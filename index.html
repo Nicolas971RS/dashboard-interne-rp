@@ -437,10 +437,10 @@ async function loadAll(){
     const [suivi,lignes,dbc,devis]=await Promise.all([
       // Suivi_BC — champs confirmés
       spFetch('sites/RseauxPlus','Suivi_BC',
-        '$select=*,Client/Title&$expand=Client&$orderby=ID desc'),
+        '$select=ID,Title,Vendeurencharge,DateLivraisonpr_x00e9_vue,Statut,_x00c9_tatfacturation,Client/Title&$expand=Client&$orderby=ID desc'),
       // Lignes_BC — champs confirmés, lié par BC lookup
       spFetch('sites/RseauxPlus','Lignes_BC',
-        '$select=*,BC/Title&$expand=BC&$orderby=BCId asc'),
+        '$select=ID,Title,BCId,BC/Title,R_x00e9_f_x00e9_rence,Produit_x002f_D_x00e9_signation,Quantit_x00e9_command_x00e9_e,Quantit_x00e9_livr_x00e9_e,BLSign_x00e9_,Chantier&$expand=BC&$orderby=BCId asc'),
       // Demandes_BC — champs confirmés
       spFetch('sites/BondeCommande','Demandes_BC',
         "$select=*&$filter=Statut ne 'BC Reçu'&$orderby=Date_Enl_x00e8_vement asc"),
@@ -504,7 +504,7 @@ function ralBlock(lignes){
     const prod=f(l,'Produit_x002f_D_x00e9_signation')||'—';
     const cmd=Number(f(l,'Quantit_x00e9_command_x00e9_e')||0);
     const liv=Number(f(l,'Quantit_x00e9_livr_x00e9_e')||0);
-    const ral=Number(f(l,'Quantit_x00e9__x0020_reste_x0020_x00e0__x0020_livrer')||Math.max(0,cmd-liv));
+    const ral=Math.max(0,cmd-liv);
     const pct=cmd>0?Math.round((liv/cmd)*100):0;
     const blOk=f(l,'BLSign_x00e9_');
     return`<div class="ral-line">
@@ -542,7 +542,7 @@ function renderSuiviKPIs(){
 function recuRow(i){
   const s=f(i,'Statut')||'—';
   const ef=f(i,'_x00c9_tatfacturation')||'Non Facturé';
-  const clientRaw=f(i,'Client');const client=(typeof clientRaw==='string'?clientRaw:null)||clientRaw?.Title||clientRaw?.Value||clientRaw?.LookupValue||'—';
+  const client=(i.Client?.Title)||(typeof i.Client==='string'?i.Client:null)||'—';
   const vendeur=f(i,'Vendeurencharge')||'—';
   const numBC=f(i,'Title')||`BC-${i.ID}`;
   const dateLiv=fmtDate(f(i,'DateLivraisonpr_x00e9_vue'));
@@ -581,7 +581,7 @@ function renderSuiviEnCours(){
   b.innerHTML=ec.map(i=>{
     const s=f(i,'Statut')||'—';
     const ef=f(i,'_x00c9_tatfacturation')||'Non Facturé';
-    const clientRaw=f(i,'Client');const client=(typeof clientRaw==='string'?clientRaw:null)||clientRaw?.Title||clientRaw?.Value||clientRaw?.LookupValue||'—';
+    const client=(i.Client?.Title)||(typeof i.Client==='string'?i.Client:null)||'—';
     const vendeur=f(i,'Vendeurencharge')||'—';
     const numBC=f(i,'Title')||`BC-${i.ID}`;
     const dateLiv=f(i,'DateLivraisonpr_x00e9_vue');
