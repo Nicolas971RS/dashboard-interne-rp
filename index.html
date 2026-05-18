@@ -143,6 +143,65 @@
   .note{background:#f8fafc;border:1px solid var(--border);border-left:3px solid var(--blue);border-radius:6px;padding:8px 12px;font-size:11px;color:var(--grey);margin-bottom:10px;}
   .error-box{background:var(--red-light);border:1px solid #ef9a9a;border-radius:8px;padding:12px 16px;font-size:12px;color:var(--red);margin-bottom:12px;display:none;word-break:break-all;}
   @media(max-width:1100px){.kpi-row.c4,.kpi-row.c5,.kpi-row.c3{grid-template-columns:repeat(2,1fr);}}
+  /* ── MODAL ── */
+  .modal-ov{display:none;position:fixed;inset:0;background:rgba(11,37,69,.55);z-index:2000;align-items:center;justify-content:center;}
+  .modal-ov.open{display:flex;}
+  .modal-box{background:white;border-radius:10px;width:540px;max-width:94vw;box-shadow:0 12px 40px rgba(0,0,0,.3);display:flex;flex-direction:column;max-height:90vh;}
+  .modal-hd{display:flex;align-items:center;justify-content:space-between;padding:14px 18px;border-bottom:1px solid var(--border);color:var(--navy);}
+  .modal-hd-t{font-weight:700;font-size:13px;}
+  .modal-x{background:none;border:none;font-size:18px;cursor:pointer;color:var(--grey);line-height:1;padding:0 4px;}
+  .modal-bd{padding:18px;display:flex;flex-direction:column;gap:11px;overflow-y:auto;}
+  .modal-ft{display:flex;justify-content:flex-end;gap:8px;padding:12px 18px;border-top:1px solid var(--border);}
+  .mbtn{padding:8px 18px;border-radius:6px;font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;border:none;transition:opacity .15s;}
+  .mbtn:disabled{opacity:.55;cursor:not-allowed;}
+  .mbtn.cancel{background:#f0f2f5;color:var(--navy);}
+  .mbtn.submit{background:var(--blue);color:white;}
+  .mf{display:flex;flex-direction:column;gap:3px;}
+  .mf label{font-size:10px;font-weight:700;color:var(--grey);text-transform:uppercase;letter-spacing:.07em;}
+  .mf input,.mf select,.mf textarea{border:1px solid var(--border);border-radius:5px;padding:7px 9px;font-size:13px;font-family:inherit;outline:none;transition:border-color .15s;}
+  .mf input:focus,.mf select:focus,.mf textarea:focus{border-color:var(--blue);}
+  .mf input.err,.mf select.err{border-color:var(--red)!important;}
+  .mf .hint{font-size:10px;color:var(--grey);margin-top:1px;}
+  .modal-msg{font-size:12px;padding:7px 11px;border-radius:5px;display:none;}
+  .modal-msg.ok{background:var(--green-light);color:var(--green);display:block;}
+  .modal-msg.ko{background:var(--red-light);color:var(--red);display:block;}
+  /* ── PANEL ── */
+  .panel-ov{display:none;position:fixed;inset:0;background:rgba(11,37,69,.4);z-index:1500;}
+  .panel-ov.open{display:block;}
+  .panel-box{position:fixed;top:0;right:0;bottom:0;width:480px;max-width:96vw;background:white;box-shadow:-6px 0 28px rgba(0,0,0,.18);display:flex;flex-direction:column;animation:slideIn .2s ease;}
+  @keyframes slideIn{from{transform:translateX(60px);opacity:0}to{transform:translateX(0);opacity:1}}
+  .panel-hd{display:flex;align-items:center;justify-content:space-between;padding:14px 18px;background:var(--navy);color:white;flex-shrink:0;}
+  .panel-hd-t{font-weight:700;font-size:13px;}
+  .panel-x{background:none;border:1px solid rgba(255,255,255,.25);color:white;padding:4px 10px;border-radius:5px;cursor:pointer;font-family:inherit;font-size:11px;}
+  .panel-bd{flex:1;overflow-y:auto;padding:16px 18px;}
+  .pf{margin-bottom:11px;}
+  .pf-lbl{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--grey);margin-bottom:2px;}
+  .pf-val{font-size:13px;color:var(--navy);line-height:1.4;}
+  .pf-val.mono{font-family:"IBM Plex Mono",monospace;font-size:12px;}
+  .pattach{display:flex;align-items:center;gap:8px;padding:7px 10px;background:#f8fafc;border:1px solid var(--border);border-radius:5px;margin-bottom:5px;cursor:pointer;color:var(--navy);text-decoration:none;}
+  .pattach:hover{background:var(--blue-light);border-color:var(--blue);}
+  .pa-name{flex:1;font-size:12px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+  .pa-hint{font-size:10px;color:var(--grey);}
+  .pactions{display:flex;gap:7px;flex-wrap:wrap;margin-top:14px;padding-top:14px;border-top:1px solid var(--border);}
+  .pbtn{padding:7px 13px;border-radius:5px;font-size:11px;font-weight:600;cursor:pointer;font-family:inherit;border:none;transition:opacity .15s;}
+  .pbtn:hover{opacity:.85;}
+  .pbtn.blue{background:var(--blue);color:white;}
+  .pbtn.green{background:var(--green);color:white;}
+  .pbtn.amber{background:var(--amber);color:white;}
+  .pbtn.red{background:var(--red);color:white;}
+  .pbtn.grey{background:#e0e5ec;color:var(--navy);}
+  .pbtn:disabled{opacity:.5;cursor:not-allowed;}
+  .ltable{width:100%;border-collapse:collapse;margin-top:6px;font-size:11px;}
+  .ltable th{background:#f8fafc;padding:5px 7px;text-align:left;font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--grey);border-bottom:1px solid var(--border);}
+  .ltable td{padding:6px 7px;border-bottom:1px solid #f0f2f5;}
+  .ltable tr:last-child td{border:none;}
+  .pspin{text-align:center;padding:24px;color:var(--grey);font-size:13px;}
+  /* ── BOUTONS ACTION IN TABLE ── */
+  .btn.blue{background:var(--blue);color:white;border-color:var(--blue);}
+  .btn.blue:hover{background:#1565c0;}
+  .btn.green{background:var(--green);color:white;border-color:var(--green);}
+  .btn.teal{background:var(--teal);color:white;border-color:var(--teal);}
+  .btn-grp{display:flex;gap:4px;flex-wrap:wrap;}
 </style>
 </head>
 <body>
@@ -310,13 +369,39 @@
         </div>
       </div>
       <div class="tc"><table>
-        <thead><tr><th>N° Devis</th><th>Client</th><th>Chantier</th><th>Date</th><th>Vendeur</th><th>Statut</th><th>Dernière MàJ</th></tr></thead>
+        <thead><tr><th>N° Devis</th><th>Client</th><th>Chantier</th><th>Date</th><th>Vendeur</th><th>Statut</th><th>Dernière MàJ</th><th>Actions</th></tr></thead>
         <tbody id="devis-body"><tr class="empty-row"><td colspan="7">Chargement...</td></tr></tbody>
       </table></div>
     </div>
   </div>
   <div style="text-align:center;padding:10px;font-size:10px;color:#aab;border-top:1px solid var(--border);">
-    Dashboard Interne v7.0 · Réseaux Plus Guadeloupe · 5 sources SharePoint
+    Dashboard Interne v8.0 · Réseaux Plus Guadeloupe · 5 sources SharePoint
+  </div>
+</div>
+
+<!-- ══ MODAL OVERLAY ══ -->
+<div class="modal-ov" id="modal-ov" onclick="closeModal()">
+  <div class="modal-box" onclick="event.stopPropagation()">
+    <div class="modal-hd">
+      <span class="modal-hd-t" id="modal-title">—</span>
+      <button class="modal-x" onclick="closeModal()">✕</button>
+    </div>
+    <div class="modal-bd" id="modal-body"></div>
+    <div class="modal-ft">
+      <button class="mbtn cancel" onclick="closeModal()">Annuler</button>
+      <button class="mbtn submit" id="modal-submit" onclick="submitModal()">Valider</button>
+    </div>
+  </div>
+</div>
+
+<!-- ══ PANNEAU LATÉRAL ══ -->
+<div class="panel-ov" id="panel-ov" onclick="closePanel()">
+  <div class="panel-box" onclick="event.stopPropagation()">
+    <div class="panel-hd">
+      <span class="panel-hd-t" id="panel-title">Détail</span>
+      <button class="panel-x" onclick="closePanel()">✕ Fermer</button>
+    </div>
+    <div class="panel-bd" id="panel-body"><div class="pspin">⏳ Chargement...</div></div>
   </div>
 </div>
 
@@ -527,7 +612,11 @@ function bcRow(i,showAction=true){
   const vendeur=f(i,'Vendeurencharge')||'—';
   const numBC=f(i,'Title')||`BC-${i.ID}`;
   const dateLiv=fmtDate(f(i,'Dateder_x00e9_ception'));
-  const act=showAction?`<td><button class="btn gr">💰 Facturer</button></td>`:'';
+  const cE=client.replace(/'/g,"\\'"),nE=numBC.replace(/'/g,"\\'");
+  const act=showAction?`<td><div class="btn-grp">
+    <button class="btn gr" onclick="openFacturerModal(${i.ID},'${nE}','${cE}')">💰 Facturer</button>
+    <button class="btn" onclick="openTraiterModal(${i.ID},'${nE}','${cE}')">🔧 Traiter</button>
+  </div></td>`:'';
   return`<tr class="rr"><td class="ref">${numBC}</td><td class="cname">${client}</td><td class="mono">${dateLiv}</td><td>${vendeur}</td><td>${bStatut(s)}</td><td>${bFact(ef)}</td>${act}</tr>`;
 }
 
@@ -544,7 +633,11 @@ function renderAFacturer(){
     const bl=f(i,'N_x00b0_BL')||'—';
     const dateRec=fmtDate(f(i,'Dateder_x00e9_ception'));
     const s=getStatut(i),ef=getEtatFact(i);
-    return`<tr class="rr"><td class="ref">${numBC}</td><td class="cname">${client}</td><td class="mono">${bl}</td><td class="mono">${dateRec}</td><td>${vendeur}</td><td>${bStatut(s)}</td><td>${bFact(ef)}</td><td><button class="btn gr">💰 Facturer</button></td></tr>`;
+    const cE=client.replace(/'/g,"\\'"),nE=numBC.replace(/'/g,"\\'");
+    return`<tr class="rr"><td class="ref">${numBC}</td><td class="cname">${client}</td><td class="mono">${bl}</td><td class="mono">${dateRec}</td><td>${vendeur}</td><td>${bStatut(s)}</td><td>${bFact(ef)}</td><td><div class="btn-grp">
+      <button class="btn gr" onclick="openFacturerModal(${i.ID},'${nE}','${cE}')">💰 Facturer</button>
+      <button class="btn" onclick="openTraiterModal(${i.ID},'${nE}','${cE}')">🔧 Traiter</button>
+    </div></td></tr>`;
   }).join('');
 }
 
@@ -636,7 +729,10 @@ function renderSuiviEnCours(){renderHistorique();
 function dbcRowCompact(i){
   const days=daysSince(f(i,'Date_Enl_x00e8_vement'));
   const urg=urgFromDays(days>5?days:0);
-  return`<tr class="${urg.row}"><td><span class="urg ${urg.cls}">${urg.lbl}</span></td><td class="cname">${f(i,'NomClient')||f(i,'Title')||'—'}</td><td class="mono">${fmtDate(f(i,'Date_Enl_x00e8_vement'))}</td><td class="amt" style="${days>5?'color:var(--red)':''}">${fmtMoney(f(i,'Montant_HT'))}</td><td>${f(i,'Vendeur')||'—'}</td><td>${bDBC(f(i,'Statut'))}</td><td>${days>10?`<button class="btn w">⚡ Escalade Fabrice</button>`:`<button class="btn">📧 Relancer</button>`}</td></tr>`;
+  return`<tr class="${urg.row}"><td><span class="urg ${urg.cls}">${urg.lbl}</span></td><td class="cname">${f(i,'NomClient')||f(i,'Title')||'—'}</td><td class="mono">${fmtDate(f(i,'Date_Enl_x00e8_vement'))}</td><td class="amt" style="${days>5?'color:var(--red)':''}">${fmtMoney(f(i,'Montant_HT'))}</td><td>${f(i,'Vendeur')||'—'}</td><td>${bDBC(f(i,'Statut'))}</td><td><div class="btn-grp">
+    <button class="btn" onclick="openDBCPanel(${i.ID})">🔍 Détail</button>
+    ${days>10?`<button class="btn w" onclick="openDBCPanel(${i.ID})">⚡ Escalade</button>`:`<button class="btn" onclick="openDBCPanel(${i.ID})">📧 Relancer</button>`}
+  </div></td></tr>`;
 }
 
 function renderDBCTable(){
@@ -650,7 +746,10 @@ function renderDBCTable(){
     const days=daysSince(f(i,'Date_Enl_x00e8_vement'));
     const urg=urgFromDays(days>5?days:0);
     const nbRel=f(i,'Nb_Relances')||0;
-    return`<tr class="${urg.row}"><td><span class="urg ${urg.cls}">${urg.lbl}</span></td><td class="ref">DBC-${i.ID}</td><td class="cname">${f(i,'NomClient')||f(i,'Title')||'—'}</td><td>${f(i,'Nom_Employ_x00e9_')||'—'}</td><td class="mono">${fmtDate(f(i,'Date_Enl_x00e8_vement'))}</td><td class="amt" style="${days>5?'color:var(--red)':''}">${fmtMoney(f(i,'Montant_HT'))}</td><td>${f(i,'Vendeur')||'—'}</td><td>${bDBC(f(i,'Statut'))}</td><td class="mono" style="text-align:center;${nbRel>=2?'color:var(--red);font-weight:700':''}">${nbRel}</td><td>${days>10?`<button class="btn w">⚡ Escalade Fabrice</button>`:`<button class="btn">📧 Relancer</button>`}</td></tr>`;
+    return`<tr class="${urg.row}" style="cursor:pointer" onclick="openDBCPanel(${i.ID})"><td><span class="urg ${urg.cls}">${urg.lbl}</span></td><td class="ref">DBC-${i.ID}</td><td class="cname">${f(i,'NomClient')||f(i,'Title')||'—'}</td><td>${f(i,'Nom_Employ_x00e9_')||'—'}</td><td class="mono">${fmtDate(f(i,'Date_Enl_x00e8_vement'))}</td><td class="amt" style="${days>5?'color:var(--red)':''}">${fmtMoney(f(i,'Montant_HT'))}</td><td>${f(i,'Vendeur')||'—'}</td><td>${bDBC(f(i,'Statut'))}</td><td class="mono" style="text-align:center;${nbRel>=2?'color:var(--red);font-weight:700':''}">${nbRel}</td><td onclick="event.stopPropagation()"><div class="btn-grp">
+      <button class="btn" onclick="openDBCPanel(${i.ID})">🔍 Détail</button>
+      ${days>10?`<button class="btn w" onclick="openDBCPanel(${i.ID})">⚡ Escalade</button>`:`<button class="btn" onclick="openDBCPanel(${i.ID})">📧 Relancer</button>`}
+    </div></td></tr>`;
   }).join(''):'<tr class="empty-row"><td colspan="10">Aucune demande BC en attente</td></tr>';
 }
 
@@ -665,8 +764,13 @@ function renderDevisTable(){
     const st=f(i,'Statut')||'—',mod=f(i,'Modified');
     const stale=mod&&daysSince(mod)>7&&st==='En cours de traitement';
     const nd=f(i,'Num_x00e9_ro_Devis','Numero_Devis','Title')||`DEV-${i.ID}`;
-    return`<tr class="${stale?'ru':''}"><td class="ref">${nd}</td><td class="cname">${f(i,'Client')||'—'}</td><td>${f(i,'Chantier')||'—'}</td><td class="mono">${fmtDate(f(i,'Date_Devis'))}</td><td>${f(i,'Vendeur_Assign_x00e9_')||'—'}</td><td>${bDevis(st)}</td><td class="mono" style="${stale?'color:var(--amber)':''}">${fmtDate(mod)}</td></tr>`;
-  }).join(''):'<tr class="empty-row"><td colspan="7">Aucun devis correspondant</td></tr>';
+    const isNew=st==='Nouvelle'||st==='nouvelle';
+    return`<tr class="${stale?'ru':isNew?'rr':''}"><td class="ref">${nd}</td><td class="cname">${f(i,'Client')||'—'}</td><td>${f(i,'Chantier')||'—'}</td><td class="mono">${fmtDate(f(i,'Date_Devis'))}</td><td>${f(i,'Vendeur_Assign_x00e9_')||'—'}</td><td>${bDevis(st)}</td><td class="mono" style="${stale?'color:var(--amber)':''}">${fmtDate(mod)}</td><td onclick="event.stopPropagation()"><div class="btn-grp">
+      <button class="btn" onclick="openDevisPanel(${i.ID})">🔍 Détail</button>
+      ${st!=='En cours de traitement'&&st!=='Devis envoyé'?`<button class="btn blue" onclick="passerEnCours(${i.ID})">▶ En cours</button>`:''}
+      <button class="btn teal" onclick="envoyerDevisFlow(${i.ID})">📨 Envoyer</button>
+    </div></td></tr>`;
+  }).join(''):'<tr class="empty-row"><td colspan="8">Aucun devis correspondant</td></tr>';
 }
 
 // ═══ BADGES ═══
@@ -689,6 +793,296 @@ function showTab(id){
   const m={matin:0,suivi:1,dbc:2,devis:3};
   document.querySelectorAll('.tabs .tab')[m[id]].classList.add('active');
 }
+
+// ═══════════════════════════════════════════════════════════
+// ═══ V8 — ÉCRITURE SHAREPOINT + MODAL + PANNEAUX ═══
+// ═══════════════════════════════════════════════════════════
+
+// ── PATCH REST SharePoint ──
+async function spPatch(site,list,id,body){
+  const url=`${C.spRoot}/${site}/_api/web/lists/getbytitle('${list}')/items(${id})`;
+  const r=await fetch(url,{
+    method:'POST',
+    headers:{
+      'Authorization':`Bearer ${getToken()}`,
+      'Accept':'application/json;odata=nometadata',
+      'Content-Type':'application/json;odata=nometadata',
+      'X-HTTP-Method':'MERGE',
+      'IF-MATCH':'*'
+    },
+    body:JSON.stringify(body)
+  });
+  if(r.status===401){sessionStorage.clear();location.reload();throw new Error('401');}
+  if(!r.ok){const t=await r.text().catch(()=>'');throw new Error(`PATCH ${list}(${id}): HTTP ${r.status} — ${t.substring(0,200)}`);}
+}
+
+// ── Récupérer pièces jointes ──
+async function getAttachments(site,list,id){
+  const url=`${C.spRoot}/${site}/_api/web/lists/getbytitle('${list}')/items(${id})/AttachmentFiles`;
+  try{
+    const r=await fetch(url,{headers:{'Authorization':`Bearer ${getToken()}`,'Accept':'application/json;odata=nometadata'}});
+    if(!r.ok)return[];
+    const d=await r.json();
+    return d.value||[];
+  }catch(e){console.warn('Attachments error:',e);return[];}
+}
+
+// ── Ouvrir pièce jointe via Bearer+blob ──
+async function openAttachment(url){
+  try{
+    const r=await fetch(url,{headers:{'Authorization':`Bearer ${getToken()}`}});
+    if(!r.ok)throw new Error(`HTTP ${r.status}`);
+    const blob=await r.blob();
+    const blobUrl=URL.createObjectURL(blob);
+    window.open(blobUrl,'_blank');
+    setTimeout(()=>URL.revokeObjectURL(blobUrl),15000);
+  }catch(e){alert('Impossible d\'ouvrir le fichier : '+e.message);}
+}
+
+// ────────────────────────────────────────────────────────────
+// ═══ SYSTÈME MODAL ═══
+// ────────────────────────────────────────────────────────────
+let _onSubmit=null;
+
+function openModal(title,html,onSubmit){
+  document.getElementById('modal-title').textContent=title;
+  document.getElementById('modal-body').innerHTML=html+'<div class="modal-msg" id="modal-msg"></div>';
+  const btn=document.getElementById('modal-submit');
+  btn.disabled=false;btn.textContent='Valider';
+  document.getElementById('modal-ov').classList.add('open');
+  _onSubmit=onSubmit;
+}
+
+function closeModal(){
+  document.getElementById('modal-ov').classList.remove('open');
+  _onSubmit=null;
+}
+
+async function submitModal(){
+  if(!_onSubmit)return;
+  const btn=document.getElementById('modal-submit');
+  const msgEl=document.getElementById('modal-msg');
+  btn.disabled=true;btn.textContent='⏳ Envoi...';
+  msgEl.className='modal-msg';msgEl.textContent='';
+  try{
+    await _onSubmit();
+    msgEl.className='modal-msg ok';msgEl.textContent='✅ Mis à jour avec succès !';
+    setTimeout(()=>{closeModal();loadAll();},1200);
+  }catch(e){
+    msgEl.className='modal-msg ko';msgEl.textContent='❌ '+e.message;
+    btn.disabled=false;btn.textContent='Valider';
+  }
+}
+
+// ── Modal Facturer ──
+function openFacturerModal(id,numBC,client){
+  openModal(`💰 Facturer — ${numBC} · ${client}`,`
+    <div class="mf"><label>N° Facture *</label><input id="m-fc" placeholder="ex: FC-2025-001"></div>
+    <div class="mf"><label>État facturation</label>
+      <select id="m-efact">
+        <option value="Partiellement facturé">Partiellement facturé</option>
+        <option value="Entièrement facturé" selected>Entièrement facturé</option>
+      </select>
+    </div>`,
+  async()=>{
+    const fc=document.getElementById('m-fc').value.trim();
+    if(!fc){document.getElementById('m-fc').classList.add('err');throw new Error('Le N° de facture est obligatoire.');}
+    const ef=document.getElementById('m-efact').value;
+    await spPatch('sites/RseauxPlus','Suivi_BC',id,{'N_x00b0_FC':fc,'_x00c9_tatfacturation':ef});
+  });
+}
+
+// ── Modal Traiter (BL + dates + montant) ──
+function openTraiterModal(id,numBC,client){
+  const today=new Date().toISOString().slice(0,10);
+  openModal(`🔧 Traiter — ${numBC} · ${client}`,`
+    <div class="mf"><label>N° BL *</label><input id="m-bl" placeholder="ex: BL-2025-0123"></div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+      <div class="mf"><label>Date BL</label><input id="m-datebl" type="date" value="${today}"></div>
+      <div class="mf"><label>Date prise en charge</label><input id="m-datepec" type="date" value="${today}"></div>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+      <div class="mf"><label>Date livraison prévue</label><input id="m-eta" type="date"></div>
+      <div class="mf"><label>Montant HT (€)</label><input id="m-montant" type="number" step="0.01" placeholder="0.00"></div>
+    </div>
+    <div class="mf"><label>Chantier / Projet</label><input id="m-chantier" placeholder="Optionnel"></div>
+    <div class="mf"><label>Remarques</label><textarea id="m-rem" rows="2" placeholder="Observations, anomalies..."></textarea></div>`,
+  async()=>{
+    const bl=document.getElementById('m-bl').value.trim();
+    if(!bl){document.getElementById('m-bl').classList.add('err');throw new Error('Le N° de BL est obligatoire.');}
+    const body={'N_x00b0_BL':bl};
+    const datebl=document.getElementById('m-datebl').value;
+    const datepec=document.getElementById('m-datepec').value;
+    const eta=document.getElementById('m-eta').value;
+    const montant=document.getElementById('m-montant').value;
+    const chantier=document.getElementById('m-chantier').value.trim();
+    const rem=document.getElementById('m-rem').value.trim();
+    if(datebl)body['DateBL']=datebl;
+    if(datepec)body['Datepriseencharge']=datepec;
+    if(eta)body['DateLivraisonpr_x00e9_vue']=eta;
+    if(montant)body['MontantHT']=parseFloat(montant);
+    if(chantier)body['Projet']=chantier;
+    if(rem)body['Remarques']=rem;
+    await spPatch('sites/RseauxPlus','Suivi_BC',id,body);
+  });
+}
+
+// ────────────────────────────────────────────────────────────
+// ═══ SYSTÈME PANNEAU LATÉRAL ═══
+// ────────────────────────────────────────────────────────────
+function openPanel(title,html){
+  document.getElementById('panel-title').textContent=title;
+  document.getElementById('panel-body').innerHTML=html;
+  document.getElementById('panel-ov').classList.add('open');
+}
+
+function closePanel(){
+  document.getElementById('panel-ov').classList.remove('open');
+}
+
+// ── Panneau DBC ──
+async function openDBCPanel(id){
+  openPanel(`🧾 Demande BC — DBC-${id}`,'<div class="pspin">⏳ Chargement...</div>');
+  try{
+    const item=DATA.dbc.find(i=>i.ID===id);
+    if(!item)throw new Error('Item DBC non trouvé en cache');
+    const [attachments]=await Promise.all([
+      getAttachments('sites/BondeCommande','Demandes_BC',id)
+    ]);
+    const days=daysSince(f(item,'Date_Enl_x00e8_vement'));
+    const nbRel=f(item,'Nb_Relances')||0;
+    let html=`
+      <div class="pf"><div class="pf-lbl">Client</div><div class="pf-val">${f(item,'NomClient')||f(item,'Title')||'—'}</div></div>
+      <div class="pf"><div class="pf-lbl">Employé</div><div class="pf-val">${f(item,'Nom_Employ_x00e9_')||'—'}</div></div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:0">
+        <div class="pf"><div class="pf-lbl">Date enlèvement</div><div class="pf-val">${fmtDate(f(item,'Date_Enl_x00e8_vement'))}</div></div>
+        <div class="pf"><div class="pf-lbl">Délai</div><div class="pf-val" style="color:${days>5?'var(--red)':'var(--green)'}">${days} jour${days>1?'s':''} écoulé${days>1?'s':''}</div></div>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:0">
+        <div class="pf"><div class="pf-lbl">Montant HT</div><div class="pf-val mono" style="${days>5?'color:var(--red);font-weight:700':''}">${fmtMoney(f(item,'Montant_HT'))}</div></div>
+        <div class="pf"><div class="pf-lbl">Nb relances</div><div class="pf-val" style="${nbRel>=2?'color:var(--red);font-weight:700':''}">${nbRel}</div></div>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:0">
+        <div class="pf"><div class="pf-lbl">Vendeur</div><div class="pf-val">${f(item,'Vendeur')||'—'}</div></div>
+        <div class="pf"><div class="pf-lbl">Statut</div><div class="pf-val">${bDBC(f(item,'Statut'))}</div></div>
+      </div>
+      <hr style="border:none;border-top:1px solid var(--border);margin:4px 0 12px">
+      <div class="pf"><div class="pf-lbl">📎 Pièces jointes (${attachments.length})</div>`;
+    if(attachments.length){
+      attachments.forEach(a=>{
+        const url=C.spRoot+(a.ServerRelativeUrl||'');
+        html+=`<a class="pattach" onclick="openAttachment('${url}')"><span style="font-size:16px">📄</span><span class="pa-name">${a.FileName}</span><span class="pa-hint">Ouvrir →</span></a>`;
+      });
+    }else{
+      html+=`<div style="color:var(--grey);font-size:12px;font-style:italic;padding:4px 0">Aucune pièce jointe (BL scanné)</div>`;
+    }
+    html+=`</div>
+      <div class="pactions">
+        <button class="pbtn blue" onclick="alert('Flow PA Relance (Passe 2) — ID: flux-relance-dbc')">📧 Relancer</button>
+        <button class="pbtn amber" onclick="alert('Flow PA Escalade Fabrice (Passe 2)')">⚡ Escalade</button>
+        <button class="pbtn grey" onclick="closePanel()">Fermer</button>
+      </div>`;
+    document.getElementById('panel-body').innerHTML=html;
+  }catch(e){
+    document.getElementById('panel-body').innerHTML=`<div style="background:var(--red-light);color:var(--red);padding:10px;border-radius:6px;font-size:12px">❌ ${e.message}</div>`;
+  }
+}
+
+// ── Panneau Devis ──
+async function openDevisPanel(id){
+  openPanel(`📄 Devis — chargement...`,'<div class="pspin">⏳ Chargement...</div>');
+  try{
+    const item=DATA.devis.find(i=>i.ID===id);
+    if(!item)throw new Error('Devis non trouvé en cache');
+    const nd=f(item,'Num_x00e9_ro_Devis','Numero_Devis','Title')||`DEV-${id}`;
+    const st=f(item,'Statut')||'—';
+    document.getElementById('panel-title').textContent=`📄 ${nd}`;
+    // Charger lignes et pièces jointes en parallèle
+    const [lignes,attachments]=await Promise.all([
+      spFetch('sites/BondeCommande','Lignes_Demandes_Devis',`$select=*&$filter=Num_x00e9_ro_Devis_RefId eq ${id}&$top=50`).catch(()=>[]),
+      getAttachments('sites/BondeCommande','Demandes_Devis',id)
+    ]);
+    let html=`
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:0">
+        <div class="pf"><div class="pf-lbl">N° Devis</div><div class="pf-val mono">${nd}</div></div>
+        <div class="pf"><div class="pf-lbl">Statut</div><div class="pf-val">${bDevis(st)}</div></div>
+      </div>
+      <div class="pf"><div class="pf-lbl">Client</div><div class="pf-val">${f(item,'Client')||'—'}</div></div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:0">
+        <div class="pf"><div class="pf-lbl">Contact</div><div class="pf-val">${f(item,'Client_Contact')||'—'}</div></div>
+        <div class="pf"><div class="pf-lbl">Téléphone</div><div class="pf-val mono">${f(item,'Client_T_x00e9_l_x00e9_phone')||'—'}</div></div>
+      </div>
+      <div class="pf"><div class="pf-lbl">Email</div><div class="pf-val mono">${f(item,'Client_Email')||'—'}</div></div>
+      <div class="pf"><div class="pf-lbl">Chantier</div><div class="pf-val">${f(item,'Chantier')||'—'}</div></div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:0">
+        <div class="pf"><div class="pf-lbl">Date émission</div><div class="pf-val">${fmtDate(f(item,'Date__x00c9_mission_Devis'))}</div></div>
+        <div class="pf"><div class="pf-lbl">Devis RS</div><div class="pf-val">${f(item,'Devis_RS')||'—'}</div></div>
+      </div>
+      <hr style="border:none;border-top:1px solid var(--border);margin:4px 0 10px">`;
+    if(lignes.length){
+      html+=`<div class="pf"><div class="pf-lbl">Articles (${lignes.length})</div>
+      <table class="ltable"><thead><tr><th>Référence</th><th>Désignation</th><th>Qté</th><th>Unité</th></tr></thead><tbody>`;
+      lignes.forEach(l=>{
+        html+=`<tr>
+          <td class="mono">${f(l,'Produit_Libre_R_x00e9_f_x00e9_re')||'—'}</td>
+          <td>${f(l,'Produit_Libre_D_x00e9_signation')||'—'}</td>
+          <td style="text-align:right">${f(l,'Quantit_x00e9_')||'—'}</td>
+          <td>${f(l,'Unit_x00e9_')||'—'}</td>
+        </tr>`;
+      });
+      html+=`</tbody></table></div>`;
+    }else{
+      html+=`<div class="pf"><div class="pf-lbl">Articles</div><div class="pf-val" style="color:var(--grey);font-style:italic">Aucune ligne trouvée</div></div>`;
+    }
+    html+=`<div class="pf"><div class="pf-lbl">📎 Pièces jointes — Devis PDF (${attachments.length})</div>`;
+    if(attachments.length){
+      attachments.forEach(a=>{
+        const url=C.spRoot+(a.ServerRelativeUrl||'');
+        html+=`<a class="pattach" onclick="openAttachment('${url}')"><span style="font-size:16px">📄</span><span class="pa-name">${a.FileName}</span><span class="pa-hint">Ouvrir →</span></a>`;
+      });
+    }else{
+      html+=`<div style="color:var(--grey);font-size:12px;font-style:italic;padding:4px 0">Aucun PDF joint</div>`;
+    }
+    html+=`</div><div class="pactions">`;
+    if(st!=='En cours de traitement'&&st!=='Devis envoyé'){
+      html+=`<button class="pbtn blue" onclick="passerEnCours(${id})">▶ Passer En cours</button>`;
+    }
+    html+=`<button class="pbtn green" onclick="envoyerDevisFlow(${id})">📨 Envoyer devis</button>
+      <button class="pbtn grey" onclick="closePanel()">Fermer</button>
+    </div>`;
+    document.getElementById('panel-body').innerHTML=html;
+  }catch(e){
+    document.getElementById('panel-body').innerHTML=`<div style="background:var(--red-light);color:var(--red);padding:10px;border-radius:6px;font-size:12px">❌ ${e.message}</div>`;
+  }
+}
+
+// ── Passer En cours (PATCH direct) ──
+async function passerEnCours(id){
+  const btn=document.querySelector(`#panel-body .pbtn.blue`);
+  if(btn){btn.disabled=true;btn.textContent='⏳...';}
+  try{
+    await spPatch('sites/BondeCommande','Demandes_Devis',id,{'Statut':'En cours de traitement'});
+    closePanel();
+    loadAll();
+  }catch(e){
+    if(btn){btn.disabled=false;btn.textContent='▶ Passer En cours';}
+    alert('Erreur PATCH : '+e.message);
+  }
+}
+
+// ── Envoyer devis — Flow PA (Passe 2) ──
+async function envoyerDevisFlow(id){
+  if(!confirm(`Lancer le flow Power Automate "Envoyer devis" pour DEV-${id} ?\n\n⚠️ Passe 2 non encore déployée — scope PA manquant.`))return;
+  alert('Flow ID: 96ee525f-4b81-4b47-8079-8040c63d00e5\n\nPour activer : ajouter le scope https://service.flow.microsoft.com/.default dans C.scope et implémenter triggerPAFlow() (Passe 2).');
+}
+
+// ── Stub PA flows (Passe 2) ──
+async function triggerPAFlow(flowId,data){
+  // TODO Passe 2 : second token PKCE avec scope service.flow.microsoft.com/.default
+  throw new Error('Flow PA non encore connecté (Passe 2). Flow ID: '+flowId);
+}
+
+// ═══════════════════════════════════════════════════════════
 
 // ═══ INIT ═══
 async function init(){
