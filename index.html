@@ -338,7 +338,7 @@ function logout(){sessionStorage.clear();window.location.href=`https://login.mic
 
 // ═══ SHAREPOINT FETCH ═══
 async function spFetch(site,list,qs){
-  const url=`${C.spRoot}/${site}/_api/web/lists/getbytitle('${encodeURIComponent(list)}')/items?${qs}&$top=2000`;
+  const hasTop=qs.includes('$top=');const url=`${C.spRoot}/${site}/_api/web/lists/getbytitle('${list}')/items?${qs}${hasTop?'':'&$top=2000'}`;
   const r=await fetch(url,{headers:{'Authorization':`Bearer ${getToken()}`,'Accept':'application/json;odata=nometadata'}});
   if(r.status===401){sessionStorage.clear();location.reload();throw new Error('401');}
   if(!r.ok){const t=await r.text().catch(()=>'');throw new Error(`SP ${list}: ${r.status} — ${t.substring(0,300)}`);}
@@ -412,7 +412,7 @@ async function loadAll(){
       // Demandes_Devis: $select=*
       spFetch('sites/BondeCommande','Demandes_Devis','$select=*&$orderby=ID desc'),
       // Base_Clients: for client name lookup map
-      spFetch('sites/RseauxPlus','Base_Clients','$select=ID,Title&$top=2000')
+      spFetch('sites/RseauxPlus','Base_Clients','$select=ID,Title')
     ]);
 
     // Build client map: {ID → Title}
