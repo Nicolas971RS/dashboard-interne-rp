@@ -199,7 +199,7 @@
         <div class="kc r"><div class="kl">💰 Risque DBC</div><div class="kv" id="kpi-risque">—</div><div class="ks">HT sans BC reçu</div></div>
         <div class="kc a"><div class="kl">📄 Devis en cours</div><div class="kv" id="kpi-devis-matin">—</div><div class="ks">En cours de traitement</div></div>
       </div>
-      <div class="sd"><h2>📥 Arrivées du jour</h2><span class="site-tag rp">Suivi_BC · Statut = Reçu</span><div class="sd-line"></div></div>
+      <div class="sd"><h2>📥 Arrivées du jour</h2><span class="site-tag rp">Suivi_BC · Statut = Reçu · Date réception = aujourd'hui</span><div class="sd-line"></div></div>
       <div class="tc"><table>
         <thead><tr><th>N° BC</th><th>Client</th><th>Date livraison</th><th>Vendeur</th><th>Statut</th><th>État facturation</th><th>Action</th></tr></thead>
         <tbody id="matin-recu-body"><tr class="empty-row"><td colspan="7">Chargement...</td></tr></tbody>
@@ -218,7 +218,7 @@
         <button class="btn-refresh" onclick="loadAll()">🔄 Actualiser</button>
       </div>
       <div class="sd"><h2>📥 Arrivées du jour</h2><span class="site-tag rp">Statut = Reçu</span><span class="ctag g" id="sd-recu-count">0 BC</span><div class="sd-line"></div></div>
-      <div class="banner"><div class="pulse"></div><div class="banner-num" id="banner-num">0</div><div><div class="banner-lbl">BCs reçus — vérifier BL · mettre à jour facturation</div><div class="banner-sub">Créer la facture si livraison complète · Facturer partiellement si livraison partielle</div></div></div>
+      <div class="banner"><div class="pulse"></div><div class="banner-num" id="banner-num">0</div><div><div class="banner-lbl">BCs réceptionnés aujourd'hui — vérifier BL · mettre à jour facturation</div><div class="banner-sub">Créer la facture si livraison complète · Facturer partiellement si livraison partielle</div></div></div>
       <div class="tc"><table>
         <thead><tr><th>N° BC</th><th>Client</th><th>Date livraison</th><th>Vendeur</th><th>Statut</th><th>État facturation</th><th>Action</th></tr></thead>
         <tbody id="suivi-recu-body"><tr class="empty-row"><td colspan="7">Chargement...</td></tr></tbody>
@@ -463,7 +463,15 @@ function pop(id,vals){
 }
 
 // ═══ GETTERS ═══
-const getSuiviRecu=()=>DATA.suivi.filter(i=>getStatut(i)==='Reçu');
+const getSuiviRecu=()=>{
+  const todayStr=TODAY.toISOString().slice(0,10);
+  return DATA.suivi.filter(i=>{
+    if(getStatut(i)!=='Reçu') return false;
+    const dateRec=f(i,'Dateder_x00e9_ception');
+    if(!dateRec) return false;
+    return dateRec.slice(0,10)===todayStr;
+  });
+};
 const getSuiviEnCours=()=>DATA.suivi.filter(i=>{
   const s=getStatut(i);
   const ef=getEtatFact(i);
