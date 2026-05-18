@@ -199,7 +199,7 @@
         <div class="kc r"><div class="kl">💰 Risque DBC</div><div class="kv" id="kpi-risque">—</div><div class="ks">HT sans BC reçu</div></div>
         <div class="kc a"><div class="kl">📄 Devis en cours</div><div class="kv" id="kpi-devis-matin">—</div><div class="ks">En cours de traitement</div></div>
       </div>
-      <div class="sd"><h2>📥 Arrivées du jour</h2><span class="site-tag rp">Suivi_BC · Statut = Reçu · Date réception = aujourd'hui</span><div class="sd-line"></div></div>
+      <div class="sd"><h2>📥 Arrivées du jour</h2><span class="site-tag rp">Suivi_BC · Date réception = aujourd'hui · tous statuts</span><div class="sd-line"></div></div>
       <div class="tc"><table>
         <thead><tr><th>N° BC</th><th>Client</th><th>Date livraison</th><th>Vendeur</th><th>Statut</th><th>État facturation</th><th>Action</th></tr></thead>
         <tbody id="matin-recu-body"><tr class="empty-row"><td colspan="7">Chargement...</td></tr></tbody>
@@ -223,8 +223,21 @@
         <thead><tr><th>N° BC</th><th>Client</th><th>Date livraison</th><th>Vendeur</th><th>Statut</th><th>État facturation</th><th>Action</th></tr></thead>
         <tbody id="suivi-recu-body"><tr class="empty-row"><td colspan="7">Chargement...</td></tr></tbody>
       </table></div>
+      <div class="sd"><h2>💰 À facturer — BL reçu non facturé</h2><span class="site-tag rp">N° BL renseigné · État ≠ Entièrement facturé</span><span class="ctag g" id="sd-afacturer-count">0</span><div class="sd-line"></div></div>
+      <div class="tc"><table>
+        <thead><tr><th>N° BC</th><th>Client</th><th>N° BL</th><th>Date réception</th><th>Vendeur</th><th>Statut</th><th>État facturation</th><th>Action</th></tr></thead>
+        <tbody id="suivi-afacturer-body"><tr class="empty-row"><td colspan="8">Chargement...</td></tr></tbody>
+      </table></div>
+
+      <div class="sd"><h2>📋 Historique non soldé</h2><span class="site-tag rp">BCs anciens · État ≠ Entièrement facturé · À nettoyer progressivement</span><span class="ctag a" id="sd-histo-count">0</span><div class="sd-line"></div></div>
+      <div class="tc"><table>
+        <thead><tr><th>Urgence</th><th>N° BC</th><th>Client</th><th>Date réception</th><th>Vendeur</th><th>Statut</th><th>RAL / Lignes</th><th>État facturation</th></tr></thead>
+        <tbody id="suivi-histo-body"><tr class="empty-row"><td colspan="8">Chargement...</td></tr></tbody>
+      </table></div>
+
       <div class="sd"><h2>⚙️ BCs en cours — Non soldés</h2><span class="site-tag rp">≠ Reçu · ≠ Annulé · ≠ Entièrement facturé</span><span class="ctag o" id="sd-encours-count">0</span><div class="sd-line"></div></div>
       <div class="kpi-row c5">
+        <div class="kc g"><div class="kl">💰 BL reçu non facturé</div><div class="kv" id="kpi-afacturer">—</div><div class="ks">À facturer maintenant</div></div>
         <div class="kc a"><div class="kl">⏳ En préparation</div><div class="kv" id="kpi-prep">—</div><div class="ks">Chez fournisseur</div></div>
         <div class="kc b"><div class="kl">📦 Prêt à livrer</div><div class="kv" id="kpi-pret">—</div><div class="ks">Livraison imminente</div></div>
         <div class="kc o"><div class="kl">🔀 Partiellement livré</div><div class="kv" id="kpi-partiel">—</div><div class="ks">RAL Lignes_BC</div></div>
@@ -293,7 +306,7 @@
         <div class="st">📄 Devis récents</div>
         <div class="fb">
           <select class="fs" id="filter-vendeur-devis" onchange="renderDevisTable()"><option value="all">Tous les vendeurs</option></select>
-          <select class="fs" id="filter-statut-devis" onchange="renderDevisTable()"><option value="all">Tous les statuts</option><option value="En cours de traitement">En cours de traitement</option><option value="Devis envoyé">Devis envoyé</option></select>
+          <select class="fs" id="filter-statut-devis" onchange="renderDevisTable()"><option value="all">Tous les statuts</option><option value="En cours">En cours</option><option value="Devis envoyé">Devis envoyé</option></select>
         </div>
       </div>
       <div class="tc"><table>
@@ -466,12 +479,24 @@ function pop(id,vals){
 const getSuiviRecu=()=>{
   const todayStr=TODAY.toISOString().slice(0,10);
   return DATA.suivi.filter(i=>{
-    if(getStatut(i)!=='Reçu') return false;
     const dateRec=f(i,'Dateder_x00e9_ception');
     if(!dateRec) return false;
     return dateRec.slice(0,10)===todayStr;
   });
 };
+const getSuiviAFacturer=()=>DATA.suivi.filter(i=>{
+  const bl=f(i,'N_x00b0_BL');
+  const ef=getEtatFact(i);
+  return bl&&bl.trim()!==''&&ef!=='Entièrement facturé';
+});
+const getSuiviHistorique=()=>DATA.suivi.filter(i=>{
+  const s=getStatut(i);
+  const ef=getEtatFact(i);
+  const dateRec=f(i,'Dateder_x00e9_ception');
+  const todayStr=TODAY.toISOString().slice(0,10);
+  const isToday=dateRec&&dateRec.slice(0,10)===todayStr;
+  return !isToday&&s!=='Annulé'&&ef!=='Entièrement facturé';
+});
 const getSuiviEnCours=()=>DATA.suivi.filter(i=>{
   const s=getStatut(i);
   const ef=getEtatFact(i);
@@ -501,12 +526,50 @@ function bcRow(i,showAction=true){
   const client=getClient(i);
   const vendeur=f(i,'Vendeurencharge')||'—';
   const numBC=f(i,'Title')||`BC-${i.ID}`;
-  const dateLiv=fmtDate(f(i,'DateLivraisonpr_x00e9_vue'));
+  const dateLiv=fmtDate(f(i,'Dateder_x00e9_ception'));
   const act=showAction?`<td><button class="btn gr">💰 Facturer</button></td>`:'';
   return`<tr class="rr"><td class="ref">${numBC}</td><td class="cname">${client}</td><td class="mono">${dateLiv}</td><td>${vendeur}</td><td>${bStatut(s)}</td><td>${bFact(ef)}</td>${act}</tr>`;
 }
 
 // ═══ RENDER ALL ═══
+function renderAFacturer(){
+  const items=getSuiviAFacturer();
+  document.getElementById('sd-afacturer-count').textContent=items.length+' BC'+(items.length!==1?'s':'');
+  document.getElementById('kpi-afacturer').textContent=items.length;
+  const b=document.getElementById('suivi-afacturer-body');
+  if(!items.length){b.innerHTML='<tr class="empty-row"><td colspan="8">✅ Aucun BC avec BL non facturé</td></tr>';return;}
+  b.innerHTML=items.map(i=>{
+    const client=getClient(i),vendeur=f(i,'Vendeurencharge')||'—';
+    const numBC=f(i,'Title')||`BC-${i.ID}`;
+    const bl=f(i,'N_x00b0_BL')||'—';
+    const dateRec=fmtDate(f(i,'Dateder_x00e9_ception'));
+    const s=getStatut(i),ef=getEtatFact(i);
+    return`<tr class="rr"><td class="ref">${numBC}</td><td class="cname">${client}</td><td class="mono">${bl}</td><td class="mono">${dateRec}</td><td>${vendeur}</td><td>${bStatut(s)}</td><td>${bFact(ef)}</td><td><button class="btn gr">💰 Facturer</button></td></tr>`;
+  }).join('');
+}
+
+function renderHistorique(){
+  let items=getSuiviHistorique();
+  const fV=document.getElementById('filter-vendeur-bc')?.value||'all';
+  const fC=document.getElementById('filter-client-bc')?.value||'all';
+  if(fV!=='all')items=items.filter(i=>f(i,'Vendeurencharge')===fV);
+  if(fC!=='all')items=items.filter(i=>getClient(i)===fC);
+  document.getElementById('sd-histo-count').textContent=items.length+' BC'+(items.length!==1?'s':'');
+  const b=document.getElementById('suivi-histo-body');
+  if(!items.length){b.innerHTML='<tr class="empty-row"><td colspan="8">✅ Historique vide</td></tr>';return;}
+  b.innerHTML=items.slice(0,100).map(i=>{// limit to 100 for perf
+    const s=getStatut(i),ef=getEtatFact(i);
+    const client=getClient(i),vendeur=f(i,'Vendeurencharge')||'—';
+    const numBC=f(i,'Title')||`BC-${i.ID}`;
+    const dateLiv=f(i,'DateLivraisonpr_x00e9_vue');
+    const late=daysLate(dateLiv);
+    const urg=urgFromDays(late>0?late:0);
+    const lignes=s==='Partiellement livré'?getLignesForBC(i.ID):[];
+    return`<tr class="${urg.row}"><td><span class="urg ${urg.cls}">${urg.lbl}</span></td><td class="ref">${numBC}</td><td class="cname">${client}</td><td class="mono">${fmtDate(f(i,'Dateder_x00e9_ception'))}</td><td>${vendeur}</td><td>${bStatut(s)}</td><td>${ralBlock(lignes)}</td><td>${bFact(ef)}</td></tr>`;
+  }).join('');
+  if(items.length>100){b.innerHTML+=`<tr class="empty-row"><td colspan="8">... et ${items.length-100} autres BCs — utilisez les filtres pour affiner</td></tr>`;}
+}
+
 function renderAll(){
   const recu=getSuiviRecu(),ec=getSuiviEnCours();
   // KPIs
@@ -521,7 +584,7 @@ function renderAll(){
   document.getElementById('kpi-atbc').textContent=ec.filter(i=>getStatut(i)==='En attente BC').length;
   const risqueDBC=DATA.dbc.reduce((s,i)=>s+Number(f(i,'Montant_HT')||0),0);
   const dbcU=DATA.dbc.filter(i=>daysSince(f(i,'Date_Enl_x00e8_vement'))>5).length;
-  const dc=DATA.devis.filter(i=>f(i,'Statut')==='En cours de traitement').length;
+  const dc=DATA.devis.filter(i=>(f(i,'Statut')||'').startsWith('En cours')).length;
   document.getElementById('kpi-recu').textContent=recu.length;
   document.getElementById('kpi-retard').textContent=retard;
   document.getElementById('kpi-risque').textContent=risqueDBC>0?Math.round(risqueDBC/1000)+'k €':'0 €';
@@ -532,12 +595,14 @@ function renderAll(){
   const now=new Date(),mois=new Date(now.getFullYear(),now.getMonth(),1);
   document.getElementById('kpi-devis-cours').textContent=dc;
   document.getElementById('kpi-devis-envoye').textContent=DATA.devis.filter(i=>f(i,'Statut')==='Devis envoyé'&&new Date(f(i,'Date_Devis')||'')>=mois).length;
-  document.getElementById('kpi-devis-stale').textContent=DATA.devis.filter(i=>daysSince(f(i,'Modified'))>7&&f(i,'Statut')==='En cours de traitement').length;
+  document.getElementById('kpi-devis-stale').textContent=DATA.devis.filter(i=>daysSince(f(i,'Modified'))>7&&(f(i,'Statut')||'').startsWith('En cours')).length;
   document.getElementById('kpi-devis-total').textContent=DATA.devis.length;
   // Tables
   const recuHtml=recu.length?recu.map(i=>bcRow(i,true)).join(''):'<tr class="empty-row"><td colspan="7">✅ Aucun BC en statut "Reçu" pour le moment</td></tr>';
   document.getElementById('matin-recu-body').innerHTML=recuHtml;
   document.getElementById('suivi-recu-body').innerHTML=recuHtml;
+  renderAFacturer();
+  renderHistorique();
   renderSuiviEnCours();
   // Matin DBC
   const crit=DATA.dbc.filter(i=>daysSince(f(i,'Date_Enl_x00e8_vement'))>5).slice(0,6);
@@ -545,7 +610,7 @@ function renderAll(){
   renderDBCTable();renderDevisTable();
 }
 
-function renderSuiviEnCours(){
+function renderSuiviEnCours(){renderHistorique();
   let ec=getSuiviEnCours();
   const fS=document.getElementById('filter-statut-bc')?.value||'all';
   const fV=document.getElementById('filter-vendeur-bc')?.value||'all';
@@ -579,7 +644,7 @@ function renderDBCTable(){
   const fV=document.getElementById('filter-vendeur-dbc')?.value||'all';
   const fS=document.getElementById('filter-statut-dbc')?.value||'all';
   if(fV!=='all')items=items.filter(i=>f(i,'Vendeur')===fV);
-  if(fS!=='all')items=items.filter(i=>f(i,'Statut')===fS);
+  if(fS!=='all')items=items.filter(i=>(f(i,'Statut')||'').startsWith(fS));
   const b=document.getElementById('dbc-body');
   b.innerHTML=items.length?items.map(i=>{
     const days=daysSince(f(i,'Date_Enl_x00e8_vement'));
@@ -609,8 +674,8 @@ function updateBadges(){
   const recu=getSuiviRecu().length;
   const retard=getSuiviEnCours().filter(i=>daysLate(f(i,'DateLivraisonpr_x00e9_vue'))>0).length;
   const dbcU=DATA.dbc.filter(i=>daysSince(f(i,'Date_Enl_x00e8_vement'))>5).length;
-  const dc=DATA.devis.filter(i=>f(i,'Statut')==='En cours de traitement').length;
-  document.getElementById('badge-recu').textContent=recu+' reçus';
+  const dc=DATA.devis.filter(i=>(f(i,'Statut')||'').startsWith('En cours')).length;
+  document.getElementById('badge-recu').textContent=recu+" auj.";
   document.getElementById('badge-retard').textContent=retard+' retard';
   document.getElementById('badge-dbc').textContent=dbcU+' urgents';
   document.getElementById('badge-devis').textContent=dc+' en cours';
