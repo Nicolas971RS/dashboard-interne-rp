@@ -437,16 +437,16 @@ async function loadAll(){
     const [suivi,lignes,dbc,devis]=await Promise.all([
       // Suivi_BC — champs confirmés
       spFetch('sites/RseauxPlus','Suivi_BC',
-        '$select=ID,Title,Client,Vendeurencharge,DateLivraisonpr_x00e9_vue,Statut,_x00c9_tatfacturation&$orderby=ID desc'),
+        '$select=*,Client/Title&$expand=Client&$orderby=ID desc'),
       // Lignes_BC — champs confirmés, lié par BC lookup
       spFetch('sites/RseauxPlus','Lignes_BC',
-        '$select=ID,Title,BCId,BC/Title,R_x00e9_f_x00e9_rence,Produit_x002f_D_x00e9_signation,Quantit_x00e9_command_x00e9_e,Quantit_x00e9_livr_x00e9_e,Quantit_x00e9__x0020_reste_x0020_x00e0__x0020_livrer,BLSign_x00e9_,Chantier&$expand=BC&$orderby=BCId asc'),
+        '$select=*,BC/Title&$expand=BC&$orderby=BCId asc'),
       // Demandes_BC — champs confirmés
       spFetch('sites/BondeCommande','Demandes_BC',
-        "$select=ID,Title,NomClient,Nom_Employ_x00e9_,Email_Client,Date_Enl_x00e8_vement,Montant_HT,Vendeur,Statut,Date_Relance,Nb_Relances&$filter=Statut ne 'BC Reçu'&$orderby=Date_Enl_x00e8_vement asc"),
+        "$select=*&$filter=Statut ne 'BC Reçu'&$orderby=Date_Enl_x00e8_vement asc"),
       // Demandes_Devis
       spFetch('sites/BondeCommande','Demandes_Devis',
-        '$select=ID,Title,Client,Chantier,Statut,Date_Devis,Modified,Vendeur_Assign_x00e9_&$orderby=ID desc')
+        '$select=*&$orderby=ID desc')
     ]);
     DATA={suivi,lignes,dbc,devis};
     buildFilters();renderAll();updateBadges();
@@ -542,7 +542,7 @@ function renderSuiviKPIs(){
 function recuRow(i){
   const s=f(i,'Statut')||'—';
   const ef=f(i,'_x00c9_tatfacturation')||'Non Facturé';
-  const client=f(i,'Client')||'—';
+  const clientRaw=f(i,'Client');const client=(typeof clientRaw==='string'?clientRaw:null)||clientRaw?.Title||clientRaw?.Value||clientRaw?.LookupValue||'—';
   const vendeur=f(i,'Vendeurencharge')||'—';
   const numBC=f(i,'Title')||`BC-${i.ID}`;
   const dateLiv=fmtDate(f(i,'DateLivraisonpr_x00e9_vue'));
@@ -581,7 +581,7 @@ function renderSuiviEnCours(){
   b.innerHTML=ec.map(i=>{
     const s=f(i,'Statut')||'—';
     const ef=f(i,'_x00c9_tatfacturation')||'Non Facturé';
-    const client=f(i,'Client')||'—';
+    const clientRaw=f(i,'Client');const client=(typeof clientRaw==='string'?clientRaw:null)||clientRaw?.Title||clientRaw?.Value||clientRaw?.LookupValue||'—';
     const vendeur=f(i,'Vendeurencharge')||'—';
     const numBC=f(i,'Title')||`BC-${i.ID}`;
     const dateLiv=f(i,'DateLivraisonpr_x00e9_vue');
