@@ -1326,11 +1326,38 @@ async function openDevisPanel(id){
     // Charger lignes — essayer les deux noms de champ lookup possibles
     const [lignes,attachments]=await Promise.all([
       spFetch('sites/BondeCommande','Lignes_Demandes_Devis',
-        `$select=*&$top=100`
-      ).then(all=>all.filter(l=>{
-        const ref=f(l,'Num_x00e9_ro_Devis_RefId')||f(l,'Num_x00e9_ro_Devis_Ref')||f(l,'Num_x00e9_ro_Devis_RefId');
-        return parseInt(ref)===id || String(ref)===String(id);
-      })).catch(()=>[]),
+        `$select=*&$top=200`
+      ).then(all=>{
+        if(all.length>0){
+          console.log('[LIGNES] Clés disponibles sur le premier item:',Object.keys(all[0]));
+          console.log('[LIGNES] Premier item complet:',JSON.stringify(all[0]));
+          console.log('[LIGNES] Total lignes chargées:',all.length);
+        } else {
+          console.log('[LIGNES] Aucune ligne retournée par la liste');
+        }
+        return all.filter(l=>{
+          // Tester tous les noms de champ lookup possibles
+          const keys=['Num_x00e9_ro_Devis_RefId','Num_x00e9_ro_Devis_Ref','NumeroDevisRefId',
+            'Numero_Devis_RefId','Num_ro_Devis_RefId','Numéro_Devis_RefId'];
+          for(const k of keys){
+            const v=l[k];
+            if(v!==undefined&&v!==null){
+              if(parseInt(v)===id||String(v)===String(id)){
+                console.log('[LIGNES] Match trouvé avec clé:',k,'valeur:',v,'pour id:',id);
+                return true;
+              }
+            }
+          }
+          // Fallback : chercher dans le Title qui contient souvent le N° devis
+          const title=l['Title']||'';
+          const nd=f(item,'Num_x00e9_ro_Devis','Numero_Devis','Title')||`DEV-${id}`;
+          if(title&&nd&&title.includes(nd.replace('DEV-',''))){
+            console.log('[LIGNES] Match via Title:',title,'pour devis:',nd);
+            return true;
+          }
+          return false;
+        });
+      }).catch(e=>{console.error('[LIGNES] Erreur fetch:',e);return[];}),
       getAttachments('sites/BondeCommande','Demandes_Devis',id)
     ]);
     let html=`
