@@ -696,10 +696,50 @@ function renderDocuware(){
   }).join('');
 }
 
-// ═══ FLOW TOKEN (Azure AD — pour flows dans Solution) ═══
-const FLOW_SCOPE='https://service.flow.microsoft.com/.default';
-const ENV_ID='Default-d441528b-bc77-4636-8d24-8ac9d38aed63';
-const FLOW_DOCUWARE_ID='59f86f49474a4739ba5563104919af7b';
+// ═══ TOKEN POWER PLATFORM (silent — prompt=none) ═══
+const PP_SCOPE='https://service.flow.microsoft.com/user_impersonation openid';
+
+async function getPPToken(){
+  const cached=sessionStorage.getItem('pp_token');
+  const exp=parseInt(sessionStorage.getItem('pp_token_exp')||'0');
+  if(cached&&Date.now()<exp-60000)return cached;
+
+  const v=rndB64(),ch=await sha256b64(v);
+  const authUrl=`https://login.microsoftonline.com/${C.tenantId}/oauth2/v2.0/authorize?`+
+    new URLSearchParams({client_id:C.clientId,response_type:'code',redirect_uri:C.redirectUri,
+      scope:PP_SCOPE,code_challenge:ch,code_challenge_method:'S256',
+      response_mode:'query',prompt:'none'});
+
+  return new Promise(async(res,rej)=>{
+    // Popup 1x1 — invisible pour l'utilisateur
+    const pop=window.open(authUrl,'_pp_auth','width=1,height=1,left=-200,top=-200');
+    if(!pop){rej(new Error('Popup bloquée — autorise les popups'));return;}
+    let done=false;
+    const t=setInterval(async()=>{
+      try{
+        const u=pop.location.href;
+        if(u&&u.startsWith(C.redirectUri)){
+          clearInterval(t);done=true;pop.close();
+          const code=new URL(u).searchParams.get('code');
+          const err=new URL(u).searchParams.get('error');
+          if(err){rej(new Error(err));return;}
+          if(!code){rej(new Error('Pas de code'));return;}
+          const b=new URLSearchParams({client_id:C.clientId,grant_type:'authorization_code',
+            code,redirect_uri:C.redirectUri,code_verifier:v,scope:PP_SCOPE});
+          const r=await fetch(`https://login.microsoftonline.com/${C.tenantId}/oauth2/v2.0/token`,
+            {method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:b});
+          if(!r.ok){rej(new Error('Token PP: HTTP '+r.status));return;}
+          const d=await r.json();
+          sessionStorage.setItem('pp_token',d.access_token);
+          sessionStorage.setItem('pp_token_exp',String(Date.now()+d.expires_in*1000));
+          res(d.access_token);
+        }
+      }catch(e){/* cross-origin — attendre */}
+      if(!done&&pop.closed){clearInterval(t);rej(new Error('Popup fermée'));}
+    },300);
+    setTimeout(()=>{if(!done){clearInterval(t);if(!pop.closed)pop.close();rej(new Error('Timeout'));}},15000);
+  });
+}
 
 async function getFlowToken(){
   const cached=sessionStorage.getItem('flow_token');
@@ -1654,21 +1694,22 @@ const PA_FLOWS = {
 // ── Déclencher un flow PA via HTTP trigger ──
 async function triggerPAFlow(flowKey, itemId){
   const url = PA_FLOWS[flowKey];
-  if(!url){
-    alert(`Flow "${flowKey}" non encore configuré — URL manquante.`);
-    return false;
-  }
-  // URLs avec sig= → appel anonyme. URLs sans sig= → Bearer token du tenant requis.
-  const headers = {'Content-Type': 'application/json'};
-  if(!url.includes('sig=')) headers['Authorization'] = `Bearer ${getToken()}`;
+  if(!url){alert(`Flow "${flowKey}" non configuré.`);return false;}
 
-  const r = await fetch(url, {
-    method: 'POST',
-    headers,
-    body: JSON.stringify({itemId: itemId})
-  });
-  if(!r.ok && r.status !== 202){
-    const t = await r.text().catch(()=>'');
+  const headers = {'Content-Type':'application/json'};
+  // URLs sans sig= → token Power Platform requis
+  if(!url.includes('sig=')){
+    try{
+      const ppToken=await getPPToken();
+      headers['Authorization']=`Bearer ${ppToken}`;
+    }catch(e){
+      console.warn('getPPToken silencieux échoué:',e.message);
+      // Fallback : essayer sans token (peut fonctionner selon la config du tenant)
+    }
+  }
+  const r=await fetch(url,{method:'POST',headers,body:JSON.stringify({itemId})});
+  if(!r.ok&&r.status!==202){
+    const t=await r.text().catch(()=>'');
     throw new Error(`Flow PA ${flowKey}: HTTP ${r.status} — ${t.substring(0,150)}`);
   }
   return true;
