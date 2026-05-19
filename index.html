@@ -330,7 +330,7 @@
       <div class="page-header">
         <div><h1>Demandes BC — Enlèvements sans BC</h1><div class="sub">/sites/BondeCommande · Demandes_BC</div></div>
         <div style="display:flex;gap:8px">
-          <button class="btn-refresh" style="background:var(--green)" onclick="openNouveauDBCModal()">🆕 Nouvelle demande BC</button>
+          <button class="btn-refresh" style="background:var(--green)" onclick="openNouveauDBCModal()">🆕 Demande BC</button>
           <button class="btn-refresh" onclick="loadAll()">🔄 Actualiser</button>
         </div>
       </div>
@@ -343,7 +343,7 @@
         <div class="st">🧾 Toutes les demandes en cours</div>
         <div class="fb">
           <select class="fs" id="filter-vendeur-dbc" onchange="renderDBCTable()"><option value="all">Tous les vendeurs</option></select>
-          <select class="fs" id="filter-statut-dbc" onchange="renderDBCTable()"><option value="all">Tous les statuts</option><option value="En attente BC">En attente BC</option><option value="Relancé">Relancé</option><option value="Litigieux">Litigieux</option></select>
+          <select class="fs" id="filter-statut-dbc" onchange="renderDBCTable()"><option value="all">Tous les statuts</option><option value="En attente BC">En attente BC</option><option value="Relancé">Relancé</option><option value="Litigieux">Litigieux</option><option value="BC Reçu">BC Reçu</option></select>
         </div>
       </div>
       <div class="tc"><table>
@@ -509,7 +509,7 @@ async function loadAll(){
         '$select=ID,Title,BCId,BC/Title,R_x00e9_f_x00e9_rence,Produit_x002f_D_x00e9_signation,Quantit_x00e9_command_x00e9_e,Quantit_x00e9_livr_x00e9_e,BLSign_x00e9_,Chantier&$expand=BC&$orderby=BCId asc'),
       // Demandes_BC: $select=* + filter
       spFetch('sites/BondeCommande','Demandes_BC',
-        "$select=*&$filter=Statut ne 'BC Reçu'&$orderby=Date_Enl_x00e8_vement asc"),
+        "$select=*&$orderby=Date_Enl_x00e8_vement asc&$top=500"),
       // Demandes_Devis: $select=*
       spFetch('sites/BondeCommande','Demandes_Devis','$select=*&$orderby=ID desc'),
       // Base_Clients: for client name lookup map
@@ -629,6 +629,8 @@ function bcRow(i,showAction=true){
   const act=showAction?`<td><div class="btn-grp">
     <button class="btn gr" onclick="openFacturerModal(${i.ID},'${nE}','${cE}')">💰 Facturer</button>
     <button class="btn" onclick="openTraiterModal(${i.ID},'${nE}','${cE}')">🔧 Traiter</button>
+    <button class="btn" onclick="livraisonPartielleFlow(${i.ID},'${nE}','${cE}')">🔀 Partielle</button>
+    <button class="btn" onclick="envoyerBCFlow(${i.ID},'${nE}')">📦 Docuware</button>
   </div></td>`:'';
   return`<tr class="rr"><td class="ref">${numBC}</td><td class="cname">${client}</td><td class="mono">${dateLiv}</td><td class="mono">${numBL}</td><td>${vendeur}</td><td>${bStatut(s)}</td><td>${bFact(ef)}</td>${act}</tr>`;
 }
@@ -1187,8 +1189,44 @@ async function passerEnCours(id,fromPanel=false){
 
 // ── Envoyer devis — Flow PA (Passe 2) ──
 async function envoyerDevisFlow(id){
-  if(!confirm(`Lancer le flow Power Automate "Envoyer devis" pour DEV-${id} ?\n\n⚠️ Passe 2 non encore déployée — scope PA manquant.`))return;
-  alert('Flow ID: 96ee525f-4b81-4b47-8079-8040c63d00e5\n\nPour activer : ajouter le scope https://service.flow.microsoft.com/.default dans C.scope et implémenter triggerPAFlow() (Passe 2).');
+  if(!confirm(`Envoyer le devis DEV-${id} au client par email ?\nLe flow Power Automate va récupérer le PDF joint et envoyer l'email automatiquement.`))return;
+  const btn=document.querySelector(`#panel-body .pbtn.green`);
+  if(btn){btn.disabled=true;btn.textContent='⏳ Envoi...';}
+  try{
+    await triggerPAFlow('envoyerDevis',id);
+    if(btn){btn.disabled=false;btn.textContent='✅ Envoyé !';}
+    // Mettre à jour le statut en mémoire
+    const idx=DATA.devis.findIndex(i=>i.ID===id);
+    if(idx!==-1)DATA.devis[idx]['Statut']='Devis envoyé';
+    renderDevisTable();
+    setTimeout(()=>loadAll(),3000);
+  }catch(e){
+    if(btn){btn.disabled=false;btn.textContent='📨 Envoyer devis';}
+    alert('Erreur flow : '+e.message);
+  }
+}
+
+// ── Livraison partielle — Flow PA ──
+async function livraisonPartielleFlow(id,numBC,client){
+  if(!confirm(`Créer une livraison partielle pour ${numBC} · ${client} ?\nLe flow va générer le suffixe alphabétique et créer la ligne dans Suivi_BC.`))return;
+  try{
+    await triggerPAFlow('livraisonPartielle',id);
+    alert('✅ Flow livraison partielle lancé ! La liste sera mise à jour dans quelques secondes.');
+    setTimeout(()=>loadAll(),4000);
+  }catch(e){
+    alert('Erreur flow : '+e.message);
+  }
+}
+
+// ── Envoyer BC à Docuware — Flow PA ──
+async function envoyerBCFlow(id,numBC){
+  if(!confirm(`Envoyer le BC ${numBC} à Docuware ?\nLe flow va archiver les pièces jointes dans la GED.`))return;
+  try{
+    await triggerPAFlow('envoyerBC',id);
+    alert('✅ Flow Docuware lancé !');
+  }catch(e){
+    alert('Erreur flow : '+e.message);
+  }
 }
 
 // ── Portail création Demande BC ──
@@ -1258,7 +1296,8 @@ function openNouveauDBCModal(){
     };
     if(dateEnlev)body['Date_Enl_x00e8_vement']=dateEnlev+'T00:00:00Z';
     if(numbl)body['N_x00b0_BL']=numbl;
-    if(chef)body['Chef_de_chantier']=chef;
+    // Chef_de_chantier : nom interne SharePoint à confirmer — skippé pour éviter erreur 400
+    // if(chef)body['Chef_de_chantier']=chef;
     if(devisId)body['ID_DevisId']=parseInt(devisId);
 
     // Vendeur : si currentUser stocké, utiliser VendeurId (champ Personne)
@@ -1278,9 +1317,31 @@ function openNouveauDBCModal(){
   });
 }
 
-// ── Stub PA flows (Passe 2) ──
-async function triggerPAFlow(flowId,data){
-  throw new Error('Flow PA non encore connecté (Passe 2). Flow ID: '+flowId);
+// ── URLs HTTP trigger des flows Power Automate (déclenchement direct via sig) ──
+const PA_FLOWS = {
+  envoyerDevis:       'https://defaultd441528bbc7746368d248ac9d38aed.63.environment.api.powerplatform.com:443/powerautomate/automations/direct/workflows/41c98ae2c6964b1b87f5cfa75cb46776/triggers/manual/paths/invoke?api-version=1&sp=%2Ftriggers%2Fmanual%2Frun&sv=1.0&sig=1S-A55JhnRiF4McOqSKBXJwfDPacLRlNNSt072hwZ9Y',
+  livraisonPartielle: 'https://defaultd441528bbc7746368d248ac9d38aed.63.environment.api.powerplatform.com:443/powerautomate/automations/direct/workflows/5150617ef47e450085a2c9adaefd54a0/triggers/manual/paths/invoke?api-version=1&sp=%2Ftriggers%2Fmanual%2Frun&sv=1.0&sig=3ahWz9NDUmjJcU9nBr8Whir2g4fjQIZl2ac0NoZiLqA',
+  envoyerBC:          'https://defaultd441528bbc7746368d248ac9d38aed.63.environment.api.powerplatform.com:443/powerautomate/automations/direct/workflows/59f86f49474a4739ba5563104919af7b/triggers/manual/paths/invoke?api-version=1' // ⚠️ URL tronquée — recopy depuis PA
+};
+
+// ── Déclencher un flow PA via HTTP trigger ──
+async function triggerPAFlow(flowKey, itemId){
+  const url = PA_FLOWS[flowKey];
+  if(!url){
+    alert(`Flow "${flowKey}" non encore configuré — URL manquante.`);
+    return false;
+  }
+  const r = await fetch(url, {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({itemId: itemId})
+  });
+  // Les flows PA retournent 202 Accepted (pas 200)
+  if(!r.ok && r.status !== 202){
+    const t = await r.text().catch(()=>'');
+    throw new Error(`Flow PA ${flowKey}: HTTP ${r.status} — ${t.substring(0,150)}`);
+  }
+  return true;
 }
 
 // ═══════════════════════════════════════════════════════════
