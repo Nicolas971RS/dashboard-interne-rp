@@ -1549,12 +1549,19 @@ async function livraisonPartielleFlow(id,numBC,client){
   }
 }
 
-// ── Envoyer BC à Docuware — lien direct SP + appel API PA ──
+// ── Envoyer BC à Docuware — Flow PA direct ──
 async function envoyerBCFlow(id,numBC){
-  // Ouvrir l'item SharePoint directement pour déclencher le bouton Docuware natif
-  const spUrl=`${C.spRoot}/sites/RseauxPlus/Lists/Suivi_BC/DispForm.aspx?ID=${id}`;
-  if(confirm(`Ouvrir le BC ${numBC||id} dans SharePoint pour l'envoyer à Docuware ?\n\nLa page SharePoint s'ouvrira — clique le bouton Docuware depuis là.`)){
-    window.open(spUrl,'_blank');
+  if(!confirm(`Envoyer le BC ${numBC||id} à Docuware ?\nLe flow Power Automate va archiver les pièces jointes dans la GED.`))return;
+  try{
+    await triggerPAFlow('envoyerBC',id);
+    alert('✅ Flow Docuware lancé ! L\'archivage sera effectué dans quelques secondes.');
+    setTimeout(()=>loadAll(),5000);
+  }catch(e){
+    // L'erreur 401/400 peut apparaître mais le flow est quand même déclenché
+    // On avertit sans bloquer
+    console.warn('Docuware flow warning (peut être ignoré si flow exécuté):',e.message);
+    alert('⚠️ Réponse inattendue du flow : '+e.message+'\n\nVérifie dans Power Automate que le flow "Envoyer BC à Docuware-Dashboard" s\'est bien exécuté.');
+    setTimeout(()=>loadAll(),5000);
   }
 }
 
