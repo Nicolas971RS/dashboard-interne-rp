@@ -320,8 +320,8 @@
         </div>
       </div>
       <div class="tc"><table>
-        <thead><tr><th>Urgence</th><th>N° BC</th><th>Client</th><th>Date livraison</th><th>Vendeur</th><th>Statut</th><th>RAL / Lignes</th><th>État facturation</th></tr></thead>
-        <tbody id="suivi-encours-body"><tr class="empty-row"><td colspan="8">Chargement...</td></tr></tbody>
+        <thead><tr><th>Urgence</th><th>N° BC</th><th>Client</th><th>ETA</th><th>Vendeur</th><th>Statut</th><th>RAL / Lignes</th><th>État fact.</th><th>Actions</th></tr></thead>
+        <tbody id="suivi-encours-body"><tr class="empty-row"><td colspan="9">Chargement...</td></tr></tbody>
       </table></div>
     </div>
 
@@ -560,13 +560,25 @@ function getDBCVendeur(item){
   return'—';
 }
 
+// ═══ VENDEURS — liste fixe + dynamique ═══
+const VENDEURS_FIXES=['Fabrice','Fred','Fritz','Fritz Ballet','Fritz Carew','Nicolas'];
+function getAllVendeurs(){
+  const dyn=[...new Set([
+    ...DATA.suivi.map(i=>f(i,'Vendeurencharge')||''),
+    ...DATA.devis.map(i=>f(i,'Vendeur_Assign_x00e9_')||'')
+  ].filter(Boolean))];
+  return [...new Set([...VENDEURS_FIXES,...dyn])].sort();
+}
+
 function buildFilters(){
   const vBC=[...new Set(DATA.suivi.map(i=>f(i,'Vendeurencharge')||'').filter(Boolean))].sort();
+  const tous=getAllVendeurs();
   const cBC=[...new Set(DATA.suivi.map(i=>getClient(i)).filter(c=>c!=='—'))].sort();
   const vDBC=[...new Set(DATA.dbc.map(i=>getDBCVendeur(i)).filter(v=>v!=='—'))].sort();
-  const vDev=[...new Set(DATA.devis.map(i=>f(i,'Vendeur_Assign_x00e9_')||'').filter(Boolean))].sort();
-  pop('filter-vendeur-bc',vBC);pop('filter-client-bc',cBC);
-  pop('filter-vendeur-dbc',vDBC);pop('filter-vendeur-devis',vDev);
+  pop('filter-vendeur-bc',vBC);
+  pop('filter-client-bc',cBC);
+  pop('filter-vendeur-dbc',vDBC);
+  pop('filter-vendeur-devis',tous);
 }
 function pop(id,vals){
   const s=document.getElementById(id);if(!s)return;
@@ -655,6 +667,8 @@ function renderAFacturer(){
     return`<tr class="rr"><td class="ref">${numBC}</td><td class="cname">${client}</td><td class="mono">${bl}</td><td class="mono">${dateRec}</td><td>${vendeur}</td><td>${bStatut(s)}</td><td>${bFact(ef)}</td><td><div class="btn-grp">
       <button class="btn gr" onclick="openFacturerModal(${i.ID},'${nE}','${cE}')">💰 Facturer</button>
       <button class="btn" onclick="openTraiterModal(${i.ID},'${nE}','${cE}')">🔧 Traiter</button>
+      <button class="btn" onclick="livraisonPartielleFlow(${i.ID},'${nE}','${cE}')">🔀 Partielle</button>
+      <button class="btn" onclick="envoyerBCFlow(${i.ID},'${nE}')">📦 Docuware</button>
     </div></td></tr>`;
   }).join('');
 }
@@ -693,8 +707,8 @@ function renderAll(){
   const retard=ec.filter(i=>daysLate(f(i,'DateLivraisonpr_x00e9_vue'))>0).length;
   document.getElementById('kpi-eta').textContent=retard;
   document.getElementById('kpi-atbc').textContent=ec.filter(i=>getStatut(i)==='En attente BC').length;
-  const risqueDBC=DATA.dbc.reduce((s,i)=>s+Number(f(i,'Montant_HT')||0),0);
-  const dbcU=DATA.dbc.filter(i=>daysSince(f(i,'Date_Enl_x00e8_vement'))>5).length;
+  const risqueDBC=DATA.dbc.filter(i=>f(i,'Statut')!=='BC Reçu').reduce((s,i)=>s+Number(f(i,'Montant_HT')||0),0);
+  const dbcU=DATA.dbc.filter(i=>f(i,'Statut')!=='BC Reçu'&&daysSince(f(i,'Date_Enl_x00e8_vement'))>5).length;
   const dc=DATA.devis.filter(i=>(f(i,'Statut')||'').startsWith('En cours')).length;
   document.getElementById('kpi-recu').textContent=recu.length;
   document.getElementById('kpi-retard').textContent=retard;
@@ -740,16 +754,36 @@ function renderSuiviEnCours(){renderHistorique();
     const urg=urgFromDays(late>0?late:0);
     const etaColor=late>0?'color:var(--red)':'';
     const lignes=s==='Partiellement livré'?getLignesForBC(i.ID):[];
-    return`<tr class="${urg.row}"><td><span class="urg ${urg.cls}">${urg.lbl}</span></td><td class="ref">${numBC}</td><td class="cname">${client}</td><td class="mono" style="${etaColor}">${fmtDate(dateLiv)}</td><td>${vendeur}</td><td>${bStatut(s)}</td><td>${ralBlock(lignes)}</td><td>${bFact(ef)}</td></tr>`;
+    const cE=client.replace(/'/g,"\\'"),nE=numBC.replace(/'/g,"\\'");
+    return`<tr class="${urg.row}">
+      <td><span class="urg ${urg.cls}">${urg.lbl}</span></td>
+      <td class="ref">${numBC}</td><td class="cname">${client}</td>
+      <td class="mono" style="${etaColor}">${fmtDate(dateLiv)}</td>
+      <td>${vendeur}</td><td>${bStatut(s)}</td>
+      <td>${ralBlock(lignes)}</td><td>${bFact(ef)}</td>
+      <td><div class="btn-grp">
+        <button class="btn gr" onclick="openFacturerModal(${i.ID},'${nE}','${cE}')">💰</button>
+        <button class="btn" onclick="openTraiterModal(${i.ID},'${nE}','${cE}')">🔧</button>
+        <button class="btn" onclick="livraisonPartielleFlow(${i.ID},'${nE}','${cE}')">🔀</button>
+        <button class="btn" onclick="envoyerBCFlow(${i.ID},'${nE}')">📦</button>
+      </div></td>
+    </tr>`;
   }).join('');
 }
 
+function getDBCUrgence(item){
+  const statut=f(item,'Statut')||'';
+  if(statut==='BC Reçu')return{cls:'ok',lbl:'✓ BC Reçu',row:''};
+  const days=daysSince(f(item,'Date_Enl_x00e8_vement'));
+  return urgFromDays(days>5?days:0);
+}
+
 function dbcRowCompact(i){
+  const urg=getDBCUrgence(i);
   const days=daysSince(f(i,'Date_Enl_x00e8_vement'));
-  const urg=urgFromDays(days>5?days:0);
-  return`<tr class="${urg.row}"><td><span class="urg ${urg.cls}">${urg.lbl}</span></td><td class="cname">${f(i,'NomClient')||f(i,'Title')||'—'}</td><td class="mono">${fmtDate(f(i,'Date_Enl_x00e8_vement'))}</td><td class="amt" style="${days>5?'color:var(--red)':''}">${fmtMoney(f(i,'Montant_HT'))}</td><td>${f(i,'Vendeur')||'—'}</td><td>${bDBC(f(i,'Statut'))}</td><td><div class="btn-grp">
+  return`<tr class="${urg.row}"><td><span class="urg ${urg.cls}">${urg.lbl}</span></td><td class="cname">${f(i,'NomClient')||f(i,'Title')||'—'}</td><td class="mono">${fmtDate(f(i,'Date_Enl_x00e8_vement'))}</td><td class="amt" style="${days>5&&f(i,'Statut')!=='BC Reçu'?'color:var(--red)':''}">${fmtMoney(f(i,'Montant_HT'))}</td><td>${getDBCVendeur(i)}</td><td>${bDBC(f(i,'Statut'))}</td><td><div class="btn-grp">
     <button class="btn" onclick="openDBCPanel(${i.ID})">🔍 Détail</button>
-    ${days>10?`<button class="btn w" onclick="openDBCPanel(${i.ID})">⚡ Escalade</button>`:`<button class="btn" onclick="openDBCPanel(${i.ID})">📧 Relancer</button>`}
+    ${days>10&&f(i,'Statut')!=='BC Reçu'?`<button class="btn w" onclick="openDBCPanel(${i.ID})">⚡ Escalade</button>`:`<button class="btn" onclick="openDBCPanel(${i.ID})">📧 Relancer</button>`}
   </div></td></tr>`;
 }
 
@@ -769,15 +803,16 @@ function renderDBCTable(){
   if(fS!=='all')items=items.filter(i=>(f(i,'Statut')||'').startsWith(fS));
   const b=document.getElementById('dbc-body');
   b.innerHTML=items.length?items.map(i=>{
+    const urg=getDBCUrgence(i);
     const days=daysSince(f(i,'Date_Enl_x00e8_vement'));
-    const urg=urgFromDays(days>5?days:0);
     const nbRel=f(i,'Nb_Relances')||0;
     const devisRef=getDevisRefForDBC(i);
     const hasAttach=f(i,'Attachments');
     const vendeur=getDBCVendeur(i);
-    return`<tr class="${urg.row}" style="cursor:pointer" onclick="openDBCPanel(${i.ID})"><td><span class="urg ${urg.cls}">${urg.lbl}</span></td><td class="ref">DBC-${i.ID}</td><td class="cname">${f(i,'NomClient')||f(i,'Title')||'—'}</td><td>${f(i,'Nom_Employ_x00e9_')||'—'}</td><td class="ref" style="color:var(--blue)">${devisRef}</td><td class="mono">${fmtDate(f(i,'Date_Enl_x00e8_vement'))}</td><td class="amt" style="${days>5?'color:var(--red)':''}">${fmtMoney(f(i,'Montant_HT'))}</td><td>${vendeur}</td><td>${bDBC(f(i,'Statut'))}</td><td class="mono" style="text-align:center;${nbRel>=2?'color:var(--red);font-weight:700':''}">${nbRel}${hasAttach?' 📎':''}</td><td onclick="event.stopPropagation()"><div class="btn-grp">
+    const isReceu=f(i,'Statut')==='BC Reçu';
+    return`<tr class="${urg.row}" style="cursor:pointer" onclick="openDBCPanel(${i.ID})"><td><span class="urg ${urg.cls}">${urg.lbl}</span></td><td class="ref">DBC-${i.ID}</td><td class="cname">${f(i,'NomClient')||f(i,'Title')||'—'}</td><td>${f(i,'Nom_Employ_x00e9_')||'—'}</td><td class="ref" style="color:var(--blue)">${devisRef}</td><td class="mono">${fmtDate(f(i,'Date_Enl_x00e8_vement'))}</td><td class="amt" style="${days>5&&!isReceu?'color:var(--red)':''}">${fmtMoney(f(i,'Montant_HT'))}</td><td>${vendeur}</td><td>${bDBC(f(i,'Statut'))}</td><td class="mono" style="text-align:center;${nbRel>=2?'color:var(--red);font-weight:700':''}">${nbRel}${hasAttach?' 📎':''}</td><td onclick="event.stopPropagation()"><div class="btn-grp">
       <button class="btn" onclick="openDBCPanel(${i.ID})">🔍 Détail</button>
-      ${days>10?`<button class="btn w" onclick="openDBCPanel(${i.ID})">⚡ Escalade</button>`:`<button class="btn" onclick="openDBCPanel(${i.ID})">📧 Relancer</button>`}
+      ${days>10&&!isReceu?`<button class="btn w" onclick="openDBCPanel(${i.ID})">⚡ Escalade</button>`:`<button class="btn" onclick="openDBCPanel(${i.ID})">📧 Relancer</button>`}
     </div></td></tr>`;
   }).join(''):'<tr class="empty-row"><td colspan="11">Aucune demande BC en attente</td></tr>';
 }
@@ -813,7 +848,7 @@ function renderDevisTable(){
 function updateBadges(){
   const recu=getSuiviRecu().length;
   const retard=getSuiviEnCours().filter(i=>daysLate(f(i,'DateLivraisonpr_x00e9_vue'))>0).length;
-  const dbcU=DATA.dbc.filter(i=>daysSince(f(i,'Date_Enl_x00e8_vement'))>5).length;
+  const dbcU=DATA.dbc.filter(i=>f(i,'Statut')!=='BC Reçu'&&daysSince(f(i,'Date_Enl_x00e8_vement'))>5).length;
   const dc=DATA.devis.filter(i=>(f(i,'Statut')||'').startsWith('En cours')).length;
   document.getElementById('badge-recu').textContent=recu+" auj.";
   document.getElementById('badge-retard').textContent=retard+' retard';
@@ -995,7 +1030,7 @@ function openFacturerModal(id,numBC,client){
 function openTraiterModal(id,numBC,client){
   const today=new Date().toISOString().slice(0,10);
   // Construire options vendeurs depuis Suivi_BC
-  const vendeurs=[...new Set(DATA.suivi.map(i=>f(i,'Vendeurencharge')||'').filter(Boolean))].sort();
+  const vendeurs=getAllVendeurs();
   const currentVendeur=DATA.suivi.find(i=>i.ID===id);
   const currentV=f(currentVendeur,'Vendeurencharge')||'';
   const vendOpts=vendeurs.map(v=>`<option value="${v}"${v===currentV?' selected':''}>${v}</option>`).join('');
@@ -1117,7 +1152,7 @@ async function openDevisPanel(id){
     const nd=f(item,'Num_x00e9_ro_Devis','Numero_Devis','Title')||`DEV-${id}`;
     const st=f(item,'Statut')||'—';
     document.getElementById('panel-title').textContent=`📄 ${nd}`;
-    const vendeurs=[...new Set(DATA.suivi.map(i=>f(i,'Vendeurencharge')||'').filter(Boolean))].sort();
+    const vendeurs=getAllVendeurs();
     const currentVd=f(item,'Vendeur_Assign_x00e9_')||'';
     const vOpts=vendeurs.map(v=>`<option value="${v}"${v===currentVd?' selected':''}>${v}</option>`).join('');
 
@@ -1134,7 +1169,15 @@ async function openDevisPanel(id){
     let html=`
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:0">
         <div class="pf"><div class="pf-lbl">N° Devis</div><div class="pf-val mono">${nd}</div></div>
-        <div class="pf"><div class="pf-lbl">Statut</div><div class="pf-val">${bDevis(st)}</div></div>
+        <div class="pf"><div class="pf-lbl">Statut actuel</div><div class="pf-val">${bDevis(st)}</div></div>
+      </div>
+      <div class="pf"><div class="pf-lbl">Changer le statut</div>
+        <div style="display:flex;gap:6px;align-items:center;margin-top:2px">
+          <select id="panel-statut-devis" style="flex:1;border:1px solid var(--border);border-radius:5px;padding:5px 8px;font-size:12px;font-family:inherit">
+            ${['Nouvelle','En cours','Devis envoyé','Converti en BC','Expiré','Refusé'].map(s=>`<option value="${s}"${s===st?' selected':''}>${s}</option>`).join('')}
+          </select>
+          <button class="pbtn blue" style="padding:5px 10px;font-size:11px" onclick="changerStatutDevis(${id})">💾 Changer</button>
+        </div>
       </div>
       <div class="pf"><div class="pf-lbl">Client</div><div class="pf-val">${f(item,'Client')||'—'}</div></div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:0">
@@ -1223,6 +1266,25 @@ async function envoyerDevisFlow(id){
   }catch(e){
     if(btn){btn.disabled=false;btn.textContent='📨 Envoyer devis';}
     alert('Erreur flow : '+e.message);
+  }
+}
+
+// ── Changer statut devis depuis panneau ──
+async function changerStatutDevis(id){
+  const sel=document.getElementById('panel-statut-devis');
+  if(!sel||!sel.value){return;}
+  const btn=sel.nextElementSibling;
+  if(btn){btn.disabled=true;btn.textContent='⏳...';}
+  try{
+    await spPatch('sites/BondeCommande','Demandes_Devis',id,{'Statut':sel.value});
+    const idx=DATA.devis.findIndex(i=>i.ID===id);
+    if(idx!==-1)DATA.devis[idx]['Statut']=sel.value;
+    if(btn){btn.disabled=false;btn.textContent='✅ Mis à jour';}
+    renderDevisTable();
+    setTimeout(()=>loadAll(),2500);
+  }catch(e){
+    if(btn){btn.disabled=false;btn.textContent='💾 Changer';}
+    alert('Erreur : '+e.message);
   }
 }
 
