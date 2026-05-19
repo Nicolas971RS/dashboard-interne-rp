@@ -548,10 +548,19 @@ function getClient(item){
 }
 
 // ═══ BUILD FILTERS ═══
+// Helper : champ Vendeur de Demandes_BC est une Personne ou groupe (objet complexe)
+function getDBCVendeur(item){
+  const v=item.Vendeur;
+  if(!v)return'—';
+  if(typeof v==='string'&&v)return v;
+  if(typeof v==='object'){return v.Title||v.Name||v.LoginName||'—';}
+  return'—';
+}
+
 function buildFilters(){
   const vBC=[...new Set(DATA.suivi.map(i=>f(i,'Vendeurencharge')||'').filter(Boolean))].sort();
   const cBC=[...new Set(DATA.suivi.map(i=>getClient(i)).filter(c=>c!=='—'))].sort();
-  const vDBC=[...new Set(DATA.dbc.map(i=>f(i,'Vendeur')||'').filter(Boolean))].sort();
+  const vDBC=[...new Set(DATA.dbc.map(i=>getDBCVendeur(i)).filter(v=>v!=='—'))].sort();
   const vDev=[...new Set(DATA.devis.map(i=>f(i,'Vendeur_Assign_x00e9_')||'').filter(Boolean))].sort();
   pop('filter-vendeur-bc',vBC);pop('filter-client-bc',cBC);
   pop('filter-vendeur-dbc',vDBC);pop('filter-vendeur-devis',vDev);
@@ -751,7 +760,7 @@ function renderDBCTable(){
   let items=[...DATA.dbc];
   const fV=document.getElementById('filter-vendeur-dbc')?.value||'all';
   const fS=document.getElementById('filter-statut-dbc')?.value||'all';
-  if(fV!=='all')items=items.filter(i=>f(i,'Vendeur')===fV);
+  if(fV!=='all')items=items.filter(i=>getDBCVendeur(i)===fV);
   if(fS!=='all')items=items.filter(i=>(f(i,'Statut')||'').startsWith(fS));
   const b=document.getElementById('dbc-body');
   b.innerHTML=items.length?items.map(i=>{
@@ -760,7 +769,8 @@ function renderDBCTable(){
     const nbRel=f(i,'Nb_Relances')||0;
     const devisRef=getDevisRefForDBC(i);
     const hasAttach=f(i,'Attachments');
-    return`<tr class="${urg.row}" style="cursor:pointer" onclick="openDBCPanel(${i.ID})"><td><span class="urg ${urg.cls}">${urg.lbl}</span></td><td class="ref">DBC-${i.ID}</td><td class="cname">${f(i,'NomClient')||f(i,'Title')||'—'}</td><td>${f(i,'Nom_Employ_x00e9_')||'—'}</td><td class="ref" style="color:var(--blue)">${devisRef}</td><td class="mono">${fmtDate(f(i,'Date_Enl_x00e8_vement'))}</td><td class="amt" style="${days>5?'color:var(--red)':''}">${fmtMoney(f(i,'Montant_HT'))}</td><td>${f(i,'Vendeur')||'—'}</td><td>${bDBC(f(i,'Statut'))}</td><td class="mono" style="text-align:center;${nbRel>=2?'color:var(--red);font-weight:700':''}">${nbRel}${hasAttach?' 📎':''}</td><td onclick="event.stopPropagation()"><div class="btn-grp">
+    const vendeur=getDBCVendeur(i);
+    return`<tr class="${urg.row}" style="cursor:pointer" onclick="openDBCPanel(${i.ID})"><td><span class="urg ${urg.cls}">${urg.lbl}</span></td><td class="ref">DBC-${i.ID}</td><td class="cname">${f(i,'NomClient')||f(i,'Title')||'—'}</td><td>${f(i,'Nom_Employ_x00e9_')||'—'}</td><td class="ref" style="color:var(--blue)">${devisRef}</td><td class="mono">${fmtDate(f(i,'Date_Enl_x00e8_vement'))}</td><td class="amt" style="${days>5?'color:var(--red)':''}">${fmtMoney(f(i,'Montant_HT'))}</td><td>${vendeur}</td><td>${bDBC(f(i,'Statut'))}</td><td class="mono" style="text-align:center;${nbRel>=2?'color:var(--red);font-weight:700':''}">${nbRel}${hasAttach?' 📎':''}</td><td onclick="event.stopPropagation()"><div class="btn-grp">
       <button class="btn" onclick="openDBCPanel(${i.ID})">🔍 Détail</button>
       ${days>10?`<button class="btn w" onclick="openDBCPanel(${i.ID})">⚡ Escalade</button>`:`<button class="btn" onclick="openDBCPanel(${i.ID})">📧 Relancer</button>`}
     </div></td></tr>`;
@@ -941,8 +951,10 @@ async function submitModal(){
   msgEl.className='modal-msg';msgEl.textContent='';
   try{
     await _onSubmit();
-    msgEl.className='modal-msg ok';msgEl.textContent='✅ Mis à jour avec succès !';
-    setTimeout(()=>{closeModal();loadAll();},1200);
+    msgEl.className='modal-msg ok';msgEl.textContent='✅ Mis à jour — rechargement en cours...';
+    // Fermer rapidement, recharger après délai SharePoint
+    setTimeout(()=>closeModal(),800);
+    setTimeout(()=>loadAll(),2500); // 2.5s pour laisser SP propager
   }catch(e){
     msgEl.className='modal-msg ko';msgEl.textContent='❌ '+e.message;
     btn.disabled=false;btn.textContent='Valider';
@@ -967,14 +979,29 @@ function openFacturerModal(id,numBC,client){
     body[nFCKey()]=fc;
     body[etatFactKey()]=ef;
     await spPatch('sites/RseauxPlus','Suivi_BC',id,body);
+    // Mise à jour en mémoire immédiate
+    const idx=DATA.suivi.findIndex(i=>i.ID===id);
+    if(idx!==-1)Object.assign(DATA.suivi[idx],body);
+    renderAll();updateBadges();
   });
 }
 
-// ── Modal Traiter (BL + dates + montant) ──
+// ── Modal Traiter (BL + dates + montant + vendeur) ──
 function openTraiterModal(id,numBC,client){
   const today=new Date().toISOString().slice(0,10);
+  // Construire options vendeurs depuis Suivi_BC
+  const vendeurs=[...new Set(DATA.suivi.map(i=>f(i,'Vendeurencharge')||'').filter(Boolean))].sort();
+  const currentVendeur=DATA.suivi.find(i=>i.ID===id);
+  const currentV=f(currentVendeur,'Vendeurencharge')||'';
+  const vendOpts=vendeurs.map(v=>`<option value="${v}"${v===currentV?' selected':''}>${v}</option>`).join('');
+
   openModal(`🔧 Traiter — ${numBC} · ${client}`,`
-    <div class="mf"><label>N° BL *</label><input id="m-bl" placeholder="ex: BL-2025-0123"></div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+      <div class="mf"><label>N° BL *</label><input id="m-bl" placeholder="ex: BL-2025-0123"></div>
+      <div class="mf"><label>Vendeur en charge</label>
+        <select id="m-vendeur"><option value="">— Inchangé —</option>${vendOpts}</select>
+      </div>
+    </div>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
       <div class="mf"><label>Date BL</label><input id="m-datebl" type="date" value="${today}"></div>
       <div class="mf"><label>Date prise en charge</label><input id="m-datepec" type="date" value="${today}"></div>
@@ -995,13 +1022,20 @@ function openTraiterModal(id,numBC,client){
     const montant=document.getElementById('m-montant').value;
     const chantier=document.getElementById('m-chantier').value.trim();
     const rem=document.getElementById('m-rem').value.trim();
-    if(datebl)body['DateBL']=datebl;
-    if(datepec)body['Datepriseencharge']=datepec;
-    if(eta)body['DateLivraisonpr_x00e9_vue']=eta;
-    if(montant)body['MontantHT']=parseFloat(montant);
+    const vendeur=document.getElementById('m-vendeur').value;
+    // Dates : format ISO complet requis par SharePoint REST
+    if(datebl)body['DateBL']=datebl+'T00:00:00Z';
+    if(datepec)body['Datepriseencharge']=datepec+'T00:00:00Z';
+    if(eta)body['DateLivraisonpr_x00e9_vue']=eta+'T00:00:00Z';
+    if(montant&&!isNaN(parseFloat(montant)))body['MontantHT']=parseFloat(montant);
     if(chantier)body['Projet']=chantier;
     if(rem)body['Remarques']=rem;
+    if(vendeur)body['Vendeurencharge']=vendeur;
     await spPatch('sites/RseauxPlus','Suivi_BC',id,body);
+    // Mise à jour en mémoire immédiate pour affichage instantané
+    const idx=DATA.suivi.findIndex(i=>i.ID===id);
+    if(idx!==-1)Object.assign(DATA.suivi[idx],body);
+    renderAll();updateBadges();
   });
 }
 
@@ -1029,6 +1063,8 @@ async function openDBCPanel(id){
     ]);
     const days=daysSince(f(item,'Date_Enl_x00e8_vement'));
     const nbRel=f(item,'Nb_Relances')||0;
+    const vendeur=getDBCVendeur(item);
+    const numBL=f(item,'N_x00b0_BL')||'—';
     let html=`
       <div class="pf"><div class="pf-lbl">Client</div><div class="pf-val">${f(item,'NomClient')||f(item,'Title')||'—'}</div></div>
       <div class="pf"><div class="pf-lbl">Employé</div><div class="pf-val">${f(item,'Nom_Employ_x00e9_')||'—'}</div></div>
@@ -1038,12 +1074,13 @@ async function openDBCPanel(id){
       </div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:0">
         <div class="pf"><div class="pf-lbl">Montant HT</div><div class="pf-val mono" style="${days>5?'color:var(--red);font-weight:700':''}">${fmtMoney(f(item,'Montant_HT'))}</div></div>
-        <div class="pf"><div class="pf-lbl">Nb relances</div><div class="pf-val" style="${nbRel>=2?'color:var(--red);font-weight:700':''}">${nbRel}</div></div>
+        <div class="pf"><div class="pf-lbl">N° BL</div><div class="pf-val mono">${numBL}</div></div>
       </div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:0">
-        <div class="pf"><div class="pf-lbl">Vendeur</div><div class="pf-val">${f(item,'Vendeur')||'—'}</div></div>
-        <div class="pf"><div class="pf-lbl">Statut</div><div class="pf-val">${bDBC(f(item,'Statut'))}</div></div>
+        <div class="pf"><div class="pf-lbl">Vendeur</div><div class="pf-val">${vendeur}</div></div>
+        <div class="pf"><div class="pf-lbl">Nb relances</div><div class="pf-val" style="${nbRel>=2?'color:var(--red);font-weight:700':''}">${nbRel}</div></div>
       </div>
+      <div class="pf"><div class="pf-lbl">Statut</div><div class="pf-val">${bDBC(f(item,'Statut'))}</div></div>
       <hr style="border:none;border-top:1px solid var(--border);margin:4px 0 12px">
       <div class="pf"><div class="pf-lbl">📎 Pièces jointes (${attachments.length})</div>`;
     if(attachments.length){
@@ -1156,16 +1193,16 @@ async function envoyerDevisFlow(id){
 
 // ── Portail création Demande BC ──
 function openNouveauDBCModal(){
-  // Construire la liste des devis pour le select
   const devisOpts=DATA.devis.map(d=>{
     const ref=f(d,'Num_x00e9_ro_Devis','Numero_Devis','Title')||`DEV-${d.ID}`;
     const client=f(d,'Client')||'';
     return `<option value="${d.ID}">${ref}${client?' — '+client:''}</option>`;
   }).join('');
+  const today=new Date().toISOString().slice(0,10);
 
   openModal('🆕 Nouvelle Demande BC — Enlèvement sans BC',`
-    <div style="background:var(--amber-light);border-left:3px solid var(--amber);border-radius:4px;padding:7px 10px;font-size:11px;color:#7a4000;margin-bottom:2px;">
-      Un client récupère de la marchandise sans avoir envoyé de BC. Remplissez ce formulaire pour créer la demande et déclencher l'email de régularisation.
+    <div style="background:var(--amber-light);border-left:3px solid var(--amber);border-radius:4px;padding:7px 10px;font-size:11px;color:#7a4000;margin-bottom:6px;">
+      Un client récupère de la marchandise sans BC. Ce formulaire crée la demande dans SharePoint.
     </div>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
       <div class="mf"><label>Client (entreprise) *</label><input id="d-client" placeholder="Nom de l'entreprise"></div>
@@ -1175,14 +1212,18 @@ function openNouveauDBCModal(){
       <div class="mf"><label>Email client *</label><input id="d-email" type="email" placeholder="contact@entreprise.com"></div>
       <div class="mf"><label>Montant HT estimé (€) *</label><input id="d-montant" type="number" step="0.01" placeholder="0.00"></div>
     </div>
-    <div class="mf"><label>Vendeur</label><input id="d-vendeur" value="${sessionStorage.getItem('user_name')||''}" placeholder="Nom du vendeur"></div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+      <div class="mf"><label>Date enlèvement</label><input id="d-dateenlev" type="date" value="${today}"></div>
+      <div class="mf"><label>N° BL signé</label><input id="d-numbl" placeholder="ex: 820454"></div>
+    </div>
+    <div class="mf"><label>Chef de chantier</label><input id="d-chef" placeholder="Nom du chef de chantier (optionnel)"></div>
     <div class="mf"><label>Articles / Marchandise remise *</label><textarea id="d-articles" rows="2" placeholder="Description des articles, références, quantités..."></textarea></div>
     <div class="mf"><label>Devis lié (optionnel)</label>
       <select id="d-devis"><option value="">— Aucun devis lié —</option>${devisOpts}</select>
     </div>
-    <div class="mf"><label>BL signé (scan ou photo)</label>
-      <input id="d-bl" type="file" accept=".pdf,.jpg,.jpeg,.png" style="font-size:12px;padding:4px 0">
-      <span class="hint">PDF, JPG, PNG — peut être ajouté plus tard</span>
+    <div class="mf"><label>📎 BL signé — fichier (optionnel)</label>
+      <input id="d-blfile" type="file" accept=".pdf,.jpg,.jpeg,.png" style="font-size:12px;padding:4px 0">
+      <span class="hint">PDF, JPG, PNG</span>
     </div>`,
   async()=>{
     const client=document.getElementById('d-client').value.trim();
@@ -1196,31 +1237,43 @@ function openNouveauDBCModal(){
     if(!montant||parseFloat(montant)<=0){document.getElementById('d-montant').classList.add('err');throw new Error('Le montant HT est obligatoire.');}
     if(!articles){document.getElementById('d-articles').classList.add('err');throw new Error('La description des articles est obligatoire.');}
 
-    const today=new Date().toISOString();
+    const dateEnlev=document.getElementById('d-dateenlev').value;
+    const numbl=document.getElementById('d-numbl').value.trim();
+    const chef=document.getElementById('d-chef').value.trim();
+    const devisId=document.getElementById('d-devis').value;
+
+    // Générer le titre DBC
+    const dStr=dateEnlev.replace(/-/g,'');
+    const initials=client.split(' ').map(w=>w[0]||'').join('').toUpperCase().slice(0,3);
+    const titre=`DBC-${dStr}-${initials}`;
+
     const body={
+      'Title':titre,
       'NomClient':client,
       'Nom_Employ_x00e9_':employe,
       'Email_Client':email,
       'Montant_HT':parseFloat(montant),
-      'Vendeur':document.getElementById('d-vendeur').value.trim()||sessionStorage.getItem('user_name')||'',
       'Articles':articles,
       'Statut':'En attente BC',
-      'Date_Enl_x00e8_vement':today,
     };
-    const devisId=document.getElementById('d-devis').value;
+    if(dateEnlev)body['Date_Enl_x00e8_vement']=dateEnlev+'T00:00:00Z';
+    if(numbl)body['N_x00b0_BL']=numbl;
+    if(chef)body['Chef_de_chantier']=chef;
     if(devisId)body['ID_DevisId']=parseInt(devisId);
 
-    // Créer l'item
+    // Vendeur : si currentUser stocké, utiliser VendeurId (champ Personne)
+    const userId=parseInt(sessionStorage.getItem('sp_bc_user_id')||'0');
+    if(userId)body['VendeurId']=userId;
+
     const created=await spPost('sites/BondeCommande','Demandes_BC',body);
     const newId=created.ID||created.id;
 
-    // Upload BL si fourni
-    const fileInput=document.getElementById('d-bl');
+    const fileInput=document.getElementById('d-blfile');
     if(fileInput&&fileInput.files&&fileInput.files[0]&&newId){
       const file=fileInput.files[0];
       const ab=await file.arrayBuffer();
       try{await spAddAttachment('sites/BondeCommande','Demandes_BC',newId,file.name,ab);}
-      catch(e){console.warn('BL upload failed (non bloquant):',e.message);}
+      catch(e){console.warn('Upload BL non bloquant:',e.message);}
     }
   });
 }
@@ -1256,6 +1309,13 @@ async function init(){
   document.getElementById('loadingScreen').style.display='flex';
   document.getElementById('loadingText').textContent='Chargement des 5 sources SharePoint...';
   await loadAll();
+  // Récupérer l'ID utilisateur SharePoint (BondeCommande) pour les champs Personne
+  try{
+    const r=await fetch(`${C.spRoot}/sites/BondeCommande/_api/web/currentUser`,{
+      headers:{'Authorization':`Bearer ${getToken()}`,'Accept':'application/json;odata=nometadata'}
+    });
+    if(r.ok){const u=await r.json();sessionStorage.setItem('sp_bc_user_id',u.Id||'');}
+  }catch(e){console.warn('CurrentUser fetch:',e);}
   document.getElementById('loadingScreen').style.display='none';
   setInterval(loadAll,5*60*1000);
 }
