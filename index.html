@@ -242,6 +242,7 @@
     <div class="topbar-spacer"></div>
     <span class="topbar-date" id="currentDate"></span>
     <div class="topbar-user">
+      <span id="last-load-time" style="font-size:10px;color:rgba(255,255,255,.45);margin-right:10px">À l'instant</span>
       <div class="topbar-avatar" id="userInitials">NL</div>
       <span id="userName">...</span>
       <button class="topbar-logout" onclick="logout()">Déconnexion</button>
@@ -441,7 +442,7 @@
         </div>
       </div>
       <div class="tc"><table>
-        <thead><tr><th>N° Devis</th><th>Client</th><th>Chantier</th><th>Date</th><th>Vendeur</th><th>Statut</th><th>Dernière MàJ</th><th>Actions</th></tr></thead>
+        <thead><tr><th>N° Devis</th><th>Client</th><th>Chantier</th><th>Date</th><th>Devis RS</th><th>Vendeur</th><th>Statut</th><th>Dernière MàJ</th><th>Actions</th></tr></thead>
         <tbody id="devis-body"><tr class="empty-row"><td colspan="7">Chargement...</td></tr></tbody>
       </table></div>
     </div>
@@ -594,7 +595,7 @@ async function loadAll(){
     // Debug: log first suivi item to help identify field names
     if(suivi.length>0){console.log('DEBUG Suivi_BC[0] keys:',Object.keys(suivi[0]).sort().join(', '));}
 
-    buildFilters();renderAll();updateBadges();
+    _lastLoad=Date.now();updateTimer();
     document.getElementById('lastRefresh').textContent=
       `${suivi.length} BCs · ${lignes.length} lignes · ${dbc.length} DBC · ${devis.length} devis · Actualisé ${new Date().toLocaleTimeString('fr-FR')}`;
   }catch(e){showError(e.message);console.error(e);}
@@ -629,7 +630,25 @@ function getDBCVendeur(item){
   return'—';
 }
 
-// ═══ ACCORDÉON ═══
+// ═══ A8 — TIMER ACTUALISATION ═══
+let _lastLoad=Date.now();
+function updateTimer(){
+  const el=document.getElementById('last-load-time');
+  if(!el)return;
+  const mins=Math.floor((Date.now()-_lastLoad)/60000);
+  el.textContent=mins===0?'À l\'instant':`Il y a ${mins} min`;
+  el.style.color=mins>4?'var(--amber)':'var(--grey)';
+}
+setInterval(updateTimer,30000);
+
+// ═══ A4 — LIGNE VERTE IMMÉDIATE après PATCH ═══
+function highlightRow(id){
+  document.querySelectorAll(`[data-bc-id="${id}"]`).forEach(tr=>{
+    tr.style.transition='background .3s';
+    tr.style.background='#d4edda';
+    setTimeout(()=>{tr.style.background='';},2500);
+  });
+}
 function toggleAcc(id,hd){
   const body=document.getElementById(id);
   const arrow=hd.querySelector('.acc-arrow');
@@ -720,7 +739,7 @@ async function getFlowToken(){
     },500);
   });
 }
-const VENDEURS_FIXES=['Fabrice','Fred','Fritz','Fritz Ballet','Fritz Carew','Nicolas'];
+const VENDEURS_FIXES=['Fabrice','Fred','Fritz','Nicolas'];
 function getAllVendeurs(){
   const dyn=[...new Set([
     ...DATA.suivi.map(i=>f(i,'Vendeurencharge')||''),
@@ -806,7 +825,7 @@ function bcRow(i,showAction=true){
     <button class="btn" onclick="livraisonPartielleFlow(${i.ID},'${nE}','${cE}')">🔀 Partielle</button>
     <button class="btn" onclick="envoyerBCFlow(${i.ID},'${nE}')">📦 Docuware</button>
   </div></td>`:'';
-  return`<tr class="rr"><td class="ref">${numBC}</td><td class="cname">${client}</td><td class="mono">${dateLiv}</td><td class="mono">${numBL}</td><td>${vendeur}</td><td>${bStatut(s)}</td><td>${bFact(ef)}</td>${act}</tr>`;
+  return`<tr class="rr" data-bc-id="${i.ID}"><td class="ref">${numBC}</td><td class="cname">${client}</td><td class="mono">${dateLiv}</td><td class="mono">${numBL}</td><td>${vendeur}</td><td>${bStatut(s)}</td><td>${bFact(ef)}</td>${act}</tr>`;
 }
 
 // ═══ RENDER ALL ═══
@@ -1000,14 +1019,18 @@ function renderDevisTable(){
     if(isNew)btns=`<button class="btn blue" onclick="event.stopPropagation();passerEnCours(${i.ID})">📋 Prendre en charge</button>`;
     else if(st==='En cours')btns=`<button class="btn teal" onclick="event.stopPropagation();envoyerDevisFlow(${i.ID})">📨 Envoyer</button>`;
     return`<tr class="${stale?'ru':isNew?'rr':''}" style="cursor:pointer" onclick="openDevisPanel(${i.ID})">
-      <td class="ref">${nd}</td><td class="cname">${f(i,'Client')||'—'}</td>
-      <td>${f(i,'Chantier')||'—'}</td><td class="mono">${fmtDate(f(i,'Date_Devis'))}</td>
-      <td>${f(i,'Vendeur_Assign_x00e9_')||'—'}</td><td>${bDevis(st)}</td>
+      <td class="ref">${nd}</td>
+      <td class="cname">${f(i,'Client')||'—'}</td>
+      <td>${f(i,'Chantier')||'—'}</td>
+      <td class="mono">${fmtDate(f(i,'Date_Devis'))}</td>
+      <td class="mono">${f(i,'Devis_RS')||'—'}</td>
+      <td>${f(i,'Vendeur_Assign_x00e9_')||'—'}</td>
+      <td>${bDevis(st)}</td>
       <td class="mono" style="${stale?'color:var(--amber)':''}">${fmtDate(mod)}</td>
       <td onclick="event.stopPropagation()"><div class="btn-grp">
         <button class="btn" onclick="openDevisPanel(${i.ID})">🔍 Détail</button>${btns}
       </div></td></tr>`;
-  }).join(''):'<tr class="empty-row"><td colspan="8">Aucun devis correspondant</td></tr>';
+  }).join(''):'<tr class="empty-row"><td colspan="9">Aucun devis correspondant</td></tr>';
 }
 
 // ═══ BADGES ═══
@@ -1108,8 +1131,13 @@ async function getAttachments(site,list,id){
 }
 
 // ── Ouvrir pièce jointe via REST API (/$value) — contourne le CORS sur fichiers directs ──
-async function openAttachment(serverRelativeUrl){
-  // Méthode 1 : REST API /$value — Bearer accepté, CORS OK
+async function openAttachment(rawUrl){
+  // Normaliser : extraire le chemin relatif si URL absolue
+  let serverRelativeUrl=rawUrl;
+  if(rawUrl.startsWith('http')){
+    try{serverRelativeUrl=new URL(rawUrl).pathname;}
+    catch(e){serverRelativeUrl=rawUrl.replace(/^https?:\/\/[^\/]+/,'');}
+  }
   const apiUrl=`${C.spRoot}/_api/web/GetFileByServerRelativeUrl(@u)/$value?@u='${encodeURIComponent(serverRelativeUrl)}'`;
   try{
     const r=await fetch(apiUrl,{headers:{'Authorization':`Bearer ${getToken()}`}});
@@ -1117,17 +1145,15 @@ async function openAttachment(serverRelativeUrl){
     const blob=await r.blob();
     const blobUrl=URL.createObjectURL(blob);
     const a=document.createElement('a');
-    a.href=blobUrl;
-    a.download=serverRelativeUrl.split('/').pop();
-    a.target='_blank';
-    document.body.appendChild(a);a.click();document.body.removeChild(a);
+    a.href=blobUrl;a.download=serverRelativeUrl.split('/').pop();
+    a.target='_blank';document.body.appendChild(a);a.click();document.body.removeChild(a);
     setTimeout(()=>URL.revokeObjectURL(blobUrl),20000);
   }catch(e){
-    // Fallback : ouverture directe (fonctionne si session SharePoint active)
+    // Fallback : ouvrir directement (si session SP active)
     console.warn('REST download failed, trying direct:',e.message);
     const directUrl=C.spRoot+serverRelativeUrl;
     const w=window.open(directUrl,'_blank');
-    if(!w)alert('Veuillez autoriser les popups pour ce site, puis réessayer.');
+    if(!w)alert('Autorise les popups pour ce site puis réessaie.');
   }
 }
 
@@ -1202,12 +1228,20 @@ function openTraiterModal(id,numBC,client){
   const currentV=f(currentVendeur,'Vendeurencharge')||'';
   const vendOpts=vendeurs.map(v=>`<option value="${v}"${v===currentV?' selected':''}>${v}</option>`).join('');
 
+  const STATUTS_BC=['En préparation','Prêt à Livrer','Partiellement livré','Entièrement livré','En attente BC','Reçu','Annulé'];
+  const currentItem=DATA.suivi.find(i=>i.ID===id);
+  const currentSt=getStatut(currentItem||{});
+  const stOpts=STATUTS_BC.map(s=>`<option value="${s}"${s===currentSt?' selected':''}>${s}</option>`).join('');
+
   openModal(`🔧 Traiter — ${numBC} · ${client}`,`
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
       <div class="mf"><label>N° BL *</label><input id="m-bl" placeholder="ex: BL-2025-0123"></div>
       <div class="mf"><label>Vendeur en charge</label>
         <select id="m-vendeur"><option value="">— Inchangé —</option>${vendOpts}</select>
       </div>
+    </div>
+    <div class="mf"><label>Statut BC</label>
+      <select id="m-statut">${stOpts}</select>
     </div>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
       <div class="mf"><label>Date BL</label><input id="m-datebl" type="date" value="${today}"></div>
@@ -1237,6 +1271,8 @@ function openTraiterModal(id,numBC,client){
     if(montant&&!isNaN(parseFloat(montant.replace(',','.'))))body['MontantHT']=parseFloat(montant.replace(',','.'));
     if(chantier)body['Projet']=chantier;
     if(rem)body['Remarques']=rem;
+    const statut=document.getElementById('m-statut').value;
+    if(statut&&statut!==currentSt)body['Statut']=statut;
     if(vendeur)body['Vendeurencharge']=vendeur;
     await spPatch('sites/RseauxPlus','Suivi_BC',id,body);
     // Mise à jour en mémoire immédiate pour affichage instantané
@@ -1512,31 +1548,12 @@ async function livraisonPartielleFlow(id,numBC,client){
   }
 }
 
-// ── Envoyer BC à Docuware — Flow PA via token Azure AD ──
+// ── Envoyer BC à Docuware — lien direct SP + appel API PA ──
 async function envoyerBCFlow(id,numBC){
-  if(!confirm(`Envoyer le BC ${numBC||id} à Docuware ?\nLe flow Power Automate va archiver les pièces jointes dans la GED.`))return;
-  try{
-    // Essai 1 : token silencieux via popup
-    let flowToken;
-    try{flowToken=await getFlowToken();}
-    catch(e){
-      // Si popup bloquée ou erreur → fallback URL directe (si elle a un sig)
-      console.warn('getFlowToken failed:',e.message);
-      await triggerPAFlow('envoyerBC',id);
-      alert('✅ Flow Docuware lancé !');
-      return;
-    }
-    const url=`https://api.flow.microsoft.com/providers/Microsoft.ProcessSimple/environments/${ENV_ID}/flows/${FLOW_DOCUWARE_ID}/triggers/manual/run?api-version=2016-11-01`;
-    const r=await fetch(url,{
-      method:'POST',
-      headers:{'Authorization':`Bearer ${flowToken}`,'Content-Type':'application/json'},
-      body:JSON.stringify({itemId:id})
-    });
-    if(!r.ok&&r.status!==202){const t=await r.text().catch(()=>'');throw new Error(`HTTP ${r.status} — ${t.substring(0,150)}`);}
-    alert('✅ Flow Docuware lancé ! L\'archivage sera effectué dans quelques secondes.');
-    setTimeout(()=>loadAll(),5000);
-  }catch(e){
-    alert('Erreur Docuware : '+e.message);
+  // Ouvrir l'item SharePoint directement pour déclencher le bouton Docuware natif
+  const spUrl=`${C.spRoot}/sites/RseauxPlus/Lists/Suivi_BC/DispForm.aspx?ID=${id}`;
+  if(confirm(`Ouvrir le BC ${numBC||id} dans SharePoint pour l'envoyer à Docuware ?\n\nLa page SharePoint s'ouvrira — clique le bouton Docuware depuis là.`)){
+    window.open(spUrl,'_blank');
   }
 }
 
