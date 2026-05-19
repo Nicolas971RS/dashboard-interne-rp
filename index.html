@@ -261,24 +261,35 @@
     <!-- VUE MATIN -->
     <div id="tab-matin" class="section-bloc active">
       <div class="page-header">
-        <div><h1>Vue d'ensemble — Matin</h1><div class="sub" id="lastRefresh">Chargement...</div></div>
+        <div><h1>Vue Matin — Actions du jour</h1><div class="sub" id="lastRefresh">Chargement...</div></div>
         <button class="btn-refresh" onclick="loadAll()">🔄 Actualiser</button>
       </div>
       <div class="kpi-row c4">
-        <div class="kc g"><div class="kl">📥 Reçus à facturer</div><div class="kv" id="kpi-recu">—</div><div class="ks">Action immédiate</div></div>
-        <div class="kc r"><div class="kl">🚨 BCs en retard</div><div class="kv" id="kpi-retard">—</div><div class="ks">Date dépassée</div></div>
+        <div class="kc g"><div class="kl">💰 À traiter maintenant</div><div class="kv" id="kpi-recu">—</div><div class="ks">BL reçu non facturé</div></div>
+        <div class="kc r"><div class="kl">🚨 À relancer fournisseur</div><div class="kv" id="kpi-retard">—</div><div class="ks">Date dépassée</div></div>
         <div class="kc r"><div class="kl">💰 Risque DBC</div><div class="kv" id="kpi-risque">—</div><div class="ks">HT sans BC reçu</div></div>
-        <div class="kc a"><div class="kl">📄 Devis en cours</div><div class="kv" id="kpi-devis-matin">—</div><div class="ks">En cours de traitement</div></div>
+        <div class="kc a"><div class="kl">🆕 Devis à prendre en charge</div><div class="kv" id="kpi-devis-matin">—</div><div class="ks">Statut Nouvelle</div></div>
       </div>
-      <div class="sd"><h2>📥 Arrivées du jour</h2><span class="site-tag rp">Suivi_BC · Date réception = aujourd'hui · tous statuts</span><div class="sd-line"></div></div>
+
+      <!-- SECTION 1 : À traiter maintenant -->
+      <div class="sd"><h2>💰 À traiter maintenant</h2><span class="site-tag rp">BL renseigné · État ≠ Entièrement facturé</span><div class="sd-line"></div><button class="btn" onclick="exportMatinTraiter()">⬇ CSV</button></div>
       <div class="tc"><table>
-        <thead><tr><th>N° BC</th><th>Client</th><th>Date livraison</th><th>N° BL</th><th>Vendeur</th><th>Statut</th><th>État facturation</th><th>Action</th></tr></thead>
-        <tbody id="matin-recu-body"><tr class="empty-row"><td colspan="8">Chargement...</td></tr></tbody>
+        <thead><tr><th>N° BC</th><th>Client</th><th>N° BL</th><th>Date réception</th><th>Vendeur</th><th>Statut</th><th>État facturation</th><th>Action</th></tr></thead>
+        <tbody id="matin-traiter-body"><tr class="empty-row"><td colspan="8">Chargement...</td></tr></tbody>
       </table></div>
-      <div class="sd"><h2>🧾 Alertes DBC critiques</h2><span class="site-tag bc">Demandes_BC</span><div class="sd-line"></div></div>
+
+      <!-- SECTION 2 : À relancer fournisseur -->
+      <div class="sd"><h2>🚨 À relancer fournisseur</h2><span class="site-tag rp">Date livraison prévue dépassée · Non soldés</span><div class="sd-line"></div><button class="btn" onclick="exportMatinRelancer()">⬇ CSV</button></div>
       <div class="tc"><table>
-        <thead><tr><th>Urgence</th><th>Client</th><th>Date enlèv.</th><th>Montant HT</th><th>Vendeur</th><th>Statut</th><th>Action</th></tr></thead>
-        <tbody id="matin-dbc-body"><tr class="empty-row"><td colspan="7">Chargement...</td></tr></tbody>
+        <thead><tr><th>Retard</th><th>N° BC</th><th>Client</th><th>ETA prévue</th><th>Vendeur</th><th>Statut</th><th>RAL</th><th>Action</th></tr></thead>
+        <tbody id="matin-retard-body"><tr class="empty-row"><td colspan="8">Chargement...</td></tr></tbody>
+      </table></div>
+
+      <!-- SECTION 3 : Devis à prendre en charge -->
+      <div class="sd"><h2>🆕 Devis à prendre en charge</h2><span class="site-tag bc">Statut = Nouvelle</span><div class="sd-line"></div><button class="btn" onclick="exportMatinDevis()">⬇ CSV</button></div>
+      <div class="tc"><table>
+        <thead><tr><th>N° Devis</th><th>Client</th><th>Chantier</th><th>Date</th><th>Vendeur assigné</th><th>Action</th></tr></thead>
+        <tbody id="matin-devis-body"><tr class="empty-row"><td colspan="6">Chargement...</td></tr></tbody>
       </table></div>
     </div>
 
@@ -305,6 +316,7 @@
       <div class="sh" style="margin-bottom:10px">
         <div class="st">🔍 Filtres</div>
         <div class="fb">
+          <input class="fs" type="text" id="search-suivi" placeholder="🔍 Recherche libre..." oninput="renderSuiviEnCours()" style="min-width:160px">
           <select class="fs" id="filter-statut-bc" onchange="renderSuiviEnCours()">
             <option value="all">Tous les statuts</option>
             <option value="En préparation">En préparation</option>
@@ -315,6 +327,7 @@
           </select>
           <select class="fs" id="filter-vendeur-bc" onchange="renderAll()"><option value="all">Tous les vendeurs</option></select>
           <select class="fs" id="filter-client-bc" onchange="renderAll()"><option value="all">Tous les clients</option></select>
+          <button class="btn" onclick="exportSuiviCSV()">⬇ CSV</button>
         </div>
       </div>
 
@@ -412,8 +425,10 @@
       <div class="sh">
         <div class="st">🧾 Toutes les demandes en cours</div>
         <div class="fb">
+          <input class="fs" type="text" id="search-dbc" placeholder="🔍 Recherche libre..." oninput="renderDBCTable()" style="min-width:160px">
           <select class="fs" id="filter-vendeur-dbc" onchange="renderDBCTable()"><option value="all">Tous les vendeurs</option></select>
           <select class="fs" id="filter-statut-dbc" onchange="renderDBCTable()"><option value="all">Tous les statuts</option><option value="En attente BC">En attente BC</option><option value="Relancé">Relancé</option><option value="Litigieux">Litigieux</option><option value="BC Reçu">BC Reçu</option></select>
+          <button class="btn" onclick="exportDBCCSV()">⬇ CSV</button>
         </div>
       </div>
       <div class="tc"><table>
@@ -437,8 +452,10 @@
       <div class="sh">
         <div class="st">📄 Devis récents</div>
         <div class="fb">
+          <input class="fs" type="text" id="search-devis" placeholder="🔍 Recherche libre..." oninput="renderDevisTable()" style="min-width:160px">
           <select class="fs" id="filter-vendeur-devis" onchange="renderDevisTable()"><option value="all">Tous les vendeurs</option></select>
           <select class="fs" id="filter-statut-devis" onchange="renderDevisTable()"><option value="all">Tous les statuts</option><option value="Nouvelle">🆕 Nouvelle</option><option value="En cours">En cours</option><option value="Devis envoyé">Devis envoyé</option></select>
+          <button class="btn" onclick="exportDevisCSV()">⬇ CSV</button>
         </div>
       </div>
       <div class="tc"><table>
@@ -914,6 +931,138 @@ function renderHistorique(){
   if(items.length>100){b.innerHTML+=`<tr class="empty-row"><td colspan="8">... et ${items.length-100} autres BCs — utilisez les filtres pour affiner</td></tr>`;}
 }
 
+// ═══ HELPER RECHERCHE ═══
+function matchSearch(item, q) {
+  if(!q) return true;
+  const s = q.toLowerCase();
+  return Object.values(item).some(v => v && String(v).toLowerCase().includes(s));
+}
+
+// ═══ CSV EXPORT ═══
+function exportCSV(rows, cols, filename) {
+  const header = cols.map(c => '"'+c.label+'"').join(';');
+  const lines = rows.map(r => cols.map(c => {
+    const v = (typeof c.fn === 'function') ? c.fn(r) : (r[c.key]||'');
+    return '"'+String(v).replace(/"/g,'""')+'"';
+  }).join(';'));
+  const csv = '\uFEFF' + [header, ...lines].join('\n');
+  const a = document.createElement('a');
+  a.href = 'data:text/csv;charset=utf-8,' + encodeURIComponent(csv);
+  a.download = filename;
+  a.click();
+}
+
+function exportSuiviCSV(){
+  let items = getSuiviEnCours();
+  const fS=document.getElementById('filter-statut-bc')?.value||'all';
+  const fV=document.getElementById('filter-vendeur-bc')?.value||'all';
+  const fC=document.getElementById('filter-client-bc')?.value||'all';
+  const q=(document.getElementById('search-suivi')?.value||'').toLowerCase();
+  if(fS!=='all')items=items.filter(i=>getStatut(i)===fS);
+  if(fV!=='all')items=items.filter(i=>f(i,'Vendeurencharge')===fV);
+  if(fC!=='all')items=items.filter(i=>getClient(i)===fC);
+  if(q)items=items.filter(i=>matchSearch(i,q));
+  exportCSV(items,[
+    {label:'N° BC', fn:i=>f(i,'Title')||`BC-${i.ID}`},
+    {label:'Client', fn:i=>getClient(i)},
+    {label:'ETA', fn:i=>fmtDate(f(i,'DateLivraisonpr_x00e9_vue'))},
+    {label:'N° BL', fn:i=>f(i,'N_x00b0_BL')||''},
+    {label:'Vendeur', fn:i=>f(i,'Vendeurencharge')||''},
+    {label:'Statut', fn:i=>getStatut(i)},
+    {label:'État facturation', fn:i=>getEtatFact(i)},
+  ], `suivi_bc_${new Date().toISOString().slice(0,10)}.csv`);
+}
+
+function exportDBCCSV(){
+  let items=[...DATA.dbc];
+  const fV=document.getElementById('filter-vendeur-dbc')?.value||'all';
+  const fS=document.getElementById('filter-statut-dbc')?.value||'all';
+  const q=(document.getElementById('search-dbc')?.value||'').toLowerCase();
+  if(fV!=='all')items=items.filter(i=>getDBCVendeur(i)===fV);
+  if(fS!=='all')items=items.filter(i=>(f(i,'Statut')||'').startsWith(fS));
+  if(q)items=items.filter(i=>matchSearch(i,q));
+  exportCSV(items,[
+    {label:'Réf.', fn:i=>`DBC-${i.ID}`},
+    {label:'Client', fn:i=>f(i,'NomClient')||f(i,'Title')||''},
+    {label:'Employé', fn:i=>f(i,'Nom_Employ_x00e9_')||''},
+    {label:'Date enlèvement', fn:i=>fmtDate(f(i,'Date_Enl_x00e8_vement'))},
+    {label:'Montant HT', fn:i=>f(i,'Montant_HT')||0},
+    {label:'Vendeur', fn:i=>getDBCVendeur(i)},
+    {label:'Statut', fn:i=>f(i,'Statut')||''},
+    {label:'Nb relances', fn:i=>f(i,'Nb_Relances')||0},
+  ], `demandes_bc_${new Date().toISOString().slice(0,10)}.csv`);
+}
+
+function exportDevisCSV(){
+  let items=[...DATA.devis];
+  const fV=document.getElementById('filter-vendeur-devis')?.value||'all';
+  const fS=document.getElementById('filter-statut-devis')?.value||'all';
+  const q=(document.getElementById('search-devis')?.value||'').toLowerCase();
+  if(fV!=='all')items=items.filter(i=>f(i,'Vendeur_Assign_x00e9_')===fV);
+  if(fS!=='all')items=items.filter(i=>f(i,'Statut')===fS);
+  if(q)items=items.filter(i=>matchSearch(i,q));
+  exportCSV(items,[
+    {label:'N° Devis', fn:i=>f(i,'Num_x00e9_ro_Devis','Numero_Devis','Title')||`DEV-${i.ID}`},
+    {label:'Client', fn:i=>f(i,'Client')||''},
+    {label:'Chantier', fn:i=>f(i,'Chantier')||''},
+    {label:'Date', fn:i=>fmtDate(f(i,'Date_Devis'))},
+    {label:'Vendeur', fn:i=>f(i,'Vendeur_Assign_x00e9_')||''},
+    {label:'Statut', fn:i=>f(i,'Statut')||''},
+    {label:'Dernière MàJ', fn:i=>fmtDate(f(i,'Modified'))},
+  ], `devis_${new Date().toISOString().slice(0,10)}.csv`);
+}
+
+function exportMatinTraiter(){
+  exportCSV(getMatinTraiter(),[
+    {label:'N° BC', fn:i=>f(i,'Title')||`BC-${i.ID}`},
+    {label:'Client', fn:i=>getClient(i)},
+    {label:'N° BL', fn:i=>f(i,'N_x00b0_BL')||''},
+    {label:'Date réception', fn:i=>fmtDate(f(i,'Dateder_x00e9_ception'))},
+    {label:'Vendeur', fn:i=>f(i,'Vendeurencharge')||''},
+    {label:'Statut', fn:i=>getStatut(i)},
+    {label:'État facturation', fn:i=>getEtatFact(i)},
+  ], `traiter_maintenant_${new Date().toISOString().slice(0,10)}.csv`);
+}
+function exportMatinRelancer(){
+  exportCSV(getMatinRelancer(),[
+    {label:'N° BC', fn:i=>f(i,'Title')||`BC-${i.ID}`},
+    {label:'Client', fn:i=>getClient(i)},
+    {label:'ETA prévue', fn:i=>fmtDate(f(i,'DateLivraisonpr_x00e9_vue'))},
+    {label:'Jours retard', fn:i=>daysLate(f(i,'DateLivraisonpr_x00e9_vue'))},
+    {label:'Vendeur', fn:i=>f(i,'Vendeurencharge')||''},
+    {label:'Statut', fn:i=>getStatut(i)},
+  ], `relancer_fournisseur_${new Date().toISOString().slice(0,10)}.csv`);
+}
+function exportMatinDevis(){
+  exportCSV(getMatinDevisNouvelle(),[
+    {label:'N° Devis', fn:i=>f(i,'Num_x00e9_ro_Devis','Numero_Devis','Title')||`DEV-${i.ID}`},
+    {label:'Client', fn:i=>f(i,'Client')||''},
+    {label:'Chantier', fn:i=>f(i,'Chantier')||''},
+    {label:'Date', fn:i=>fmtDate(f(i,'Date_Devis'))},
+    {label:'Vendeur assigné', fn:i=>f(i,'Vendeur_Assign_x00e9_')||''},
+  ], `devis_nouvelle_${new Date().toISOString().slice(0,10)}.csv`);
+}
+
+// ═══ GETTERS VUE MATIN ═══
+function getMatinTraiter(){
+  return DATA.suivi.filter(i=>{
+    const bl=f(i,'N_x00b0_BL');
+    const ef=getEtatFact(i);
+    return bl&&bl.trim()!==''&&ef!=='Entièrement facturé';
+  });
+}
+function getMatinRelancer(){
+  return DATA.suivi.filter(i=>{
+    const s=getStatut(i);
+    const ef=getEtatFact(i);
+    const dateLiv=f(i,'DateLivraisonpr_x00e9_vue');
+    return daysLate(dateLiv)>0&&s!=='Reçu'&&s!=='Annulé'&&ef!=='Entièrement facturé';
+  }).sort((a,b)=>daysLate(f(b,'DateLivraisonpr_x00e9_vue'))-daysLate(f(a,'DateLivraisonpr_x00e9_vue')));
+}
+function getMatinDevisNouvelle(){
+  return DATA.devis.filter(i=>f(i,'Statut')==='Nouvelle');
+}
+
 function renderAll(){
   const fV=getFilterVendeur(),fC=getFilterClient();
   const filterBC=i=>(fV==='all'||f(i,'Vendeurencharge')===fV)&&(fC==='all'||getClient(i)===fC);
@@ -923,41 +1072,78 @@ function renderAll(){
   document.getElementById('banner-num').textContent=recu.length;
   document.getElementById('sd-recu-count').textContent=recu.length+' BC'+(recu.length!==1?'s':'');
   document.getElementById('sd-encours-count').textContent=ec.length+' actifs';
-  document.getElementById('kpi-afacturer').textContent=ec.filter(i=>getStatut(i)==='Entièrement livré'||f(i,'N_x00b0_BL')).length;
+  document.getElementById('kpi-afacturer').textContent=getSuiviAFacturer().length;
   document.getElementById('kpi-prep').textContent=ec.filter(i=>getStatut(i)==='En préparation').length;
   document.getElementById('kpi-pret').textContent=ec.filter(i=>getStatut(i)==='Prêt à Livrer').length;
   document.getElementById('kpi-partiel').textContent=ec.filter(i=>getStatut(i)==='Partiellement livré').length;
   const retard=ec.filter(i=>daysLate(f(i,'DateLivraisonpr_x00e9_vue'))>0).length;
   document.getElementById('kpi-eta').textContent=retard;
-  // KPIs DBC — exclure BC Reçu partout
+  // KPIs DBC
   const dbcActifs=DATA.dbc.filter(i=>f(i,'Statut')!=='BC Reçu');
   const risqueDBC=dbcActifs.reduce((s,i)=>s+Number(f(i,'Montant_HT')||0),0);
   const dbcUrgents=dbcActifs.filter(i=>daysSince(f(i,'Date_Enl_x00e8_vement'))>5).length;
   const dbcOk=dbcActifs.filter(i=>daysSince(f(i,'Date_Enl_x00e8_vement'))<=5).length;
-  document.getElementById('kpi-risque')?.setAttribute('textContent',risqueDBC>0?Math.round(risqueDBC/1000)+'k €':'0 €');
   const kr=document.getElementById('kpi-risque');if(kr)kr.textContent=risqueDBC>0?Math.round(risqueDBC/1000)+'k €':'0 €';
   document.getElementById('kpi-risque-total').textContent=fmtMoney(risqueDBC);
   document.getElementById('kpi-dbc-urgents').textContent=dbcUrgents;
   document.getElementById('kpi-dbc-ok').textContent=dbcOk;
   // KPIs Devis
-  const dc=DATA.devis.filter(i=>(f(i,'Statut')||'').startsWith('En cours')).length;
   const mois=new Date();mois.setDate(1);mois.setHours(0,0,0,0);
-  document.getElementById('kpi-devis-matin').textContent=dc;
+  const devisNouv=getMatinDevisNouvelle().length;
+  const dc=DATA.devis.filter(i=>(f(i,'Statut')||'').startsWith('En cours')).length;
+  document.getElementById('kpi-devis-matin').textContent=devisNouv;
   document.getElementById('kpi-devis-cours').textContent=dc;
   document.getElementById('kpi-devis-envoye').textContent=DATA.devis.filter(i=>f(i,'Statut')==='Devis envoyé'&&new Date(f(i,'Date_Devis')||'')>=mois).length;
   document.getElementById('kpi-devis-stale').textContent=DATA.devis.filter(i=>daysSince(f(i,'Modified'))>7&&(f(i,'Statut')||'').startsWith('En cours')).length;
   document.getElementById('kpi-devis-total').textContent=DATA.devis.length;
-  // Tables
-  const recuHtml=recu.length?recu.map(i=>bcRow(i,true)).join(''):'<tr class="empty-row"><td colspan="8">✅ Aucun BC en statut "Reçu" pour le moment</td></tr>';
-  document.getElementById('matin-recu-body').innerHTML=recuHtml;
+  // KPI matin
+  const traiter=getMatinTraiter();
+  const relancer=getMatinRelancer();
+  document.getElementById('kpi-recu').textContent=traiter.length;
+  document.getElementById('kpi-retard').textContent=relancer.length;
+  // Tables Suivi BC (accordéons)
+  const recuHtml=recu.length?recu.map(i=>bcRow(i,true)).join(''):'<tr class="empty-row"><td colspan="8">✅ Aucun BC réceptionné aujourd\'hui</td></tr>';
   document.getElementById('suivi-recu-body').innerHTML=recuHtml;
   renderAFacturer();
   renderDocuware();
   renderHistorique();
   renderSuiviEnCours();
-  // Matin DBC
-  const crit=DATA.dbc.filter(i=>f(i,'Statut')!=='BC Reçu'&&daysSince(f(i,'Date_Enl_x00e8_vement'))>5).slice(0,6);
-  document.getElementById('matin-dbc-body').innerHTML=crit.length?crit.map(i=>dbcRowCompact(i)).join(''):'<tr class="empty-row"><td colspan="7">✅ Aucun DBC critique</td></tr>';
+  // Vue Matin — 3 sections
+  const traiterHtml=traiter.length?traiter.map(i=>{
+    const client=getClient(i),numBC=f(i,'Title')||`BC-${i.ID}`;
+    const bl=f(i,'N_x00b0_BL')||'—',dateRec=fmtDate(f(i,'Dateder_x00e9_ception'));
+    const vendeur=f(i,'Vendeurencharge')||'—';
+    const cE=client.replace(/'/g,"\\'"),nE=numBC.replace(/'/g,"\\'");
+    return`<tr class="rr"><td class="ref">${numBC}</td><td class="cname">${client}</td><td class="mono">${bl}</td><td class="mono">${dateRec}</td><td>${vendeur}</td><td>${bStatut(getStatut(i))}</td><td>${bFact(getEtatFact(i))}</td><td><div class="btn-grp">
+      <button class="btn gr" onclick="openFacturerModal(${i.ID},'${nE}','${cE}')">💰 Facturer</button>
+      <button class="btn" onclick="openTraiterModal(${i.ID},'${nE}','${cE}')">🔧 Traiter</button>
+    </div></td></tr>`;
+  }).join(''):'<tr class="empty-row"><td colspan="8">✅ Aucun BL reçu non facturé</td></tr>';
+  document.getElementById('matin-traiter-body').innerHTML=traiterHtml;
+
+  const relancerHtml=relancer.length?relancer.map(i=>{
+    const client=getClient(i),numBC=f(i,'Title')||`BC-${i.ID}`;
+    const dateLiv=f(i,'DateLivraisonpr_x00e9_vue');
+    const late=daysLate(dateLiv);
+    const urg=urgFromDays(late);
+    const vendeur=f(i,'Vendeurencharge')||'—';
+    const lignes=getStatut(i)==='Partiellement livré'?getLignesForBC(i.ID):[];
+    const cE=client.replace(/'/g,"\\'"),nE=numBC.replace(/'/g,"\\'");
+    return`<tr class="${urg.row}"><td><span class="urg ${urg.cls}">${urg.lbl}</span></td><td class="ref">${numBC}</td><td class="cname">${client}</td><td class="mono" style="color:var(--red)">${fmtDate(dateLiv)}</td><td>${vendeur}</td><td>${bStatut(getStatut(i))}</td><td>${ralBlock(lignes)}</td><td><div class="btn-grp">
+      <button class="btn" onclick="openTraiterModal(${i.ID},'${nE}','${cE}')">🔧 Traiter</button>
+    </div></td></tr>`;
+  }).join(''):'<tr class="empty-row"><td colspan="8">✅ Aucun BC en retard fournisseur</td></tr>';
+  document.getElementById('matin-retard-body').innerHTML=relancerHtml;
+
+  const devisNouv_items=getMatinDevisNouvelle();
+  const devisHtml=devisNouv_items.length?devisNouv_items.map(i=>{
+    const nd=f(i,'Num_x00e9_ro_Devis','Numero_Devis','Title')||`DEV-${i.ID}`;
+    return`<tr class="rr" style="cursor:pointer" onclick="openDevisPanel(${i.ID})"><td class="ref">${nd}</td><td class="cname">${f(i,'Client')||'—'}</td><td>${f(i,'Chantier')||'—'}</td><td class="mono">${fmtDate(f(i,'Date_Devis'))}</td><td>${f(i,'Vendeur_Assign_x00e9_')||'—'}</td><td onclick="event.stopPropagation()">
+      <button class="btn blue" onclick="passerEnCours(${i.ID})">📋 Prendre en charge</button>
+    </td></tr>`;
+  }).join(''):'<tr class="empty-row"><td colspan="6">✅ Aucun devis en attente de prise en charge</td></tr>';
+  document.getElementById('matin-devis-body').innerHTML=devisHtml;
+
   renderDBCTable();renderDevisTable();
 }
 
@@ -966,11 +1152,19 @@ function renderSuiviEnCours(){renderHistorique();
   const fS=document.getElementById('filter-statut-bc')?.value||'all';
   const fV=document.getElementById('filter-vendeur-bc')?.value||'all';
   const fC=document.getElementById('filter-client-bc')?.value||'all';
+  const q=(document.getElementById('search-suivi')?.value||'').toLowerCase();
   if(fS!=='all')ec=ec.filter(i=>getStatut(i)===fS);
   if(fV!=='all')ec=ec.filter(i=>f(i,'Vendeurencharge')===fV);
   if(fC!=='all')ec=ec.filter(i=>getClient(i)===fC);
+  if(q)ec=ec.filter(i=>{
+    const numBC=f(i,'Title')||`BC-${i.ID}`;
+    const client=getClient(i);
+    const vendeur=f(i,'Vendeurencharge')||'';
+    const bl=f(i,'N_x00b0_BL')||'';
+    return [numBC,client,vendeur,bl].some(v=>v.toLowerCase().includes(q));
+  });
   const b=document.getElementById('suivi-encours-body');
-  if(!ec.length){b.innerHTML='<tr class="empty-row"><td colspan="8">Aucun BC correspondant aux filtres</td></tr>';return;}
+  if(!ec.length){b.innerHTML='<tr class="empty-row"><td colspan="9">Aucun BC correspondant aux filtres</td></tr>';return;}
   b.innerHTML=ec.map(i=>{
     const s=getStatut(i),ef=getEtatFact(i);
     const client=getClient(i),vendeur=f(i,'Vendeurencharge')||'—';
@@ -1025,8 +1219,16 @@ function renderDBCTable(){
   let items=[...DATA.dbc];
   const fV=document.getElementById('filter-vendeur-dbc')?.value||'all';
   const fS=document.getElementById('filter-statut-dbc')?.value||'all';
+  const q=(document.getElementById('search-dbc')?.value||'').toLowerCase();
   if(fV!=='all')items=items.filter(i=>getDBCVendeur(i)===fV);
   if(fS!=='all')items=items.filter(i=>(f(i,'Statut')||'').startsWith(fS));
+  if(q)items=items.filter(i=>{
+    const client=f(i,'NomClient')||f(i,'Title')||'';
+    const employe=f(i,'Nom_Employ_x00e9_')||'';
+    const vendeur=getDBCVendeur(i);
+    const devisRef=getDevisRefForDBC(i);
+    return [client,employe,vendeur,devisRef,`DBC-${i.ID}`].some(v=>v.toLowerCase().includes(q));
+  });
   const b=document.getElementById('dbc-body');
   b.innerHTML=items.length?items.map(i=>{
     const urg=getDBCUrgence(i);
@@ -1047,8 +1249,16 @@ function renderDevisTable(){
   let items=[...DATA.devis];
   const fV=document.getElementById('filter-vendeur-devis')?.value||'all';
   const fS=document.getElementById('filter-statut-devis')?.value||'all';
+  const q=(document.getElementById('search-devis')?.value||'').toLowerCase();
   if(fV!=='all')items=items.filter(i=>f(i,'Vendeur_Assign_x00e9_')===fV);
   if(fS!=='all')items=items.filter(i=>f(i,'Statut')===fS);
+  if(q)items=items.filter(i=>{
+    const nd=f(i,'Num_x00e9_ro_Devis','Numero_Devis','Title')||`DEV-${i.ID}`;
+    const client=f(i,'Client')||'';
+    const chantier=f(i,'Chantier')||'';
+    const vendeur=f(i,'Vendeur_Assign_x00e9_')||'';
+    return [nd,client,chantier,vendeur].some(v=>v.toLowerCase().includes(q));
+  });
   const b=document.getElementById('devis-body');
   b.innerHTML=items.length?items.map(i=>{
     const st=f(i,'Statut')||'—',mod=f(i,'Modified');
@@ -1076,15 +1286,15 @@ function renderDevisTable(){
 
 // ═══ BADGES ═══
 function updateBadges(){
-  const recu=getSuiviRecu().length;
-  const retard=getSuiviEnCours().filter(i=>daysLate(f(i,'DateLivraisonpr_x00e9_vue'))>0).length;
+  const traiter=getMatinTraiter().length;
+  const retard=getMatinRelancer().length;
   const dbcActifs=DATA.dbc.filter(i=>f(i,'Statut')!=='BC Reçu');
   const dbcU=dbcActifs.filter(i=>daysSince(f(i,'Date_Enl_x00e8_vement'))>5).length;
-  const dc=DATA.devis.filter(i=>(f(i,'Statut')||'').startsWith('En cours')).length;
-  document.getElementById('badge-recu').textContent=recu+" auj.";
-  document.getElementById('badge-retard').textContent=retard+' retard';
-  document.getElementById('badge-dbc').textContent=dbcU+' urgents';
-  document.getElementById('badge-devis').textContent=dc+' en cours';
+  const dc=DATA.devis.filter(i=>(f(i,'Statut')||'').startsWith('En cours')||f(i,'Statut')==='Nouvelle').length;
+  document.getElementById('badge-recu').textContent=traiter>0?traiter+' à traiter':'';
+  document.getElementById('badge-retard').textContent=retard>0?retard+' retard':'';
+  document.getElementById('badge-dbc').textContent=dbcU>0?dbcU+' urgents':'';
+  document.getElementById('badge-devis').textContent=dc>0?dc+' actifs':'';
 }
 
 // ═══ TABS ═══
