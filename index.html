@@ -596,6 +596,7 @@ async function loadAll(){
     if(suivi.length>0){console.log('DEBUG Suivi_BC[0] keys:',Object.keys(suivi[0]).sort().join(', '));}
 
     _lastLoad=Date.now();updateTimer();
+    buildFilters();renderAll();updateBadges();
     document.getElementById('lastRefresh').textContent=
       `${suivi.length} BCs · ${lignes.length} lignes · ${dbc.length} DBC · ${devis.length} devis · Actualisé ${new Date().toLocaleTimeString('fr-FR')}`;
   }catch(e){showError(e.message);console.error(e);}
