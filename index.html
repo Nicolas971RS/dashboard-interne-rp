@@ -100,7 +100,18 @@
   .rtu td{background:#fff8f3 !important;}
   .ru td{background:#fffbf0 !important;}
   .urg{display:inline-flex;align-items:center;gap:3px;padding:3px 8px;border-radius:20px;font-size:10px;font-weight:700;white-space:nowrap;}
-  .urg.ok{background:#f0f2f5;color:var(--grey);}
+  .urg.ok{background:var(--green-light);color:var(--green);font-weight:700;}
+  /* ── ACCORDÉON ── */
+  .acc-hd{display:flex;align-items:center;justify-content:space-between;cursor:pointer;padding:9px 14px;background:white;border:1px solid var(--border);border-radius:8px;margin-bottom:4px;user-select:none;transition:background .12s;}
+  .acc-hd:hover{background:#f8fafc;}
+  .acc-hd-left{display:flex;align-items:center;gap:10px;}
+  .acc-hd-title{font-size:13px;font-weight:700;color:var(--navy);}
+  .acc-hd-meta{display:flex;gap:6px;align-items:center;}
+  .acc-arrow{font-size:12px;color:var(--grey);transition:transform .2s;}
+  .acc-arrow.open{transform:rotate(180deg);}
+  .acc-body{overflow:hidden;transition:max-height .25s ease;max-height:0;}
+  .acc-body.open{max-height:4000px;}
+  .acc-body .tc{margin-top:4px;}
   .urg.u{background:var(--amber-light);color:var(--amber);}
   .urg.tu{background:var(--orange-light);color:var(--orange);}
   .urg.cr{background:var(--red-light);color:var(--red);}
@@ -276,36 +287,22 @@
         <div><h1>Suivi Bons de Commande</h1><div class="sub">/sites/RseauxPlus · Suivi_BC + Lignes_BC</div></div>
         <button class="btn-refresh" onclick="loadAll()">🔄 Actualiser</button>
       </div>
-      <div class="sd"><h2>📥 Arrivées du jour</h2><span class="site-tag rp">Statut = Reçu</span><span class="ctag g" id="sd-recu-count">0 BC</span><div class="sd-line"></div></div>
+
+      <!-- BANDEAU EN HAUT -->
       <div class="banner"><div class="pulse"></div><div class="banner-num" id="banner-num">0</div><div><div class="banner-lbl">BCs réceptionnés aujourd'hui — vérifier BL · mettre à jour facturation</div><div class="banner-sub">Créer la facture si livraison complète · Facturer partiellement si livraison partielle</div></div></div>
-      <div class="tc"><table>
-        <thead><tr><th>N° BC</th><th>Client</th><th>Date livraison</th><th>N° BL</th><th>Vendeur</th><th>Statut</th><th>État facturation</th><th>Action</th></tr></thead>
-        <tbody id="suivi-recu-body"><tr class="empty-row"><td colspan="8">Chargement...</td></tr></tbody>
-      </table></div>
-      <div class="sd"><h2>💰 À facturer — BL reçu non facturé</h2><span class="site-tag rp">N° BL renseigné · État ≠ Entièrement facturé</span><span class="ctag g" id="sd-afacturer-count">0</span><div class="sd-line"></div></div>
-      <div class="tc"><table>
-        <thead><tr><th>N° BC</th><th>Client</th><th>N° BL</th><th>Date réception</th><th>Vendeur</th><th>Statut</th><th>État facturation</th><th>Action</th></tr></thead>
-        <tbody id="suivi-afacturer-body"><tr class="empty-row"><td colspan="8">Chargement...</td></tr></tbody>
-      </table></div>
 
-      <div class="sd"><h2>📋 Historique non soldé</h2><span class="site-tag rp">BCs anciens · État ≠ Entièrement facturé · À nettoyer progressivement</span><span class="ctag a" id="sd-histo-count">0</span><div class="sd-line"></div></div>
-      <div class="tc"><table>
-        <thead><tr><th>Urgence</th><th>N° BC</th><th>Client</th><th>Date réception</th><th>Vendeur</th><th>Statut</th><th>RAL / Lignes</th><th>État facturation</th></tr></thead>
-        <tbody id="suivi-histo-body"><tr class="empty-row"><td colspan="8">Chargement...</td></tr></tbody>
-      </table></div>
-
-      <div class="sd"><h2>⚙️ BCs en cours — Non soldés</h2><span class="site-tag rp">≠ Reçu · ≠ Annulé · ≠ Entièrement facturé</span><span class="ctag o" id="sd-encours-count">0</span><div class="sd-line"></div></div>
-      <div class="kpi-row c5">
+      <!-- KPIs -->
+      <div class="kpi-row c5" style="margin-bottom:14px">
         <div class="kc g"><div class="kl">💰 BL reçu non facturé</div><div class="kv" id="kpi-afacturer">—</div><div class="ks">À facturer maintenant</div></div>
         <div class="kc a"><div class="kl">⏳ En préparation</div><div class="kv" id="kpi-prep">—</div><div class="ks">Chez fournisseur</div></div>
         <div class="kc b"><div class="kl">📦 Prêt à livrer</div><div class="kv" id="kpi-pret">—</div><div class="ks">Livraison imminente</div></div>
         <div class="kc o"><div class="kl">🔀 Partiellement livré</div><div class="kv" id="kpi-partiel">—</div><div class="ks">RAL Lignes_BC</div></div>
         <div class="kc r"><div class="kl">🚨 Date dépassée</div><div class="kv" id="kpi-eta">—</div><div class="ks">Relancer fournisseur</div></div>
-        <div class="kc a"><div class="kl">🧾 En attente BC</div><div class="kv" id="kpi-atbc">—</div><div class="ks">BC client manquant</div></div>
       </div>
-      <div class="note">ℹ️ Les articles et le RAL proviennent de <strong>Lignes_BC</strong> — visibles uniquement pour les BCs en livraison partielle.</div>
-      <div class="sh">
-        <div class="st">⚙️ Détail BCs actifs</div>
+
+      <!-- FILTRES -->
+      <div class="sh" style="margin-bottom:10px">
+        <div class="st">🔍 Filtres</div>
         <div class="fb">
           <select class="fs" id="filter-statut-bc" onchange="renderSuiviEnCours()">
             <option value="all">Tous les statuts</option>
@@ -315,14 +312,86 @@
             <option value="En attente BC">En attente BC</option>
             <option value="Entièrement livré">Entièrement livré</option>
           </select>
-          <select class="fs" id="filter-vendeur-bc" onchange="renderSuiviEnCours()"><option value="all">Tous les vendeurs</option></select>
-          <select class="fs" id="filter-client-bc" onchange="renderSuiviEnCours()"><option value="all">Tous les clients</option></select>
+          <select class="fs" id="filter-vendeur-bc" onchange="renderAll()"><option value="all">Tous les vendeurs</option></select>
+          <select class="fs" id="filter-client-bc" onchange="renderAll()"><option value="all">Tous les clients</option></select>
         </div>
       </div>
-      <div class="tc"><table>
-        <thead><tr><th>Urgence</th><th>N° BC</th><th>Client</th><th>ETA</th><th>Vendeur</th><th>Statut</th><th>RAL / Lignes</th><th>État fact.</th><th>Actions</th></tr></thead>
-        <tbody id="suivi-encours-body"><tr class="empty-row"><td colspan="9">Chargement...</td></tr></tbody>
-      </table></div>
+
+      <!-- ACCORDÉON 1 — Arrivées du jour -->
+      <div class="acc-hd" onclick="toggleAcc('acc-recu',this)">
+        <div class="acc-hd-left">
+          <div class="acc-hd-title">📥 Arrivées du jour</div>
+          <div class="acc-hd-meta"><span class="ctag g" id="sd-recu-count">0 BC</span><span class="site-tag rp">Statut = Reçu</span></div>
+        </div>
+        <span class="acc-arrow open">▼</span>
+      </div>
+      <div class="acc-body open" id="acc-recu">
+        <div class="tc"><table>
+          <thead><tr><th>N° BC</th><th>Client</th><th>Date livraison</th><th>N° BL</th><th>Vendeur</th><th>Statut</th><th>État facturation</th><th>Action</th></tr></thead>
+          <tbody id="suivi-recu-body"><tr class="empty-row"><td colspan="8">Chargement...</td></tr></tbody>
+        </table></div>
+      </div>
+
+      <!-- ACCORDÉON 2 — À facturer -->
+      <div class="acc-hd" onclick="toggleAcc('acc-afact',this)">
+        <div class="acc-hd-left">
+          <div class="acc-hd-title">💰 À facturer — BL reçu non facturé</div>
+          <div class="acc-hd-meta"><span class="ctag g" id="sd-afacturer-count">0</span><span class="site-tag rp">N° BL renseigné · État ≠ Entièrement facturé</span></div>
+        </div>
+        <span class="acc-arrow open">▼</span>
+      </div>
+      <div class="acc-body open" id="acc-afact">
+        <div class="tc"><table>
+          <thead><tr><th>N° BC</th><th>Client</th><th>N° BL</th><th>Date réception</th><th>Vendeur</th><th>Statut</th><th>État facturation</th><th>Action</th></tr></thead>
+          <tbody id="suivi-afacturer-body"><tr class="empty-row"><td colspan="8">Chargement...</td></tr></tbody>
+        </table></div>
+      </div>
+
+      <!-- ACCORDÉON 3 — Facturés en attente Docuware -->
+      <div class="acc-hd" onclick="toggleAcc('acc-docuware',this)">
+        <div class="acc-hd-left">
+          <div class="acc-hd-title">📦 Facturés — En attente Docuware</div>
+          <div class="acc-hd-meta"><span class="ctag a" id="sd-docuware-count">0</span><span class="site-tag rp">Entièrement facturé · Non encore archivé</span></div>
+        </div>
+        <span class="acc-arrow">▼</span>
+      </div>
+      <div class="acc-body" id="acc-docuware">
+        <div class="tc"><table>
+          <thead><tr><th>N° BC</th><th>Client</th><th>N° BL</th><th>N° FC</th><th>Date réception</th><th>Vendeur</th><th>Action</th></tr></thead>
+          <tbody id="suivi-docuware-body"><tr class="empty-row"><td colspan="7">Chargement...</td></tr></tbody>
+        </table></div>
+      </div>
+
+      <!-- ACCORDÉON 4 — Historique -->
+      <div class="acc-hd" onclick="toggleAcc('acc-histo',this)">
+        <div class="acc-hd-left">
+          <div class="acc-hd-title">📋 Historique non soldé</div>
+          <div class="acc-hd-meta"><span class="ctag a" id="sd-histo-count">0</span><span class="site-tag rp">BCs anciens · À nettoyer</span></div>
+        </div>
+        <span class="acc-arrow">▼</span>
+      </div>
+      <div class="acc-body" id="acc-histo">
+        <div class="tc"><table>
+          <thead><tr><th>Urgence</th><th>N° BC</th><th>Client</th><th>Date réception</th><th>Vendeur</th><th>Statut</th><th>RAL / Lignes</th><th>État facturation</th></tr></thead>
+          <tbody id="suivi-histo-body"><tr class="empty-row"><td colspan="8">Chargement...</td></tr></tbody>
+        </table></div>
+      </div>
+
+      <!-- ACCORDÉON 5 — BCs en cours -->
+      <div class="acc-hd" onclick="toggleAcc('acc-encours',this)">
+        <div class="acc-hd-left">
+          <div class="acc-hd-title">⚙️ BCs en cours — Non soldés</div>
+          <div class="acc-hd-meta"><span class="ctag o" id="sd-encours-count">0</span><span class="site-tag rp">≠ Reçu · ≠ Annulé · ≠ Entièrement facturé</span></div>
+        </div>
+        <span class="acc-arrow">▼</span>
+      </div>
+      <div class="acc-body" id="acc-encours">
+        <div class="note">ℹ️ RAL visible uniquement pour les BCs en livraison partielle.</div>
+        <div class="tc"><table>
+          <thead><tr><th>Urgence</th><th>N° BC</th><th>Client</th><th>ETA</th><th>Vendeur</th><th>Statut</th><th>RAL / Lignes</th><th>État fact.</th><th>Actions</th></tr></thead>
+          <tbody id="suivi-encours-body"><tr class="empty-row"><td colspan="9">Chargement...</td></tr></tbody>
+        </table></div>
+      </div>
     </div>
 
     <!-- DEMANDES BC -->
@@ -560,7 +629,97 @@ function getDBCVendeur(item){
   return'—';
 }
 
-// ═══ VENDEURS — liste fixe + dynamique ═══
+// ═══ ACCORDÉON ═══
+function toggleAcc(id,hd){
+  const body=document.getElementById(id);
+  const arrow=hd.querySelector('.acc-arrow');
+  const isOpen=body.classList.contains('open');
+  body.classList.toggle('open',!isOpen);
+  arrow.classList.toggle('open',!isOpen);
+}
+
+// ═══ FILTRE VENDEUR GLOBAL ═══
+function getFilterVendeur(){return document.getElementById('filter-vendeur-bc')?.value||'all';}
+function getFilterClient(){return document.getElementById('filter-client-bc')?.value||'all';}
+
+// ═══ SUIVI DOCUWARE ═══
+function getSuiviDocuware(){
+  const fV=getFilterVendeur(),fC=getFilterClient();
+  return DATA.suivi.filter(i=>{
+    const ef=getEtatFact(i);
+    const lienDW=f(i,'Lien_Docuware')||f(i,'LienDocuware')||'';
+    if(ef!=='Entièrement facturé')return false;
+    if(lienDW)return false; // déjà archivé
+    if(fV!=='all'&&f(i,'Vendeurencharge')!==fV)return false;
+    if(fC!=='all'&&getClient(i)!==fC)return false;
+    return true;
+  });
+}
+
+function renderDocuware(){
+  const items=getSuiviDocuware();
+  const el=document.getElementById('sd-docuware-count');
+  if(el)el.textContent=items.length+' BC'+(items.length!==1?'s':'');
+  const b=document.getElementById('suivi-docuware-body');
+  if(!b)return;
+  if(!items.length){b.innerHTML='<tr class="empty-row"><td colspan="7">✅ Tous les BCs facturés sont archivés dans Docuware</td></tr>';return;}
+  b.innerHTML=items.map(i=>{
+    const client=getClient(i),vendeur=f(i,'Vendeurencharge')||'—';
+    const numBC=f(i,'Title')||`BC-${i.ID}`;
+    const bl=f(i,'N_x00b0_BL')||'—';
+    const fc=f(i,nFCKey())||'—';
+    const dateRec=fmtDate(f(i,'Dateder_x00e9_ception'));
+    const nE=numBC.replace(/'/g,"\\'");
+    return`<tr class="rr"><td class="ref">${numBC}</td><td class="cname">${client}</td><td class="mono">${bl}</td><td class="mono">${fc}</td><td class="mono">${dateRec}</td><td>${vendeur}</td><td>
+      <button class="btn" onclick="envoyerBCFlow(${i.ID},'${nE}')">📦 Envoyer Docuware</button>
+    </td></tr>`;
+  }).join('');
+}
+
+// ═══ FLOW TOKEN (Azure AD — pour flows dans Solution) ═══
+const FLOW_SCOPE='https://service.flow.microsoft.com/.default';
+const ENV_ID='Default-d441528b-bc77-4636-8d24-8ac9d38aed63';
+const FLOW_DOCUWARE_ID='59f86f49474a4739ba5563104919af7b';
+
+async function getFlowToken(){
+  const cached=sessionStorage.getItem('flow_token');
+  const exp=parseInt(sessionStorage.getItem('flow_token_exp')||'0');
+  if(cached&&Date.now()<exp-60000)return cached;
+  // Token silencieux via authorization_code avec scope Flow
+  const v=rndB64(),ch=await sha256b64(v);
+  const hint=sessionStorage.getItem('user_login_hint')||'';
+  return new Promise((res,rej)=>{
+    const w=window.open(
+      `https://login.microsoftonline.com/${C.tenantId}/oauth2/v2.0/authorize?`+
+      new URLSearchParams({client_id:C.clientId,response_type:'code',redirect_uri:C.redirectUri,
+        scope:FLOW_SCOPE+' openid',code_challenge:ch,code_challenge_method:'S256',
+        response_mode:'query',login_hint:hint,prompt:'none'}),
+      'flow_auth','width=600,height=600'
+    );
+    if(!w){rej(new Error('Popup bloquée — autorise les popups pour ce site'));return;}
+    let done=false;
+    const check=setInterval(async()=>{
+      try{
+        const u=w.location.href;
+        if(u&&u.startsWith(C.redirectUri)){
+          clearInterval(check);done=true;w.close();
+          const code=new URL(u).searchParams.get('code');
+          if(!code){rej(new Error('Pas de code dans la réponse'));return;}
+          const b=new URLSearchParams({client_id:C.clientId,grant_type:'authorization_code',
+            code,redirect_uri:C.redirectUri,code_verifier:v,scope:FLOW_SCOPE+' openid'});
+          const r=await fetch(`https://login.microsoftonline.com/${C.tenantId}/oauth2/v2.0/token`,
+            {method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:b});
+          if(!r.ok){rej(new Error('Token flow: HTTP '+r.status));return;}
+          const d=await r.json();
+          sessionStorage.setItem('flow_token',d.access_token);
+          sessionStorage.setItem('flow_token_exp',String(Date.now()+d.expires_in*1000));
+          res(d.access_token);
+        }
+      }catch(e){/* cross-origin — attendre */}
+      if(w.closed&&!done){clearInterval(check);rej(new Error('Fenêtre fermée avant authentification'));}
+    },500);
+  });
+}
 const VENDEURS_FIXES=['Fabrice','Fred','Fritz','Fritz Ballet','Fritz Carew','Nicolas'];
 function getAllVendeurs(){
   const dyn=[...new Set([
@@ -571,7 +730,7 @@ function getAllVendeurs(){
 }
 
 function buildFilters(){
-  const vBC=[...new Set(DATA.suivi.map(i=>f(i,'Vendeurencharge')||'').filter(Boolean))].sort();
+  const vBC=getAllVendeurs();
   const tous=getAllVendeurs();
   const cBC=[...new Set(DATA.suivi.map(i=>getClient(i)).filter(c=>c!=='—'))].sort();
   const vDBC=[...new Set(DATA.dbc.map(i=>getDBCVendeur(i)).filter(v=>v!=='—'))].sort();
@@ -696,41 +855,48 @@ function renderHistorique(){
 }
 
 function renderAll(){
-  const recu=getSuiviRecu(),ec=getSuiviEnCours();
-  // KPIs
+  const fV=getFilterVendeur(),fC=getFilterClient();
+  const filterBC=i=>(fV==='all'||f(i,'Vendeurencharge')===fV)&&(fC==='all'||getClient(i)===fC);
+  const recu=getSuiviRecu().filter(filterBC);
+  const ec=getSuiviEnCours().filter(filterBC);
+  // KPIs Suivi BC
   document.getElementById('banner-num').textContent=recu.length;
   document.getElementById('sd-recu-count').textContent=recu.length+' BC'+(recu.length!==1?'s':'');
   document.getElementById('sd-encours-count').textContent=ec.length+' actifs';
+  document.getElementById('kpi-afacturer').textContent=ec.filter(i=>getStatut(i)==='Entièrement livré'||f(i,'N_x00b0_BL')).length;
   document.getElementById('kpi-prep').textContent=ec.filter(i=>getStatut(i)==='En préparation').length;
   document.getElementById('kpi-pret').textContent=ec.filter(i=>getStatut(i)==='Prêt à Livrer').length;
   document.getElementById('kpi-partiel').textContent=ec.filter(i=>getStatut(i)==='Partiellement livré').length;
   const retard=ec.filter(i=>daysLate(f(i,'DateLivraisonpr_x00e9_vue'))>0).length;
   document.getElementById('kpi-eta').textContent=retard;
-  document.getElementById('kpi-atbc').textContent=ec.filter(i=>getStatut(i)==='En attente BC').length;
-  const risqueDBC=DATA.dbc.filter(i=>f(i,'Statut')!=='BC Reçu').reduce((s,i)=>s+Number(f(i,'Montant_HT')||0),0);
-  const dbcU=DATA.dbc.filter(i=>f(i,'Statut')!=='BC Reçu'&&daysSince(f(i,'Date_Enl_x00e8_vement'))>5).length;
-  const dc=DATA.devis.filter(i=>(f(i,'Statut')||'').startsWith('En cours')).length;
-  document.getElementById('kpi-recu').textContent=recu.length;
-  document.getElementById('kpi-retard').textContent=retard;
-  document.getElementById('kpi-risque').textContent=risqueDBC>0?Math.round(risqueDBC/1000)+'k €':'0 €';
-  document.getElementById('kpi-devis-matin').textContent=dc;
+  // KPIs DBC — exclure BC Reçu partout
+  const dbcActifs=DATA.dbc.filter(i=>f(i,'Statut')!=='BC Reçu');
+  const risqueDBC=dbcActifs.reduce((s,i)=>s+Number(f(i,'Montant_HT')||0),0);
+  const dbcUrgents=dbcActifs.filter(i=>daysSince(f(i,'Date_Enl_x00e8_vement'))>5).length;
+  const dbcOk=dbcActifs.filter(i=>daysSince(f(i,'Date_Enl_x00e8_vement'))<=5).length;
+  document.getElementById('kpi-risque')?.setAttribute('textContent',risqueDBC>0?Math.round(risqueDBC/1000)+'k €':'0 €');
+  const kr=document.getElementById('kpi-risque');if(kr)kr.textContent=risqueDBC>0?Math.round(risqueDBC/1000)+'k €':'0 €';
   document.getElementById('kpi-risque-total').textContent=fmtMoney(risqueDBC);
-  document.getElementById('kpi-dbc-urgents').textContent=dbcU;
-  document.getElementById('kpi-dbc-ok').textContent=DATA.dbc.length-dbcU;
-  const now=new Date(),mois=new Date(now.getFullYear(),now.getMonth(),1);
+  document.getElementById('kpi-dbc-urgents').textContent=dbcUrgents;
+  document.getElementById('kpi-dbc-ok').textContent=dbcOk;
+  // KPIs Devis
+  const dc=DATA.devis.filter(i=>(f(i,'Statut')||'').startsWith('En cours')).length;
+  const mois=new Date();mois.setDate(1);mois.setHours(0,0,0,0);
+  document.getElementById('kpi-devis-matin').textContent=dc;
   document.getElementById('kpi-devis-cours').textContent=dc;
   document.getElementById('kpi-devis-envoye').textContent=DATA.devis.filter(i=>f(i,'Statut')==='Devis envoyé'&&new Date(f(i,'Date_Devis')||'')>=mois).length;
   document.getElementById('kpi-devis-stale').textContent=DATA.devis.filter(i=>daysSince(f(i,'Modified'))>7&&(f(i,'Statut')||'').startsWith('En cours')).length;
   document.getElementById('kpi-devis-total').textContent=DATA.devis.length;
   // Tables
-  const recuHtml=recu.length?recu.map(i=>bcRow(i,true)).join(''):'<tr class="empty-row"><td colspan="7">✅ Aucun BC en statut "Reçu" pour le moment</td></tr>';
+  const recuHtml=recu.length?recu.map(i=>bcRow(i,true)).join(''):'<tr class="empty-row"><td colspan="8">✅ Aucun BC en statut "Reçu" pour le moment</td></tr>';
   document.getElementById('matin-recu-body').innerHTML=recuHtml;
   document.getElementById('suivi-recu-body').innerHTML=recuHtml;
   renderAFacturer();
+  renderDocuware();
   renderHistorique();
   renderSuiviEnCours();
   // Matin DBC
-  const crit=DATA.dbc.filter(i=>daysSince(f(i,'Date_Enl_x00e8_vement'))>5).slice(0,6);
+  const crit=DATA.dbc.filter(i=>f(i,'Statut')!=='BC Reçu'&&daysSince(f(i,'Date_Enl_x00e8_vement'))>5).slice(0,6);
   document.getElementById('matin-dbc-body').innerHTML=crit.length?crit.map(i=>dbcRowCompact(i)).join(''):'<tr class="empty-row"><td colspan="7">✅ Aucun DBC critique</td></tr>';
   renderDBCTable();renderDevisTable();
 }
@@ -848,7 +1014,8 @@ function renderDevisTable(){
 function updateBadges(){
   const recu=getSuiviRecu().length;
   const retard=getSuiviEnCours().filter(i=>daysLate(f(i,'DateLivraisonpr_x00e9_vue'))>0).length;
-  const dbcU=DATA.dbc.filter(i=>f(i,'Statut')!=='BC Reçu'&&daysSince(f(i,'Date_Enl_x00e8_vement'))>5).length;
+  const dbcActifs=DATA.dbc.filter(i=>f(i,'Statut')!=='BC Reçu');
+  const dbcU=dbcActifs.filter(i=>daysSince(f(i,'Date_Enl_x00e8_vement'))>5).length;
   const dc=DATA.devis.filter(i=>(f(i,'Statut')||'').startsWith('En cours')).length;
   document.getElementById('badge-recu').textContent=recu+" auj.";
   document.getElementById('badge-retard').textContent=retard+' retard';
@@ -1318,14 +1485,31 @@ async function livraisonPartielleFlow(id,numBC,client){
   }
 }
 
-// ── Envoyer BC à Docuware — Flow PA ──
+// ── Envoyer BC à Docuware — Flow PA via token Azure AD ──
 async function envoyerBCFlow(id,numBC){
-  if(!confirm(`Envoyer le BC ${numBC} à Docuware ?\nLe flow va archiver les pièces jointes dans la GED.`))return;
+  if(!confirm(`Envoyer le BC ${numBC||id} à Docuware ?\nLe flow Power Automate va archiver les pièces jointes dans la GED.`))return;
   try{
-    await triggerPAFlow('envoyerBC',id);
-    alert('✅ Flow Docuware lancé !');
+    // Essai 1 : token silencieux via popup
+    let flowToken;
+    try{flowToken=await getFlowToken();}
+    catch(e){
+      // Si popup bloquée ou erreur → fallback URL directe (si elle a un sig)
+      console.warn('getFlowToken failed:',e.message);
+      await triggerPAFlow('envoyerBC',id);
+      alert('✅ Flow Docuware lancé !');
+      return;
+    }
+    const url=`https://api.flow.microsoft.com/providers/Microsoft.ProcessSimple/environments/${ENV_ID}/flows/${FLOW_DOCUWARE_ID}/triggers/manual/run?api-version=2016-11-01`;
+    const r=await fetch(url,{
+      method:'POST',
+      headers:{'Authorization':`Bearer ${flowToken}`,'Content-Type':'application/json'},
+      body:JSON.stringify({itemId:id})
+    });
+    if(!r.ok&&r.status!==202){const t=await r.text().catch(()=>'');throw new Error(`HTTP ${r.status} — ${t.substring(0,150)}`);}
+    alert('✅ Flow Docuware lancé ! L\'archivage sera effectué dans quelques secondes.');
+    setTimeout(()=>loadAll(),5000);
   }catch(e){
-    alert('Erreur flow : '+e.message);
+    alert('Erreur Docuware : '+e.message);
   }
 }
 
