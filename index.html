@@ -330,7 +330,7 @@
       <div class="page-header">
         <div><h1>Demandes BC — Enlèvements sans BC</h1><div class="sub">/sites/BondeCommande · Demandes_BC</div></div>
         <div style="display:flex;gap:8px">
-          <button class="btn-refresh" style="background:var(--green)" onclick="openNouveauDBCModal()">🆕 Demande BC</button>
+          <button class="btn-refresh" data-label="1" style="background:var(--green)" onclick="openNouveauDBCModal()">🆕 Demande BC</button>
           <button class="btn-refresh" onclick="loadAll()">🔄 Actualiser</button>
         </div>
       </div>
@@ -532,7 +532,10 @@ async function loadAll(){
   setLoading(false);
 }
 
-function setLoading(v){document.querySelectorAll('.btn-refresh').forEach(b=>{b.disabled=v;b.textContent=v?'⏳ Chargement...':'🔄 Actualiser';});}
+function setLoading(v){document.querySelectorAll('.btn-refresh').forEach(b=>{
+  if(b.dataset.label)return; // boutons avec label fixe — ne pas écraser
+  b.disabled=v;b.textContent=v?'⏳':'🔄 Actualiser';
+});}
 function showError(m){const b=document.getElementById('errorBox');b.textContent='⚠️ '+m;b.style.display='block';}
 function hideError(){document.getElementById('errorBox').style.display='none';}
 
@@ -1029,7 +1032,7 @@ function openTraiterModal(id,numBC,client){
     if(datebl)body['DateBL']=datebl+'T00:00:00Z';
     if(datepec)body['Datepriseencharge']=datepec+'T00:00:00Z';
     if(eta)body['DateLivraisonpr_x00e9_vue']=eta+'T00:00:00Z';
-    if(montant&&!isNaN(parseFloat(montant)))body['MontantHT']=parseFloat(montant);
+    if(montant&&!isNaN(parseFloat(montant.replace(',','.'))))body['MontantHT']=parseFloat(montant.replace(',','.'));
     if(chantier)body['Projet']=chantier;
     if(rem)body['Remarques']=rem;
     if(vendeur)body['Vendeurencharge']=vendeur;
@@ -1114,9 +1117,18 @@ async function openDevisPanel(id){
     const nd=f(item,'Num_x00e9_ro_Devis','Numero_Devis','Title')||`DEV-${id}`;
     const st=f(item,'Statut')||'—';
     document.getElementById('panel-title').textContent=`📄 ${nd}`;
-    // Charger lignes et pièces jointes en parallèle
+    const vendeurs=[...new Set(DATA.suivi.map(i=>f(i,'Vendeurencharge')||'').filter(Boolean))].sort();
+    const currentVd=f(item,'Vendeur_Assign_x00e9_')||'';
+    const vOpts=vendeurs.map(v=>`<option value="${v}"${v===currentVd?' selected':''}>${v}</option>`).join('');
+
+    // Charger lignes — essayer les deux noms de champ lookup possibles
     const [lignes,attachments]=await Promise.all([
-      spFetch('sites/BondeCommande','Lignes_Demandes_Devis',`$select=*&$filter=Num_x00e9_ro_Devis_RefId eq ${id}&$top=50`).catch(()=>[]),
+      spFetch('sites/BondeCommande','Lignes_Demandes_Devis',
+        `$select=*&$top=100`
+      ).then(all=>all.filter(l=>{
+        const ref=f(l,'Num_x00e9_ro_Devis_RefId')||f(l,'Num_x00e9_ro_Devis_Ref')||f(l,'Num_x00e9_ro_Devis_RefId');
+        return parseInt(ref)===id || String(ref)===String(id);
+      })).catch(()=>[]),
       getAttachments('sites/BondeCommande','Demandes_Devis',id)
     ]);
     let html=`
@@ -1134,6 +1146,14 @@ async function openDevisPanel(id){
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:0">
         <div class="pf"><div class="pf-lbl">Date émission</div><div class="pf-val">${fmtDate(f(item,'Date__x00c9_mission_Devis'))}</div></div>
         <div class="pf"><div class="pf-lbl">Devis RS</div><div class="pf-val">${f(item,'Devis_RS')||'—'}</div></div>
+      </div>
+      <div class="pf"><div class="pf-lbl">Vendeur assigné</div>
+        <div style="display:flex;gap:6px;align-items:center;margin-top:2px">
+          <select id="panel-vendeur" style="flex:1;border:1px solid var(--border);border-radius:5px;padding:5px 8px;font-size:12px;font-family:inherit">
+            <option value="">— Non assigné —</option>${vOpts}
+          </select>
+          <button class="pbtn blue" style="padding:5px 10px;font-size:11px" onclick="assignerVendeurDevis(${id})">💾 Assigner</button>
+        </div>
       </div>
       <hr style="border:none;border-top:1px solid var(--border);margin:4px 0 10px">`;
     if(lignes.length){
@@ -1206,6 +1226,24 @@ async function envoyerDevisFlow(id){
   }
 }
 
+// ── Assigner vendeur depuis panneau Devis ──
+async function assignerVendeurDevis(id){
+  const sel=document.getElementById('panel-vendeur');
+  if(!sel||!sel.value){alert('Sélectionne un vendeur avant d\'assigner.');return;}
+  const btn=sel.nextElementSibling;
+  if(btn){btn.disabled=true;btn.textContent='⏳...';}
+  try{
+    await spPatch('sites/BondeCommande','Demandes_Devis',id,{'Vendeur_Assign_x00e9_':sel.value});
+    const idx=DATA.devis.findIndex(i=>i.ID===id);
+    if(idx!==-1)DATA.devis[idx]['Vendeur_Assign_x00e9_']=sel.value;
+    if(btn){btn.disabled=false;btn.textContent='✅ Assigné';}
+    renderDevisTable();
+  }catch(e){
+    if(btn){btn.disabled=false;btn.textContent='💾 Assigner';}
+    alert('Erreur : '+e.message);
+  }
+}
+
 // ── Livraison partielle — Flow PA ──
 async function livraisonPartielleFlow(id,numBC,client){
   if(!confirm(`Créer une livraison partielle pour ${numBC} · ${client} ?\nLe flow va générer le suffixe alphabétique et créer la ligne dans Suivi_BC.`))return;
@@ -1231,13 +1269,7 @@ async function envoyerBCFlow(id,numBC){
 
 // ── Portail création Demande BC ──
 function openNouveauDBCModal(){
-  const devisOpts=DATA.devis.map(d=>{
-    const ref=f(d,'Num_x00e9_ro_Devis','Numero_Devis','Title')||`DEV-${d.ID}`;
-    const client=f(d,'Client')||'';
-    return `<option value="${d.ID}">${ref}${client?' — '+client:''}</option>`;
-  }).join('');
   const today=new Date().toISOString().slice(0,10);
-
   openModal('🆕 Nouvelle Demande BC — Enlèvement sans BC',`
     <div style="background:var(--amber-light);border-left:3px solid var(--amber);border-radius:4px;padding:7px 10px;font-size:11px;color:#7a4000;margin-bottom:6px;">
       Un client récupère de la marchandise sans BC. Ce formulaire crée la demande dans SharePoint.
@@ -1254,11 +1286,11 @@ function openNouveauDBCModal(){
       <div class="mf"><label>Date enlèvement</label><input id="d-dateenlev" type="date" value="${today}"></div>
       <div class="mf"><label>N° BL signé</label><input id="d-numbl" placeholder="ex: 820454"></div>
     </div>
-    <div class="mf"><label>Chef de chantier</label><input id="d-chef" placeholder="Nom du chef de chantier (optionnel)"></div>
-    <div class="mf"><label>Articles / Marchandise remise *</label><textarea id="d-articles" rows="2" placeholder="Description des articles, références, quantités..."></textarea></div>
-    <div class="mf"><label>Devis lié (optionnel)</label>
-      <select id="d-devis"><option value="">— Aucun devis lié —</option>${devisOpts}</select>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+      <div class="mf"><label>Chef de chantier</label><input id="d-chef" placeholder="Nom du chef de chantier"></div>
+      <div class="mf"><label>N° Devis lié (optionnel)</label><input id="d-numdevis" placeholder="ex: 716521"></div>
     </div>
+    <div class="mf"><label>Articles / Marchandise remise *</label><textarea id="d-articles" rows="2" placeholder="Description des articles, références, quantités..."></textarea></div>
     <div class="mf"><label>📎 BL signé — fichier (optionnel)</label>
       <input id="d-blfile" type="file" accept=".pdf,.jpg,.jpeg,.png" style="font-size:12px;padding:4px 0">
       <span class="hint">PDF, JPG, PNG</span>
@@ -1272,15 +1304,13 @@ function openNouveauDBCModal(){
     if(!client){document.getElementById('d-client').classList.add('err');throw new Error('Le nom du client est obligatoire.');}
     if(!employe){document.getElementById('d-employe').classList.add('err');throw new Error("Le nom de l'employé est obligatoire.");}
     if(!email){document.getElementById('d-email').classList.add('err');throw new Error('L\'email client est obligatoire.');}
-    if(!montant||parseFloat(montant)<=0){document.getElementById('d-montant').classList.add('err');throw new Error('Le montant HT est obligatoire.');}
+    if(!montant||parseFloat(montant.replace(',','.'))<0){document.getElementById('d-montant').classList.add('err');throw new Error('Le montant HT est obligatoire.');}
     if(!articles){document.getElementById('d-articles').classList.add('err');throw new Error('La description des articles est obligatoire.');}
 
     const dateEnlev=document.getElementById('d-dateenlev').value;
     const numbl=document.getElementById('d-numbl').value.trim();
     const chef=document.getElementById('d-chef').value.trim();
-    const devisId=document.getElementById('d-devis').value;
 
-    // Générer le titre DBC
     const dStr=dateEnlev.replace(/-/g,'');
     const initials=client.split(' ').map(w=>w[0]||'').join('').toUpperCase().slice(0,3);
     const titre=`DBC-${dStr}-${initials}`;
@@ -1290,19 +1320,18 @@ function openNouveauDBCModal(){
       'NomClient':client,
       'Nom_Employ_x00e9_':employe,
       'Email_Client':email,
-      'Montant_HT':parseFloat(montant),
+      'Montant_HT':parseFloat(montant.replace(',','.')),
       'Articles':articles,
       'Statut':'En attente BC',
     };
     if(dateEnlev)body['Date_Enl_x00e8_vement']=dateEnlev+'T00:00:00Z';
     if(numbl)body['N_x00b0_BL']=numbl;
-    // Chef_de_chantier : nom interne SharePoint à confirmer — skippé pour éviter erreur 400
-    // if(chef)body['Chef_de_chantier']=chef;
-    if(devisId)body['ID_DevisId']=parseInt(devisId);
+    if(chef)body['Chefdechantier']=chef;
+    const numDevis=document.getElementById('d-numdevis').value.trim();
+    if(numDevis)body['ID_Devis']=numDevis;
 
-    // Vendeur : si currentUser stocké, utiliser VendeurId (champ Personne)
-    const userId=parseInt(sessionStorage.getItem('sp_bc_user_id')||'0');
-    if(userId)body['VendeurId']=userId;
+    // Vendeur : champ Personne — ne pas setter automatiquement (nom interne à confirmer)
+    // if(userId)body['VendeurId']=userId;
 
     const created=await spPost('sites/BondeCommande','Demandes_BC',body);
     const newId=created.ID||created.id;
@@ -1321,7 +1350,7 @@ function openNouveauDBCModal(){
 const PA_FLOWS = {
   envoyerDevis:       'https://defaultd441528bbc7746368d248ac9d38aed.63.environment.api.powerplatform.com:443/powerautomate/automations/direct/workflows/41c98ae2c6964b1b87f5cfa75cb46776/triggers/manual/paths/invoke?api-version=1&sp=%2Ftriggers%2Fmanual%2Frun&sv=1.0&sig=1S-A55JhnRiF4McOqSKBXJwfDPacLRlNNSt072hwZ9Y',
   livraisonPartielle: 'https://defaultd441528bbc7746368d248ac9d38aed.63.environment.api.powerplatform.com:443/powerautomate/automations/direct/workflows/5150617ef47e450085a2c9adaefd54a0/triggers/manual/paths/invoke?api-version=1&sp=%2Ftriggers%2Fmanual%2Frun&sv=1.0&sig=3ahWz9NDUmjJcU9nBr8Whir2g4fjQIZl2ac0NoZiLqA',
-  envoyerBC:          'https://defaultd441528bbc7746368d248ac9d38aed.63.environment.api.powerplatform.com:443/powerautomate/automations/direct/workflows/59f86f49474a4739ba5563104919af7b/triggers/manual/paths/invoke?api-version=1' // ⚠️ URL tronquée — recopy depuis PA
+  envoyerBC:          'https://defaultd441528bbc7746368d248ac9d38aed.63.environment.api.powerplatform.com:443/powerautomate/automations/direct/workflows/59f86f49474a4739ba5563104919af7b/triggers/manual/paths/invoke?api-version=1' // ⚠️ URL tronquée — &sp=&sv=&sig= manquants
 };
 
 // ── Déclencher un flow PA via HTTP trigger ──
