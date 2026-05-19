@@ -1658,12 +1658,15 @@ async function triggerPAFlow(flowKey, itemId){
     alert(`Flow "${flowKey}" non encore configuré — URL manquante.`);
     return false;
   }
+  // URLs avec sig= → appel anonyme. URLs sans sig= → Bearer token du tenant requis.
+  const headers = {'Content-Type': 'application/json'};
+  if(!url.includes('sig=')) headers['Authorization'] = `Bearer ${getToken()}`;
+
   const r = await fetch(url, {
     method: 'POST',
-    headers: {'Content-Type': 'application/json'},
+    headers,
     body: JSON.stringify({itemId: itemId})
   });
-  // Les flows PA retournent 202 Accepted (pas 200)
   if(!r.ok && r.status !== 202){
     const t = await r.text().catch(()=>'');
     throw new Error(`Flow PA ${flowKey}: HTTP ${r.status} — ${t.substring(0,150)}`);
