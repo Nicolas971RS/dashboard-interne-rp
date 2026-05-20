@@ -386,12 +386,42 @@
       </div>
 
       <!-- RECHERCHE GLOBALE -->
-      <div style="background:var(--navy);border-radius:var(--radius);padding:14px 18px;margin-bottom:14px;display:flex;align-items:center;gap:12px">
-        <span style="font-size:20px">🔍</span>
-        <input type="text" id="search-global-bc" placeholder="Recherche rapide — N° BC, client, chantier, N° BL, N° FC..." 
-          style="flex:1;background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.2);border-radius:var(--radius-sm);padding:9px 14px;font-size:13.5px;color:white;font-family:var(--font-body);outline:none"
-          oninput="rechercheGlobalBC(this.value)">
-        <button class="btn" style="border-color:rgba(255,255,255,.3);color:rgba(255,255,255,.7);background:none;white-space:nowrap" onclick="document.getElementById('search-global-bc').value='';rechercheGlobalBC('')">✕ Effacer</button>
+      <div style="background:var(--navy);border-radius:var(--radius);padding:14px 18px;margin-bottom:14px">
+        <div style="display:flex;align-items:center;gap:12px;margin-bottom:10px">
+          <span style="font-size:20px">🔍</span>
+          <input type="text" id="search-global-bc" placeholder="Recherche rapide — N° BC, client, chantier, N° BL, N° FC..." 
+            style="flex:1;background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.2);border-radius:var(--radius-sm);padding:9px 14px;font-size:13.5px;color:white;font-family:var(--font-body);outline:none"
+            oninput="rechercheGlobalBC()">
+          <button class="btn" style="border-color:rgba(255,255,255,.3);color:rgba(255,255,255,.7);background:none;white-space:nowrap" onclick="clearRechercheGlobalBC()">✕ Effacer</button>
+        </div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+          <select id="sg-statut" onchange="rechercheGlobalBC()" style="background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.15);border-radius:var(--radius-sm);padding:5px 9px;font-size:11.5px;color:rgba(255,255,255,.8);font-family:var(--font-body);outline:none;cursor:pointer">
+            <option value="all">Tous les statuts</option>
+            <option value="Reçu">Reçu</option>
+            <option value="En préparation">En préparation</option>
+            <option value="Prêt à Livrer">Prêt à livrer</option>
+            <option value="Partiellement livré">Partiellement livré</option>
+            <option value="Entièrement livré">Entièrement livré</option>
+            <option value="Terminé">Terminé</option>
+            <option value="Annulé">Annulé</option>
+          </select>
+          <select id="sg-vendeur" onchange="rechercheGlobalBC()" style="background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.15);border-radius:var(--radius-sm);padding:5px 9px;font-size:11.5px;color:rgba(255,255,255,.8);font-family:var(--font-body);outline:none;cursor:pointer">
+            <option value="all">Tous les vendeurs</option>
+          </select>
+          <select id="sg-fact" onchange="rechercheGlobalBC()" style="background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.15);border-radius:var(--radius-sm);padding:5px 9px;font-size:11.5px;color:rgba(255,255,255,.8);font-family:var(--font-body);outline:none;cursor:pointer">
+            <option value="all">Toutes facturations</option>
+            <option value="Non Facturé">Non Facturé</option>
+            <option value="Partiellement facturé">Partiellement facturé</option>
+            <option value="Entièrement facturé">Entièrement facturé</option>
+          </select>
+          <div style="display:flex;align-items:center;gap:5px">
+            <span style="font-size:11px;color:rgba(255,255,255,.5)">Du</span>
+            <input type="date" id="sg-date-from" onchange="rechercheGlobalBC()" style="background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.15);border-radius:var(--radius-sm);padding:4px 8px;font-size:11.5px;color:rgba(255,255,255,.8);font-family:var(--font-body);outline:none">
+            <span style="font-size:11px;color:rgba(255,255,255,.5)">au</span>
+            <input type="date" id="sg-date-to" onchange="rechercheGlobalBC()" style="background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.15);border-radius:var(--radius-sm);padding:4px 8px;font-size:11.5px;color:rgba(255,255,255,.8);font-family:var(--font-body);outline:none">
+          </div>
+          <span id="sg-count" style="font-size:11px;color:rgba(255,255,255,.4);margin-left:4px"></span>
+        </div>
       </div>
 
       <!-- Résultats recherche globale -->
@@ -2249,56 +2279,100 @@ async function openTraiterModal(id,numBC,client){
 // ═══════════════════════════════════════════════════════════
 // ═══ RECHERCHE GLOBALE BC ═══
 // ═══════════════════════════════════════════════════════════
-function rechercheGlobalBC(q){
+function buildSGVendeurs(){
+  const sel=document.getElementById('sg-vendeur');
+  if(!sel||sel.options.length>1)return;
+  const vendeurs=[...new Set((DATA.suivi||[]).map(i=>f(i,'Vendeurencharge')).filter(Boolean))].sort();
+  vendeurs.forEach(v=>{const o=document.createElement('option');o.value=v;o.textContent=v;sel.appendChild(o);});
+}
+
+function clearRechercheGlobalBC(){
+  ['search-global-bc','sg-date-from','sg-date-to'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});
+  ['sg-statut','sg-vendeur','sg-fact'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='all';});
+  rechercheGlobalBC();
+}
+
+function rechercheGlobalBC(){
+  buildSGVendeurs();
   const acc=document.getElementById('bc-accordeons');
   const res=document.getElementById('bc-search-results');
   const body=document.getElementById('bc-search-body');
   const title=document.getElementById('bc-search-title');
-  q=q.trim().toLowerCase();
+  const countEl=document.getElementById('sg-count');
 
-  if(q.length<2){
-    // Retour aux accordéons
+  const q=(document.getElementById('search-global-bc')?.value||'').trim().toLowerCase();
+  const statut=document.getElementById('sg-statut')?.value||'all';
+  const vendeur=document.getElementById('sg-vendeur')?.value||'all';
+  const fact=document.getElementById('sg-fact')?.value||'all';
+  const dateFrom=document.getElementById('sg-date-from')?.value||'';
+  const dateTo=document.getElementById('sg-date-to')?.value||'';
+
+  const hasFilter=q.length>=2||statut!=='all'||vendeur!=='all'||fact!=='all'||dateFrom||dateTo;
+
+  if(!hasFilter){
     acc.style.display='';
     res.style.display='none';
+    if(countEl)countEl.textContent='';
     return;
   }
 
-  // Masquer accordéons, afficher résultats
   acc.style.display='none';
   res.style.display='block';
 
   const items=(DATA.suivi||[]).filter(i=>{
-    const numBC=(f(i,'Title')||'').toLowerCase();
-    const client=getClient(i).toLowerCase();
-    const chantier=getChantier(i).toLowerCase();
-    const bl=(f(i,'N_x00b0_BL')||'').toLowerCase();
-    const fc=(f(i,nFCKey())||'').toLowerCase();
-    const vendeur=(f(i,'Vendeurencharge')||'').toLowerCase();
-    return numBC.includes(q)||client.includes(q)||chantier.includes(q)||bl.includes(q)||fc.includes(q)||vendeur.includes(q);
+    // Texte libre
+    if(q.length>=2){
+      const numBC=(f(i,'Title')||'').toLowerCase();
+      const client=getClient(i).toLowerCase();
+      const chantier=getChantier(i).toLowerCase();
+      const bl=(f(i,'N_x00b0_BL')||'').toLowerCase();
+      const fc=(f(i,nFCKey())||'').toLowerCase();
+      const v=(f(i,'Vendeurencharge')||'').toLowerCase();
+      if(!numBC.includes(q)&&!client.includes(q)&&!chantier.includes(q)&&!bl.includes(q)&&!fc.includes(q)&&!v.includes(q))return false;
+    }
+    // Statut
+    if(statut!=='all'&&getStatut(i)!==statut)return false;
+    // Vendeur
+    if(vendeur!=='all'&&f(i,'Vendeurencharge')!==vendeur)return false;
+    // Facturation
+    if(fact!=='all'&&getEtatFact(i)!==fact)return false;
+    // Dates
+    const dateRec=f(i,'Dateder_x00e9_ception');
+    if(dateFrom&&dateRec&&dateRec<dateFrom)return false;
+    if(dateTo&&dateRec&&dateRec>dateTo)return false;
+    return true;
   });
 
-  title.textContent=`${items.length} résultat${items.length>1?'s':''} pour "${q}"`;
+  const activeFilters=[];
+  if(q.length>=2)activeFilters.push(`"${q}"`);
+  if(statut!=='all')activeFilters.push(statut);
+  if(vendeur!=='all')activeFilters.push(vendeur);
+  if(fact!=='all')activeFilters.push(fact);
+  if(dateFrom||dateTo)activeFilters.push(`${dateFrom||'…'} → ${dateTo||'…'}`);
+
+  title.textContent=`${items.length} résultat${items.length>1?'s':''} — ${activeFilters.join(' · ')}`;
+  if(countEl)countEl.textContent=`${items.length} BC${items.length>1?'s':''}`;
 
   if(!items.length){
-    body.innerHTML='<tr class="empty-row"><td colspan="10">Aucun BC trouvé pour cette recherche</td></tr>';
+    body.innerHTML='<tr class="empty-row"><td colspan="10">Aucun BC trouvé — modifiez les critères</td></tr>';
     return;
   }
 
-  body.innerHTML=items.slice(0,100).map(i=>{
+  const hl=(txt)=>{
+    if(!txt||txt==='—'||q.length<2)return txt||'—';
+    const re=new RegExp(`(${q.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')})`, 'gi');
+    return txt.replace(re,'<mark style="background:var(--amber-light);color:var(--amber);border-radius:2px;padding:0 2px">$1</mark>');
+  };
+
+  body.innerHTML=items.slice(0,150).map(i=>{
     const s=getStatut(i),ef=getEtatFact(i);
-    const client=getClient(i),vendeur=f(i,'Vendeurencharge')||'—';
+    const client=getClient(i),vendeurV=f(i,'Vendeurencharge')||'—';
     const numBC=f(i,'Title')||`BC-${i.ID}`;
     const chantier=getChantier(i);
     const numBL=f(i,'N_x00b0_BL')||'—';
     const numFC=f(i,nFCKey())||'—';
     const dateRec=fmtDate(f(i,'Dateder_x00e9_ception'));
     const cE=client.replace(/'/g,"\\'"),nE=numBC.replace(/'/g,"\\'");
-    // Highlight terme recherché
-    const hl=(txt)=>{
-      if(!txt||txt==='—')return txt;
-      const re=new RegExp(`(${q.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')})`, 'gi');
-      return txt.replace(re,'<mark style="background:var(--amber-light);color:var(--amber);border-radius:2px;padding:0 2px">$1</mark>');
-    };
     return`<tr style="cursor:pointer" onclick="openBCPanel(${i.ID})">
       <td class="ref">${hl(numBC)}</td>
       <td class="cname">${hl(client)}</td>
@@ -2306,7 +2380,7 @@ function rechercheGlobalBC(q){
       <td class="mono">${hl(numBL)}</td>
       <td class="mono">${numFC!=='—'?`<span style="color:var(--teal)">${hl(numFC)}</span>`:numFC}</td>
       <td class="mono">${dateRec}</td>
-      <td>${hl(vendeur)}</td>
+      <td>${hl(vendeurV)}</td>
       <td>${bStatut(s)}</td>
       <td>${bFact(ef)}</td>
       <td onclick="event.stopPropagation()"><div class="btn-grp">
@@ -2317,7 +2391,7 @@ function rechercheGlobalBC(q){
     </tr>`;
   }).join('');
 
-  if(items.length>100)body.innerHTML+=`<tr class="empty-row"><td colspan="10">... et ${items.length-100} autres — affinez la recherche</td></tr>`;
+  if(items.length>150)body.innerHTML+=`<tr class="empty-row"><td colspan="10">... et ${items.length-150} autres — affinez les critères</td></tr>`;
 }
 
 function setupAC(inputId,hiddenId,dropId,data){
