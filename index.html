@@ -1828,19 +1828,19 @@ async function submitAjoutDevis(){
     const newId=created.ID||created.id;
     if(!newId)throw new Error('ID non retourné par SharePoint');
 
-    // Mettre à jour Numéro_Devis + Date_Émission via PATCH (encoding testé séparément)
-    const patchBody={Num_x00e9_ro_Devis:`DEV-${newId}`};
-    if(dateEmission){
-      // Tester les deux encodings possibles pour É (x00C9 ou x00c9)
-      patchBody['Date__x00c9_mission_Devis']=new Date(dateEmission).toISOString();
-    }
-    await spPatch('sites/BondeCommande','Demandes_Devis',newId,patchBody)
-      .catch(async()=>{
-        // Fallback : essayer l'autre encoding si le premier échoue
-        const pb2={Num_x00e9_ro_Devis:`DEV-${newId}`};
-        if(dateEmission)pb2['Date__x00C9_mission_Devis']=new Date(dateEmission).toISOString();
-        await spPatch('sites/BondeCommande','Demandes_Devis',newId,pb2);
-      });
+    // À partir d'ici : si une étape échoue, on supprime le devis créé (rollback)
+    try{
+      // Mettre à jour Numéro_Devis + Date_Émission via PATCH
+      const patchBody={Num_x00e9_ro_Devis:`DEV-${newId}`};
+      if(dateEmission){
+        patchBody['Date__x00c9_mission_Devis']=new Date(dateEmission).toISOString();
+      }
+      await spPatch('sites/BondeCommande','Demandes_Devis',newId,patchBody)
+        .catch(async()=>{
+          const pb2={Num_x00e9_ro_Devis:`DEV-${newId}`};
+          if(dateEmission)pb2['Date__x00C9_mission_Devis']=new Date(dateEmission).toISOString();
+          await spPatch('sites/BondeCommande','Demandes_Devis',newId,pb2);
+        });
 
     // ── 2. Créer les lignes articles ──
     // Récupérer les vrais noms internes des champs depuis l'API SharePoint
@@ -1914,6 +1914,14 @@ async function submitAjoutDevis(){
       showTab('devis',document.querySelector('.tabs .tab[onclick*="devis"]'));
     },1500);
 
+    }catch(innerErr){
+      // ── ROLLBACK : supprimer le devis orphelin ──
+      console.error('[Ajout Devis] Erreur après création — rollback DEV-'+newId, innerErr);
+      try{await spDelete('sites/BondeCommande','Demandes_Devis',newId);console.log('[Rollback] DEV-'+newId+' supprimé');}
+      catch(de){console.warn('[Rollback] Échec suppression DEV-'+newId,de);}
+      throw innerErr; // Re-lancer pour le catch externe
+    }
+
   }catch(e){
     console.error('[Ajout Devis]',e);
     adMsg(`Erreur : ${e.message}`,'ko');
@@ -1957,7 +1965,11 @@ async function spPost(site,list,body){
   return r.json();
 }
 
-// ── Upload pièce jointe SharePoint ──
+// ── DELETE REST SharePoint ──
+async function spDelete(site,list,id){
+  const url=`${C.spRoot}/${site}/_api/web/lists/getbytitle('${list}')/items(${id})`;
+  await fetch(url,{method:'DELETE',headers:{'Authorization':`Bearer ${getToken()}`,'Accept':'application/json;odata=nometadata','IF-MATCH':'*','X-HTTP-Method':'DELETE'}});
+}
 async function spAddAttachment(site,list,itemId,fileName,fileArrayBuffer){
   const safe=encodeURIComponent(fileName.replace(/['"]/g,'_'));
   const url=`${C.spRoot}/${site}/_api/web/lists/getbytitle('${list}')/items(${itemId})/AttachmentFiles/add(FileName='${safe}')`;
