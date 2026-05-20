@@ -430,8 +430,8 @@
           <span style="font-size:11px;color:var(--text-muted);cursor:pointer;text-decoration:underline" onclick="document.getElementById('search-global-bc').value='';rechercheGlobalBC('')">← Retour aux accordéons</span>
         </div>
         <div class="tc"><table>
-          <thead><tr><th>N° BC</th><th>Client</th><th>Chantier</th><th>N° BL</th><th>N° FC</th><th>Date réception</th><th>Vendeur</th><th>Statut</th><th>État fact.</th><th>Actions</th></tr></thead>
-          <tbody id="bc-search-body"><tr class="empty-row"><td colspan="10">Aucun résultat</td></tr></tbody>
+          <thead><tr><th>N° BC</th><th>Client</th><th>Chantier</th><th>N° BL</th><th>N° FC</th><th>Date réception</th><th>Vendeur</th><th>Statut</th><th>État fact.</th><th>Doc.</th><th>Actions</th></tr></thead>
+          <tbody id="bc-search-body"><tr class="empty-row"><td colspan="11">Aucun résultat</td></tr></tbody>
         </table></div>
       </div>
 
@@ -851,7 +851,7 @@ async function loadAll(){
     if(suivi.length>0){console.log('DEBUG Suivi_BC[0] keys:',Object.keys(suivi[0]).sort().join(', '));}
 
     _lastLoad=Date.now();updateTimer();
-    buildFilters();renderAll();updateBadges();
+    buildFilters();renderAll();updateBadges();buildSGVendeurs();
     document.getElementById('lastRefresh').textContent=
       `${suivi.length} BCs · ${lignes.length} lignes · ${dbc.length} DBC · ${devis.length} devis · Actualisé ${new Date().toLocaleTimeString('fr-FR')}`;
   }catch(e){showError(e.message);console.error(e);}
@@ -2279,11 +2279,22 @@ async function openTraiterModal(id,numBC,client){
 // ═══════════════════════════════════════════════════════════
 // ═══ RECHERCHE GLOBALE BC ═══
 // ═══════════════════════════════════════════════════════════
+function bDocuware(i){
+  const lien=f(i,'Lien_dossier','Liendossier');
+  const statut=i['StatutBCLivr_x00e9_etFC']||i['StatutBCLivretFC'];
+  if(lien&&lien.trim()&&lien.trim()!=='—')
+    return`<a href="${lien}" target="_blank" title="Voir dans Docuware" style="color:var(--teal);font-size:11px;text-decoration:none;display:inline-flex;align-items:center;gap:3px">📦 ✅</a>`;
+  if(statut===true||statut==='true')
+    return`<span title="Archivé Docuware" style="color:var(--teal);font-size:11px">📦 ✅</span>`;
+  return'<span style="color:#ccc;font-size:11px" title="Non archivé">📦</span>';
+}
 function buildSGVendeurs(){
   const sel=document.getElementById('sg-vendeur');
-  if(!sel||sel.options.length>1)return;
+  if(!sel)return;
+  const current=sel.value;
+  sel.innerHTML='<option value="all">Tous les vendeurs</option>';
   const vendeurs=[...new Set((DATA.suivi||[]).map(i=>f(i,'Vendeurencharge')).filter(Boolean))].sort();
-  vendeurs.forEach(v=>{const o=document.createElement('option');o.value=v;o.textContent=v;sel.appendChild(o);});
+  vendeurs.forEach(v=>{const o=document.createElement('option');o.value=v;o.textContent=v;if(v===current)o.selected=true;sel.appendChild(o);});
 }
 
 function clearRechercheGlobalBC(){
@@ -2354,7 +2365,7 @@ function rechercheGlobalBC(){
   if(countEl)countEl.textContent=`${items.length} BC${items.length>1?'s':''}`;
 
   if(!items.length){
-    body.innerHTML='<tr class="empty-row"><td colspan="10">Aucun BC trouvé — modifiez les critères</td></tr>';
+    body.innerHTML='<tr class="empty-row"><td colspan="11">Aucun BC trouvé — modifiez les critères</td></tr>';
     return;
   }
 
@@ -2383,6 +2394,7 @@ function rechercheGlobalBC(){
       <td>${hl(vendeurV)}</td>
       <td>${bStatut(s)}</td>
       <td>${bFact(ef)}</td>
+      <td style="text-align:center">${bDocuware(i)}</td>
       <td onclick="event.stopPropagation()"><div class="btn-grp">
         <button class="btn" onclick="openBCPanel(${i.ID})">🔍 Détail</button>
         <button class="btn gr" onclick="openFacturerModal(${i.ID},'${nE}','${cE}')">💰</button>
@@ -2391,7 +2403,7 @@ function rechercheGlobalBC(){
     </tr>`;
   }).join('');
 
-  if(items.length>150)body.innerHTML+=`<tr class="empty-row"><td colspan="10">... et ${items.length-150} autres — affinez les critères</td></tr>`;
+  if(items.length>150)body.innerHTML+=`<tr class="empty-row"><td colspan="11">... et ${items.length-150} autres — affinez les critères</td></tr>`;
 }
 
 function setupAC(inputId,hiddenId,dropId,data){
@@ -2527,9 +2539,10 @@ async function openBCPanel(id){
       </div>
       <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:0">
         <div class="pf"><div class="pf-lbl">N° BL</div><div class="pf-val mono">${numBL}</div></div>
-        <div class="pf"><div class="pf-lbl">N° FC</div><div class="pf-val mono" style="${numFC!=='—'?'color:var(--teal);font-weight:700':''}'">${numFC}</div></div>
+        <div class="pf"><div class="pf-lbl">N° FC</div><div class="pf-val mono" style="${numFC!=='—'?'color:var(--teal);font-weight:700':''}">${numFC}</div></div>
         <div class="pf"><div class="pf-lbl">État fact.</div><div class="pf-val">${bFact(ef)}</div></div>
       </div>
+      <div class="pf"><div class="pf-lbl">📦 Archivage Docuware</div><div class="pf-val" style="display:flex;align-items:center;gap:8px">${bDocuware(item)}${f(item,'Lien_dossier','Liendossier')&&f(item,'Lien_dossier','Liendossier')!=='—'?`<a href="${f(item,'Lien_dossier','Liendossier')}" target="_blank" style="font-size:11.5px;color:var(--teal)">Ouvrir dans Docuware →</a>`:'<span style="font-size:11.5px;color:var(--text-muted)">Non archivé</span>'}</div></div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:0">
         <div class="pf"><div class="pf-lbl">📅 Date réception</div><div class="pf-val mono">${dateRec}</div></div>
         <div class="pf"><div class="pf-lbl">📅 ETA prévue</div><div class="pf-val mono">${dateLiv}</div></div>
