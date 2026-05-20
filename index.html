@@ -1038,6 +1038,7 @@ function bcRow(i,showAction=true){
   const chantier=getChantier(i);
   const cE=client.replace(/'/g,"\\'"),nE=numBC.replace(/'/g,"\\'");
   const act=showAction?`<td><div class="btn-grp">
+    <button class="btn" onclick="openBCPanel(${i.ID})">🔍 Détail</button>
     <button class="btn gr" onclick="openFacturerModal(${i.ID},'${nE}','${cE}')">💰 Facturer</button>
     <button class="btn" onclick="openTraiterModal(${i.ID},'${nE}','${cE}')">🔧 Traiter</button>
     <button class="btn" onclick="livraisonPartielleFlow(${i.ID},'${nE}','${cE}')">🔀 Partielle</button>
@@ -1063,6 +1064,7 @@ function renderAFacturer(){
     const s=getStatut(i),ef=getEtatFact(i);
     const cE=client.replace(/'/g,"\\'"),nE=numBC.replace(/'/g,"\\'");
     return`<tr class="rr"><td class="ref">${numBC}</td><td class="cname">${client}</td><td style="font-size:12px;color:var(--text-secondary)">${chantier}</td><td class="mono">${bl}</td><td class="mono">${fc!=='—'?`<span style="color:var(--teal)">${fc}</span>`:fc}</td><td class="mono">${dateRec}</td><td>${vendeur}</td><td>${bStatut(s)}</td><td>${bFact(ef)}</td><td><div class="btn-grp">
+      <button class="btn" onclick="openBCPanel(${i.ID})">🔍 Détail</button>
       <button class="btn gr" onclick="openFacturerModal(${i.ID},'${nE}','${cE}')">💰 Facturer</button>
       <button class="btn" onclick="openTraiterModal(${i.ID},'${nE}','${cE}')">🔧 Traiter</button>
       <button class="btn" onclick="livraisonPartielleFlow(${i.ID},'${nE}','${cE}')">🔀 Partielle</button>
@@ -1459,6 +1461,7 @@ function renderAll(){
     const chantier=getChantier(i);
     const cE=client.replace(/'/g,"\\'"),nE=numBC.replace(/'/g,"\\'");
     return`<tr class="rr"><td class="ref">${numBC}</td><td class="cname">${client}</td><td style="font-size:12px;color:var(--text-secondary)">${chantier}</td><td class="mono">${bl}</td><td class="mono">${dateRec}</td><td>${vendeur}</td><td>${bStatut(getStatut(i))}</td><td>${bFact(getEtatFact(i))}</td><td><div class="btn-grp">
+      <button class="btn" onclick="openBCPanel(${i.ID})">🔍 Détail</button>
       <button class="btn gr" onclick="openFacturerModal(${i.ID},'${nE}','${cE}')">💰 Facturer</button>
       <button class="btn" onclick="openTraiterModal(${i.ID},'${nE}','${cE}')">🔧 Traiter</button>
     </div></td></tr>`;
@@ -1475,6 +1478,7 @@ function renderAll(){
     const lignes=getStatut(i)==='Partiellement livré'?getLignesForBC(i.ID):[];
     const cE=client.replace(/'/g,"\\'"),nE=numBC.replace(/'/g,"\\'");
     return`<tr class="${urg.row}"><td><span class="urg ${urg.cls}">${urg.lbl}</span></td><td class="ref">${numBC}</td><td class="cname">${client}</td><td style="font-size:12px;color:var(--text-secondary)">${chantier}</td><td class="mono" style="color:var(--red)">${fmtDate(dateLiv)}</td><td>${vendeur}</td><td>${bStatut(getStatut(i))}</td><td>${ralBlock(lignes)}</td><td><div class="btn-grp">
+      <button class="btn" onclick="openBCPanel(${i.ID})">🔍 Détail</button>
       <button class="btn" onclick="openTraiterModal(${i.ID},'${nE}','${cE}')">🔧 Traiter</button>
     </div></td></tr>`;
   }).join(''):'<tr class="empty-row"><td colspan="9">✅ Aucun BC en retard fournisseur</td></tr>';
@@ -1534,6 +1538,7 @@ function renderSuiviEnCours(){renderHistorique();
       <td>${vendeur}</td><td>${bStatut(s)}</td>
       <td>${ralBlock(lignes)}</td><td>${bFact(ef)}</td>
       <td><div class="btn-grp">
+        <button class="btn" onclick="openBCPanel(${i.ID})">🔍 Détail</button>
         <button class="btn gr" onclick="openFacturerModal(${i.ID},'${nE}','${cE}')">💰</button>
         <button class="btn" onclick="openTraiterModal(${i.ID},'${nE}','${cE}')">🔧</button>
         <button class="btn" onclick="livraisonPartielleFlow(${i.ID},'${nE}','${cE}')">🔀</button>
@@ -1970,6 +1975,117 @@ async function openDBCPanel(id){
 }
 
 // ── Panneau Devis ──
+// ═══════════════════════════════════════════════════════════
+// ═══ PANEL DÉTAIL BC ═══
+// ═══════════════════════════════════════════════════════════
+async function openBCPanel(id){
+  openPanel(`📦 BC — chargement...`,'<div class="pspin">⏳ Chargement des données...</div>');
+  try{
+    const item=DATA.suivi.find(i=>i.ID===id);
+    if(!item)throw new Error('BC non trouvé en cache');
+    const numBC=f(item,'Title')||`BC-${id}`;
+    const client=getClient(item);
+    const chantier=getChantier(item);
+    const vendeur=f(item,'Vendeurencharge')||'—';
+    const numBL=f(item,'N_x00b0_BL')||'—';
+    const numFC=f(item,nFCKey())||'—';
+    const s=getStatut(item);
+    const ef=getEtatFact(item);
+    const dateRec=fmtDate(f(item,'Dateder_x00e9_ception'));
+    const dateLiv=fmtDate(f(item,'DateLivraisonpr_x00e9_vue'));
+
+    document.getElementById('panel-title').textContent=`📦 ${numBC}`;
+
+    // Charger PJ depuis Suivi_BC (site RseauxPlus)
+    const attachments=await getAttachments('sites/RseauxPlus','Suivi_BC',id);
+
+    // Lignes déjà en cache
+    const lignes=(DATA.lignes||[]).filter(l=>l.BCId===id||parseInt(l.BCId)===id);
+
+    let html=`
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:0">
+        <div class="pf"><div class="pf-lbl">N° BC</div><div class="pf-val mono" style="font-size:15px;font-weight:800;color:var(--navy)">${numBC}</div></div>
+        <div class="pf"><div class="pf-lbl">Statut</div><div class="pf-val">${bStatut(s)}</div></div>
+      </div>
+      <div class="pf"><div class="pf-lbl">Client</div><div class="pf-val" style="font-size:14px;font-weight:700">${client}</div></div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:0">
+        <div class="pf"><div class="pf-lbl">Chantier / Projet</div><div class="pf-val">${chantier}</div></div>
+        <div class="pf"><div class="pf-lbl">Vendeur</div><div class="pf-val">${vendeur}</div></div>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:0">
+        <div class="pf"><div class="pf-lbl">N° BL</div><div class="pf-val mono">${numBL}</div></div>
+        <div class="pf"><div class="pf-lbl">N° FC</div><div class="pf-val mono" style="${numFC!=='—'?'color:var(--teal);font-weight:700':''}'">${numFC}</div></div>
+        <div class="pf"><div class="pf-lbl">État fact.</div><div class="pf-val">${bFact(ef)}</div></div>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:0">
+        <div class="pf"><div class="pf-lbl">📅 Date réception</div><div class="pf-val mono">${dateRec}</div></div>
+        <div class="pf"><div class="pf-lbl">📅 ETA prévue</div><div class="pf-val mono">${dateLiv}</div></div>
+      </div>
+      <hr style="border:none;border-top:1px solid var(--border);margin:4px 0 12px">`;
+
+    // ── Lignes articles ──
+    if(lignes.length){
+      const totalCmd=lignes.reduce((s,l)=>s+(parseFloat(f(l,'Quantit_x00e9_command_x00e9_e'))||0),0);
+      const totalLiv=lignes.reduce((s,l)=>s+(parseFloat(f(l,'Quantit_x00e9_livr_x00e9_e'))||0),0);
+      const ral=totalCmd-totalLiv;
+      html+=`<div class="pf"><div class="pf-lbl">📦 Articles (${lignes.length} ligne${lignes.length>1?'s':''}) · RAL total : <span style="color:${ral>0?'var(--red)':'var(--green)'};font-weight:700">${ral}</span></div>
+        <table class="ltable"><thead><tr><th>Référence</th><th>Désignation</th><th>Cmd</th><th>Livré</th><th>RAL</th></tr></thead><tbody>`;
+      lignes.forEach(l=>{
+        const qc=parseFloat(f(l,'Quantit_x00e9_command_x00e9_e'))||0;
+        const ql=parseFloat(f(l,'Quantit_x00e9_livr_x00e9_e'))||0;
+        const lr=qc-ql;
+        html+=`<tr>
+          <td class="mono">${f(l,'R_x00e9_f_x00e9_rence')||'—'}</td>
+          <td style="font-size:11px">${f(l,'Produit_x002f_D_x00e9_signation')||'—'}</td>
+          <td style="text-align:right;font-weight:600">${qc}</td>
+          <td style="text-align:right;color:var(--green)">${ql}</td>
+          <td style="text-align:right;font-weight:700;color:${lr>0?'var(--red)':'var(--green)'}">${lr}</td>
+        </tr>`;
+      });
+      html+=`</tbody></table></div>`;
+    }else{
+      html+=`<div class="pf"><div class="pf-lbl">Articles</div><div class="pf-val" style="color:var(--grey);font-style:italic">Aucune ligne Lignes_BC trouvée</div></div>`;
+    }
+
+    // ── Pièces jointes ──
+    html+=`<hr style="border:none;border-top:1px solid var(--border);margin:4px 0 12px">
+      <div class="pf"><div class="pf-lbl">📎 Pièces jointes (${attachments.length})</div>`;
+    if(attachments.length){
+      attachments.forEach(a=>{
+        const url=C.spRoot+(a.ServerRelativeUrl||'');
+        const ext=(a.FileName||'').split('.').pop().toLowerCase();
+        const icon=ext==='pdf'?'📄':['jpg','jpeg','png','gif'].includes(ext)?'🖼️':ext==='xlsx'||ext==='xls'?'📊':'📎';
+        html+=`<a class="pattach" onclick="openAttachment('${url}')">
+          <span style="font-size:18px">${icon}</span>
+          <div style="flex:1;overflow:hidden">
+            <div class="pa-name">${a.FileName}</div>
+            <div class="pa-hint">${ext.toUpperCase()} · Cliquer pour ouvrir</div>
+          </div>
+          <span style="color:var(--teal);font-size:18px">→</span>
+        </a>`;
+      });
+    }else{
+      html+=`<div style="background:var(--grey-xlight);border:1px dashed var(--border);border-radius:var(--radius-sm);padding:14px;text-align:center;color:var(--text-muted);font-size:12.5px">
+        Aucun document joint à ce BC dans SharePoint
+      </div>`;
+    }
+    html+=`</div>`;
+
+    // ── Actions ──
+    const cE=client.replace(/'/g,"\\'"),nE=numBC.replace(/'/g,"\\'");
+    html+=`<div class="pactions">
+      <button class="pbtn green" onclick="closePanel();openFacturerModal(${id},'${nE}','${cE}')">💰 Facturer</button>
+      <button class="pbtn blue" onclick="closePanel();openTraiterModal(${id},'${nE}','${cE}')">🔧 Traiter</button>
+      <button class="pbtn grey" onclick="closePanel()">Fermer</button>
+    </div>`;
+
+    document.getElementById('panel-bd').innerHTML=html;
+  }catch(e){
+    document.getElementById('panel-bd').innerHTML=`<div class="error-box" style="display:block">Erreur : ${e.message}</div>`;
+    console.error('[BC Panel]',e);
+  }
+}
+
 async function openDevisPanel(id){
   openPanel(`📄 Devis — chargement...`,'<div class="pspin">⏳ Chargement...</div>');
   try{
