@@ -352,15 +352,15 @@
       <!-- SECTION 1 : À traiter maintenant -->
       <div class="sd"><h2>💰 À traiter maintenant</h2><span class="site-tag rp">BL renseigné · État ≠ Entièrement facturé</span><div class="sd-line"></div><button class="btn" onclick="exportMatinTraiter()">⬇ CSV</button></div>
       <div class="tc"><table>
-        <thead><tr><th>N° BC</th><th>Client</th><th>N° BL</th><th>Date réception</th><th>Vendeur</th><th>Statut</th><th>État facturation</th><th>Action</th></tr></thead>
-        <tbody id="matin-traiter-body"><tr class="empty-row"><td colspan="8">Chargement...</td></tr></tbody>
+        <thead><tr><th>N° BC</th><th>Client</th><th>Chantier</th><th>N° BL</th><th>Date réception</th><th>Vendeur</th><th>Statut</th><th>État facturation</th><th>Action</th></tr></thead>
+        <tbody id="matin-traiter-body"><tr class="empty-row"><td colspan="9">Chargement...</td></tr></tbody>
       </table></div>
 
       <!-- SECTION 2 : À relancer fournisseur -->
       <div class="sd"><h2>🚨 À relancer fournisseur</h2><span class="site-tag rp">Date livraison prévue dépassée · Non soldés</span><div class="sd-line"></div><button class="btn" onclick="exportMatinRelancer()">⬇ CSV</button></div>
       <div class="tc"><table>
-        <thead><tr><th>Retard</th><th>N° BC</th><th>Client</th><th>ETA prévue</th><th>Vendeur</th><th>Statut</th><th>RAL</th><th>Action</th></tr></thead>
-        <tbody id="matin-retard-body"><tr class="empty-row"><td colspan="8">Chargement...</td></tr></tbody>
+        <thead><tr><th>Retard</th><th>N° BC</th><th>Client</th><th>Chantier</th><th>ETA prévue</th><th>Vendeur</th><th>Statut</th><th>RAL</th><th>Action</th></tr></thead>
+        <tbody id="matin-retard-body"><tr class="empty-row"><td colspan="9">Chargement...</td></tr></tbody>
       </table></div>
 
       <!-- SECTION 3 : Devis à prendre en charge -->
@@ -426,8 +426,8 @@
       </div>
       <div class="acc-body open" id="acc-recu">
         <div class="tc"><table>
-          <thead><tr><th>N° BC</th><th>Client</th><th>Date livraison</th><th>N° BL</th><th>N° FC</th><th>Vendeur</th><th>Statut</th><th>État facturation</th><th>Action</th></tr></thead>
-          <tbody id="suivi-recu-body"><tr class="empty-row"><td colspan="9">Chargement...</td></tr></tbody>
+          <thead><tr><th>N° BC</th><th>Client</th><th>Chantier</th><th>Date livraison</th><th>N° BL</th><th>N° FC</th><th>Vendeur</th><th>Statut</th><th>État facturation</th><th>Action</th></tr></thead>
+          <tbody id="suivi-recu-body"><tr class="empty-row"><td colspan="10">Chargement...</td></tr></tbody>
         </table></div>
       </div>
 
@@ -441,8 +441,8 @@
       </div>
       <div class="acc-body open" id="acc-afact">
         <div class="tc"><table>
-          <thead><tr><th>N° BC</th><th>Client</th><th>N° BL</th><th>N° FC</th><th>Date réception</th><th>Vendeur</th><th>Statut</th><th>État facturation</th><th>Action</th></tr></thead>
-          <tbody id="suivi-afacturer-body"><tr class="empty-row"><td colspan="9">Chargement...</td></tr></tbody>
+          <thead><tr><th>N° BC</th><th>Client</th><th>Chantier</th><th>N° BL</th><th>N° FC</th><th>Date réception</th><th>Vendeur</th><th>Statut</th><th>État facturation</th><th>Action</th></tr></thead>
+          <tbody id="suivi-afacturer-body"><tr class="empty-row"><td colspan="10">Chargement...</td></tr></tbody>
         </table></div>
       </div>
 
@@ -471,8 +471,8 @@
       </div>
       <div class="acc-body" id="acc-histo">
         <div class="tc"><table>
-          <thead><tr><th>Urgence</th><th>N° BC</th><th>Client</th><th>N° BL</th><th>N° FC</th><th>Date réception</th><th>Vendeur</th><th>Statut</th><th>RAL / Lignes</th><th>État facturation</th></tr></thead>
-          <tbody id="suivi-histo-body"><tr class="empty-row"><td colspan="10">Chargement...</td></tr></tbody>
+          <thead><tr><th>Urgence</th><th>N° BC</th><th>Client</th><th>Chantier</th><th>N° BL</th><th>N° FC</th><th>Date réception</th><th>Vendeur</th><th>Statut</th><th>RAL / Lignes</th><th>État facturation</th></tr></thead>
+          <tbody id="suivi-histo-body"><tr class="empty-row"><td colspan="11">Chargement...</td></tr></tbody>
         </table></div>
       </div>
 
@@ -487,8 +487,8 @@
       <div class="acc-body" id="acc-encours">
         <div class="note">ℹ️ RAL visible uniquement pour les BCs en livraison partielle.</div>
         <div class="tc"><table>
-          <thead><tr><th>Urgence</th><th>N° BC</th><th>Client</th><th>ETA</th><th>Vendeur</th><th>Statut</th><th>RAL / Lignes</th><th>État fact.</th><th>Actions</th></tr></thead>
-          <tbody id="suivi-encours-body"><tr class="empty-row"><td colspan="9">Chargement...</td></tr></tbody>
+          <thead><tr><th>Urgence</th><th>N° BC</th><th>Client</th><th>Chantier</th><th>ETA</th><th>Vendeur</th><th>Statut</th><th>RAL / Lignes</th><th>État fact.</th><th>Actions</th></tr></thead>
+          <tbody id="suivi-encours-body"><tr class="empty-row"><td colspan="10">Chargement...</td></tr></tbody>
         </table></div>
       </div>
     </div>
@@ -1035,6 +1035,7 @@ function bcRow(i,showAction=true){
   const dateLiv=fmtDate(f(i,'Dateder_x00e9_ception'));
   const numBL=f(i,'N_x00b0_BL')||'—';
   const numFC=f(i,nFCKey())||'—';
+  const chantier=f(i,'Chantier')||'—';
   const cE=client.replace(/'/g,"\\'"),nE=numBC.replace(/'/g,"\\'");
   const act=showAction?`<td><div class="btn-grp">
     <button class="btn gr" onclick="openFacturerModal(${i.ID},'${nE}','${cE}')">💰 Facturer</button>
@@ -1042,7 +1043,7 @@ function bcRow(i,showAction=true){
     <button class="btn" onclick="livraisonPartielleFlow(${i.ID},'${nE}','${cE}')">🔀 Partielle</button>
     <button class="btn" onclick="envoyerBCFlow(${i.ID},'${nE}')">📦 Docuware</button>
   </div></td>`:'';
-  return`<tr class="rr" data-bc-id="${i.ID}"><td class="ref">${numBC}</td><td class="cname">${client}</td><td class="mono">${dateLiv}</td><td class="mono">${numBL}</td><td class="mono">${numFC!=='—'?`<span style="color:var(--teal)">${numFC}</span>`:numFC}</td><td>${vendeur}</td><td>${bStatut(s)}</td><td>${bFact(ef)}</td>${act}</tr>`;
+  return`<tr class="rr" data-bc-id="${i.ID}"><td class="ref">${numBC}</td><td class="cname">${client}</td><td style="font-size:12px;color:var(--text-secondary)">${chantier}</td><td class="mono">${dateLiv}</td><td class="mono">${numBL}</td><td class="mono">${numFC!=='—'?`<span style="color:var(--teal)">${numFC}</span>`:numFC}</td><td>${vendeur}</td><td>${bStatut(s)}</td><td>${bFact(ef)}</td>${act}</tr>`;
 }
 
 // ═══ RENDER ALL ═══
@@ -1057,10 +1058,11 @@ function renderAFacturer(){
     const numBC=f(i,'Title')||`BC-${i.ID}`;
     const bl=f(i,'N_x00b0_BL')||'—';
     const fc=f(i,nFCKey())||'—';
+    const chantier=f(i,'Chantier')||'—';
     const dateRec=fmtDate(f(i,'Dateder_x00e9_ception'));
     const s=getStatut(i),ef=getEtatFact(i);
     const cE=client.replace(/'/g,"\\'"),nE=numBC.replace(/'/g,"\\'");
-    return`<tr class="rr"><td class="ref">${numBC}</td><td class="cname">${client}</td><td class="mono">${bl}</td><td class="mono">${fc!=='—'?`<span style="color:var(--teal)">${fc}</span>`:fc}</td><td class="mono">${dateRec}</td><td>${vendeur}</td><td>${bStatut(s)}</td><td>${bFact(ef)}</td><td><div class="btn-grp">
+    return`<tr class="rr"><td class="ref">${numBC}</td><td class="cname">${client}</td><td style="font-size:12px;color:var(--text-secondary)">${chantier}</td><td class="mono">${bl}</td><td class="mono">${fc!=='—'?`<span style="color:var(--teal)">${fc}</span>`:fc}</td><td class="mono">${dateRec}</td><td>${vendeur}</td><td>${bStatut(s)}</td><td>${bFact(ef)}</td><td><div class="btn-grp">
       <button class="btn gr" onclick="openFacturerModal(${i.ID},'${nE}','${cE}')">💰 Facturer</button>
       <button class="btn" onclick="openTraiterModal(${i.ID},'${nE}','${cE}')">🔧 Traiter</button>
       <button class="btn" onclick="livraisonPartielleFlow(${i.ID},'${nE}','${cE}')">🔀 Partielle</button>
@@ -1077,20 +1079,21 @@ function renderHistorique(){
   if(fC!=='all')items=items.filter(i=>getClient(i)===fC);
   document.getElementById('sd-histo-count').textContent=items.length+' BC'+(items.length!==1?'s':'');
   const b=document.getElementById('suivi-histo-body');
-  if(!items.length){b.innerHTML='<tr class="empty-row"><td colspan="10">✅ Historique vide</td></tr>';return;}
+  if(!items.length){b.innerHTML='<tr class="empty-row"><td colspan="11">✅ Historique vide</td></tr>';return;}
   b.innerHTML=items.slice(0,100).map(i=>{// limit to 100 for perf
     const s=getStatut(i),ef=getEtatFact(i);
     const client=getClient(i),vendeur=f(i,'Vendeurencharge')||'—';
     const numBC=f(i,'Title')||`BC-${i.ID}`;
     const numBL=f(i,'N_x00b0_BL')||'—';
     const numFC=f(i,nFCKey())||'—';
+    const chantier=f(i,'Chantier')||'—';
     const dateLiv=f(i,'DateLivraisonpr_x00e9_vue');
     const late=daysLate(dateLiv);
     const urg=urgFromDays(late>0?late:0);
     const lignes=s==='Partiellement livré'?getLignesForBC(i.ID):[];
-    return`<tr class="${urg.row}"><td><span class="urg ${urg.cls}">${urg.lbl}</span></td><td class="ref">${numBC}</td><td class="cname">${client}</td><td class="mono">${numBL}</td><td class="mono">${numFC!=='—'?`<span style="color:var(--teal)">${numFC}</span>`:numFC}</td><td class="mono">${fmtDate(f(i,'Dateder_x00e9_ception'))}</td><td>${vendeur}</td><td>${bStatut(s)}</td><td>${ralBlock(lignes)}</td><td>${bFact(ef)}</td></tr>`;
+    return`<tr class="${urg.row}"><td><span class="urg ${urg.cls}">${urg.lbl}</span></td><td class="ref">${numBC}</td><td class="cname">${client}</td><td style="font-size:12px;color:var(--text-secondary)">${chantier}</td><td class="mono">${numBL}</td><td class="mono">${numFC!=='—'?`<span style="color:var(--teal)">${numFC}</span>`:numFC}</td><td class="mono">${fmtDate(f(i,'Dateder_x00e9_ception'))}</td><td>${vendeur}</td><td>${bStatut(s)}</td><td>${ralBlock(lignes)}</td><td>${bFact(ef)}</td></tr>`;
   }).join('');
-  if(items.length>100){b.innerHTML+=`<tr class="empty-row"><td colspan="10">... et ${items.length-100} autres BCs — utilisez les filtres pour affiner</td></tr>`;}
+  if(items.length>100){b.innerHTML+=`<tr class="empty-row"><td colspan="11">... et ${items.length-100} autres BCs — utilisez les filtres pour affiner</td></tr>`;}
 }
 
 // ═══ HELPER RECHERCHE ═══
@@ -1442,7 +1445,7 @@ function renderAll(){
   document.getElementById('kpi-recu').textContent=traiter.length;
   document.getElementById('kpi-retard').textContent=relancer.length;
   // Tables Suivi BC (accordéons)
-  const recuHtml=recu.length?recu.map(i=>bcRow(i,true)).join(''):'<tr class="empty-row"><td colspan="8">✅ Aucun BC réceptionné aujourd\'hui</td></tr>';
+  const recuHtml=recu.length?recu.map(i=>bcRow(i,true)).join(''):'<tr class="empty-row"><td colspan="10">✅ Aucun BC réceptionné aujourd\'hui</td></tr>';
   document.getElementById('suivi-recu-body').innerHTML=recuHtml;
   renderAFacturer();
   renderDocuware();
@@ -1453,12 +1456,13 @@ function renderAll(){
     const client=getClient(i),numBC=f(i,'Title')||`BC-${i.ID}`;
     const bl=f(i,'N_x00b0_BL')||'—',dateRec=fmtDate(f(i,'Dateder_x00e9_ception'));
     const vendeur=f(i,'Vendeurencharge')||'—';
+    const chantier=f(i,'Chantier')||'—';
     const cE=client.replace(/'/g,"\\'"),nE=numBC.replace(/'/g,"\\'");
-    return`<tr class="rr"><td class="ref">${numBC}</td><td class="cname">${client}</td><td class="mono">${bl}</td><td class="mono">${dateRec}</td><td>${vendeur}</td><td>${bStatut(getStatut(i))}</td><td>${bFact(getEtatFact(i))}</td><td><div class="btn-grp">
+    return`<tr class="rr"><td class="ref">${numBC}</td><td class="cname">${client}</td><td style="font-size:12px;color:var(--text-secondary)">${chantier}</td><td class="mono">${bl}</td><td class="mono">${dateRec}</td><td>${vendeur}</td><td>${bStatut(getStatut(i))}</td><td>${bFact(getEtatFact(i))}</td><td><div class="btn-grp">
       <button class="btn gr" onclick="openFacturerModal(${i.ID},'${nE}','${cE}')">💰 Facturer</button>
       <button class="btn" onclick="openTraiterModal(${i.ID},'${nE}','${cE}')">🔧 Traiter</button>
     </div></td></tr>`;
-  }).join(''):'<tr class="empty-row"><td colspan="8">✅ Aucun BL reçu non facturé</td></tr>';
+  }).join(''):'<tr class="empty-row"><td colspan="9">✅ Aucun BL reçu non facturé</td></tr>';
   document.getElementById('matin-traiter-body').innerHTML=traiterHtml;
 
   const relancerHtml=relancer.length?relancer.map(i=>{
@@ -1467,12 +1471,13 @@ function renderAll(){
     const late=daysLate(dateLiv);
     const urg=urgFromDays(late);
     const vendeur=f(i,'Vendeurencharge')||'—';
+    const chantier=f(i,'Chantier')||'—';
     const lignes=getStatut(i)==='Partiellement livré'?getLignesForBC(i.ID):[];
     const cE=client.replace(/'/g,"\\'"),nE=numBC.replace(/'/g,"\\'");
-    return`<tr class="${urg.row}"><td><span class="urg ${urg.cls}">${urg.lbl}</span></td><td class="ref">${numBC}</td><td class="cname">${client}</td><td class="mono" style="color:var(--red)">${fmtDate(dateLiv)}</td><td>${vendeur}</td><td>${bStatut(getStatut(i))}</td><td>${ralBlock(lignes)}</td><td><div class="btn-grp">
+    return`<tr class="${urg.row}"><td><span class="urg ${urg.cls}">${urg.lbl}</span></td><td class="ref">${numBC}</td><td class="cname">${client}</td><td style="font-size:12px;color:var(--text-secondary)">${chantier}</td><td class="mono" style="color:var(--red)">${fmtDate(dateLiv)}</td><td>${vendeur}</td><td>${bStatut(getStatut(i))}</td><td>${ralBlock(lignes)}</td><td><div class="btn-grp">
       <button class="btn" onclick="openTraiterModal(${i.ID},'${nE}','${cE}')">🔧 Traiter</button>
     </div></td></tr>`;
-  }).join(''):'<tr class="empty-row"><td colspan="8">✅ Aucun BC en retard fournisseur</td></tr>';
+  }).join(''):'<tr class="empty-row"><td colspan="9">✅ Aucun BC en retard fournisseur</td></tr>';
   document.getElementById('matin-retard-body').innerHTML=relancerHtml;
 
   const devisNouv_items=getMatinDevisNouvelle();
@@ -1509,11 +1514,12 @@ function renderSuiviEnCours(){renderHistorique();
     return [numBC,client,vendeur,bl].some(v=>v.toLowerCase().includes(q));
   });
   const b=document.getElementById('suivi-encours-body');
-  if(!ec.length){b.innerHTML='<tr class="empty-row"><td colspan="9">Aucun BC correspondant aux filtres</td></tr>';return;}
+  if(!ec.length){b.innerHTML='<tr class="empty-row"><td colspan="10">Aucun BC correspondant aux filtres</td></tr>';return;}
   b.innerHTML=ec.map(i=>{
     const s=getStatut(i),ef=getEtatFact(i);
     const client=getClient(i),vendeur=f(i,'Vendeurencharge')||'—';
     const numBC=f(i,'Title')||`BC-${i.ID}`;
+    const chantier=f(i,'Chantier')||'—';
     const dateLiv=f(i,'DateLivraisonpr_x00e9_vue');
     const late=daysLate(dateLiv);
     const urg=urgFromDays(late>0?late:0);
@@ -1523,6 +1529,7 @@ function renderSuiviEnCours(){renderHistorique();
     return`<tr class="${urg.row}">
       <td><span class="urg ${urg.cls}">${urg.lbl}</span></td>
       <td class="ref">${numBC}</td><td class="cname">${client}</td>
+      <td style="font-size:12px;color:var(--text-secondary)">${chantier}</td>
       <td class="mono" style="${etaColor}">${fmtDate(dateLiv)}</td>
       <td>${vendeur}</td><td>${bStatut(s)}</td>
       <td>${ralBlock(lignes)}</td><td>${bFact(ef)}</td>
