@@ -482,8 +482,8 @@
       </div>
       <div class="acc-body open" id="acc-recu">
         <div class="tc"><table>
-          <thead><tr><th>N° BC</th><th>Client</th><th>Chantier</th><th>Date livraison</th><th>N° BL</th><th>N° FC</th><th>Vendeur</th><th>Statut</th><th>État facturation</th><th>Action</th></tr></thead>
-          <tbody id="suivi-recu-body"><tr class="empty-row"><td colspan="10">Chargement...</td></tr></tbody>
+          <thead><tr><th>N° BC</th><th>Client</th><th>Chantier</th><th>Date livraison</th><th>N° BL</th><th>N° FC</th><th>Montant HT</th><th>Vendeur</th><th>Statut</th><th>État facturation</th><th>Action</th></tr></thead>
+          <tbody id="suivi-recu-body"><tr class="empty-row"><td colspan="11">Chargement...</td></tr></tbody>
         </table></div>
       </div>
 
@@ -613,7 +613,18 @@
     <div id="tab-analytics" class="section-bloc">
       <div class="page-header">
         <div><h1>Analytics — Vue synthétique</h1><div class="sub" id="analytics-refresh">Données calculées depuis Suivi_BC, Demandes_Devis · Actualisez pour mettre à jour</div></div>
-        <button class="btn-refresh" onclick="renderAnalytics()">🔄 Recalculer</button>
+        <div style="display:flex;gap:8px;align-items:center">
+          <select id="analytics-vendeur" class="fs" onchange="renderAnalytics()" style="min-width:130px">
+            <option value="all">Tous les vendeurs</option>
+          </select>
+          <select id="analytics-periode" class="fs" onchange="renderAnalytics()">
+            <option value="12">12 mois</option>
+            <option value="6">6 mois</option>
+            <option value="3">3 mois</option>
+            <option value="24">24 mois</option>
+          </select>
+          <button class="btn-refresh" onclick="renderAnalytics()">🔄 Recalculer</button>
+        </div>
       </div>
 
       <!-- KPI Synthèse -->
@@ -913,7 +924,22 @@ function updateTimer(){
   if(!el)return;
   const mins=Math.floor((Date.now()-_lastLoad)/60000);
   el.textContent=mins===0?'À l\'instant':`Il y a ${mins} min`;
-  el.style.color=mins>4?'var(--amber)':'var(--grey)';
+  // Fix 13 — indicateur visuel données périmées >15 min
+  const stale=mins>=15;
+  el.style.color=stale?'var(--red)':mins>4?'var(--amber)':'var(--grey)';
+  if(stale){
+    el.textContent=`⚠️ Il y a ${mins} min — Actualisez`;
+    el.style.cursor='pointer';
+    el.onclick=()=>loadAll();
+  }else{
+    el.style.cursor='default';
+    el.onclick=null;
+  }
+  // Fix 17 — badge onglet navigateur
+  const traiter=getMatinTraiter().length;
+  const relancer=getMatinRelancer().length;
+  const total=traiter+relancer;
+  document.title=total>0?`(${total}) Dashboard RP`:'Dashboard RP';
 }
 setInterval(updateTimer,30000);
 
@@ -1141,6 +1167,8 @@ function bcRow(i,showAction=true){
   const numBL=f(i,'N_x00b0_BL')||'—';
   const numFC=f(i,nFCKey())||'—';
   const chantier=getChantier(i);
+  const montant=f(i,'MontantHT');
+  const montantFmt=montant?new Intl.NumberFormat('fr-FR',{style:'currency',currency:'EUR',maximumFractionDigits:0}).format(montant):'—';
   const cE=client.replace(/'/g,"\\'"),nE=numBC.replace(/'/g,"\\'");
   const act=showAction?`<td><div class="btn-grp">
     <button class="btn" onclick="openBCPanel(${i.ID})">🔍 Détail</button>
@@ -1149,7 +1177,7 @@ function bcRow(i,showAction=true){
     <button class="btn" onclick="livraisonPartielleFlow(${i.ID},'${nE}','${cE}')">🔀 Partielle</button>
     <button class="btn" onclick="envoyerBCFlow(${i.ID},'${nE}')">📦 Docuware</button>
   </div></td>`:'';
-  return`<tr class="rr" data-bc-id="${i.ID}"><td class="ref">${numBC}</td><td class="cname">${client}</td><td style="font-size:12px;color:var(--text-secondary)">${chantier}</td><td class="mono">${dateLiv}</td><td class="mono">${numBL}</td><td class="mono">${numFC!=='—'?`<span style="color:var(--teal)">${numFC}</span>`:numFC}</td><td>${vendeur}</td><td>${bStatut(s)}</td><td>${bFact(ef)}</td>${act}</tr>`;
+  return`<tr class="rr" data-bc-id="${i.ID}"><td class="ref">${numBC}</td><td class="cname">${client}</td><td style="font-size:12px;color:var(--text-secondary)">${chantier}</td><td class="mono">${dateLiv}</td><td class="mono">${numBL}</td><td class="mono">${numFC!=='—'?`<span style="color:var(--teal)">${numFC}</span>`:numFC}</td><td class="amt" style="font-size:11.5px">${montantFmt}</td><td>${vendeur}</td><td>${bStatut(s)}</td><td>${bFact(ef)}</td>${act}</tr>`;
 }
 
 // ═══ RENDER ALL ═══
@@ -1214,12 +1242,22 @@ function renderAnalytics(){
   const suivi=DATA.suivi||[];
   const devis=DATA.devis||[];
   const now=new Date();
-  const y12=new Date(now); y12.setMonth(y12.getMonth()-12);
 
-  // Filtre 12 mois sur date réception ou date commande
+  // Filtres vendeur + période
+  const fVendeur=document.getElementById('analytics-vendeur')?.value||'all';
+  const fPeriode=parseInt(document.getElementById('analytics-periode')?.value||'12');
+  // Peupler dropdown vendeurs analytics
+  const avSel=document.getElementById('analytics-vendeur');
+  if(avSel&&avSel.options.length<=1){
+    getAllVendeurs().forEach(v=>{const o=document.createElement('option');o.value=v;o.textContent=v;avSel.appendChild(o);});
+  }
+
+  const yN=new Date(now); yN.setMonth(yN.getMonth()-fPeriode);
   const recent=suivi.filter(i=>{
     const d=f(i,'Dateder_x00e9_ception')||f(i,'DateLivraisonpr_x00e9_vue');
-    return d&&new Date(d)>=y12;
+    if(!d||new Date(d)<yN)return false;
+    if(fVendeur!=='all'&&f(i,'Vendeurencharge')!==fVendeur)return false;
+    return true;
   });
 
   // ── KPIs synthèse ──
@@ -1244,34 +1282,46 @@ function renderAnalytics(){
   }).length;
   document.getElementById('an-retard').textContent=recent.length?Math.round(enRetard/recent.length*100)+'%':'—';
 
-  // ── Graphique 1 — BCs par mois ──
+  // ── Graphique 1 — BCs par mois + CA ──
   const byMonth={};
   for(let m=11;m>=0;m--){
     const d=new Date(now);d.setMonth(d.getMonth()-m);
     const key=d.getFullYear()+'-'+(d.getMonth()+1).toString().padStart(2,'0');
     const lbl=d.toLocaleDateString('fr-FR',{month:'short',year:'2-digit'});
-    byMonth[key]={lbl,n:0};
+    byMonth[key]={lbl,n:0,ca:0};
   }
   recent.forEach(i=>{
     const d=f(i,'Dateder_x00e9_ception');
     if(!d)return;
     const dt=new Date(d);
     const key=dt.getFullYear()+'-'+(dt.getMonth()+1).toString().padStart(2,'0');
-    if(byMonth[key])byMonth[key].n++;
+    if(byMonth[key]){
+      byMonth[key].n++;
+      byMonth[key].ca+=(parseFloat(f(i,'MontantHT'))||0);
+    }
   });
   const months=Object.values(byMonth);
   const maxM=Math.max(...months.map(m=>m.n),1);
+  const maxCA=Math.max(...months.map(m=>m.ca),1);
+  const fmtCA=(v)=>v>=1000?Math.round(v/1000)+'k€':v>0?Math.round(v)+'€':'';
   const chartMois=document.getElementById('chart-mois');
   chartMois.style.cssText='min-height:200px;display:flex;align-items:flex-end;gap:5px;padding-bottom:30px;position:relative;padding-top:10px;';
   chartMois.innerHTML=months.map(m=>{
     const h=Math.max(4,Math.round(m.n/maxM*160));
-    const col=m.n===0?'#e0e5ec':m.n===maxM?'var(--teal-mid)':'var(--blue-mid)';
-    return`<div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:3px">
-      <span style="font-size:10px;font-weight:700;color:var(--text-secondary)">${m.n||''}</span>
-      <div style="width:100%;height:${h}px;background:${col};border-radius:4px 4px 0 0;transition:height .3s"></div>
-      <span style="font-size:9px;color:var(--text-muted);transform:rotate(-30deg);white-space:nowrap;margin-top:4px">${m.lbl}</span>
+    const hCA=Math.max(2,Math.round(m.ca/maxCA*160));
+    const col=m.n===0?'#e0e5ec':m.n===Math.max(...months.map(x=>x.n))?'var(--teal-mid)':'var(--blue-mid)';
+    return`<div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:2px">
+      <span style="font-size:9px;font-weight:700;color:var(--text-secondary)">${m.n||''}</span>
+      <div style="width:100%;position:relative;height:${Math.max(h,hCA)}px">
+        <div style="position:absolute;bottom:0;width:65%;left:0;height:${h}px;background:${col};border-radius:3px 3px 0 0;opacity:.85"></div>
+        <div style="position:absolute;bottom:0;right:0;width:30%;height:${hCA}px;background:var(--amber);border-radius:3px 3px 0 0;opacity:.7" title="CA: ${fmtCA(m.ca)}"></div>
+      </div>
+      <span style="font-size:9px;color:var(--teal-mid);font-weight:600">${fmtCA(m.ca)}</span>
+      <span style="font-size:8.5px;color:var(--text-muted);transform:rotate(-30deg);white-space:nowrap;margin-top:2px">${m.lbl}</span>
     </div>`;
   }).join('');
+  // Légende
+  chartMois.insertAdjacentHTML('afterend','<div style="display:flex;gap:14px;margin-top:6px;font-size:10.5px"><span style="display:flex;align-items:center;gap:4px"><span style="width:10px;height:10px;border-radius:2px;background:var(--blue-mid);opacity:.85;display:inline-block"></span>Nb BCs</span><span style="display:flex;align-items:center;gap:4px"><span style="width:10px;height:10px;border-radius:2px;background:var(--amber);opacity:.7;display:inline-block"></span>CA (€)</span></div>');
 
   // ── Graphique 2 — Top clients (barres horizontales) ──
   const byClient={};
@@ -1378,7 +1428,7 @@ function renderAnalytics(){
   });
   document.getElementById('analytics-vendeurs-body').innerHTML=vendeurRows.join('')||'<tr class="empty-row"><td colspan="6">Aucune donnée</td></tr>';
 
-  document.getElementById('analytics-refresh').textContent=`Calculé le ${new Date().toLocaleString('fr-FR')} · ${recent.length} BCs sur 12 mois · ${devis.length} devis`;
+  document.getElementById('analytics-refresh').textContent=`Calculé le ${new Date().toLocaleString('fr-FR')} · ${recent.length} BCs sur ${fPeriode} mois${fVendeur!=='all'?' · '+fVendeur:''} · ${devis.length} devis`;
 }
 
 function matchSearch(item, q) {
@@ -2620,7 +2670,7 @@ async function openBCPanel(id){
 
     let html=`
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:0">
-        <div class="pf"><div class="pf-lbl">N° BC</div><div class="pf-val mono" style="font-size:15px;font-weight:800;color:var(--navy)">${numBC}</div></div>
+        <div class="pf"><div class="pf-lbl">N° BC</div><div class="pf-val mono" style="font-size:15px;font-weight:800;color:var(--navy);display:flex;align-items:center;gap:8px">${numBC}<button onclick="navigator.clipboard.writeText('${numBC}').then(()=>{this.textContent='✅';setTimeout(()=>this.textContent='📋',1200)})" style="background:none;border:1px solid var(--border);border-radius:4px;padding:2px 7px;font-size:11px;cursor:pointer;color:var(--text-muted)">📋</button></div></div>
         <div class="pf"><div class="pf-lbl">Statut</div><div class="pf-val">${bStatut(s)}</div></div>
       </div>
       <div class="pf"><div class="pf-lbl">Client</div><div class="pf-val" style="font-size:14px;font-weight:700">${client}</div></div>
@@ -2776,6 +2826,11 @@ async function openDevisPanel(id){
         <div class="pf"><div class="pf-lbl">Date émission</div><div class="pf-val">${fmtDate(f(item,'Date__x00c9_mission_Devis'))}</div></div>
         <div class="pf"><div class="pf-lbl">Devis RS</div><div class="pf-val">${f(item,'Devis_RS')||'—'}</div></div>
       </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:0">
+        <div class="pf"><div class="pf-lbl">⏱ Délai validité</div><div class="pf-val">${f(item,'D_x00e9_lai_Validit_x00e9__Jours','Delai_Validite_Jours','D_lai_Validit_Jours')?f(item,'D_x00e9_lai_Validit_x00e9__Jours','Delai_Validite_Jours','D_lai_Validit_Jours')+' jours':'—'}</div></div>
+        <div class="pf"><div class="pf-lbl">📅 Date validité</div><div class="pf-val">${fmtDate(f(item,'Date_Validit_x00e9_','Date_Validite'))}</div></div>
+        <div class="pf"><div class="pf-lbl">📧 Email envoyé</div><div class="pf-val">${f(item,'Email_Envoy_x00e9_','Email_Envoye')?'<span style="color:var(--green);font-weight:600">✅ Oui</span>':'<span style="color:var(--text-muted)">Non</span>'}</div></div>
+      </div>
       <div class="pf"><div class="pf-lbl">Vendeur assigné</div>
         <div style="display:flex;gap:6px;align-items:center;margin-top:2px">
           <select id="panel-vendeur" style="flex:1;border:1px solid var(--border);border-radius:5px;padding:5px 8px;font-size:12px;font-family:inherit">
@@ -2815,6 +2870,9 @@ async function openDevisPanel(id){
     html+=`</div><div class="pactions">`;
     if(st!=='En cours de traitement'&&st!=='Devis envoyé'){
       html+=`<button class="pbtn blue" onclick="passerEnCours(${id},true)">📋 Prendre en charge</button>`;
+    }
+    if(st==='Converti en BC'||st==='Accepté'){
+      html+=`<button class="pbtn grey" style="background:var(--teal-light);color:var(--teal);border:1px solid var(--teal)" onclick="closePanel();showTab('suivi',document.querySelector('.tabs .tab[onclick*=&quot;suivi&quot;]'));document.getElementById('search-global-bc').value='${nd}';rechercheGlobalBC()">🔗 Trouver BC associé</button>`;
     }
     html+=`<button class="pbtn green" onclick="envoyerDevisFlow(${id})">📨 Envoyer devis</button>
       <button class="pbtn grey" onclick="closePanel()">Fermer</button>
