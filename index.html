@@ -2595,49 +2595,180 @@ async function openDBCPanel(id){
   try{
     const item=DATA.dbc.find(i=>i.ID===id);
     if(!item)throw new Error('Item DBC non trouvé en cache');
-    const [attachments]=await Promise.all([
-      getAttachments('sites/BondeCommande','Demandes_BC',id)
-    ]);
+    const attachments=await getAttachments('sites/BondeCommande','Demandes_BC',id);
     const days=daysSince(f(item,'Date_Enl_x00e8_vement'));
-    const nbRel=f(item,'Nb_Relances')||0;
+    const nbRel=parseInt(f(item,'Nb_Relances')||0);
     const vendeur=getDBCVendeur(item);
+    const statut=f(item,'Statut')||'En attente BC';
+    const isReceu=statut==='BC Reçu';
+    const client=f(item,'NomClient')||f(item,'Title')||'—';
+    const employe=f(item,'Nom_Employ_x00e9_')||'—';
+    const email=f(item,'Email_Client')||'—';
+    const montant=f(item,'Montant_HT');
     const numBL=f(item,'N_x00b0_BL')||'—';
+    const devisRef=f(item,'ID_Devis')||f(item,'N_x00b0_Devis')||'—';
+    const articles=f(item,'Articles')||'—';
+    const dateRel=fmtDate(f(item,'Date_Relance'));
+    const notes=f(item,'Notes_Interne')||'';
+    // BC lié si reçu
+    const bcLieId=f(item,'ID_Suivi_BC','ID_Suivi_BCId');
+
+    document.getElementById('panel-title').textContent=`🧾 DBC-${id} — ${client}`;
+
     let html=`
-      <div class="pf"><div class="pf-lbl">Client</div><div class="pf-val">${f(item,'NomClient')||f(item,'Title')||'—'}</div></div>
-      <div class="pf"><div class="pf-lbl">Employé</div><div class="pf-val">${f(item,'Nom_Employ_x00e9_')||'—'}</div></div>
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:0">
-        <div class="pf"><div class="pf-lbl">Date enlèvement</div><div class="pf-val">${fmtDate(f(item,'Date_Enl_x00e8_vement'))}</div></div>
-        <div class="pf"><div class="pf-lbl">Délai</div><div class="pf-val" style="color:${days>5?'var(--red)':'var(--green)'}">${days} jour${days>1?'s':''} écoulé${days>1?'s':''}</div></div>
+      <div class="pf"><div class="pf-lbl">Client (Entreprise)</div>
+        <div class="pf-val" style="font-size:14px;font-weight:700;display:flex;align-items:center;gap:8px">${client}
+          <button onclick="navigator.clipboard.writeText('${client.replace(/'/g,"\\'")}').then(()=>{this.textContent='✅';setTimeout(()=>this.textContent='📋',1200)})" style="background:none;border:1px solid var(--border);border-radius:4px;padding:2px 7px;font-size:11px;cursor:pointer;color:var(--text-muted)">📋</button>
+        </div>
       </div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:0">
-        <div class="pf"><div class="pf-lbl">Montant HT</div><div class="pf-val mono" style="${days>5?'color:var(--red);font-weight:700':''}">${fmtMoney(f(item,'Montant_HT'))}</div></div>
+        <div class="pf"><div class="pf-lbl">Employé</div><div class="pf-val">${employe}</div></div>
+        <div class="pf"><div class="pf-lbl">Email client</div><div class="pf-val mono" style="font-size:11.5px">${email}</div></div>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:0">
+        <div class="pf"><div class="pf-lbl">📅 Date enlèvement</div><div class="pf-val">${fmtDate(f(item,'Date_Enl_x00e8_vement'))}</div></div>
+        <div class="pf"><div class="pf-lbl">⏱ Délai écoulé</div><div class="pf-val" style="color:${days>10?'var(--red)':days>5?'var(--amber)':'var(--green)'};font-weight:700">${days}j ${days>10?'🔴':days>5?'🟠':'✅'}</div></div>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:0">
+        <div class="pf"><div class="pf-lbl">💰 Montant HT</div><div class="pf-val mono" style="${days>5&&!isReceu?'color:var(--red);font-weight:700':''}">${fmtMoney(montant)}</div></div>
         <div class="pf"><div class="pf-lbl">N° BL</div><div class="pf-val mono">${numBL}</div></div>
+        <div class="pf"><div class="pf-lbl">N° Devis lié</div><div class="pf-val mono" style="color:var(--blue)">${devisRef}</div></div>
       </div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:0">
         <div class="pf"><div class="pf-lbl">Vendeur</div><div class="pf-val">${vendeur}</div></div>
-        <div class="pf"><div class="pf-lbl">Nb relances</div><div class="pf-val" style="${nbRel>=2?'color:var(--red);font-weight:700':''}">${nbRel}</div></div>
+        <div class="pf"><div class="pf-lbl">Nb relances</div><div class="pf-val" style="${nbRel>=2?'color:var(--red);font-weight:700':''}">
+          ${nbRel} ${nbRel>=3?'🔴 Escalade requise':nbRel>=2?'🟠':''} ${dateRel?`<span style="font-size:10.5px;color:var(--text-muted)">· dernière ${dateRel}</span>`:''}
+        </div></div>
       </div>
-      <div class="pf"><div class="pf-lbl">Statut</div><div class="pf-val">${bDBC(f(item,'Statut'))}</div></div>
-      <hr style="border:none;border-top:1px solid var(--border);margin:4px 0 12px">
+      <div class="pf"><div class="pf-lbl">Statut</div>
+        <div style="display:flex;align-items:center;gap:10px;margin-top:4px">
+          ${bDBC(statut)}
+          ${!isReceu?`<select id="dbc-panel-statut" style="flex:1;border:1px solid var(--border);border-radius:5px;padding:5px 8px;font-size:12px;font-family:inherit">
+            <option value="En attente BC"${statut==='En attente BC'?' selected':''}>En attente BC</option>
+            <option value="Relancé"${statut==='Relancé'?' selected':''}>Relancé</option>
+            <option value="Litigieux"${statut==='Litigieux'?' selected':''}>Litigieux</option>
+            <option value="BC Reçu"${statut==='BC Reçu'?' selected':''}>BC Reçu</option>
+          </select>
+          <button class="pbtn blue" style="padding:5px 10px;font-size:11px" onclick="updateDBCStatut(${id})">💾 Sauver</button>`:'<span style="color:var(--green);font-weight:600;font-size:12.5px">✅ BC reçu — dossier clôturé</span>'}
+        </div>
+      </div>
+      ${articles&&articles!=='—'?`<div class="pf"><div class="pf-lbl">📦 Articles / Marchandise</div><div class="pf-val" style="background:var(--grey-xlight);padding:8px 10px;border-radius:5px;border:1px solid var(--border);font-size:12px;line-height:1.6;white-space:pre-wrap">${articles}</div></div>`:''}
+      ${notes?`<div class="pf"><div class="pf-lbl">📝 Notes internes</div><div class="pf-val" style="background:#fffbf0;padding:8px 10px;border-radius:5px;border-left:3px solid var(--amber);font-size:12px">${notes}</div></div>`:''}
+      ${bcLieId?`<div class="pf"><div class="pf-lbl">🔗 BC créé</div><div class="pf-val"><button class="pbtn grey" style="background:var(--teal-light);color:var(--teal);border:1px solid var(--teal);font-size:11.5px;padding:4px 10px" onclick="closePanel();showTab('suivi',document.querySelector('.tabs .tab[onclick*=&quot;suivi&quot;]'));document.getElementById('search-global-bc').value='${bcLieId}';rechercheGlobalBC()">Voir BC associé →</button></div></div>`:''}
+      <hr style="border:none;border-top:1px solid var(--border);margin:6px 0 12px">
       <div class="pf"><div class="pf-lbl">📎 Pièces jointes (${attachments.length})</div>`;
+
     if(attachments.length){
       attachments.forEach(a=>{
         const url=C.spRoot+(a.ServerRelativeUrl||'');
-        html+=`<a class="pattach" onclick="openAttachment('${url}')"><span style="font-size:16px">📄</span><span class="pa-name">${a.FileName}</span><span class="pa-hint">Ouvrir →</span></a>`;
+        const ext=(a.FileName||'').split('.').pop().toLowerCase();
+        const icon=ext==='pdf'?'📄':['jpg','jpeg','png','gif'].includes(ext)?'🖼️':'📎';
+        html+=`<a class="pattach" onclick="openAttachment('${url}')">
+          <span style="font-size:18px">${icon}</span>
+          <div style="flex:1;overflow:hidden"><div class="pa-name">${a.FileName}</div><div class="pa-hint">${ext.toUpperCase()} · Cliquer pour ouvrir</div></div>
+          <span style="color:var(--teal);font-size:18px">→</span>
+        </a>`;
       });
     }else{
-      html+=`<div style="color:var(--grey);font-size:12px;font-style:italic;padding:4px 0">Aucune pièce jointe (BL scanné)</div>`;
+      html+=`<div style="background:var(--grey-xlight);border:1px dashed var(--border);border-radius:var(--radius-sm);padding:14px;text-align:center;color:var(--text-muted);font-size:12.5px">Aucun BL scanné attaché</div>`;
     }
+
+    // Bouton upload BL depuis le panel
     html+=`</div>
+      <div class="pf" style="margin-top:6px">
+        <div class="pf-lbl">📤 Ajouter un BL signé</div>
+        <div style="display:flex;gap:8px;align-items:center;margin-top:4px">
+          <input type="file" id="dbc-panel-file" accept=".pdf,.jpg,.jpeg,.png" style="flex:1;font-size:11.5px;border:1px dashed var(--border);border-radius:5px;padding:5px;background:var(--grey-xlight)">
+          <button class="pbtn blue" style="padding:5px 12px;font-size:11px" onclick="uploadDBCAttachment(${id})">📤 Upload</button>
+        </div>
+      </div>
+      <div id="dbc-panel-msg" style="margin-top:6px"></div>
       <div class="pactions">
-        <button class="pbtn blue" onclick="alert('Flow PA Relance (Passe 2) — ID: flux-relance-dbc')">📧 Relancer</button>
-        <button class="pbtn amber" onclick="alert('Flow PA Escalade Fabrice (Passe 2)')">⚡ Escalade</button>
+        ${!isReceu?`
+          <button class="pbtn green" onclick="relancerDBC(${id},'${email.replace(/'/g,"\\'")}')" ${!email||email==='—'?'disabled title="Email client manquant"':''}>📧 Relancer client</button>
+          <button class="pbtn amber" onclick="escaladerDBC(${id})" ${nbRel<2?'title="Disponible après 2 relances" style="opacity:.5"':''}>⚡ Escalader Fabrice</button>
+        `:''}
         <button class="pbtn grey" onclick="closePanel()">Fermer</button>
       </div>`;
+
     document.getElementById('panel-body').innerHTML=html;
   }catch(e){
     document.getElementById('panel-body').innerHTML=`<div style="background:var(--red-light);color:var(--red);padding:10px;border-radius:6px;font-size:12px">❌ ${e.message}</div>`;
+    console.error('[DBC Panel]',e);
   }
+}
+
+// ── Actions DBC depuis le panel ──
+async function updateDBCStatut(id){
+  const sel=document.getElementById('dbc-panel-statut');
+  if(!sel)return;
+  const newStatut=sel.value;
+  try{
+    await spPatch('sites/BondeCommande','Demandes_BC',id,{Statut:newStatut});
+    const idx=DATA.dbc.findIndex(i=>i.ID===id);
+    if(idx!==-1)DATA.dbc[idx]['Statut']=newStatut;
+    const msg=document.getElementById('dbc-panel-msg');
+    if(msg){msg.innerHTML=`<div style="color:var(--green);font-size:12px;padding:4px 0">✅ Statut mis à jour : ${newStatut}</div>`;}
+    renderDBCTable();updateBadges();
+  }catch(e){
+    const msg=document.getElementById('dbc-panel-msg');
+    if(msg)msg.innerHTML=`<div style="color:var(--red);font-size:12px">❌ ${e.message}</div>`;
+  }
+}
+
+async function uploadDBCAttachment(id){
+  const inp=document.getElementById('dbc-panel-file');
+  if(!inp?.files?.length){alert('Sélectionnez un fichier d\'abord.');return;}
+  const file=inp.files[0];
+  const msg=document.getElementById('dbc-panel-msg');
+  try{
+    if(msg)msg.innerHTML='<div style="color:var(--text-muted);font-size:12px">⏳ Upload en cours...</div>';
+    const buf=await file.arrayBuffer();
+    await spAddAttachment('sites/BondeCommande','Demandes_BC',id,file.name,buf);
+    // Mettre à jour A_des_Pièces_Jointes
+    await spPatch('sites/BondeCommande','Demandes_BC',id,{'A_des_Pi_x00e8_ces_Jointes':true});
+    const idx=DATA.dbc.findIndex(i=>i.ID===id);
+    if(idx!==-1)DATA.dbc[idx]['A_des_Pi_x00e8_ces_Jointes']=true;
+    if(msg)msg.innerHTML=`<div style="color:var(--green);font-size:12px">✅ ${file.name} uploadé avec succès</div>`;
+    // Rafraîchir le panel
+    setTimeout(()=>openDBCPanel(id),800);
+  }catch(e){
+    if(msg)msg.innerHTML=`<div style="color:var(--red);font-size:12px">❌ ${e.message}</div>`;
+  }
+}
+
+async function relancerDBC(id,email){
+  const ok=await showConfirm('📧 Relancer le client',`Un email de relance va être envoyé à <strong>${email}</strong> pour lui demander de fournir son bon de commande.<br><br>Confirmer l'envoi ?`,'📧 Envoyer relance','submit');
+  if(!ok)return;
+  try{
+    const item=DATA.dbc.find(i=>i.ID===id);
+    const nbRel=parseInt(f(item,'Nb_Relances')||0)+1;
+    await spPatch('sites/BondeCommande','Demandes_BC',id,{
+      Statut:'Relancé',
+      Nb_Relances:nbRel,
+      Date_Relance:new Date().toISOString()
+    });
+    const idx=DATA.dbc.findIndex(i=>i.ID===id);
+    if(idx!==-1){DATA.dbc[idx]['Statut']='Relancé';DATA.dbc[idx]['Nb_Relances']=nbRel;}
+    alert(`✅ Statut mis à jour : Relancé (${nbRel}ème relance)\n\nPensez à envoyer l'email manuellement à : ${email}`);
+    renderDBCTable();updateBadges();
+    openDBCPanel(id);
+  }catch(e){alert('Erreur : '+e.message);}
+}
+
+async function escaladerDBC(id){
+  const item=DATA.dbc.find(i=>i.ID===id);
+  const client=f(item,'NomClient')||`DBC-${id}`;
+  const ok=await showConfirm('⚡ Escalader à Fabrice',`La demande BC de <strong>${client}</strong> va être marquée comme Litigieuse et Fabrice sera notifié.<br><br>Confirmer l'escalade ?`,'⚡ Escalader','submit');
+  if(!ok)return;
+  try{
+    await spPatch('sites/BondeCommande','Demandes_BC',id,{Statut:'Litigieux'});
+    const idx=DATA.dbc.findIndex(i=>i.ID===id);
+    if(idx!==-1)DATA.dbc[idx]['Statut']='Litigieux';
+    alert('✅ Statut mis à jour : Litigieux\nFabrice peut maintenant voir ce dossier dans la vue "Litigieux".');
+    renderDBCTable();updateBadges();
+    openDBCPanel(id);
+  }catch(e){alert('Erreur : '+e.message);}
 }
 
 // ── Panneau Devis ──
