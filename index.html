@@ -2210,7 +2210,7 @@ async function openTraiterModal(id,numBC,client){
     const chInput=document.getElementById('m-chantier-search');
     if(!chInput)return;
     try{
-      const chantiers=await spFetch('sites/RseauxPlus','Projets','$select=ID,Title&$orderby=Title asc&$top=500');
+      const chantiers=await spFetch('sites/RseauxPlus','Chantiers','$select=ID,Title&$orderby=Title asc&$top=500');
       chInput.disabled=false;
       chInput.placeholder='Tapez 3 caractères...';
       const chData=chantiers.map(c=>({id:String(c.ID),name:c.Title}));
