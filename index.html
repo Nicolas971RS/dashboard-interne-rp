@@ -385,6 +385,29 @@
         <button class="btn-refresh" onclick="loadAll()">🔄 Actualiser</button>
       </div>
 
+      <!-- RECHERCHE GLOBALE -->
+      <div style="background:var(--navy);border-radius:var(--radius);padding:14px 18px;margin-bottom:14px;display:flex;align-items:center;gap:12px">
+        <span style="font-size:20px">🔍</span>
+        <input type="text" id="search-global-bc" placeholder="Recherche rapide — N° BC, client, chantier, N° BL, N° FC..." 
+          style="flex:1;background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.2);border-radius:var(--radius-sm);padding:9px 14px;font-size:13.5px;color:white;font-family:var(--font-body);outline:none"
+          oninput="rechercheGlobalBC(this.value)">
+        <button class="btn" style="border-color:rgba(255,255,255,.3);color:rgba(255,255,255,.7);background:none;white-space:nowrap" onclick="document.getElementById('search-global-bc').value='';rechercheGlobalBC('')">✕ Effacer</button>
+      </div>
+
+      <!-- Résultats recherche globale -->
+      <div id="bc-search-results" style="display:none;margin-bottom:14px">
+        <div class="sd"><h2 id="bc-search-title">Résultats</h2><div class="sd-line"></div>
+          <span style="font-size:11px;color:var(--text-muted);cursor:pointer;text-decoration:underline" onclick="document.getElementById('search-global-bc').value='';rechercheGlobalBC('')">← Retour aux accordéons</span>
+        </div>
+        <div class="tc"><table>
+          <thead><tr><th>N° BC</th><th>Client</th><th>Chantier</th><th>N° BL</th><th>N° FC</th><th>Date réception</th><th>Vendeur</th><th>Statut</th><th>État fact.</th><th>Actions</th></tr></thead>
+          <tbody id="bc-search-body"><tr class="empty-row"><td colspan="10">Aucun résultat</td></tr></tbody>
+        </table></div>
+      </div>
+
+      <!-- Accordéons (masqués pendant recherche) -->
+      <div id="bc-accordeons">
+
       <!-- BANDEAU EN HAUT -->
       <div class="banner"><div class="pulse"></div><div class="banner-num" id="banner-num">0</div><div><div class="banner-lbl">BCs réceptionnés aujourd'hui — vérifier BL · mettre à jour facturation</div><div class="banner-sub">Créer la facture si livraison complète · Facturer partiellement si livraison partielle</div></div></div>
 
@@ -399,9 +422,9 @@
 
       <!-- FILTRES -->
       <div class="sh" style="margin-bottom:10px">
-        <div class="st">🔍 Filtres</div>
+        <div class="st">🔍 Filtres accordéons</div>
         <div class="fb">
-          <input class="fs" type="text" id="search-suivi" placeholder="🔍 Recherche libre..." oninput="renderSuiviEnCours()" style="min-width:160px">
+          <input class="fs" type="text" id="search-suivi" placeholder="🔍 Filtrer En cours..." oninput="renderSuiviEnCours()" style="min-width:160px">
           <select class="fs" id="filter-statut-bc" onchange="renderSuiviEnCours()">
             <option value="all">Tous les statuts</option>
             <option value="En préparation">En préparation</option>
@@ -491,6 +514,7 @@
           <tbody id="suivi-encours-body"><tr class="empty-row"><td colspan="10">Chargement...</td></tr></tbody>
         </table></div>
       </div>
+      </div><!-- /bc-accordeons -->
     </div>
 
     <!-- DEMANDES BC -->
@@ -2222,6 +2246,80 @@ async function openTraiterModal(id,numBC,client){
 }
 
 // ── Autocomplete helper ──
+// ═══════════════════════════════════════════════════════════
+// ═══ RECHERCHE GLOBALE BC ═══
+// ═══════════════════════════════════════════════════════════
+function rechercheGlobalBC(q){
+  const acc=document.getElementById('bc-accordeons');
+  const res=document.getElementById('bc-search-results');
+  const body=document.getElementById('bc-search-body');
+  const title=document.getElementById('bc-search-title');
+  q=q.trim().toLowerCase();
+
+  if(q.length<2){
+    // Retour aux accordéons
+    acc.style.display='';
+    res.style.display='none';
+    return;
+  }
+
+  // Masquer accordéons, afficher résultats
+  acc.style.display='none';
+  res.style.display='block';
+
+  const items=(DATA.suivi||[]).filter(i=>{
+    const numBC=(f(i,'Title')||'').toLowerCase();
+    const client=getClient(i).toLowerCase();
+    const chantier=getChantier(i).toLowerCase();
+    const bl=(f(i,'N_x00b0_BL')||'').toLowerCase();
+    const fc=(f(i,nFCKey())||'').toLowerCase();
+    const vendeur=(f(i,'Vendeurencharge')||'').toLowerCase();
+    return numBC.includes(q)||client.includes(q)||chantier.includes(q)||bl.includes(q)||fc.includes(q)||vendeur.includes(q);
+  });
+
+  title.textContent=`${items.length} résultat${items.length>1?'s':''} pour "${q}"`;
+
+  if(!items.length){
+    body.innerHTML='<tr class="empty-row"><td colspan="10">Aucun BC trouvé pour cette recherche</td></tr>';
+    return;
+  }
+
+  body.innerHTML=items.slice(0,100).map(i=>{
+    const s=getStatut(i),ef=getEtatFact(i);
+    const client=getClient(i),vendeur=f(i,'Vendeurencharge')||'—';
+    const numBC=f(i,'Title')||`BC-${i.ID}`;
+    const chantier=getChantier(i);
+    const numBL=f(i,'N_x00b0_BL')||'—';
+    const numFC=f(i,nFCKey())||'—';
+    const dateRec=fmtDate(f(i,'Dateder_x00e9_ception'));
+    const cE=client.replace(/'/g,"\\'"),nE=numBC.replace(/'/g,"\\'");
+    // Highlight terme recherché
+    const hl=(txt)=>{
+      if(!txt||txt==='—')return txt;
+      const re=new RegExp(`(${q.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')})`, 'gi');
+      return txt.replace(re,'<mark style="background:var(--amber-light);color:var(--amber);border-radius:2px;padding:0 2px">$1</mark>');
+    };
+    return`<tr style="cursor:pointer" onclick="openBCPanel(${i.ID})">
+      <td class="ref">${hl(numBC)}</td>
+      <td class="cname">${hl(client)}</td>
+      <td style="font-size:12px;color:var(--text-secondary)">${hl(chantier)}</td>
+      <td class="mono">${hl(numBL)}</td>
+      <td class="mono">${numFC!=='—'?`<span style="color:var(--teal)">${hl(numFC)}</span>`:numFC}</td>
+      <td class="mono">${dateRec}</td>
+      <td>${hl(vendeur)}</td>
+      <td>${bStatut(s)}</td>
+      <td>${bFact(ef)}</td>
+      <td onclick="event.stopPropagation()"><div class="btn-grp">
+        <button class="btn" onclick="openBCPanel(${i.ID})">🔍 Détail</button>
+        <button class="btn gr" onclick="openFacturerModal(${i.ID},'${nE}','${cE}')">💰</button>
+        <button class="btn" onclick="openTraiterModal(${i.ID},'${nE}','${cE}')">🔧</button>
+      </div></td>
+    </tr>`;
+  }).join('');
+
+  if(items.length>100)body.innerHTML+=`<tr class="empty-row"><td colspan="10">... et ${items.length-100} autres — affinez la recherche</td></tr>`;
+}
+
 function setupAC(inputId,hiddenId,dropId,data){
   const input=document.getElementById(inputId);
   const hidden=document.getElementById(hiddenId);
