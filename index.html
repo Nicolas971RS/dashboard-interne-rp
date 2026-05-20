@@ -456,8 +456,8 @@
       </div>
       <div class="acc-body" id="acc-docuware">
         <div class="tc"><table>
-          <thead><tr><th>N° BC</th><th>Client</th><th>N° BL</th><th>N° FC</th><th>Date réception</th><th>Vendeur</th><th>Action</th></tr></thead>
-          <tbody id="suivi-docuware-body"><tr class="empty-row"><td colspan="7">Chargement...</td></tr></tbody>
+          <thead><tr><th>N° BC</th><th>Client</th><th>Chantier</th><th>N° BL</th><th>N° FC</th><th>Date réception</th><th>Vendeur</th><th>Actions</th></tr></thead>
+          <tbody id="suivi-docuware-body"><tr class="empty-row"><td colspan="8">Chargement...</td></tr></tbody>
         </table></div>
       </div>
 
@@ -471,8 +471,8 @@
       </div>
       <div class="acc-body" id="acc-histo">
         <div class="tc"><table>
-          <thead><tr><th>Urgence</th><th>N° BC</th><th>Client</th><th>Chantier</th><th>N° BL</th><th>N° FC</th><th>Date réception</th><th>Vendeur</th><th>Statut</th><th>RAL / Lignes</th><th>État facturation</th></tr></thead>
-          <tbody id="suivi-histo-body"><tr class="empty-row"><td colspan="11">Chargement...</td></tr></tbody>
+          <thead><tr><th>Urgence</th><th>N° BC</th><th>Client</th><th>Chantier</th><th>N° BL</th><th>N° FC</th><th>Date réception</th><th>Vendeur</th><th>Statut</th><th>RAL / Lignes</th><th>État facturation</th><th>Actions</th></tr></thead>
+          <tbody id="suivi-histo-body"><tr class="empty-row"><td colspan="12">Chargement...</td></tr></tbody>
         </table></div>
       </div>
 
@@ -527,7 +527,7 @@
       <div class="page-header">
         <div><h1>Demandes de Devis</h1><div class="sub">/sites/BondeCommande · Demandes_Devis</div></div>
         <div style="display:flex;gap:8px">
-          <button class="btn-refresh" style="background:var(--teal-mid)" onclick="openAjoutDevisModal()">➕ Ajouter devis</button>
+          <button class="btn-refresh" style="background:var(--teal-mid);gap:6px" onclick="openAjoutDevisModal()">➕ Ajouter devis</button>
           <button class="btn-refresh" onclick="loadAll()">🔄 Actualiser</button>
         </div>
       </div>
@@ -889,10 +889,15 @@ function renderDocuware(){
     const numBC=f(i,'Title')||`BC-${i.ID}`;
     const bl=f(i,'N_x00b0_BL')||'—';
     const fc=f(i,nFCKey())||'—';
+    const chantier=getChantier(i);
     const dateRec=fmtDate(f(i,'Dateder_x00e9_ception'));
-    const nE=numBC.replace(/'/g,"\\'");
-    return`<tr class="rr"><td class="ref">${numBC}</td><td class="cname">${client}</td><td class="mono">${bl}</td><td class="mono">${fc}</td><td class="mono">${dateRec}</td><td>${vendeur}</td><td>
-      <button class="btn" onclick="envoyerBCFlow(${i.ID},'${nE}')">📦 Envoyer Docuware</button>
+    const cE=client.replace(/'/g,"\\'"),nE=numBC.replace(/'/g,"\\'");
+    return`<tr class="rr"><td class="ref">${numBC}</td><td class="cname">${client}</td><td style="font-size:12px;color:var(--text-secondary)">${chantier}</td><td class="mono">${bl}</td><td class="mono">${fc}</td><td class="mono">${dateRec}</td><td>${vendeur}</td><td>
+      <div class="btn-grp">
+        <button class="btn" onclick="openBCPanel(${i.ID})">🔍 Détail</button>
+        <button class="btn" onclick="openTraiterModal(${i.ID},'${nE}','${cE}')">🔧 Traiter</button>
+        <button class="btn" onclick="envoyerBCFlow(${i.ID},'${nE}')">📦 Docuware</button>
+      </div>
     </td></tr>`;
   }).join('');
 }
@@ -1107,7 +1112,7 @@ function renderHistorique(){
   if(fC!=='all')items=items.filter(i=>getClient(i)===fC);
   document.getElementById('sd-histo-count').textContent=items.length+' BC'+(items.length!==1?'s':'');
   const b=document.getElementById('suivi-histo-body');
-  if(!items.length){b.innerHTML='<tr class="empty-row"><td colspan="11">✅ Historique vide</td></tr>';return;}
+  if(!items.length){b.innerHTML='<tr class="empty-row"><td colspan="12">✅ Historique vide</td></tr>';return;}
   b.innerHTML=items.slice(0,100).map(i=>{// limit to 100 for perf
     const s=getStatut(i),ef=getEtatFact(i);
     const client=getClient(i),vendeur=f(i,'Vendeurencharge')||'—';
@@ -1119,9 +1124,12 @@ function renderHistorique(){
     const late=daysLate(dateLiv);
     const urg=urgFromDays(late>0?late:0);
     const lignes=s==='Partiellement livré'?getLignesForBC(i.ID):[];
-    return`<tr class="${urg.row}"><td><span class="urg ${urg.cls}">${urg.lbl}</span></td><td class="ref">${numBC}</td><td class="cname">${client}</td><td style="font-size:12px;color:var(--text-secondary)">${chantier}</td><td class="mono">${numBL}</td><td class="mono">${numFC!=='—'?`<span style="color:var(--teal)">${numFC}</span>`:numFC}</td><td class="mono">${fmtDate(f(i,'Dateder_x00e9_ception'))}</td><td>${vendeur}</td><td>${bStatut(s)}</td><td>${ralBlock(lignes)}</td><td>${bFact(ef)}</td></tr>`;
+    return`<tr class="${urg.row}"><td><span class="urg ${urg.cls}">${urg.lbl}</span></td><td class="ref">${numBC}</td><td class="cname">${client}</td><td style="font-size:12px;color:var(--text-secondary)">${chantier}</td><td class="mono">${numBL}</td><td class="mono">${numFC!=='—'?`<span style="color:var(--teal)">${numFC}</span>`:numFC}</td><td class="mono">${fmtDate(f(i,'Dateder_x00e9_ception'))}</td><td>${vendeur}</td><td>${bStatut(s)}</td><td>${ralBlock(lignes)}</td><td>${bFact(ef)}</td><td><div class="btn-grp">
+      <button class="btn" onclick="openBCPanel(${i.ID})">🔍 Détail</button>
+      <button class="btn" onclick="openTraiterModal(${i.ID},'${numBC.replace(/'/g,"\\'")}','${client.replace(/'/g,"\\'")}')">🔧 Traiter</button>
+    </div></td></tr>`;
   }).join('');
-  if(items.length>100){b.innerHTML+=`<tr class="empty-row"><td colspan="11">... et ${items.length-100} autres BCs — utilisez les filtres pour affiner</td></tr>`;}
+  if(items.length>100){b.innerHTML+=`<tr class="empty-row"><td colspan="12">... et ${items.length-100} autres BCs — utilisez les filtres pour affiner</td></tr>`;}
 }
 
 // ═══ HELPER RECHERCHE ═══
@@ -1821,6 +1829,7 @@ async function submitAjoutDevis(){
       Statut:'Devis envoyé',
       Commentaires_Client:document.getElementById('ad-commentaires').value.trim()||null,
       Notes_Internes:document.getElementById('ad-notes').value.trim()||null,
+      Envoyer_Devis:'MANUEL', // Flag pour court-circuiter le flow PA notification
     };
 
     btn.textContent='⏳ Création devis...';
@@ -2401,6 +2410,9 @@ async function openDevisPanel(id){
           <button class="pbtn blue" style="padding:5px 10px;font-size:11px" onclick="assignerVendeurDevis(${id})">💾 Assigner</button>
         </div>
       </div>
+      ${f(item,'Commentaires_Client')?`<div class="pf"><div class="pf-lbl">💬 Commentaires client</div><div class="pf-val" style="background:var(--blue-xlight);padding:8px 10px;border-radius:5px;border-left:3px solid var(--blue-mid);font-size:12px;line-height:1.6">${f(item,'Commentaires_Client')}</div></div>`:''}
+      ${f(item,'Notes_Internes')?`<div class="pf"><div class="pf-lbl">📝 Notes internes</div><div class="pf-val" style="background:#fffbf0;padding:8px 10px;border-radius:5px;border-left:3px solid var(--amber);font-size:12px;line-height:1.6">${f(item,'Notes_Internes')}</div></div>`:''}
+      ${f(item,'Contenu_Email')?`<div class="pf"><div class="pf-lbl">📧 Contenu email client</div><div class="pf-val" style="background:var(--grey-xlight);padding:8px 10px;border-radius:5px;border:1px solid var(--border);font-size:11.5px;line-height:1.6;max-height:120px;overflow-y:auto">${f(item,'Contenu_Email')}</div></div>`:''}
       <hr style="border:none;border-top:1px solid var(--border);margin:4px 0 10px">`;
     if(lignes.length){
       html+=`<div class="pf"><div class="pf-lbl">Articles (${lignes.length})</div>
