@@ -489,8 +489,8 @@
       </div>
       <div class="acc-body open" id="acc-recu">
         <div class="tc"><table>
-          <thead><tr><th>N° BC</th><th>Client</th><th>Chantier</th><th>Date livraison</th><th>N° BL</th><th>N° FC</th><th>Montant HT</th><th>Vendeur</th><th>Statut</th><th>État facturation</th><th>Action</th></tr></thead>
-          <tbody id="suivi-recu-body"><tr class="empty-row"><td colspan="11">Chargement...</td></tr></tbody>
+          <thead><tr><th>N° BC</th><th>Client</th><th>Chantier</th><th>N° Devis</th><th>Date livraison</th><th>N° BL</th><th>N° FC</th><th>Montant HT</th><th>Vendeur</th><th>Statut</th><th>État facturation</th><th>Action</th></tr></thead>
+          <tbody id="suivi-recu-body"><tr class="empty-row"><td colspan="12">Chargement...</td></tr></tbody>
         </table></div>
       </div>
 
@@ -504,8 +504,8 @@
       </div>
       <div class="acc-body open" id="acc-afact">
         <div class="tc"><table>
-          <thead><tr><th>N° BC</th><th>Client</th><th>Chantier</th><th>N° BL</th><th>N° FC</th><th>Date réception</th><th>Vendeur</th><th>Statut</th><th>État facturation</th><th>Action</th></tr></thead>
-          <tbody id="suivi-afacturer-body"><tr class="empty-row"><td colspan="10">Chargement...</td></tr></tbody>
+          <thead><tr><th>N° BC</th><th>Client</th><th>Chantier</th><th>N° Devis</th><th>N° BL</th><th>N° FC</th><th>Date réception</th><th>Vendeur</th><th>Statut</th><th>État facturation</th><th>Action</th></tr></thead>
+          <tbody id="suivi-afacturer-body"><tr class="empty-row"><td colspan="11">Chargement...</td></tr></tbody>
         </table></div>
       </div>
 
@@ -550,8 +550,8 @@
       <div class="acc-body" id="acc-encours">
         <div class="note">ℹ️ RAL visible uniquement pour les BCs en livraison partielle.</div>
         <div class="tc"><table>
-          <thead><tr><th>Urgence</th><th>N° BC</th><th>Client</th><th>Chantier</th><th>ETA</th><th>Vendeur</th><th>Statut</th><th>RAL / Lignes</th><th>État fact.</th><th>Actions</th></tr></thead>
-          <tbody id="suivi-encours-body"><tr class="empty-row"><td colspan="10">Chargement...</td></tr></tbody>
+          <thead><tr><th>Urgence</th><th>N° BC</th><th>Client</th><th>Chantier</th><th>N° Devis</th><th>ETA</th><th>Vendeur</th><th>Statut</th><th>RAL / Lignes</th><th>État fact.</th><th>Actions</th></tr></thead>
+          <tbody id="suivi-encours-body"><tr class="empty-row"><td colspan="11">Chargement...</td></tr></tbody>
         </table></div>
       </div>
       </div><!-- /bc-accordeons -->
@@ -1185,6 +1185,7 @@ function bcRow(i,showAction=true){
   const numBL=f(i,'N_x00b0_BL')||'—';
   const numFC=f(i,nFCKey())||'—';
   const chantier=getChantier(i);
+  const numDev=f(i,'N_x00b0_Devis','Num_ro_Devis','NumeroDevis')||'—';
   const montant=f(i,'MontantHT');
   const montantFmt=montant?new Intl.NumberFormat('fr-FR',{style:'currency',currency:'EUR',maximumFractionDigits:0}).format(montant):'—';
   const cE=client.replace(/'/g,"\\'"),nE=numBC.replace(/'/g,"\\'");
@@ -1195,7 +1196,7 @@ function bcRow(i,showAction=true){
     <button class="btn" onclick="livraisonPartielleFlow(${i.ID},'${nE}','${cE}')">🔀 Partielle</button>
     <button class="btn" onclick="envoyerBCFlow(${i.ID},'${nE}')">📦 Docuware</button>
   </div></td>`:'';
-  return`<tr class="rr" data-bc-id="${i.ID}"><td class="ref">${numBC}</td><td class="cname">${client}</td><td style="font-size:12px;color:var(--text-secondary)">${chantier}</td><td class="mono">${dateLiv}</td><td class="mono">${numBL}</td><td class="mono">${numFC!=='—'?`<span style="color:var(--teal)">${numFC}</span>`:numFC}</td><td class="amt" style="font-size:11.5px">${montantFmt}</td><td>${vendeur}</td><td>${bStatut(s)}</td><td>${bFact(ef)}</td>${act}</tr>`;
+  return`<tr class="rr" data-bc-id="${i.ID}"><td class="ref">${numBC}</td><td class="cname">${client}</td><td style="font-size:12px;color:var(--text-secondary)">${chantier}</td><td class="mono" style="color:var(--blue-mid);font-size:11px">${numDev}</td><td class="mono">${dateLiv}</td><td class="mono">${numBL}</td><td class="mono">${numFC!=='—'?`<span style="color:var(--teal)">${numFC}</span>`:numFC}</td><td class="amt" style="font-size:11.5px">${montantFmt}</td><td>${vendeur}</td><td>${bStatut(s)}</td><td>${bFact(ef)}</td>${act}</tr>`;
 }
 
 // ═══ RENDER ALL ═══
@@ -1211,10 +1212,11 @@ function renderAFacturer(){
     const bl=f(i,'N_x00b0_BL')||'—';
     const fc=f(i,nFCKey())||'—';
     const chantier=getChantier(i);
+    const numDev=f(i,'N_x00b0_Devis','Num_ro_Devis','NumeroDevis')||'—';
     const dateRec=fmtDate(f(i,'Dateder_x00e9_ception'));
     const s=getStatut(i),ef=getEtatFact(i);
     const cE=client.replace(/'/g,"\\'"),nE=numBC.replace(/'/g,"\\'");
-    return`<tr class="rr"><td class="ref">${numBC}</td><td class="cname">${client}</td><td style="font-size:12px;color:var(--text-secondary)">${chantier}</td><td class="mono">${bl}</td><td class="mono">${fc!=='—'?`<span style="color:var(--teal)">${fc}</span>`:fc}</td><td class="mono">${dateRec}</td><td>${vendeur}</td><td>${bStatut(s)}</td><td>${bFact(ef)}</td><td><div class="btn-grp">
+    return`<tr class="rr"><td class="ref">${numBC}</td><td class="cname">${client}</td><td style="font-size:12px;color:var(--text-secondary)">${chantier}</td><td class="mono" style="color:var(--blue-mid);font-size:11px">${numDev}</td><td class="mono">${bl}</td><td class="mono">${fc!=='—'?`<span style="color:var(--teal)">${fc}</span>`:fc}</td><td class="mono">${dateRec}</td><td>${vendeur}</td><td>${bStatut(s)}</td><td>${bFact(ef)}</td><td><div class="btn-grp">
       <button class="btn" onclick="openBCPanel(${i.ID})">🔍 Détail</button>
       <button class="btn gr" onclick="openFacturerModal(${i.ID},'${nE}','${cE}')">💰 Facturer</button>
       <button class="btn" onclick="openTraiterModal(${i.ID},'${nE}','${cE}')">🔧 Traiter</button>
@@ -1701,6 +1703,7 @@ function renderSuiviEnCours(){renderHistorique();
     const client=getClient(i),vendeur=f(i,'Vendeurencharge')||'—';
     const numBC=f(i,'Title')||`BC-${i.ID}`;
     const chantier=getChantier(i);
+    const numDev=f(i,'N_x00b0_Devis','Num_ro_Devis','NumeroDevis')||'—';
     const dateLiv=f(i,'DateLivraisonpr_x00e9_vue');
     const late=daysLate(dateLiv);
     const urg=urgFromDays(late>0?late:0);
@@ -1711,6 +1714,7 @@ function renderSuiviEnCours(){renderHistorique();
       <td><span class="urg ${urg.cls}">${urg.lbl}</span></td>
       <td class="ref">${numBC}</td><td class="cname">${client}</td>
       <td style="font-size:12px;color:var(--text-secondary)">${chantier}</td>
+      <td class="mono" style="color:var(--blue-mid);font-size:11px">${numDev}</td>
       <td class="mono" style="${etaColor}">${fmtDate(dateLiv)}</td>
       <td>${vendeur}</td><td>${bStatut(s)}</td>
       <td>${ralBlock(lignes)}</td><td>${bFact(ef)}</td>
@@ -2470,7 +2474,8 @@ function rechercheGlobalBC(){
         const bl=String(f(i,'N_x00b0_BL')||'').toLowerCase();
         const fc=String(f(i,nFCKey())||'').toLowerCase();
         const v=getVendeurStr(i).toLowerCase();
-        if(!numBC.includes(q)&&!client.includes(q)&&!chantier.includes(q)&&!bl.includes(q)&&!fc.includes(q)&&!v.includes(q))return false;
+        const numDev=String(f(i,'N_x00b0_Devis','Num_ro_Devis','NumeroDevis')||'').toLowerCase();
+        if(!numBC.includes(q)&&!client.includes(q)&&!chantier.includes(q)&&!bl.includes(q)&&!fc.includes(q)&&!v.includes(q)&&!numDev.includes(q))return false;
       }
       if(statut!=='all'&&getStatut(i)!==statut)return false;
       if(vendeur!=='all'&&getVendeurStr(i)!==vendeur)return false;
@@ -2726,6 +2731,39 @@ async function loadBCHistory(id){
       </div>`;
     }).join('');
   }catch(e){container.innerHTML=`<div style="color:var(--text-muted);font-size:11.5px">Non disponible (${e.message})</div>`;}
+}
+
+// ── Trouver BC depuis un devis — associe Demandes_Devis.Num_x00e9_ro_Devis → Suivi_BC.N_x00b0_Devis ──
+function trouverBCDepuisDevis(numDevis,devisRS){
+  // Chercher dans Suivi_BC le BC dont N_x00b0_Devis = numDevis (ex: DEV-105)
+  // Ou si Devis_RS est renseigné, chercher aussi par ce numéro
+  const hits=DATA.suivi.filter(i=>{
+    const nd=String(f(i,'N_x00b0_Devis','Num_ro_Devis','NumeroDevis')||'');
+    if(numDevis&&nd&&nd.toLowerCase()===numDevis.toLowerCase())return true;
+    if(devisRS&&nd&&nd.toLowerCase()===devisRS.toLowerCase())return true;
+    return false;
+  });
+
+  showTab('suivi',document.querySelector('.tabs .tab[onclick*="\'suivi\'"]'));
+
+  if(hits.length===1){
+    // Résultat unique — ouvrir directement le panel BC
+    setTimeout(()=>openBCPanel(hits[0].ID),100);
+  }else if(hits.length>1){
+    // Plusieurs BC — afficher dans la recherche globale
+    document.getElementById('search-global-bc').value=numDevis||devisRS;
+    rechercheGlobalBC();
+  }else{
+    // Aucun BC trouvé par N°Devis — essai avec le numéro devis en texte libre
+    document.getElementById('search-global-bc').value=devisRS||numDevis;
+    rechercheGlobalBC();
+    setTimeout(()=>{
+      const b=document.getElementById('bc-search-body');
+      if(b&&b.querySelector('.empty-row')){
+        b.innerHTML=`<tr class="empty-row"><td colspan="11">Aucun BC trouvé avec N° Devis "${numDevis||devisRS}" — le BC n'a peut-être pas encore été saisi dans Suivi_BC</td></tr>`;
+      }
+    },100);
+  }
 }
 
 function exportRechercheCSV(){
@@ -3010,6 +3048,7 @@ async function openBCPanel(id){
         <div class="pf"><div class="pf-lbl">N° FC</div><div class="pf-val mono" style="${numFC!=='—'?'color:var(--teal);font-weight:700':''}">${numFC}</div></div>
         <div class="pf"><div class="pf-lbl">État fact.</div><div class="pf-val">${bFact(ef)}</div></div>
       </div>
+      <div class="pf"><div class="pf-lbl">📋 N° Devis lié</div><div class="pf-val mono" style="color:var(--blue-mid)">${f(item,'N_x00b0_Devis','Num_ro_Devis','NumeroDevis')||'—'}</div></div>
       <div class="pf"><div class="pf-lbl">📦 Archivage Docuware</div><div class="pf-val" style="display:flex;align-items:center;gap:8px">${bDocuware(item)}${f(item,'Lien_dossier','Liendossier')&&f(item,'Lien_dossier','Liendossier')!=='—'?`<a href="${f(item,'Lien_dossier','Liendossier')}" target="_blank" style="font-size:11.5px;color:var(--teal)">Ouvrir dans Docuware →</a>`:'<span style="font-size:11.5px;color:var(--text-muted)">Non archivé</span>'}</div></div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:0">
         <div class="pf"><div class="pf-lbl">📅 Date réception</div><div class="pf-val mono">${dateRec}</div></div>
@@ -3207,7 +3246,8 @@ async function openDevisPanel(id){
       html+=`<button class="pbtn blue" onclick="passerEnCours(${id},true)">📋 Prendre en charge</button>`;
     }
     if(st==='Converti en BC'||st==='Accepté'){
-      html+=`<button class="pbtn grey" style="background:var(--teal-light);color:var(--teal);border:1px solid var(--teal)" onclick="closePanel();showTab('suivi',document.querySelector('.tabs .tab[onclick*=&quot;suivi&quot;]'));document.getElementById('search-global-bc').value='${nd}';rechercheGlobalBC()">🔗 Trouver BC associé</button>`;
+      const devisRS=f(item,'Devis_RS')||'';
+      html+=`<button class="pbtn grey" style="background:var(--teal-light);color:var(--teal);border:1px solid var(--teal)" onclick="closePanel();trouverBCDepuisDevis('${nd}','${devisRS}')">🔗 Trouver BC associé</button>`;
     }
     html+=`<button class="pbtn green" onclick="envoyerDevisFlow(${id})">📨 Envoyer devis</button>
       <button class="pbtn grey" onclick="closePanel()">Fermer</button>
