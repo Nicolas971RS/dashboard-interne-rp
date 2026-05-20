@@ -751,7 +751,7 @@ async function loadAll(){
   try{
     const [suivi,lignes,dbc,devis,clients]=await Promise.all([
       // Suivi_BC: $select=* — avoids ALL field name issues + expand Projet (lookup field)
-      spFetch('sites/RseauxPlus','Suivi_BC','$select=*&$expand=Projet&$orderby=ID desc'),
+      spFetch('sites/RseauxPlus','Suivi_BC','$select=*,Projet/Title&$expand=Projet&$orderby=ID desc'),
       // Lignes_BC: explicit confirmed fields + BC expand
       spFetch('sites/RseauxPlus','Lignes_BC',
         '$select=ID,Title,BCId,BC/Title,R_x00e9_f_x00e9_rence,Produit_x002f_D_x00e9_signation,Quantit_x00e9_command_x00e9_e,Quantit_x00e9_livr_x00e9_e,BLSign_x00e9_,Chantier&$expand=BC&$orderby=BCId asc'),
