@@ -1843,24 +1843,35 @@ async function submitAjoutDevis(){
       });
 
     // ── 2. Créer les lignes articles ──
-    // Détecter les vrais noms de champs depuis les lignes déjà chargées
-    const sampleLigne=DATA.lignes&&DATA.lignes.length?DATA.lignes[0]:null;
-    const ligneKeys=sampleLigne?Object.keys(sampleLigne):[];
-    function detectLigneKey(...candidates){
-      for(const c of candidates){const k=ligneKeys.find(k=>k.toLowerCase()===c.toLowerCase());if(k)return k;}
-      // Fallback scan partiel
-      for(const c of candidates){
-        const k=ligneKeys.find(k=>k.toLowerCase().includes(c.toLowerCase().replace(/_x00[a-f0-9]{2}_/gi,'').replace(/_/g,'')));
-        if(k)return k;
+    // Récupérer les vrais noms internes des champs depuis l'API SharePoint
+    btn.textContent='⏳ Détection champs...';
+    let keyRef='Produit_R_x00e9_f_x00e9_rence';
+    let keyDes='Produit_D_x00e9_signation';
+    let keyQty='Quantit_x00e9_';
+    let keyDevisId='Demande_DevisId';
+    let keyDevisRef='Num_x00e9_ro_Devis_Ref';
+    try{
+      const fieldsUrl=`${C.spRoot}/sites/BondeCommande/_api/web/lists/getbytitle('Lignes_Demandes_Devis')/fields?$select=Title,StaticName,InternalName&$filter=Hidden eq false`;
+      const fr=await fetch(fieldsUrl,{headers:{'Authorization':`Bearer ${getToken()}`,'Accept':'application/json;odata=nometadata'}});
+      if(fr.ok){
+        const fd=await fr.json();
+        const fields=fd.value||[];
+        console.log('[Lignes fields]',fields.map(f=>f.Title+' → '+f.StaticName));
+        // Matcher par titre d'affichage
+        const findStatic=(titles)=>{
+          for(const t of titles){
+            const f=fields.find(f=>f.Title.toLowerCase()===t.toLowerCase()||f.StaticName.toLowerCase()===t.toLowerCase());
+            if(f)return f.StaticName;
+          }
+          return null;
+        };
+        keyRef=findStatic(['Produit_Référence','Produit_Reference','Produit_Rfrence','Produit_Libre_Référence','Produit_Libre_Reference'])||keyRef;
+        keyDes=findStatic(['Produit_Désignation','Produit_Designation','Produit_Dsignation','Produit_Libre_Désignation','Produit_Libre_Designation'])||keyDes;
+        keyQty=findStatic(['Quantité','Quantite'])||keyQty;
+        keyDevisRef=findStatic(['Numéro_Devis_Ref','Numero_Devis_Ref','Numéro Devis Ref'])||keyDevisRef;
+        console.log('[Lignes keys utilisés]',{keyRef,keyDes,keyQty,keyDevisId,keyDevisRef});
       }
-      return candidates[0]; // dernier recours
-    }
-    const keyRef=detectLigneKey('Produit_R_x00e9_f_x00e9_rence','Produit_R_x00E9_f_x00E9_rence','Produit_Reference','Produit_Rfrence','Produit_R_x00e9_f_x00e9__rence');
-    const keyDes=detectLigneKey('Produit_D_x00e9_signation','Produit_D_x00E9_signation','Produit_Designation','Produit_Dsignation','Produit_D_x00e9__signation','Produit_Libre_D_x00e9_signation');
-    const keyQty=detectLigneKey('Quantit_x00e9_','Quantit_x00E9_','Quantite','Quantit_x00e9__','Quantit_x00e9_e');
-    const keyDevisId=detectLigneKey('Demande_DevisId','DemandDevisId','Demande_Devis','DemandeDevisId');
-    const keyDevisRef=detectLigneKey('Num_x00e9_ro_Devis_Ref','Num_ro_Devis_Ref','NumeroDevisRef','Numéro_Devis_Ref');
-    console.log('[Lignes] Clés détectées:',{keyRef,keyDes,keyQty,keyDevisId,keyDevisRef});
+    }catch(fe){console.warn('[fields detection]',fe);}
 
     btn.textContent='⏳ Création lignes...';
     const lignePromises=[];
@@ -1873,12 +1884,9 @@ async function submitAjoutDevis(){
       const des=desEl.value.trim();
       const qty=parseFloat(qtyEl.value)||0;
       if(!ref&&!des)continue;
-      const ligneBody={
-        Title:`DEV-${newId}-L${n}`,
-        Type_Ligne:'Produit'
-      };
+      const ligneBody={Title:`DEV-${newId}-L${n}`,Type_Ligne:'Produit'};
       ligneBody[keyDevisId]=newId;
-      if(keyDevisRef!==keyDevisId)ligneBody[keyDevisRef]=`DEV-${newId}`;
+      ligneBody[keyDevisRef]=`DEV-${newId}`;
       if(ref)ligneBody[keyRef]=ref;
       if(des)ligneBody[keyDes]=des;
       if(qty)ligneBody[keyQty]=qty;
