@@ -2280,21 +2280,31 @@ async function openTraiterModal(id,numBC,client){
 // ═══ RECHERCHE GLOBALE BC ═══
 // ═══════════════════════════════════════════════════════════
 function bDocuware(i){
-  const lien=f(i,'Lien_dossier','Liendossier');
-  const statut=i['StatutBCLivr_x00e9_etFC']||i['StatutBCLivretFC'];
-  if(lien&&lien.trim()&&lien.trim()!=='—')
-    return`<a href="${lien}" target="_blank" title="Voir dans Docuware" style="color:var(--teal);font-size:11px;text-decoration:none;display:inline-flex;align-items:center;gap:3px">📦 ✅</a>`;
-  if(statut===true||statut==='true')
-    return`<span title="Archivé Docuware" style="color:var(--teal);font-size:11px">📦 ✅</span>`;
-  return'<span style="color:#ccc;font-size:11px" title="Non archivé">📦</span>';
+  // Seul indicateur fiable : Lien_dossier renseigné (URL Docuware) 
+  // ou StatutBCLivréetFC qui est un booléen dédié à l'archivage Docuware
+  const lien=i['Lien_dossier']||i['Liendossier']||i['Lien_Dossier'];
+  if(lien&&typeof lien==='string'&&lien.trim()&&lien.startsWith('http'))
+    return`<a href="${lien}" target="_blank" title="Ouvrir dans Docuware" style="color:var(--teal);font-size:11px;text-decoration:none">📦✅</a>`;
+  return'<span style="color:#ddd;font-size:11px" title="Non archivé">📦</span>';
 }
 function buildSGVendeurs(){
   const sel=document.getElementById('sg-vendeur');
   if(!sel)return;
   const current=sel.value;
   sel.innerHTML='<option value="all">Tous les vendeurs</option>';
-  const vendeurs=[...new Set((DATA.suivi||[]).map(i=>f(i,'Vendeurencharge')).filter(Boolean))].sort();
-  vendeurs.forEach(v=>{const o=document.createElement('option');o.value=v;o.textContent=v;if(v===current)o.selected=true;sel.appendChild(o);});
+  const vendeurs=[...new Set((DATA.suivi||[]).map(i=>{
+    const v=i['Vendeurencharge'];
+    if(!v)return null;
+    if(typeof v==='string')return v;
+    if(typeof v==='object')return v.Value||v.Title||v.Name||null;
+    return null;
+  }).filter(Boolean))].sort();
+  vendeurs.forEach(v=>{
+    const o=document.createElement('option');
+    o.value=v;o.textContent=v;
+    if(v===current)o.selected=true;
+    sel.appendChild(o);
+  });
 }
 
 function clearRechercheGlobalBC(){
@@ -2333,17 +2343,18 @@ function rechercheGlobalBC(){
   const all=DATA.suivi||[];
   const items=all.filter(i=>{
     try{
+      const getVendeurStr=(i)=>{const v=i['Vendeurencharge'];if(!v)return'';if(typeof v==='string')return v;if(typeof v==='object')return v.Value||v.Title||v.Name||'';return '';};
       if(q.length>=2){
         const numBC=String(f(i,'Title')||'').toLowerCase();
         const client=String(getClient(i)||'').toLowerCase();
         const chantier=String(getChantier(i)||'').toLowerCase();
         const bl=String(f(i,'N_x00b0_BL')||'').toLowerCase();
         const fc=String(f(i,nFCKey())||'').toLowerCase();
-        const v=String(f(i,'Vendeurencharge')||'').toLowerCase();
+        const v=getVendeurStr(i).toLowerCase();
         if(!numBC.includes(q)&&!client.includes(q)&&!chantier.includes(q)&&!bl.includes(q)&&!fc.includes(q)&&!v.includes(q))return false;
       }
       if(statut!=='all'&&getStatut(i)!==statut)return false;
-      if(vendeur!=='all'&&String(f(i,'Vendeurencharge')||'')!==vendeur)return false;
+      if(vendeur!=='all'&&getVendeurStr(i)!==vendeur)return false;
       if(fact!=='all'&&getEtatFact(i)!==fact)return false;
       const dateRec=String(f(i,'Dateder_x00e9_ception')||'').slice(0,10);
       if(dateFrom&&dateRec&&dateRec<dateFrom)return false;
@@ -2380,7 +2391,8 @@ function rechercheGlobalBC(){
     try{
       const s=getStatut(i),ef=getEtatFact(i);
       const client=String(getClient(i)||'—');
-      const vendeurV=String(f(i,'Vendeurencharge')||'—');
+      const vRaw=i['Vendeurencharge'];
+      const vendeurV=!vRaw?'—':typeof vRaw==='string'?vRaw:(vRaw.Value||vRaw.Title||vRaw.Name||'—');
       const numBC=String(f(i,'Title')||`BC-${i.ID}`);
       const chantier=String(getChantier(i)||'—');
       const numBL=String(f(i,'N_x00b0_BL')||'—');
