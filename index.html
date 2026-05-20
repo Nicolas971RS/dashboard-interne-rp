@@ -743,23 +743,46 @@ function bDevis(s){
 }
 
 // ═══ LOAD ═══
+async function fetchProjetTitles(){
+  try{
+    const url=`${C.spRoot}/sites/RseauxPlus/_api/web/lists/getbytitle('Suivi_BC')/items?$select=ID,Projet/Title&$expand=Projet&$top=2000`;
+    const r=await fetch(url,{headers:{
+      'Authorization':`Bearer ${getToken()}`,
+      'Accept':'application/json;odata=verbose'
+    }});
+    if(!r.ok)return[];
+    const d=await r.json();
+    return(d.d?.results||d.value||[]).map(i=>({
+      ID:i.ID,
+      Projet:{Title:i.Projet?.Title||i.Projet?.results?.[0]?.Title||null}
+    }));
+  }catch(e){console.warn('[fetchProjetTitles]',e);return[];}
+}
+
 async function loadAll(){
   setLoading(true);hideError();
   try{
-    const [suivi,lignes,dbc,devis,clients]=await Promise.all([
-      // Suivi_BC: $select=* — avoids ALL field name issues + expand Projet (lookup field)
-      spFetch('sites/RseauxPlus','Suivi_BC','$select=*,Projet/Title&$expand=Projet&$orderby=ID desc'),
-      // Lignes_BC: explicit confirmed fields + BC expand
+    const [suivi,projTitles,lignes,dbc,devis,clients]=await Promise.all([
+      // Suivi_BC: $select=*
+      spFetch('sites/RseauxPlus','Suivi_BC','$select=*&$orderby=ID desc'),
+      // Projet lookup titles — appel séparé compatible expand
+      fetchProjetTitles(),
+      // Lignes_BC
       spFetch('sites/RseauxPlus','Lignes_BC',
         '$select=ID,Title,BCId,BC/Title,R_x00e9_f_x00e9_rence,Produit_x002f_D_x00e9_signation,Quantit_x00e9_command_x00e9_e,Quantit_x00e9_livr_x00e9_e,BLSign_x00e9_,Chantier&$expand=BC&$orderby=BCId asc'),
-      // Demandes_BC: $select=* + filter
+      // Demandes_BC
       spFetch('sites/BondeCommande','Demandes_BC',
         "$select=*&$orderby=Date_Enl_x00e8_vement asc&$top=500"),
-      // Demandes_Devis: $select=*
+      // Demandes_Devis
       spFetch('sites/BondeCommande','Demandes_Devis','$select=*&$orderby=ID desc'),
-      // Base_Clients: for client name lookup map
+      // Base_Clients
       spFetch('sites/RseauxPlus','Base_Clients','$select=ID,Title')
     ]);
+
+    // Injecter ProjetTitle dans chaque item suivi
+    const projMap={}; // {ID → Title}
+    projTitles.forEach(p=>{if(p.ID&&p.Projet&&p.Projet.Title)projMap[p.ID]=p.Projet.Title;});
+    suivi.forEach(i=>{if(projMap[i.ID])i._ProjetTitle=projMap[i.ID];});
 
     // Build client map: {ID → Title}
     const clientMap={};
@@ -1688,14 +1711,19 @@ function etatFactKey(){return detectSPKey(['OData__x00c9_tatfacturation','_x00c9
 // N° FC — commence par N (pas de préfixe OData__)
 function nFCKey(){return detectSPKey(['N_x00b0_FC','N_x00b0__FC'],'N_x00b0_FC');}
 // Chantier/Projet — nom interne variable selon création SharePoint
-// Chantier = lookup field "Projet" — après $expand=Projet, disponible via i.Projet?.Title
+// Fetch Projet lookup titles — Accept verbose permet l'expand sur les lookups
+
+// Chantier = colonne Lookup "Projet" — titre injecté dans _ProjetTitle au chargement
 function getChantier(i){
   if(!i)return'—';
-  // Lookup expand
+  // Injecté par fetchProjetTitles au chargement
+  if(i._ProjetTitle)return i._ProjetTitle;
+  // Expand object direct (si dispo)
   if(i.Projet&&typeof i.Projet==='object'&&i.Projet.Title)return i.Projet.Title;
-  // Fallback texte direct
-  const v=i['Chantier']||i['Projet'];
-  return(v&&typeof v==='string'&&v.trim())?v.trim():'—';
+  // Scan dynamique fallback
+  const keys=Object.keys(i).filter(k=>(k.toLowerCase().includes('projet')||k.toLowerCase().includes('chantier'))&&!k.endsWith('Id')&&!k.endsWith('ID'));
+  for(const k of keys){const v=i[k];if(v&&typeof v==='string'&&v.trim()&&v.trim()!=='0')return v.trim();}
+  return'—';
 }
 function projetKey(){return detectSPKey(['Projet','OData__Projet','Chantier','OData__Chantier'],'Projet');}
 function debugSuiviFields(){}
