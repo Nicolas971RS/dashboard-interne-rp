@@ -426,8 +426,11 @@
 
       <!-- Résultats recherche globale -->
       <div id="bc-search-results" style="display:none;margin-bottom:14px">
-        <div class="sd"><h2 id="bc-search-title">Résultats</h2><div class="sd-line"></div>
-          <span style="font-size:11px;color:var(--text-muted);cursor:pointer;text-decoration:underline" onclick="document.getElementById('search-global-bc').value='';rechercheGlobalBC('')">← Retour aux accordéons</span>
+        <div class="sd">
+          <h2 id="bc-search-title">Résultats</h2>
+          <div class="sd-line"></div>
+          <button class="btn" id="bc-search-csv-btn" style="display:none" onclick="exportRechercheCSV()">⬇ CSV</button>
+          <span style="font-size:11px;color:var(--text-muted);cursor:pointer;text-decoration:underline" onclick="clearRechercheGlobalBC()">← Retour aux accordéons</span>
         </div>
         <div class="tc"><table>
           <thead><tr><th>N° BC</th><th>Client</th><th>Chantier</th><th>N° BL</th><th>N° FC</th><th>Date réception</th><th>Vendeur</th><th>Statut</th><th>État fact.</th><th>Doc.</th><th>Actions</th></tr></thead>
@@ -728,12 +731,29 @@ function logout(){sessionStorage.clear();window.location.href=`https://login.mic
 
 // ═══ SHAREPOINT FETCH ═══
 async function spFetch(site,list,qs){
-  const hasTop=qs.includes('$top=');const url=`${C.spRoot}/${site}/_api/web/lists/getbytitle('${list}')/items?${qs}${hasTop?'':'&$top=2000'}`;
+  const hasTop=qs.includes('$top=');
+  const url=`${C.spRoot}/${site}/_api/web/lists/getbytitle('${list}')/items?${qs}${hasTop?'':'&$top=2000'}`;
   const r=await fetch(url,{headers:{'Authorization':`Bearer ${getToken()}`,'Accept':'application/json;odata=nometadata'}});
   if(r.status===401){sessionStorage.clear();location.reload();throw new Error('401');}
   if(!r.ok){const t=await r.text().catch(()=>'');throw new Error(`SP ${list}: ${r.status} — ${t.substring(0,300)}`);}
   const d=await r.json();
-  return d.value||[];
+  let items=d.value||[];
+  // Pagination automatique — suit odata.nextLink jusqu'à épuisement
+  // Ne pagine pas si $top= est explicitement défini (requête volontairement limitée)
+  if(!hasTop){
+    let next=d['@odata.nextLink'];
+    let pages=0;
+    while(next&&pages<10){// max 10 pages = 20 000 items
+      const rn=await fetch(next,{headers:{'Authorization':`Bearer ${getToken()}`,'Accept':'application/json;odata=nometadata'}});
+      if(!rn.ok)break;
+      const dn=await rn.json();
+      items=items.concat(dn.value||[]);
+      next=dn['@odata.nextLink'];
+      pages++;
+    }
+    if(pages>=10)console.warn(`[spFetch] ${list}: pagination limit atteinte (10 pages). Données potentiellement incomplètes.`);
+  }
+  return items;
 }
 
 // ═══ FIELD HELPERS ═══
@@ -2275,7 +2295,40 @@ async function openTraiterModal(id,numBC,client){
   },120);
 }
 
-// ── Autocomplete helper ──
+// ── Confirmation modale — remplace confirm() natif ──
+let _confirmResolve=null;
+function showConfirm(title,body,okLabel='Confirmer',okClass='submit'){
+  return new Promise(resolve=>{
+    _confirmResolve=resolve;
+    document.getElementById('confirm-title').textContent=title;
+    document.getElementById('confirm-body').innerHTML=body;
+    const btn=document.getElementById('confirm-ok-btn');
+    btn.textContent=okLabel;
+    btn.className=`mbtn ${okClass}`;
+    document.getElementById('modal-confirm').classList.add('open');
+  });
+}
+function confirmResolve(val){
+  document.getElementById('modal-confirm').classList.remove('open');
+  if(_confirmResolve){_confirmResolve(val);_confirmResolve=null;}
+}
+
+// ── Escape ferme modals et panels ──
+document.addEventListener('keydown',e=>{
+  if(e.key!=='Escape')return;
+  // Panel d'abord
+  const panel=document.querySelector('.panel-ov.open');
+  if(panel){closePanel();return;}
+  // Modal confirm
+  const mc=document.getElementById('modal-confirm');
+  if(mc?.classList.contains('open')){confirmResolve(false);return;}
+  // Modal ajout devis
+  const mad=document.getElementById('modal-ajout-devis');
+  if(mad?.classList.contains('open')){closeAjoutDevisModal();return;}
+  // Autres modals génériques
+  const mo=document.querySelector('.modal-ov.open');
+  if(mo){mo.classList.remove('open');}
+});
 // ═══════════════════════════════════════════════════════════
 // ═══ RECHERCHE GLOBALE BC ═══
 // ═══════════════════════════════════════════════════════════
@@ -2368,6 +2421,11 @@ function rechercheGlobalBC(){
   if(title)title.textContent=`${items.length} résultat${items.length!==1?'s':''} — ${activeFilters.join(' · ')}`;
   if(countEl)countEl.textContent=`${items.length} BC${items.length!==1?'s':''}`;
 
+  // Stocker pour export CSV + afficher/masquer bouton
+  _lastRechercheItems=items;
+  const csvBtn=document.getElementById('bc-search-csv-btn');
+  if(csvBtn)csvBtn.style.display=items.length?'':'none';
+
   if(!items.length){
     body.innerHTML='<tr class="empty-row"><td colspan="11">Aucun BC trouvé — modifiez les critères</td></tr>';
     return;
@@ -2420,6 +2478,23 @@ function rechercheGlobalBC(){
 
   body.innerHTML=rows||(` <tr class="empty-row"><td colspan="11">Erreur rendu — actualisez</td></tr>`);
   if(items.length>150)body.innerHTML+=`<tr class="empty-row"><td colspan="11">... et ${items.length-150} autres — affinez les critères</td></tr>`;
+}
+
+// ── Export CSV recherche globale ──
+let _lastRechercheItems=[];
+function exportRechercheCSV(){
+  exportCSV(_lastRechercheItems,[
+    {label:'N° BC',          fn:i=>f(i,'Title')||`BC-${i.ID}`},
+    {label:'Client',         fn:i=>getClient(i)},
+    {label:'Chantier',       fn:i=>getChantier(i)},
+    {label:'N° BL',          fn:i=>f(i,'N_x00b0_BL')||''},
+    {label:'N° FC',          fn:i=>f(i,nFCKey())||''},
+    {label:'Date réception', fn:i=>f(i,'Dateder_x00e9_ception')||''},
+    {label:'Vendeur',        fn:i=>f(i,'Vendeurencharge')||''},
+    {label:'Statut',         fn:i=>getStatut(i)},
+    {label:'État fact.',     fn:i=>getEtatFact(i)},
+    {label:'Montant HT',     fn:i=>f(i,'MontantHT')||''},
+  ],'recherche_BC.csv');
 }
 
 function setupAC(inputId,hiddenId,dropId,data){
@@ -2766,7 +2841,8 @@ async function passerEnCours(id,fromPanel=false){
 
 // ── Envoyer devis — Flow PA (Passe 2) ──
 async function envoyerDevisFlow(id){
-  if(!confirm(`Envoyer le devis DEV-${id} au client par email ?\nLe flow Power Automate va récupérer le PDF joint et envoyer l'email automatiquement.`))return;
+  const ok=await showConfirm('📨 Envoyer le devis',`Le flow va récupérer le PDF joint au devis <strong>DEV-${id}</strong> et envoyer l'email au client automatiquement.<br><br>Confirmer l'envoi ?`,'📨 Envoyer','submit');
+  if(!ok)return;
   const btn=document.querySelector(`#panel-body .pbtn.green`);
   if(btn){btn.disabled=true;btn.textContent='⏳ Envoi...';}
   try{
@@ -2822,7 +2898,8 @@ async function assignerVendeurDevis(id){
 
 // ── Livraison partielle — Flow PA ──
 async function livraisonPartielleFlow(id,numBC,client){
-  if(!confirm(`Créer une livraison partielle pour ${numBC} · ${client} ?\nLe flow va générer le suffixe alphabétique et créer la ligne dans Suivi_BC.`))return;
+  const ok=await showConfirm('🔀 Livraison partielle',`Le flow va générer le prochain suffixe alphabétique et créer une nouvelle ligne dans Suivi_BC pour <strong>${numBC}</strong> · ${client}.<br><br>Confirmer ?`,'🔀 Créer partielle','submit');
+  if(!ok)return;
   try{
     await triggerPAFlow('livraisonPartielle',id);
     alert('✅ Flow livraison partielle lancé ! La liste sera mise à jour dans quelques secondes.');
@@ -2834,7 +2911,8 @@ async function livraisonPartielleFlow(id,numBC,client){
 
 // ── Envoyer BC à Docuware — PATCH SharePoint (déclenche le flow via colonne) ──
 async function envoyerBCFlow(id,numBC){
-  if(!confirm(`Envoyer le BC ${numBC||id} à Docuware ?\nLe flow va archiver les pièces jointes dans la GED.`))return;
+  const ok=await showConfirm('📦 Archiver dans Docuware',`Le flow va archiver les pièces jointes du BC <strong>${numBC||id}</strong> dans la GED Docuware.<br><br>Confirmer l'archivage ?`,'📦 Archiver','submit');
+  if(!ok)return;
   try{
     await spPatch('sites/RseauxPlus','Suivi_BC',id,{'Envoyer_Docuware':true});
     alert('✅ Demande Docuware envoyée ! Le flow va s\'exécuter dans quelques secondes.');
@@ -2988,10 +3066,33 @@ async function init(){
     if(r.ok){const u=await r.json();sessionStorage.setItem('sp_bc_user_id',u.Id||'');}
   }catch(e){console.warn('CurrentUser fetch:',e);}
   document.getElementById('loadingScreen').style.display='none';
-  setInterval(loadAll,5*60*1000);
+  // Auto-refresh toutes les 5 min — suspendu si un modal/panel est ouvert
+  setInterval(()=>{
+    const modalOpen=document.querySelector('.modal-ov.open');
+    const panelOpen=document.querySelector('.panel-ov.open');
+    if(!modalOpen&&!panelOpen)loadAll();
+    else console.log('[Auto-refresh] Suspendu — modal/panel ouvert');
+  },5*60*1000);
 }
 init();
 </script>
+<!-- ══ MODAL CONFIRM CUSTOM ══ -->
+<div class="modal-ov" id="modal-confirm">
+  <div class="modal-box" style="width:420px">
+    <div class="modal-hd">
+      <span class="modal-hd-t" id="confirm-title">Confirmation</span>
+      <button class="modal-x" onclick="confirmResolve(false)">✕</button>
+    </div>
+    <div class="modal-bd" style="gap:0">
+      <p id="confirm-body" style="font-size:13.5px;line-height:1.6;color:var(--text-secondary)"></p>
+    </div>
+    <div class="modal-ft">
+      <button class="mbtn cancel" onclick="confirmResolve(false)">Annuler</button>
+      <button class="mbtn submit" id="confirm-ok-btn" onclick="confirmResolve(true)">Confirmer</button>
+    </div>
+  </div>
+</div>
+
 <!-- ══ MODAL AJOUT DEVIS MANUEL ══ -->
 <div class="modal-ov" id="modal-ajout-devis">
   <div class="modal-box" style="width:680px;max-width:96vw">
