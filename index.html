@@ -285,7 +285,14 @@
   .ltable tr:last-child td{border:none;}
   .pspin{text-align:center;padding:28px;color:var(--text-muted);font-size:12.5px;}
 
-  /* ══ VUE MATIN — ÉTAT POSITIF ══ */
+  /* ══ SORTABLE COLUMNS ══ */
+  th.sortable{cursor:pointer;user-select:none;white-space:nowrap;}
+  th.sortable:hover{background:#eef1f8;color:var(--navy);}
+  th.sortable::after{content:" ↕";font-size:9px;opacity:.4;}
+  th.sortable.asc::after{content:" ↑";opacity:1;color:var(--teal-mid);}
+  th.sortable.desc::after{content:" ↓";opacity:1;color:var(--teal-mid);}
+  /* ══ OFFLINE BANNER ══ */
+  .offline-banner{display:none;position:fixed;bottom:16px;left:50%;transform:translateX(-50%);background:var(--amber);color:white;padding:8px 20px;border-radius:var(--radius);font-size:12.5px;font-weight:600;z-index:9999;box-shadow:var(--shadow-md);}
   .matin-ok{display:none;flex-direction:column;align-items:center;justify-content:center;padding:32px 24px;text-align:center;background:var(--surface);border:1px solid var(--border-light);border-radius:var(--radius);margin:8px 0;}
   .matin-ok-icon{font-size:40px;margin-bottom:12px;}
   .matin-ok-title{font-size:15px;font-weight:700;color:var(--green);margin-bottom:6px;}
@@ -883,9 +890,20 @@ async function loadAll(){
 
     _lastLoad=Date.now();updateTimer();
     buildFilters();renderAll();updateBadges();buildSGVendeurs();
+    saveCache();hideOfflineBanner();
+    initSortableHeaders();
     document.getElementById('lastRefresh').textContent=
       `${suivi.length} BCs · ${lignes.length} lignes · ${dbc.length} DBC · ${devis.length} devis · Actualisé ${new Date().toLocaleTimeString('fr-FR')}`;
-  }catch(e){showError(e.message);console.error(e);}
+  }catch(e){
+    // Tentative de restauration depuis le cache
+    if(loadCache()){
+      buildFilters();renderAll();updateBadges();buildSGVendeurs();
+      showError(`Réseau inaccessible — données en cache affichées. ${e.message}`);
+    }else{
+      showError(e.message);
+    }
+    console.error(e);
+  }
   setLoading(false);
 }
 
@@ -1212,6 +1230,7 @@ function renderHistorique(){
   const fC=document.getElementById('filter-client-bc')?.value||'all';
   if(fV!=='all')items=items.filter(i=>f(i,'Vendeurencharge')===fV);
   if(fC!=='all')items=items.filter(i=>getClient(i)===fC);
+  items=applySort(items,'suivi-histo-body',SORT_COLS_AFACTURER);
   document.getElementById('sd-histo-count').textContent=items.length+' BC'+(items.length!==1?'s':'');
   const b=document.getElementById('suivi-histo-body');
   if(!items.length){b.innerHTML='<tr class="empty-row"><td colspan="12">✅ Historique vide</td></tr>';return;}
@@ -1744,6 +1763,7 @@ function renderDBCTable(){
     const devisRef=getDevisRefForDBC(i);
     return [client,employe,vendeur,devisRef,`DBC-${i.ID}`].some(v=>v.toLowerCase().includes(q));
   });
+  items=applySort(items,'dbc-body',SORT_COLS_DBC);
   const b=document.getElementById('dbc-body');
   b.innerHTML=items.length?items.map(i=>{
     const urg=getDBCUrgence(i);
@@ -1774,6 +1794,7 @@ function renderDevisTable(){
     const vendeur=f(i,'Vendeur_Assign_x00e9_')||'';
     return [nd,client,chantier,vendeur].some(v=>v.toLowerCase().includes(q));
   });
+  items=applySort(items,'devis-body',SORT_COLS_DEVIS);
   const DEVIS_TERMINAL=['Accepté','Converti en BC','Expiré','Refusé','Archivé'];
   const b=document.getElementById('devis-body');
   b.innerHTML=items.length?items.map(i=>{
@@ -2532,6 +2553,181 @@ function rechercheGlobalBC(){
 
 // ── Export CSV recherche globale ──
 let _lastRechercheItems=[];
+// ═══════════════════════════════════════════════════════════
+// ═══ #18 CACHE OFFLINE ═══
+// ═══════════════════════════════════════════════════════════
+const CACHE_KEY='rp_dashboard_cache';
+function saveCache(){
+  try{sessionStorage.setItem(CACHE_KEY,JSON.stringify({ts:Date.now(),data:DATA}));}
+  catch(e){console.warn('[Cache] Impossible de sauvegarder',e);}
+}
+function loadCache(){
+  try{
+    const raw=sessionStorage.getItem(CACHE_KEY);
+    if(!raw)return false;
+    const {ts,data}=JSON.parse(raw);
+    const age=Math.round((Date.now()-ts)/60000);
+    if(age>120){sessionStorage.removeItem(CACHE_KEY);return false;} // expire après 2h
+    DATA=data;
+    document.getElementById('offline-banner').style.display='block';
+    document.getElementById('offline-banner').textContent=`⚠️ Mode hors-ligne — cache ${age} min · Données en cache`;
+    return true;
+  }catch(e){return false;}
+}
+function hideOfflineBanner(){
+  const b=document.getElementById('offline-banner');
+  if(b)b.style.display='none';
+}
+
+// ═══════════════════════════════════════════════════════════
+// ═══ #9 TRI DES COLONNES ═══
+// ═══════════════════════════════════════════════════════════
+const _sortState={}; // {tableId: {col, dir}}
+
+function makeSortable(tableId,cols){
+  // cols = [{key, fn}] — fn(item) retourne la valeur à trier
+  const tbody=document.getElementById(tableId);
+  if(!tbody)return;
+  const thead=tbody.closest('table')?.querySelector('thead tr');
+  if(!thead)return;
+  const ths=thead.querySelectorAll('th');
+  cols.forEach((col,idx)=>{
+    if(!col||!col.fn)return;
+    const th=ths[idx];
+    if(!th)return;
+    th.classList.add('sortable');
+    th.onclick=()=>{
+      const cur=_sortState[tableId];
+      const dir=(cur?.col===idx&&cur?.dir==='asc')?'desc':'asc';
+      _sortState[tableId]={col:idx,dir};
+      // Mettre à jour visuels
+      ths.forEach(t=>t.classList.remove('asc','desc'));
+      th.classList.add(dir);
+      // Re-render la table concernée
+      if(tableId==='devis-body')renderDevisTable();
+      else if(tableId==='dbc-body')renderDBCTable();
+      else if(tableId==='suivi-encours-body')renderSuiviEnCours();
+      else if(tableId==='suivi-afacturer-body')renderAFacturer();
+      else if(tableId==='suivi-histo-body')renderHistorique();
+      else if(tableId==='bc-search-body')rechercheGlobalBC();
+    };
+  });
+}
+
+function applySort(items,tableId,cols){
+  const s=_sortState[tableId];
+  if(!s||!cols[s.col]?.fn)return items;
+  const fn=cols[s.col].fn;
+  return [...items].sort((a,b)=>{
+    let va=fn(a),vb=fn(b);
+    if(va===null||va===undefined)va='';
+    if(vb===null||vb===undefined)vb='';
+    // Numérique si possible
+    const na=parseFloat(String(va).replace(/[^0-9.-]/g,''));
+    const nb=parseFloat(String(vb).replace(/[^0-9.-]/g,''));
+    const cmp=(!isNaN(na)&&!isNaN(nb))?na-nb:String(va).localeCompare(String(vb),'fr');
+    return s.dir==='asc'?cmp:-cmp;
+  });
+}
+
+// Colonnes de tri par table
+const SORT_COLS_DEVIS=[
+  {fn:i=>f(i,'Num_x00e9_ro_Devis','Title')||`DEV-${i.ID}`},
+  {fn:i=>getClient(i)},
+  {fn:i=>getChantier(i)},
+  {fn:i=>f(i,'Date_Devis')},
+  {fn:i=>f(i,'Devis_RS')},
+  {fn:i=>f(i,'Vendeur_Assign_x00e9_')},
+  {fn:i=>f(i,'Statut')},
+  {fn:i=>f(i,'Modified')},
+  null
+];
+const SORT_COLS_DBC=[
+  null,
+  {fn:i=>i.ID},
+  {fn:i=>f(i,'NomClient')||f(i,'Title')},
+  {fn:i=>f(i,'Nom_Employ_x00e9_')},
+  null,
+  {fn:i=>f(i,'Date_Enl_x00e8_vement')},
+  {fn:i=>parseFloat(f(i,'Montant_HT')||0)},
+  {fn:i=>getDBCVendeur(i)},
+  {fn:i=>f(i,'Statut')},
+  {fn:i=>parseInt(f(i,'Nb_Relances')||0)},
+  null
+];
+const SORT_COLS_ENCOURS=[
+  null,
+  {fn:i=>f(i,'Title')},
+  {fn:i=>getClient(i)},
+  {fn:i=>getChantier(i)},
+  {fn:i=>f(i,'DateLivraisonpr_x00e9_vue')},
+  {fn:i=>f(i,'Vendeurencharge')},
+  {fn:i=>getStatut(i)},
+  null,
+  {fn:i=>getEtatFact(i)},
+  null
+];
+const SORT_COLS_AFACTURER=[
+  {fn:i=>f(i,'Title')},
+  {fn:i=>getClient(i)},
+  {fn:i=>getChantier(i)},
+  {fn:i=>f(i,'N_x00b0_BL')},
+  {fn:i=>f(i,nFCKey())},
+  {fn:i=>f(i,'Dateder_x00e9_ception')},
+  {fn:i=>f(i,'Vendeurencharge')},
+  {fn:i=>getStatut(i)},
+  {fn:i=>getEtatFact(i)},
+  null
+];
+const SORT_COLS_SEARCH=[
+  {fn:i=>f(i,'Title')},
+  {fn:i=>getClient(i)},
+  {fn:i=>getChantier(i)},
+  {fn:i=>f(i,'N_x00b0_BL')},
+  {fn:i=>f(i,nFCKey())},
+  {fn:i=>f(i,'Dateder_x00e9_ception')},
+  {fn:i=>f(i,'Vendeurencharge')},
+  {fn:i=>getStatut(i)},
+  {fn:i=>getEtatFact(i)},
+  null,null
+];
+
+// Initialiser tri après rendu (appelé une fois après loadAll)
+function initSortableHeaders(){
+  makeSortable('devis-body',SORT_COLS_DEVIS);
+  makeSortable('dbc-body',SORT_COLS_DBC);
+  makeSortable('suivi-encours-body',SORT_COLS_ENCOURS);
+  makeSortable('suivi-afacturer-body',SORT_COLS_AFACTURER);
+  makeSortable('bc-search-body',SORT_COLS_SEARCH);
+}
+
+// ═══════════════════════════════════════════════════════════
+// ═══ #6 HISTORIQUE DES MODIFICATIONS BC ═══
+// ═══════════════════════════════════════════════════════════
+async function loadBCHistory(id){
+  const container=document.getElementById('bc-history-container');
+  if(!container)return;
+  container.innerHTML='<div style="color:var(--text-muted);font-size:12px">⏳ Chargement historique...</div>';
+  try{
+    const url=`${C.spRoot}/sites/RseauxPlus/_api/web/lists/getbytitle('Suivi_BC')/items(${id})/versions?$top=20`;
+    const r=await fetch(url,{headers:{'Authorization':`Bearer ${getToken()}`,'Accept':'application/json;odata=nometadata'}});
+    if(!r.ok){container.innerHTML='<div style="color:var(--text-muted);font-size:11.5px;font-style:italic">Historique non disponible</div>';return;}
+    const d=await r.json();
+    const versions=(d.value||[]).slice(0,10);
+    if(!versions.length){container.innerHTML='<div style="color:var(--text-muted);font-size:11.5px;font-style:italic">Aucun historique</div>';return;}
+    container.innerHTML=versions.map(v=>{
+      const who=v.Editor?.LookupValue||v.ModifiedBy||'—';
+      const when=v.Modified?new Date(v.Modified).toLocaleString('fr-FR'):'—';
+      const vNum=v.VersionLabel||v.ID||'';
+      return`<div style="display:flex;gap:10px;padding:5px 0;border-bottom:1px solid var(--border-light);font-size:11.5px;align-items:baseline">
+        <span style="color:var(--text-muted);font-family:var(--font-mono);min-width:28px">v${vNum}</span>
+        <span style="flex:1;color:var(--text-secondary)">${who}</span>
+        <span style="color:var(--text-muted);font-family:var(--font-mono)">${when}</span>
+      </div>`;
+    }).join('');
+  }catch(e){container.innerHTML=`<div style="color:var(--text-muted);font-size:11.5px">Non disponible (${e.message})</div>`;}
+}
+
 function exportRechercheCSV(){
   exportCSV(_lastRechercheItems,[
     {label:'N° BC',          fn:i=>f(i,'Title')||`BC-${i.ID}`},
@@ -2875,6 +3071,14 @@ async function openBCPanel(id){
       <button class="pbtn green" onclick="closePanel();openFacturerModal(${id},'${nE}','${cE}')">💰 Facturer</button>
       <button class="pbtn blue" onclick="closePanel();openTraiterModal(${id},'${nE}','${cE}')">🔧 Traiter</button>
       <button class="pbtn grey" onclick="closePanel()">Fermer</button>
+    </div>
+    <hr style="border:none;border-top:1px solid var(--border);margin:12px 0 8px">
+    <div class="pf">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
+        <div class="pf-lbl">🕐 Historique des modifications</div>
+        <button class="btn" style="font-size:10.5px;height:24px" onclick="loadBCHistory(${id})">Charger →</button>
+      </div>
+      <div id="bc-history-container" style="color:var(--text-muted);font-size:11.5px;font-style:italic">Cliquez "Charger" pour voir qui a modifié ce BC</div>
     </div>`;
 
     document.getElementById('panel-body').innerHTML=html;
@@ -3265,6 +3469,8 @@ async function init(){
 }
 init();
 </script>
+<div class="offline-banner" id="offline-banner">⚠️ Mode hors-ligne — données en cache</div>
+
 <!-- ══ MODAL CONFIRM CUSTOM ══ -->
 <div class="modal-ov" id="modal-confirm">
   <div class="modal-box" style="width:420px">
