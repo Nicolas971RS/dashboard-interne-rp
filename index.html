@@ -330,6 +330,7 @@
     <button class="tab" onclick="showTab('suivi',this)">📦 Suivi BC <span class="tab-badge g" id="badge-recu">0</span><span class="tab-badge r" id="badge-retard">0</span></button>
     <button class="tab" onclick="showTab('dbc',this)">🧾 Demandes BC <span class="tab-badge r" id="badge-dbc">0</span></button>
     <button class="tab" onclick="showTab('devis',this)">📄 Devis <span class="tab-badge a" id="badge-devis">0</span></button>
+    <button class="tab" onclick="showTab('analytics',this);renderAnalytics()">📈 Analytics</button>
   </div>
 
   <div class="main">
@@ -425,8 +426,8 @@
       </div>
       <div class="acc-body open" id="acc-recu">
         <div class="tc"><table>
-          <thead><tr><th>N° BC</th><th>Client</th><th>Date livraison</th><th>N° BL</th><th>Vendeur</th><th>Statut</th><th>État facturation</th><th>Action</th></tr></thead>
-          <tbody id="suivi-recu-body"><tr class="empty-row"><td colspan="8">Chargement...</td></tr></tbody>
+          <thead><tr><th>N° BC</th><th>Client</th><th>Date livraison</th><th>N° BL</th><th>N° FC</th><th>Vendeur</th><th>Statut</th><th>État facturation</th><th>Action</th></tr></thead>
+          <tbody id="suivi-recu-body"><tr class="empty-row"><td colspan="9">Chargement...</td></tr></tbody>
         </table></div>
       </div>
 
@@ -440,8 +441,8 @@
       </div>
       <div class="acc-body open" id="acc-afact">
         <div class="tc"><table>
-          <thead><tr><th>N° BC</th><th>Client</th><th>N° BL</th><th>Date réception</th><th>Vendeur</th><th>Statut</th><th>État facturation</th><th>Action</th></tr></thead>
-          <tbody id="suivi-afacturer-body"><tr class="empty-row"><td colspan="8">Chargement...</td></tr></tbody>
+          <thead><tr><th>N° BC</th><th>Client</th><th>N° BL</th><th>N° FC</th><th>Date réception</th><th>Vendeur</th><th>Statut</th><th>État facturation</th><th>Action</th></tr></thead>
+          <tbody id="suivi-afacturer-body"><tr class="empty-row"><td colspan="9">Chargement...</td></tr></tbody>
         </table></div>
       </div>
 
@@ -470,8 +471,8 @@
       </div>
       <div class="acc-body" id="acc-histo">
         <div class="tc"><table>
-          <thead><tr><th>Urgence</th><th>N° BC</th><th>Client</th><th>Date réception</th><th>Vendeur</th><th>Statut</th><th>RAL / Lignes</th><th>État facturation</th></tr></thead>
-          <tbody id="suivi-histo-body"><tr class="empty-row"><td colspan="8">Chargement...</td></tr></tbody>
+          <thead><tr><th>Urgence</th><th>N° BC</th><th>Client</th><th>N° BL</th><th>N° FC</th><th>Date réception</th><th>Vendeur</th><th>Statut</th><th>RAL / Lignes</th><th>État facturation</th></tr></thead>
+          <tbody id="suivi-histo-body"><tr class="empty-row"><td colspan="10">Chargement...</td></tr></tbody>
         </table></div>
       </div>
 
@@ -546,6 +547,66 @@
         <thead><tr><th>N° Devis</th><th>Client</th><th>Chantier</th><th>Date</th><th>Devis RS</th><th>Vendeur</th><th>Statut</th><th>Dernière MàJ</th><th>Actions</th></tr></thead>
         <tbody id="devis-body"><tr class="empty-row"><td colspan="7">Chargement...</td></tr></tbody>
       </table></div>
+    </div>
+
+    <!-- ANALYTICS -->
+    <div id="tab-analytics" class="section-bloc">
+      <div class="page-header">
+        <div><h1>Analytics — Vue synthétique</h1><div class="sub" id="analytics-refresh">Données calculées depuis Suivi_BC, Demandes_Devis · Actualisez pour mettre à jour</div></div>
+        <button class="btn-refresh" onclick="renderAnalytics()">🔄 Recalculer</button>
+      </div>
+
+      <!-- KPI Synthèse -->
+      <div class="kpi-row c4" id="kpi-analytics-row" style="margin-bottom:18px">
+        <div class="kc t"><div class="kl">📦 BCs total (12 mois)</div><div class="kv" id="an-total-bc">—</div><div class="ks">Bons de commande</div></div>
+        <div class="kc g"><div class="kl">✅ Taux facturation</div><div class="kv" id="an-taux-fact">—</div><div class="ks">BCs entièrement facturés</div></div>
+        <div class="kc r"><div class="kl">⏱ Délai moyen réception</div><div class="kv" id="an-delai">—</div><div class="ks">Jours commande → réception</div></div>
+        <div class="kc a"><div class="kl">🔄 Taux retard fournisseur</div><div class="kv" id="an-retard">—</div><div class="ks">ETA dépassée sur 12 mois</div></div>
+      </div>
+
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:14px">
+        <!-- Graphique 1 — BCs par mois -->
+        <div class="tc" style="padding:16px 18px">
+          <div class="sd" style="margin:0 0 14px"><h2>📅 BCs réceptionnés par mois</h2><div class="sd-line"></div></div>
+          <div id="chart-mois" style="min-height:200px;display:flex;align-items:flex-end;gap:6px;padding-bottom:24px;position:relative"></div>
+        </div>
+        <!-- Graphique 2 — Top clients -->
+        <div class="tc" style="padding:16px 18px">
+          <div class="sd" style="margin:0 0 14px"><h2>🏢 Top 10 clients — Volume BC</h2><div class="sd-line"></div></div>
+          <div id="chart-clients" style="min-height:200px"></div>
+        </div>
+      </div>
+
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:14px">
+        <!-- Graphique 3 — Répartition par vendeur -->
+        <div class="tc" style="padding:16px 18px">
+          <div class="sd" style="margin:0 0 14px"><h2>👤 BCs par vendeur</h2><div class="sd-line"></div></div>
+          <div id="chart-vendeurs" style="min-height:200px"></div>
+        </div>
+        <!-- Graphique 4 — Statuts devis -->
+        <div class="tc" style="padding:16px 18px">
+          <div class="sd" style="margin:0 0 14px"><h2>📄 Devis — Répartition des statuts</h2><div class="sd-line"></div></div>
+          <div id="chart-devis-statuts" style="min-height:200px"></div>
+        </div>
+      </div>
+
+      <!-- Tableau Top clients détaillé -->
+      <div class="sd"><h2>📊 Détail activité clients</h2><div class="sd-line"></div></div>
+      <div class="tc">
+        <table>
+          <thead><tr><th>Client</th><th>BCs total</th><th>BCs reçus</th><th>BCs en cours</th><th>Taux réception</th><th>Dernière activité</th></tr></thead>
+          <tbody id="analytics-clients-body"><tr class="empty-row"><td colspan="6">Chargez les données puis cliquez sur Recalculer</td></tr></tbody>
+        </table>
+      </div>
+
+      <!-- Tableau performance vendeurs -->
+      <div class="sd" style="margin-top:18px"><h2>👤 Performance vendeurs (12 mois)</h2><div class="sd-line"></div></div>
+      <div class="tc">
+        <table>
+          <thead><tr><th>Vendeur</th><th>BCs assignés</th><th>BCs entièrement facturés</th><th>BCs en retard</th><th>Devis actifs</th><th>Taux facturation</th></tr></thead>
+          <tbody id="analytics-vendeurs-body"><tr class="empty-row"><td colspan="6">—</td></tr></tbody>
+        </table>
+      </div>
     </div>
   </div>
   <div style="text-align:center;padding:10px;font-size:10px;color:#aab;border-top:1px solid var(--border);">
@@ -973,6 +1034,7 @@ function bcRow(i,showAction=true){
   const numBC=f(i,'Title')||`BC-${i.ID}`;
   const dateLiv=fmtDate(f(i,'Dateder_x00e9_ception'));
   const numBL=f(i,'N_x00b0_BL')||'—';
+  const numFC=f(i,nFCKey())||'—';
   const cE=client.replace(/'/g,"\\'"),nE=numBC.replace(/'/g,"\\'");
   const act=showAction?`<td><div class="btn-grp">
     <button class="btn gr" onclick="openFacturerModal(${i.ID},'${nE}','${cE}')">💰 Facturer</button>
@@ -980,7 +1042,7 @@ function bcRow(i,showAction=true){
     <button class="btn" onclick="livraisonPartielleFlow(${i.ID},'${nE}','${cE}')">🔀 Partielle</button>
     <button class="btn" onclick="envoyerBCFlow(${i.ID},'${nE}')">📦 Docuware</button>
   </div></td>`:'';
-  return`<tr class="rr" data-bc-id="${i.ID}"><td class="ref">${numBC}</td><td class="cname">${client}</td><td class="mono">${dateLiv}</td><td class="mono">${numBL}</td><td>${vendeur}</td><td>${bStatut(s)}</td><td>${bFact(ef)}</td>${act}</tr>`;
+  return`<tr class="rr" data-bc-id="${i.ID}"><td class="ref">${numBC}</td><td class="cname">${client}</td><td class="mono">${dateLiv}</td><td class="mono">${numBL}</td><td class="mono">${numFC!=='—'?`<span style="color:var(--teal)">${numFC}</span>`:numFC}</td><td>${vendeur}</td><td>${bStatut(s)}</td><td>${bFact(ef)}</td>${act}</tr>`;
 }
 
 // ═══ RENDER ALL ═══
@@ -994,10 +1056,11 @@ function renderAFacturer(){
     const client=getClient(i),vendeur=f(i,'Vendeurencharge')||'—';
     const numBC=f(i,'Title')||`BC-${i.ID}`;
     const bl=f(i,'N_x00b0_BL')||'—';
+    const fc=f(i,nFCKey())||'—';
     const dateRec=fmtDate(f(i,'Dateder_x00e9_ception'));
     const s=getStatut(i),ef=getEtatFact(i);
     const cE=client.replace(/'/g,"\\'"),nE=numBC.replace(/'/g,"\\'");
-    return`<tr class="rr"><td class="ref">${numBC}</td><td class="cname">${client}</td><td class="mono">${bl}</td><td class="mono">${dateRec}</td><td>${vendeur}</td><td>${bStatut(s)}</td><td>${bFact(ef)}</td><td><div class="btn-grp">
+    return`<tr class="rr"><td class="ref">${numBC}</td><td class="cname">${client}</td><td class="mono">${bl}</td><td class="mono">${fc!=='—'?`<span style="color:var(--teal)">${fc}</span>`:fc}</td><td class="mono">${dateRec}</td><td>${vendeur}</td><td>${bStatut(s)}</td><td>${bFact(ef)}</td><td><div class="btn-grp">
       <button class="btn gr" onclick="openFacturerModal(${i.ID},'${nE}','${cE}')">💰 Facturer</button>
       <button class="btn" onclick="openTraiterModal(${i.ID},'${nE}','${cE}')">🔧 Traiter</button>
       <button class="btn" onclick="livraisonPartielleFlow(${i.ID},'${nE}','${cE}')">🔀 Partielle</button>
@@ -1014,21 +1077,197 @@ function renderHistorique(){
   if(fC!=='all')items=items.filter(i=>getClient(i)===fC);
   document.getElementById('sd-histo-count').textContent=items.length+' BC'+(items.length!==1?'s':'');
   const b=document.getElementById('suivi-histo-body');
-  if(!items.length){b.innerHTML='<tr class="empty-row"><td colspan="8">✅ Historique vide</td></tr>';return;}
+  if(!items.length){b.innerHTML='<tr class="empty-row"><td colspan="10">✅ Historique vide</td></tr>';return;}
   b.innerHTML=items.slice(0,100).map(i=>{// limit to 100 for perf
     const s=getStatut(i),ef=getEtatFact(i);
     const client=getClient(i),vendeur=f(i,'Vendeurencharge')||'—';
     const numBC=f(i,'Title')||`BC-${i.ID}`;
+    const numBL=f(i,'N_x00b0_BL')||'—';
+    const numFC=f(i,nFCKey())||'—';
     const dateLiv=f(i,'DateLivraisonpr_x00e9_vue');
     const late=daysLate(dateLiv);
     const urg=urgFromDays(late>0?late:0);
     const lignes=s==='Partiellement livré'?getLignesForBC(i.ID):[];
-    return`<tr class="${urg.row}"><td><span class="urg ${urg.cls}">${urg.lbl}</span></td><td class="ref">${numBC}</td><td class="cname">${client}</td><td class="mono">${fmtDate(f(i,'Dateder_x00e9_ception'))}</td><td>${vendeur}</td><td>${bStatut(s)}</td><td>${ralBlock(lignes)}</td><td>${bFact(ef)}</td></tr>`;
+    return`<tr class="${urg.row}"><td><span class="urg ${urg.cls}">${urg.lbl}</span></td><td class="ref">${numBC}</td><td class="cname">${client}</td><td class="mono">${numBL}</td><td class="mono">${numFC!=='—'?`<span style="color:var(--teal)">${numFC}</span>`:numFC}</td><td class="mono">${fmtDate(f(i,'Dateder_x00e9_ception'))}</td><td>${vendeur}</td><td>${bStatut(s)}</td><td>${ralBlock(lignes)}</td><td>${bFact(ef)}</td></tr>`;
   }).join('');
-  if(items.length>100){b.innerHTML+=`<tr class="empty-row"><td colspan="8">... et ${items.length-100} autres BCs — utilisez les filtres pour affiner</td></tr>`;}
+  if(items.length>100){b.innerHTML+=`<tr class="empty-row"><td colspan="10">... et ${items.length-100} autres BCs — utilisez les filtres pour affiner</td></tr>`;}
 }
 
 // ═══ HELPER RECHERCHE ═══
+// ═══════════════════════════════════════════════════════════
+// ═══ ANALYTICS ═══
+// ═══════════════════════════════════════════════════════════
+function renderAnalytics(){
+  const suivi=DATA.suivi||[];
+  const devis=DATA.devis||[];
+  const now=new Date();
+  const y12=new Date(now); y12.setMonth(y12.getMonth()-12);
+
+  // Filtre 12 mois sur date réception ou date commande
+  const recent=suivi.filter(i=>{
+    const d=f(i,'Dateder_x00e9_ception')||f(i,'DateLivraisonpr_x00e9_vue');
+    return d&&new Date(d)>=y12;
+  });
+
+  // ── KPIs synthèse ──
+  document.getElementById('an-total-bc').textContent=recent.length;
+  const factures=recent.filter(i=>getEtatFact(i)==='Entièrement facturé').length;
+  document.getElementById('an-taux-fact').textContent=recent.length?Math.round(factures/recent.length*100)+'%':'—';
+
+  // Délai moyen réception
+  const avecDates=recent.filter(i=>f(i,'Dateder_x00e9_ception')&&f(i,'DateLivraisonpr_x00e9_vue'));
+  const delais=avecDates.map(i=>{
+    const r=new Date(f(i,'Dateder_x00e9_ception'));
+    const p=new Date(f(i,'DateLivraisonpr_x00e9_vue'));
+    return (r-p)/(1000*3600*24);
+  }).filter(d=>d>=0&&d<365);
+  const delaiMoy=delais.length?Math.round(delais.reduce((a,b)=>a+b,0)/delais.length):null;
+  document.getElementById('an-delai').textContent=delaiMoy!=null?delaiMoy+'j':'—';
+
+  // Taux retard
+  const enRetard=recent.filter(i=>{
+    const dateLiv=f(i,'DateLivraisonpr_x00e9_vue');
+    return dateLiv&&new Date(dateLiv)<now&&getStatut(i)!=='Reçu'&&getStatut(i)!=='Annulé';
+  }).length;
+  document.getElementById('an-retard').textContent=recent.length?Math.round(enRetard/recent.length*100)+'%':'—';
+
+  // ── Graphique 1 — BCs par mois ──
+  const byMonth={};
+  for(let m=11;m>=0;m--){
+    const d=new Date(now);d.setMonth(d.getMonth()-m);
+    const key=d.getFullYear()+'-'+(d.getMonth()+1).toString().padStart(2,'0');
+    const lbl=d.toLocaleDateString('fr-FR',{month:'short',year:'2-digit'});
+    byMonth[key]={lbl,n:0};
+  }
+  recent.forEach(i=>{
+    const d=f(i,'Dateder_x00e9_ception');
+    if(!d)return;
+    const dt=new Date(d);
+    const key=dt.getFullYear()+'-'+(dt.getMonth()+1).toString().padStart(2,'0');
+    if(byMonth[key])byMonth[key].n++;
+  });
+  const months=Object.values(byMonth);
+  const maxM=Math.max(...months.map(m=>m.n),1);
+  const chartMois=document.getElementById('chart-mois');
+  chartMois.style.cssText='min-height:200px;display:flex;align-items:flex-end;gap:5px;padding-bottom:30px;position:relative;padding-top:10px;';
+  chartMois.innerHTML=months.map(m=>{
+    const h=Math.max(4,Math.round(m.n/maxM*160));
+    const col=m.n===0?'#e0e5ec':m.n===maxM?'var(--teal-mid)':'var(--blue-mid)';
+    return`<div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:3px">
+      <span style="font-size:10px;font-weight:700;color:var(--text-secondary)">${m.n||''}</span>
+      <div style="width:100%;height:${h}px;background:${col};border-radius:4px 4px 0 0;transition:height .3s"></div>
+      <span style="font-size:9px;color:var(--text-muted);transform:rotate(-30deg);white-space:nowrap;margin-top:4px">${m.lbl}</span>
+    </div>`;
+  }).join('');
+
+  // ── Graphique 2 — Top clients (barres horizontales) ──
+  const byClient={};
+  recent.forEach(i=>{const c=getClient(i)||'Inconnu';byClient[c]=(byClient[c]||0)+1;});
+  const topClients=Object.entries(byClient).sort((a,b)=>b[1]-a[1]).slice(0,10);
+  const maxC=topClients[0]?.[1]||1;
+  document.getElementById('chart-clients').innerHTML=topClients.map(([c,n])=>{
+    const pct=Math.round(n/maxC*100);
+    return`<div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
+      <div style="width:130px;font-size:11px;font-weight:600;color:var(--text-secondary);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex-shrink:0" title="${c}">${c}</div>
+      <div style="flex:1;background:#eef1f6;border-radius:3px;height:16px;overflow:hidden">
+        <div style="width:${pct}%;height:100%;background:var(--teal-mid);border-radius:3px;transition:width .4s"></div>
+      </div>
+      <span style="font-size:11px;font-weight:700;color:var(--navy);width:24px;text-align:right">${n}</span>
+    </div>`;
+  }).join('')||'<div style="padding:20px;color:var(--text-muted);font-size:12px">Aucune donnée</div>';
+
+  // ── Graphique 3 — Vendeurs ──
+  const byVendeur={};
+  recent.forEach(i=>{const v=f(i,'Vendeurencharge')||'Non assigné';byVendeur[v]=(byVendeur[v]||0)+1;});
+  const topV=Object.entries(byVendeur).sort((a,b)=>b[1]-a[1]);
+  const maxV=topV[0]?.[1]||1;
+  const COLORS=['var(--teal-mid)','var(--blue-mid)','var(--navy-light)','var(--amber)','var(--green)','#8e24aa'];
+  document.getElementById('chart-vendeurs').innerHTML=topV.map(([v,n],idx)=>{
+    const pct=Math.round(n/maxV*100);
+    const col=COLORS[idx%COLORS.length];
+    return`<div style="display:flex;align-items:center;gap:8px;margin-bottom:9px">
+      <div style="width:110px;font-size:11px;font-weight:600;color:var(--text-secondary);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex-shrink:0">${v}</div>
+      <div style="flex:1;background:#eef1f6;border-radius:3px;height:18px;overflow:hidden">
+        <div style="width:${pct}%;height:100%;background:${col};border-radius:3px"></div>
+      </div>
+      <span style="font-size:11px;font-weight:700;color:var(--navy);width:24px;text-align:right">${n}</span>
+    </div>`;
+  }).join('')||'<div style="padding:20px;color:var(--text-muted);font-size:12px">Aucune donnée</div>';
+
+  // ── Graphique 4 — Statuts devis (donuts via barres empilées) ──
+  const DS_COLORS={'Nouvelle':'var(--blue-mid)','En cours':'var(--teal-mid)','Devis envoyé':'#00897b','Accepté':'var(--green)','Converti en BC':'#006064','Expiré':'#9e9e9e','Refusé':'var(--red)','Archivé':'#78909c'};
+  const byStatutD={};
+  devis.forEach(i=>{const s=f(i,'Statut')||'—';byStatutD[s]=(byStatutD[s]||0)+1;});
+  const totalD=devis.length||1;
+  document.getElementById('chart-devis-statuts').innerHTML=`
+    <div style="display:flex;height:26px;border-radius:6px;overflow:hidden;margin-bottom:14px">
+      ${Object.entries(byStatutD).sort((a,b)=>b[1]-a[1]).map(([s,n])=>`<div style="width:${n/totalD*100}%;background:${DS_COLORS[s]||'#ccc'};transition:width .4s" title="${s}: ${n}"></div>`).join('')}
+    </div>
+    ${Object.entries(byStatutD).sort((a,b)=>b[1]-a[1]).map(([s,n])=>`
+      <div style="display:flex;align-items:center;gap:7px;margin-bottom:6px">
+        <div style="width:10px;height:10px;border-radius:2px;background:${DS_COLORS[s]||'#ccc'};flex-shrink:0"></div>
+        <span style="font-size:11.5px;flex:1;color:var(--text-secondary)">${s}</span>
+        <span style="font-size:11.5px;font-weight:700;color:var(--navy)">${n}</span>
+        <span style="font-size:10px;color:var(--text-muted)">(${Math.round(n/totalD*100)}%)</span>
+      </div>`).join('')}`;
+
+  // ── Tableau clients détaillé ──
+  const clientsDetail=Object.entries(byClient).sort((a,b)=>b[1]-a[1]).map(([c,total])=>{
+    const bcs=recent.filter(i=>getClient(i)===c);
+    const recus=bcs.filter(i=>getStatut(i)==='Reçu'||getEtatFact(i)==='Entièrement facturé').length;
+    const enCours=bcs.filter(i=>getStatut(i)!=='Reçu'&&getStatut(i)!=='Annulé'&&getEtatFact(i)!=='Entièrement facturé').length;
+    const taux=total?Math.round(recus/total*100):0;
+    const dates=bcs.map(i=>f(i,'Dateder_x00e9_ception')).filter(Boolean).sort();
+    const lastActivity=dates.length?fmtDate(dates[dates.length-1]):'—';
+    return`<tr>
+      <td class="cname">${c}</td>
+      <td class="mono" style="text-align:center;font-weight:700">${total}</td>
+      <td class="mono" style="text-align:center;color:var(--green)">${recus}</td>
+      <td class="mono" style="text-align:center;color:var(--amber)">${enCours}</td>
+      <td>
+        <div style="display:flex;align-items:center;gap:8px">
+          <div style="flex:1;height:6px;background:#eef1f6;border-radius:3px">
+            <div style="width:${taux}%;height:100%;background:${taux>=80?'var(--green)':taux>=50?'var(--amber)':'var(--red)'};border-radius:3px"></div>
+          </div>
+          <span style="font-size:11px;font-weight:700;min-width:30px">${taux}%</span>
+        </div>
+      </td>
+      <td class="mono">${lastActivity}</td>
+    </tr>`;
+  });
+  document.getElementById('analytics-clients-body').innerHTML=clientsDetail.join('')||'<tr class="empty-row"><td colspan="6">Aucune donnée</td></tr>';
+
+  // ── Tableau vendeurs ──
+  const vendeurRows=Object.entries(byVendeur).sort((a,b)=>b[1]-a[1]).map(([v,total])=>{
+    const bcs=recent.filter(i=>f(i,'Vendeurencharge')===v);
+    const facts=bcs.filter(i=>getEtatFact(i)==='Entièrement facturé').length;
+    const retards=bcs.filter(i=>{
+      const d=f(i,'DateLivraisonpr_x00e9_vue');
+      return d&&new Date(d)<now&&getStatut(i)!=='Reçu'&&getStatut(i)!=='Annulé';
+    }).length;
+    const devisActifs=devis.filter(i=>f(i,'Vendeur_Assign_x00e9_')===v&&['Nouvelle','En cours','Devis envoyé'].includes(f(i,'Statut'))).length;
+    const taux=total?Math.round(facts/total*100):0;
+    return`<tr>
+      <td class="cname">${v}</td>
+      <td class="mono" style="text-align:center;font-weight:700">${total}</td>
+      <td class="mono" style="text-align:center;color:var(--green)">${facts}</td>
+      <td class="mono" style="text-align:center;color:var(--red)">${retards}</td>
+      <td class="mono" style="text-align:center;color:var(--blue-mid)">${devisActifs}</td>
+      <td>
+        <div style="display:flex;align-items:center;gap:8px">
+          <div style="flex:1;height:6px;background:#eef1f6;border-radius:3px">
+            <div style="width:${taux}%;height:100%;background:${taux>=80?'var(--green)':taux>=50?'var(--amber)':'var(--red)'};border-radius:3px"></div>
+          </div>
+          <span style="font-size:11px;font-weight:700;min-width:30px">${taux}%</span>
+        </div>
+      </td>
+    </tr>`;
+  });
+  document.getElementById('analytics-vendeurs-body').innerHTML=vendeurRows.join('')||'<tr class="empty-row"><td colspan="6">Aucune donnée</td></tr>';
+
+  document.getElementById('analytics-refresh').textContent=`Calculé le ${new Date().toLocaleString('fr-FR')} · ${recent.length} BCs sur 12 mois · ${devis.length} devis`;
+}
+
 function matchSearch(item, q) {
   if(!q) return true;
   const s = q.toLowerCase();
