@@ -440,8 +440,8 @@
           <span style="font-size:11px;color:var(--text-muted);cursor:pointer;text-decoration:underline" onclick="clearRechercheGlobalBC()">← Retour aux accordéons</span>
         </div>
         <div class="tc"><table>
-          <thead><tr><th>N° BC</th><th>Client</th><th>Chantier</th><th>N° BL</th><th>N° FC</th><th>Date réception</th><th>Vendeur</th><th>Statut</th><th>État fact.</th><th>Doc.</th><th>Actions</th></tr></thead>
-          <tbody id="bc-search-body"><tr class="empty-row"><td colspan="11">Aucun résultat</td></tr></tbody>
+          <thead><tr><th>N° BC</th><th>Client</th><th>Chantier</th><th>N° Devis</th><th>N° BL</th><th>N° FC</th><th>Montant HT</th><th>Date réception</th><th>Vendeur</th><th>Statut</th><th>État fact.</th><th>Doc.</th><th>Actions</th></tr></thead>
+          <tbody id="bc-search-body"><tr class="empty-row"><td colspan="13">Aucun résultat</td></tr></tbody>
         </table></div>
       </div>
 
@@ -504,8 +504,8 @@
       </div>
       <div class="acc-body open" id="acc-afact">
         <div class="tc"><table>
-          <thead><tr><th>N° BC</th><th>Client</th><th>Chantier</th><th>N° Devis</th><th>N° BL</th><th>N° FC</th><th>Date réception</th><th>Vendeur</th><th>Statut</th><th>État facturation</th><th>Action</th></tr></thead>
-          <tbody id="suivi-afacturer-body"><tr class="empty-row"><td colspan="11">Chargement...</td></tr></tbody>
+          <thead><tr><th>N° BC</th><th>Client</th><th>Chantier</th><th>N° Devis</th><th>N° BL</th><th>N° FC</th><th>Montant HT</th><th>Date réception</th><th>Vendeur</th><th>Statut</th><th>État facturation</th><th>Action</th></tr></thead>
+          <tbody id="suivi-afacturer-body"><tr class="empty-row"><td colspan="12">Chargement...</td></tr></tbody>
         </table></div>
       </div>
 
@@ -534,8 +534,8 @@
       </div>
       <div class="acc-body" id="acc-histo">
         <div class="tc"><table>
-          <thead><tr><th>Urgence</th><th>N° BC</th><th>Client</th><th>Chantier</th><th>N° BL</th><th>N° FC</th><th>Date réception</th><th>Vendeur</th><th>Statut</th><th>RAL / Lignes</th><th>État facturation</th><th>Actions</th></tr></thead>
-          <tbody id="suivi-histo-body"><tr class="empty-row"><td colspan="12">Chargement...</td></tr></tbody>
+          <thead><tr><th>Urgence</th><th>N° BC</th><th>Client</th><th>Chantier</th><th>N° Devis</th><th>N° BL</th><th>N° FC</th><th>Montant HT</th><th>Date réception</th><th>Vendeur</th><th>Statut</th><th>RAL / Lignes</th><th>État facturation</th><th>Actions</th></tr></thead>
+          <tbody id="suivi-histo-body"><tr class="empty-row"><td colspan="14">Chargement...</td></tr></tbody>
         </table></div>
       </div>
 
@@ -550,8 +550,8 @@
       <div class="acc-body" id="acc-encours">
         <div class="note">ℹ️ RAL visible uniquement pour les BCs en livraison partielle.</div>
         <div class="tc"><table>
-          <thead><tr><th>Urgence</th><th>N° BC</th><th>Client</th><th>Chantier</th><th>N° Devis</th><th>ETA</th><th>Vendeur</th><th>Statut</th><th>RAL / Lignes</th><th>État fact.</th><th>Actions</th></tr></thead>
-          <tbody id="suivi-encours-body"><tr class="empty-row"><td colspan="11">Chargement...</td></tr></tbody>
+          <thead><tr><th>Urgence</th><th>N° BC</th><th>Client</th><th>Chantier</th><th>N° Devis</th><th>Montant HT</th><th>ETA</th><th>Vendeur</th><th>Statut</th><th>RAL / Lignes</th><th>État fact.</th><th>Actions</th></tr></thead>
+          <tbody id="suivi-encours-body"><tr class="empty-row"><td colspan="12">Chargement...</td></tr></tbody>
         </table></div>
       </div>
       </div><!-- /bc-accordeons -->
@@ -1213,10 +1213,12 @@ function renderAFacturer(){
     const fc=f(i,nFCKey())||'—';
     const chantier=getChantier(i);
     const numDev=f(i,'N_x00b0_Devis','Num_ro_Devis','NumeroDevis')||'—';
+    const montantRaw=f(i,'MontantHT','Montant_HT','MontantHTTotal');
+    const montantFmt=montantRaw?new Intl.NumberFormat('fr-FR',{style:'currency',currency:'EUR',maximumFractionDigits:0}).format(montantRaw):'—';
     const dateRec=fmtDate(f(i,'Dateder_x00e9_ception'));
     const s=getStatut(i),ef=getEtatFact(i);
     const cE=client.replace(/'/g,"\\'"),nE=numBC.replace(/'/g,"\\'");
-    return`<tr class="rr"><td class="ref">${numBC}</td><td class="cname">${client}</td><td style="font-size:12px;color:var(--text-secondary)">${chantier}</td><td class="mono" style="color:var(--blue-mid);font-size:11px">${numDev}</td><td class="mono">${bl}</td><td class="mono">${fc!=='—'?`<span style="color:var(--teal)">${fc}</span>`:fc}</td><td class="mono">${dateRec}</td><td>${vendeur}</td><td>${bStatut(s)}</td><td>${bFact(ef)}</td><td><div class="btn-grp">
+    return`<tr class="rr"><td class="ref">${numBC}</td><td class="cname">${client}</td><td style="font-size:12px;color:var(--text-secondary)">${chantier}</td><td class="mono" style="color:var(--blue-mid);font-size:11px">${numDev}</td><td class="mono">${bl}</td><td class="mono">${fc!=='—'?`<span style="color:var(--teal)">${fc}</span>`:fc}</td><td class="amt" style="font-size:11.5px">${montantFmt}</td><td class="mono">${dateRec}</td><td>${vendeur}</td><td>${bStatut(s)}</td><td>${bFact(ef)}</td><td><div class="btn-grp">
       <button class="btn" onclick="openBCPanel(${i.ID})">🔍 Détail</button>
       <button class="btn gr" onclick="openFacturerModal(${i.ID},'${nE}','${cE}')">💰 Facturer</button>
       <button class="btn" onclick="openTraiterModal(${i.ID},'${nE}','${cE}')">🔧 Traiter</button>
@@ -1242,17 +1244,20 @@ function renderHistorique(){
     const numBC=f(i,'Title')||`BC-${i.ID}`;
     const numBL=f(i,'N_x00b0_BL')||'—';
     const numFC=f(i,nFCKey())||'—';
+    const numDev=f(i,'N_x00b0_Devis','Num_ro_Devis','NumeroDevis')||'—';
     const chantier=getChantier(i);
+    const montantRaw=f(i,'MontantHT','Montant_HT','MontantHTTotal');
+    const montantFmt=montantRaw?new Intl.NumberFormat('fr-FR',{style:'currency',currency:'EUR',maximumFractionDigits:0}).format(montantRaw):'—';
     const dateLiv=f(i,'DateLivraisonpr_x00e9_vue');
     const late=daysLate(dateLiv);
     const urg=urgFromDays(late>0?late:0);
     const lignes=s==='Partiellement livré'?getLignesForBC(i.ID):[];
-    return`<tr class="${urg.row}"><td><span class="urg ${urg.cls}">${urg.lbl}</span></td><td class="ref">${numBC}</td><td class="cname">${client}</td><td style="font-size:12px;color:var(--text-secondary)">${chantier}</td><td class="mono">${numBL}</td><td class="mono">${numFC!=='—'?`<span style="color:var(--teal)">${numFC}</span>`:numFC}</td><td class="mono">${fmtDate(f(i,'Dateder_x00e9_ception'))}</td><td>${vendeur}</td><td>${bStatut(s)}</td><td>${ralBlock(lignes)}</td><td>${bFact(ef)}</td><td><div class="btn-grp">
+    return`<tr class="${urg.row}"><td><span class="urg ${urg.cls}">${urg.lbl}</span></td><td class="ref">${numBC}</td><td class="cname">${client}</td><td style="font-size:12px;color:var(--text-secondary)">${chantier}</td><td class="mono" style="color:var(--blue-mid);font-size:11px">${numDev}</td><td class="mono">${numBL}</td><td class="mono">${numFC!=='—'?`<span style="color:var(--teal)">${numFC}</span>`:numFC}</td><td class="amt" style="font-size:11.5px">${montantFmt}</td><td class="mono">${fmtDate(f(i,'Dateder_x00e9_ception'))}</td><td>${vendeur}</td><td>${bStatut(s)}</td><td>${ralBlock(lignes)}</td><td>${bFact(ef)}</td><td><div class="btn-grp">
       <button class="btn" onclick="openBCPanel(${i.ID})">🔍 Détail</button>
       <button class="btn" onclick="openTraiterModal(${i.ID},'${numBC.replace(/'/g,"\\'")}','${client.replace(/'/g,"\\'")}')">🔧 Traiter</button>
     </div></td></tr>`;
   }).join('');
-  if(items.length>100){b.innerHTML+=`<tr class="empty-row"><td colspan="12">... et ${items.length-100} autres BCs — utilisez les filtres pour affiner</td></tr>`;}
+  if(items.length>100){b.innerHTML+=`<tr class="empty-row"><td colspan="14">... et ${items.length-100} autres BCs — utilisez les filtres pour affiner</td></tr>`;}
 }
 
 // ═══ HELPER RECHERCHE ═══
@@ -1704,6 +1709,8 @@ function renderSuiviEnCours(){renderHistorique();
     const numBC=f(i,'Title')||`BC-${i.ID}`;
     const chantier=getChantier(i);
     const numDev=f(i,'N_x00b0_Devis','Num_ro_Devis','NumeroDevis')||'—';
+    const montantRaw=f(i,'MontantHT','Montant_HT','MontantHTTotal');
+    const montantFmt=montantRaw?new Intl.NumberFormat('fr-FR',{style:'currency',currency:'EUR',maximumFractionDigits:0}).format(montantRaw):'—';
     const dateLiv=f(i,'DateLivraisonpr_x00e9_vue');
     const late=daysLate(dateLiv);
     const urg=urgFromDays(late>0?late:0);
@@ -1715,6 +1722,7 @@ function renderSuiviEnCours(){renderHistorique();
       <td class="ref">${numBC}</td><td class="cname">${client}</td>
       <td style="font-size:12px;color:var(--text-secondary)">${chantier}</td>
       <td class="mono" style="color:var(--blue-mid);font-size:11px">${numDev}</td>
+      <td class="amt" style="font-size:11.5px">${montantFmt}</td>
       <td class="mono" style="${etaColor}">${fmtDate(dateLiv)}</td>
       <td>${vendeur}</td><td>${bStatut(s)}</td>
       <td>${ralBlock(lignes)}</td><td>${bFact(ef)}</td>
@@ -2530,6 +2538,9 @@ function rechercheGlobalBC(){
       const chantier=String(getChantier(i)||'—');
       const numBL=String(f(i,'N_x00b0_BL')||'—');
       const numFC=String(f(i,nFCKey())||'—');
+      const numDev=String(f(i,'N_x00b0_Devis','Num_ro_Devis','NumeroDevis')||'—');
+      const montantRaw=f(i,'MontantHT','Montant_HT','MontantHTTotal');
+      const montantFmt=montantRaw?new Intl.NumberFormat('fr-FR',{style:'currency',currency:'EUR',maximumFractionDigits:0}).format(montantRaw):'—';
       const dateRec=fmtDate(f(i,'Dateder_x00e9_ception'));
       const cE=client.replace(/'/g,"\\'"),nE=numBC.replace(/'/g,"\\'");
       const docBadge=bDocuware(i);
@@ -2537,9 +2548,11 @@ function rechercheGlobalBC(){
         <td class="ref">${hl(numBC)}</td>
         <td class="cname">${hl(client)}</td>
         <td style="font-size:12px;color:var(--text-secondary)">${hl(chantier)}</td>
+        <td class="mono" style="color:var(--blue-mid);font-size:11px">${hl(numDev)}</td>
         <td class="mono">${hl(numBL)}</td>
         <td class="mono">${numFC!=='—'?`<span style="color:var(--teal)">${hl(numFC)}</span>`:numFC}</td>
         <td class="mono">${dateRec}</td>
+        <td class="amt" style="font-size:11.5px">${montantFmt}</td>
         <td>${hl(vendeurV)}</td>
         <td>${bStatut(s)}</td>
         <td>${bFact(ef)}</td>
@@ -2553,12 +2566,12 @@ function rechercheGlobalBC(){
       </tr>`;
     }catch(e){
       console.warn('[BC Search row error]',i.ID,e);
-      return`<tr><td colspan="11" style="color:var(--text-muted);font-size:11px;padding:6px 13px">BC-${i.ID} — erreur affichage</td></tr>`;
+      return`<tr><td colspan="13" style="color:var(--text-muted);font-size:11px;padding:6px 13px">BC-${i.ID} — erreur affichage</td></tr>`;
     }
   }).join('');
 
-  body.innerHTML=rows||(` <tr class="empty-row"><td colspan="11">Erreur rendu — actualisez</td></tr>`);
-  if(items.length>150)body.innerHTML+=`<tr class="empty-row"><td colspan="11">... et ${items.length-150} autres — affinez les critères</td></tr>`;
+  body.innerHTML=rows||(` <tr class="empty-row"><td colspan="13">Erreur rendu — actualisez</td></tr>`);
+  if(items.length>150)body.innerHTML+=`<tr class="empty-row"><td colspan="13">... et ${items.length-150} autres — affinez les critères</td></tr>`;
 }
 
 // ── Export CSV recherche globale ──
@@ -2765,7 +2778,7 @@ function trouverBCDepuisDevis(numDevis,devisRS){
     setTimeout(()=>{
       const b=document.getElementById('bc-search-body');
       if(b&&b.querySelector('.empty-row')){
-        b.innerHTML=`<tr class="empty-row"><td colspan="11">Aucun BC trouvé avec N° Devis "${numDevis||devisRS}" — le BC n'a peut-être pas encore été saisi dans Suivi_BC</td></tr>`;
+        b.innerHTML=`<tr class="empty-row"><td colspan="13">Aucun BC trouvé avec N° Devis "${numDevis||devisRS}" — le BC n'a peut-être pas encore été saisi dans Suivi_BC</td></tr>`;
       }
     },100);
   }
