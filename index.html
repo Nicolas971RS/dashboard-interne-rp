@@ -2291,14 +2291,9 @@ function buildSGVendeurs(){
   const sel=document.getElementById('sg-vendeur');
   if(!sel)return;
   const current=sel.value;
-  sel.innerHTML='<option value="all">Tous les vendeurs</option>';
-  const vendeurs=[...new Set((DATA.suivi||[]).map(i=>{
-    const v=i['Vendeurencharge'];
-    if(!v)return null;
-    if(typeof v==='string')return v;
-    if(typeof v==='object')return v.Value||v.Title||v.Name||null;
-    return null;
-  }).filter(Boolean))].sort();
+  while(sel.options.length>1)sel.remove(1);
+  // Utilise exactement la même logique que getAllVendeurs / buildFilters qui fonctionnent
+  const vendeurs=getAllVendeurs();
   vendeurs.forEach(v=>{
     const o=document.createElement('option');
     o.value=v;o.textContent=v;
@@ -2343,7 +2338,7 @@ function rechercheGlobalBC(){
   const all=DATA.suivi||[];
   const items=all.filter(i=>{
     try{
-      const getVendeurStr=(i)=>{const v=i['Vendeurencharge'];if(!v)return'';if(typeof v==='string')return v;if(typeof v==='object')return v.Value||v.Title||v.Name||'';return '';};
+      const getVendeurStr=(i)=>String(f(i,'Vendeurencharge')||'');
       if(q.length>=2){
         const numBC=String(f(i,'Title')||'').toLowerCase();
         const client=String(getClient(i)||'').toLowerCase();
@@ -2391,8 +2386,7 @@ function rechercheGlobalBC(){
     try{
       const s=getStatut(i),ef=getEtatFact(i);
       const client=String(getClient(i)||'—');
-      const vRaw=i['Vendeurencharge'];
-      const vendeurV=!vRaw?'—':typeof vRaw==='string'?vRaw:(vRaw.Value||vRaw.Title||vRaw.Name||'—');
+      const vendeurV=String(f(i,'Vendeurencharge')||'—');
       const numBC=String(f(i,'Title')||`BC-${i.ID}`);
       const chantier=String(getChantier(i)||'—');
       const numBL=String(f(i,'N_x00b0_BL')||'—');
