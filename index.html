@@ -2254,7 +2254,7 @@ async function openTraiterModal(id,numBC,client){
   const curTitre=f(currentItem,'Title')||numBC;
   const curNumDevis=f(currentItem,'N_x00b0_Devis','Num_ro_Devis','NumeroDevis')||'';
   const curBL=f(currentItem,'N_x00b0_BL')||'';
-  const curMontant=f(currentItem,'MontantHT')||'';
+  const curMontant=f(currentItem,'MontantHT','Montant_HT','MontantHTTotal')||'';
   const curRem=f(currentItem,'Remarques')||'';
   const curDateBL=f(currentItem,'DateBL')||'';
   const curDatePEC=f(currentItem,'Datepriseencharge')||today;
@@ -2329,7 +2329,12 @@ async function openTraiterModal(id,numBC,client){
     if(datepec)body['Datepriseencharge']=datepec+'T00:00:00Z';
     if(eta)body['DateLivraisonpr_x00e9_vue']=eta+'T00:00:00Z';
     const montant=document.getElementById('m-montant').value;
-    if(montant&&!isNaN(parseFloat(montant.replace(',','.'))))body['MontantHT']=parseFloat(montant.replace(',','.'));
+    if(montant!==''&&!isNaN(parseFloat(String(montant).replace(',','.')))){
+      const montantVal=parseFloat(String(montant).replace(',','.'));
+      // Détecter le bon nom du champ Montant dans les données existantes
+      const montantKey=Object.keys(currentItem).find(k=>k.toLowerCase().includes('montant')||k.toLowerCase().includes('montantht'))||'MontantHT';
+      body[montantKey]=montantVal;
+    }
     const contenuEmail=document.getElementById('m-contenu-email').value.trim();
     if(contenuEmail)body['Contenu_Email']=contenuEmail;
     const rem=document.getElementById('m-rem').value.trim();
