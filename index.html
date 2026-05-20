@@ -2321,37 +2321,35 @@ function rechercheGlobalBC(){
   const hasFilter=q.length>=2||statut!=='all'||vendeur!=='all'||fact!=='all'||dateFrom||dateTo;
 
   if(!hasFilter){
-    acc.style.display='';
-    res.style.display='none';
+    if(acc)acc.style.display='';
+    if(res)res.style.display='none';
     if(countEl)countEl.textContent='';
     return;
   }
 
-  acc.style.display='none';
-  res.style.display='block';
+  if(acc)acc.style.display='none';
+  if(res)res.style.display='block';
 
-  const items=(DATA.suivi||[]).filter(i=>{
-    // Texte libre
-    if(q.length>=2){
-      const numBC=(f(i,'Title')||'').toLowerCase();
-      const client=getClient(i).toLowerCase();
-      const chantier=getChantier(i).toLowerCase();
-      const bl=(f(i,'N_x00b0_BL')||'').toLowerCase();
-      const fc=(f(i,nFCKey())||'').toLowerCase();
-      const v=(f(i,'Vendeurencharge')||'').toLowerCase();
-      if(!numBC.includes(q)&&!client.includes(q)&&!chantier.includes(q)&&!bl.includes(q)&&!fc.includes(q)&&!v.includes(q))return false;
-    }
-    // Statut
-    if(statut!=='all'&&getStatut(i)!==statut)return false;
-    // Vendeur
-    if(vendeur!=='all'&&f(i,'Vendeurencharge')!==vendeur)return false;
-    // Facturation
-    if(fact!=='all'&&getEtatFact(i)!==fact)return false;
-    // Dates
-    const dateRec=f(i,'Dateder_x00e9_ception');
-    if(dateFrom&&dateRec&&dateRec<dateFrom)return false;
-    if(dateTo&&dateRec&&dateRec>dateTo)return false;
-    return true;
+  const all=DATA.suivi||[];
+  const items=all.filter(i=>{
+    try{
+      if(q.length>=2){
+        const numBC=String(f(i,'Title')||'').toLowerCase();
+        const client=String(getClient(i)||'').toLowerCase();
+        const chantier=String(getChantier(i)||'').toLowerCase();
+        const bl=String(f(i,'N_x00b0_BL')||'').toLowerCase();
+        const fc=String(f(i,nFCKey())||'').toLowerCase();
+        const v=String(f(i,'Vendeurencharge')||'').toLowerCase();
+        if(!numBC.includes(q)&&!client.includes(q)&&!chantier.includes(q)&&!bl.includes(q)&&!fc.includes(q)&&!v.includes(q))return false;
+      }
+      if(statut!=='all'&&getStatut(i)!==statut)return false;
+      if(vendeur!=='all'&&String(f(i,'Vendeurencharge')||'')!==vendeur)return false;
+      if(fact!=='all'&&getEtatFact(i)!==fact)return false;
+      const dateRec=String(f(i,'Dateder_x00e9_ception')||'').slice(0,10);
+      if(dateFrom&&dateRec&&dateRec<dateFrom)return false;
+      if(dateTo&&dateRec&&dateRec>dateTo)return false;
+      return true;
+    }catch(e){return false;}
   });
 
   const activeFilters=[];
@@ -2361,8 +2359,8 @@ function rechercheGlobalBC(){
   if(fact!=='all')activeFilters.push(fact);
   if(dateFrom||dateTo)activeFilters.push(`${dateFrom||'…'} → ${dateTo||'…'}`);
 
-  title.textContent=`${items.length} résultat${items.length>1?'s':''} — ${activeFilters.join(' · ')}`;
-  if(countEl)countEl.textContent=`${items.length} BC${items.length>1?'s':''}`;
+  if(title)title.textContent=`${items.length} résultat${items.length!==1?'s':''} — ${activeFilters.join(' · ')}`;
+  if(countEl)countEl.textContent=`${items.length} BC${items.length!==1?'s':''}`;
 
   if(!items.length){
     body.innerHTML='<tr class="empty-row"><td colspan="11">Aucun BC trouvé — modifiez les critères</td></tr>';
@@ -2370,39 +2368,50 @@ function rechercheGlobalBC(){
   }
 
   const hl=(txt)=>{
-    if(!txt||txt==='—'||q.length<2)return txt||'—';
-    const re=new RegExp(`(${q.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')})`, 'gi');
-    return txt.replace(re,'<mark style="background:var(--amber-light);color:var(--amber);border-radius:2px;padding:0 2px">$1</mark>');
+    const t=String(txt||'');
+    if(!t||t==='—'||q.length<2)return t||'—';
+    try{
+      const re=new RegExp(`(${q.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')})`, 'gi');
+      return t.replace(re,'<mark style="background:#fff3cd;color:#856404;border-radius:2px;padding:0 2px">$1</mark>');
+    }catch(e){return t;}
   };
 
-  body.innerHTML=items.slice(0,150).map(i=>{
-    const s=getStatut(i),ef=getEtatFact(i);
-    const client=getClient(i),vendeurV=f(i,'Vendeurencharge')||'—';
-    const numBC=f(i,'Title')||`BC-${i.ID}`;
-    const chantier=getChantier(i);
-    const numBL=f(i,'N_x00b0_BL')||'—';
-    const numFC=f(i,nFCKey())||'—';
-    const dateRec=fmtDate(f(i,'Dateder_x00e9_ception'));
-    const cE=client.replace(/'/g,"\\'"),nE=numBC.replace(/'/g,"\\'");
-    return`<tr style="cursor:pointer" onclick="openBCPanel(${i.ID})">
-      <td class="ref">${hl(numBC)}</td>
-      <td class="cname">${hl(client)}</td>
-      <td style="font-size:12px;color:var(--text-secondary)">${hl(chantier)}</td>
-      <td class="mono">${hl(numBL)}</td>
-      <td class="mono">${numFC!=='—'?`<span style="color:var(--teal)">${hl(numFC)}</span>`:numFC}</td>
-      <td class="mono">${dateRec}</td>
-      <td>${hl(vendeurV)}</td>
-      <td>${bStatut(s)}</td>
-      <td>${bFact(ef)}</td>
-      <td style="text-align:center">${bDocuware(i)}</td>
-      <td onclick="event.stopPropagation()"><div class="btn-grp">
-        <button class="btn" onclick="openBCPanel(${i.ID})">🔍 Détail</button>
-        <button class="btn gr" onclick="openFacturerModal(${i.ID},'${nE}','${cE}')">💰</button>
-        <button class="btn" onclick="openTraiterModal(${i.ID},'${nE}','${cE}')">🔧</button>
-      </div></td>
-    </tr>`;
+  const rows=items.slice(0,150).map(i=>{
+    try{
+      const s=getStatut(i),ef=getEtatFact(i);
+      const client=String(getClient(i)||'—');
+      const vendeurV=String(f(i,'Vendeurencharge')||'—');
+      const numBC=String(f(i,'Title')||`BC-${i.ID}`);
+      const chantier=String(getChantier(i)||'—');
+      const numBL=String(f(i,'N_x00b0_BL')||'—');
+      const numFC=String(f(i,nFCKey())||'—');
+      const dateRec=fmtDate(f(i,'Dateder_x00e9_ception'));
+      const cE=client.replace(/'/g,"\\'"),nE=numBC.replace(/'/g,"\\'");
+      const docBadge=bDocuware(i);
+      return`<tr style="cursor:pointer" onclick="openBCPanel(${i.ID})">
+        <td class="ref">${hl(numBC)}</td>
+        <td class="cname">${hl(client)}</td>
+        <td style="font-size:12px;color:var(--text-secondary)">${hl(chantier)}</td>
+        <td class="mono">${hl(numBL)}</td>
+        <td class="mono">${numFC!=='—'?`<span style="color:var(--teal)">${hl(numFC)}</span>`:numFC}</td>
+        <td class="mono">${dateRec}</td>
+        <td>${hl(vendeurV)}</td>
+        <td>${bStatut(s)}</td>
+        <td>${bFact(ef)}</td>
+        <td style="text-align:center">${docBadge}</td>
+        <td onclick="event.stopPropagation()"><div class="btn-grp">
+          <button class="btn" onclick="openBCPanel(${i.ID})">🔍 Détail</button>
+          <button class="btn gr" onclick="openFacturerModal(${i.ID},'${nE}','${cE}')">💰</button>
+          <button class="btn" onclick="openTraiterModal(${i.ID},'${nE}','${cE}')">🔧</button>
+        </div></td>
+      </tr>`;
+    }catch(e){
+      console.warn('[BC Search row error]',i.ID,e);
+      return`<tr><td colspan="11" style="color:var(--text-muted);font-size:11px;padding:6px 13px">BC-${i.ID} — erreur affichage</td></tr>`;
+    }
   }).join('');
 
+  body.innerHTML=rows||(` <tr class="empty-row"><td colspan="11">Erreur rendu — actualisez</td></tr>`);
   if(items.length>150)body.innerHTML+=`<tr class="empty-row"><td colspan="11">... et ${items.length-150} autres — affinez les critères</td></tr>`;
 }
 
