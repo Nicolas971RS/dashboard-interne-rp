@@ -2079,9 +2079,9 @@ async function openBCPanel(id){
       <button class="pbtn grey" onclick="closePanel()">Fermer</button>
     </div>`;
 
-    document.getElementById('panel-bd').innerHTML=html;
+    document.getElementById('panel-body').innerHTML=html;
   }catch(e){
-    document.getElementById('panel-bd').innerHTML=`<div class="error-box" style="display:block">Erreur : ${e.message}</div>`;
+    document.getElementById('panel-body').innerHTML=`<div class="error-box" style="display:block">❌ ${e.message}</div>`;
     console.error('[BC Panel]',e);
   }
 }
