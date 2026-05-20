@@ -1035,7 +1035,7 @@ function bcRow(i,showAction=true){
   const dateLiv=fmtDate(f(i,'Dateder_x00e9_ception'));
   const numBL=f(i,'N_x00b0_BL')||'—';
   const numFC=f(i,nFCKey())||'—';
-  const chantier=f(i,'Chantier','Projet')||'—';
+  const chantier=f(i,projetKey())||'—';
   const cE=client.replace(/'/g,"\\'"),nE=numBC.replace(/'/g,"\\'");
   const act=showAction?`<td><div class="btn-grp">
     <button class="btn gr" onclick="openFacturerModal(${i.ID},'${nE}','${cE}')">💰 Facturer</button>
@@ -1058,7 +1058,7 @@ function renderAFacturer(){
     const numBC=f(i,'Title')||`BC-${i.ID}`;
     const bl=f(i,'N_x00b0_BL')||'—';
     const fc=f(i,nFCKey())||'—';
-    const chantier=f(i,'Chantier','Projet')||'—';
+    const chantier=f(i,projetKey())||'—';
     const dateRec=fmtDate(f(i,'Dateder_x00e9_ception'));
     const s=getStatut(i),ef=getEtatFact(i);
     const cE=client.replace(/'/g,"\\'"),nE=numBC.replace(/'/g,"\\'");
@@ -1086,7 +1086,7 @@ function renderHistorique(){
     const numBC=f(i,'Title')||`BC-${i.ID}`;
     const numBL=f(i,'N_x00b0_BL')||'—';
     const numFC=f(i,nFCKey())||'—';
-    const chantier=f(i,'Chantier','Projet')||'—';
+    const chantier=f(i,projetKey())||'—';
     const dateLiv=f(i,'DateLivraisonpr_x00e9_vue');
     const late=daysLate(dateLiv);
     const urg=urgFromDays(late>0?late:0);
@@ -1343,7 +1343,7 @@ function exportDevisCSV(){
   exportCSV(items,[
     {label:'N° Devis', fn:i=>f(i,'Num_x00e9_ro_Devis','Numero_Devis','Title')||`DEV-${i.ID}`},
     {label:'Client', fn:i=>f(i,'Client')||''},
-    {label:'Chantier', fn:i=>f(i,'Chantier','Projet')||''},
+    {label:'Chantier', fn:i=>f(i,projetKey())||''},
     {label:'Date', fn:i=>fmtDate(f(i,'Date_Devis'))},
     {label:'Vendeur', fn:i=>f(i,'Vendeur_Assign_x00e9_')||''},
     {label:'Statut', fn:i=>f(i,'Statut')||''},
@@ -1376,7 +1376,7 @@ function exportMatinDevis(){
   exportCSV(getMatinDevisNouvelle(),[
     {label:'N° Devis', fn:i=>f(i,'Num_x00e9_ro_Devis','Numero_Devis','Title')||`DEV-${i.ID}`},
     {label:'Client', fn:i=>f(i,'Client')||''},
-    {label:'Chantier', fn:i=>f(i,'Chantier','Projet')||''},
+    {label:'Chantier', fn:i=>f(i,projetKey())||''},
     {label:'Date', fn:i=>fmtDate(f(i,'Date_Devis'))},
     {label:'Vendeur assigné', fn:i=>f(i,'Vendeur_Assign_x00e9_')||''},
   ], `devis_nouvelle_${new Date().toISOString().slice(0,10)}.csv`);
@@ -1456,7 +1456,7 @@ function renderAll(){
     const client=getClient(i),numBC=f(i,'Title')||`BC-${i.ID}`;
     const bl=f(i,'N_x00b0_BL')||'—',dateRec=fmtDate(f(i,'Dateder_x00e9_ception'));
     const vendeur=f(i,'Vendeurencharge')||'—';
-    const chantier=f(i,'Chantier','Projet')||'—';
+    const chantier=f(i,projetKey())||'—';
     const cE=client.replace(/'/g,"\\'"),nE=numBC.replace(/'/g,"\\'");
     return`<tr class="rr"><td class="ref">${numBC}</td><td class="cname">${client}</td><td style="font-size:12px;color:var(--text-secondary)">${chantier}</td><td class="mono">${bl}</td><td class="mono">${dateRec}</td><td>${vendeur}</td><td>${bStatut(getStatut(i))}</td><td>${bFact(getEtatFact(i))}</td><td><div class="btn-grp">
       <button class="btn gr" onclick="openFacturerModal(${i.ID},'${nE}','${cE}')">💰 Facturer</button>
@@ -1471,7 +1471,7 @@ function renderAll(){
     const late=daysLate(dateLiv);
     const urg=urgFromDays(late);
     const vendeur=f(i,'Vendeurencharge')||'—';
-    const chantier=f(i,'Chantier','Projet')||'—';
+    const chantier=f(i,projetKey())||'—';
     const lignes=getStatut(i)==='Partiellement livré'?getLignesForBC(i.ID):[];
     const cE=client.replace(/'/g,"\\'"),nE=numBC.replace(/'/g,"\\'");
     return`<tr class="${urg.row}"><td><span class="urg ${urg.cls}">${urg.lbl}</span></td><td class="ref">${numBC}</td><td class="cname">${client}</td><td style="font-size:12px;color:var(--text-secondary)">${chantier}</td><td class="mono" style="color:var(--red)">${fmtDate(dateLiv)}</td><td>${vendeur}</td><td>${bStatut(getStatut(i))}</td><td>${ralBlock(lignes)}</td><td><div class="btn-grp">
@@ -1483,7 +1483,7 @@ function renderAll(){
   const devisNouv_items=getMatinDevisNouvelle();
   const devisHtml=devisNouv_items.length?devisNouv_items.map(i=>{
     const nd=f(i,'Num_x00e9_ro_Devis','Numero_Devis','Title')||`DEV-${i.ID}`;
-    return`<tr class="rr" style="cursor:pointer" onclick="openDevisPanel(${i.ID})"><td class="ref">${nd}</td><td class="cname">${f(i,'Client')||'—'}</td><td>${f(i,'Chantier','Projet')||'—'}</td><td class="mono">${fmtDate(f(i,'Date_Devis'))}</td><td>${f(i,'Vendeur_Assign_x00e9_')||'<span style="color:var(--red);font-size:10.5px;font-weight:700;">⚠️ Non assigné</span>'}</td><td onclick="event.stopPropagation()">
+    return`<tr class="rr" style="cursor:pointer" onclick="openDevisPanel(${i.ID})"><td class="ref">${nd}</td><td class="cname">${f(i,'Client')||'—'}</td><td>${f(i,projetKey())||'—'}</td><td class="mono">${fmtDate(f(i,'Date_Devis'))}</td><td>${f(i,'Vendeur_Assign_x00e9_')||'<span style="color:var(--red);font-size:10.5px;font-weight:700;">⚠️ Non assigné</span>'}</td><td onclick="event.stopPropagation()">
       <button class="btn blue" onclick="passerEnCours(${i.ID})">📋 Prendre en charge</button>
     </td></tr>`;
   }).join(''):'<tr class="empty-row"><td colspan="6">✅ Aucun devis en attente de prise en charge</td></tr>';
@@ -1519,7 +1519,7 @@ function renderSuiviEnCours(){renderHistorique();
     const s=getStatut(i),ef=getEtatFact(i);
     const client=getClient(i),vendeur=f(i,'Vendeurencharge')||'—';
     const numBC=f(i,'Title')||`BC-${i.ID}`;
-    const chantier=f(i,'Chantier','Projet')||'—';
+    const chantier=f(i,projetKey())||'—';
     const dateLiv=f(i,'DateLivraisonpr_x00e9_vue');
     const late=daysLate(dateLiv);
     const urg=urgFromDays(late>0?late:0);
@@ -1607,7 +1607,7 @@ function renderDevisTable(){
   if(q)items=items.filter(i=>{
     const nd=f(i,'Num_x00e9_ro_Devis','Numero_Devis','Title')||`DEV-${i.ID}`;
     const client=f(i,'Client')||'';
-    const chantier=f(i,'Chantier','Projet')||'';
+    const chantier=f(i,projetKey())||'';
     const vendeur=f(i,'Vendeur_Assign_x00e9_')||'';
     return [nd,client,chantier,vendeur].some(v=>v.toLowerCase().includes(q));
   });
@@ -1632,7 +1632,7 @@ function renderDevisTable(){
     return`<tr class="${rowCls}" style="${rowStyle}" onclick="openDevisPanel(${i.ID})">
       <td class="ref">${nd}</td>
       <td class="cname">${f(i,'Client')||'—'}</td>
-      <td>${f(i,'Chantier','Projet')||'—'}</td>
+      <td>${f(i,projetKey())||'—'}</td>
       <td class="mono">${fmtDate(f(i,'Date_Devis'))}</td>
       <td class="mono">${f(i,'Devis_RS')||'—'}</td>
       <td>${f(i,'Vendeur_Assign_x00e9_')||'—'}</td>
@@ -1682,6 +1682,8 @@ function detectSPKey(candidates,fallback){
 function etatFactKey(){return detectSPKey(['OData__x00c9_tatfacturation','_x00c9_tatfacturation','OData__x00C9_tatfacturation','_x00C9_tatfacturation'],'OData__x00c9_tatfacturation');}
 // N° FC — commence par N (pas de préfixe OData__)
 function nFCKey(){return detectSPKey(['N_x00b0_FC','N_x00b0__FC'],'N_x00b0_FC');}
+// Chantier/Projet — nom interne variable selon création SharePoint
+function projetKey(){return detectSPKey(['Projet','OData__Projet','Chantier','OData__Chantier'],'Projet');}
 
 // ── PATCH REST SharePoint ──
 async function spPatch(site,list,id,body){
@@ -2026,7 +2028,7 @@ async function openDevisPanel(id){
         <div class="pf"><div class="pf-lbl">Téléphone</div><div class="pf-val mono">${f(item,'Client_T_x00e9_l_x00e9_phone')||'—'}</div></div>
       </div>
       <div class="pf"><div class="pf-lbl">Email</div><div class="pf-val mono">${f(item,'Client_Email')||'—'}</div></div>
-      <div class="pf"><div class="pf-lbl">Chantier</div><div class="pf-val">${f(item,'Chantier','Projet')||'—'}</div></div>
+      <div class="pf"><div class="pf-lbl">Chantier</div><div class="pf-val">${f(item,projetKey())||'—'}</div></div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:0">
         <div class="pf"><div class="pf-lbl">Date émission</div><div class="pf-val">${fmtDate(f(item,'Date__x00c9_mission_Devis'))}</div></div>
         <div class="pf"><div class="pf-lbl">Devis RS</div><div class="pf-val">${f(item,'Devis_RS')||'—'}</div></div>
