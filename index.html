@@ -382,10 +382,7 @@
     <div id="tab-suivi" class="section-bloc">
       <div class="page-header">
         <div><h1>Suivi Bons de Commande</h1><div class="sub">/sites/RseauxPlus · Suivi_BC + Lignes_BC</div></div>
-        <div style="display:flex;gap:8px">
-          <button class="btn-refresh" onclick="loadAll()">🔄 Actualiser</button>
-          <button class="btn" style="background:#f59e0b;color:white;border-color:#f59e0b;font-size:11px" onclick="debugSuiviFields()">🔍 Debug champs</button>
-        </div>
+        <button class="btn-refresh" onclick="loadAll()">🔄 Actualiser</button>
       </div>
 
       <!-- BANDEAU EN HAUT -->
@@ -1696,15 +1693,7 @@ function getChantier(i){
   return(v&&typeof v==='string'&&v.trim())?v.trim():'—';
 }
 function projetKey(){return detectSPKey(['Projet','OData__Projet','Chantier','OData__Chantier'],'Projet');}
-function debugSuiviFields(){
-  if(!DATA.suivi.length){alert('Aucune donnée Suivi_BC chargée. Actualisez d\'abord.');return;}
-  const item=DATA.suivi[0];
-  const keys=Object.keys(item).filter(k=>!k.startsWith('odata')).sort();
-  const lines=keys.map(k=>`${k}: ${JSON.stringify(item[k])}`).join('\n');
-  // Cherche les clés qui contiennent "proj" ou "chant"
-  const suspects=keys.filter(k=>k.toLowerCase().includes('proj')||k.toLowerCase().includes('chant'));
-  alert(`BC: ${item.Title||item.ID}\n\n🎯 SUSPECTS (proj/chant):\n${suspects.length?suspects.map(k=>`  ${k} = ${item[k]}`).join('\n'):'(aucun trouvé)'}\n\n📋 TOUS LES CHAMPS:\n${lines}`);
-}
+function debugSuiviFields(){}
 
 // ── PATCH REST SharePoint ──
 async function spPatch(site,list,id,body){
