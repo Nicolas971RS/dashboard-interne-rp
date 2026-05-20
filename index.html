@@ -526,7 +526,10 @@
     <div id="tab-devis" class="section-bloc">
       <div class="page-header">
         <div><h1>Demandes de Devis</h1><div class="sub">/sites/BondeCommande · Demandes_Devis</div></div>
-        <button class="btn-refresh" onclick="loadAll()">🔄 Actualiser</button>
+        <div style="display:flex;gap:8px">
+          <button class="btn-refresh" style="background:var(--teal-mid)" onclick="openAjoutDevisModal()">➕ Ajouter devis</button>
+          <button class="btn-refresh" onclick="loadAll()">🔄 Actualiser</button>
+        </div>
       </div>
       <div class="kpi-row c4">
         <div class="kc b"><div class="kl">📄 En cours de traitement</div><div class="kv" id="kpi-devis-cours">—</div><div class="ks">Action requise</div></div>
@@ -1728,6 +1731,161 @@ function getChantier(i){
 function projetKey(){return detectSPKey(['Projet','OData__Projet','Chantier','OData__Chantier'],'Projet');}
 function debugSuiviFields(){}
 
+// ═══════════════════════════════════════════════════════════
+// ═══ AJOUT DEVIS MANUEL ═══
+// ═══════════════════════════════════════════════════════════
+let _adLigneCount=0;
+
+function openAjoutDevisModal(){
+  _adLigneCount=0;
+  // Reset form
+  ['ad-devis-rs','ad-date-emission','ad-client','ad-chantier','ad-contact',
+   'ad-telephone','ad-email','ad-commentaires','ad-notes'].forEach(id=>{
+    const el=document.getElementById(id);
+    if(el)el.value=id==='ad-vendeur'?'Fabrice':(id==='ad-date-emission'?new Date().toISOString().split('T')[0]:'');
+  });
+  document.getElementById('ad-vendeur').value='Fabrice';
+  document.getElementById('ad-date-emission').value=new Date().toISOString().split('T')[0];
+  document.getElementById('ad-pdf').value='';
+  document.getElementById('ad-lignes-container').innerHTML='';
+  document.getElementById('ad-msg').className='modal-msg';
+  document.getElementById('ad-msg').textContent='';
+  document.getElementById('ad-submit-btn').disabled=false;
+  // Ajouter une ligne vide par défaut
+  ajoutDevisAddLigne();
+  document.getElementById('modal-ajout-devis').classList.add('open');
+}
+
+function closeAjoutDevisModal(){
+  document.getElementById('modal-ajout-devis').classList.remove('open');
+}
+
+function ajoutDevisAddLigne(){
+  _adLigneCount++;
+  const n=_adLigneCount;
+  const container=document.getElementById('ad-lignes-container');
+  const div=document.createElement('div');
+  div.id=`ad-ligne-${n}`;
+  div.style.cssText='display:grid;grid-template-columns:130px 1fr 80px 28px;gap:6px;margin-bottom:6px;align-items:end';
+  div.innerHTML=`
+    <div class="mf">
+      ${n===1?'<label>Référence</label>':''}
+      <input type="text" id="ad-ref-${n}" placeholder="Réf. article" style="font-family:var(--font-mono);font-size:12px">
+    </div>
+    <div class="mf">
+      ${n===1?'<label>Désignation</label>':''}
+      <input type="text" id="ad-des-${n}" placeholder="Description du produit">
+    </div>
+    <div class="mf">
+      ${n===1?'<label>Qté</label>':''}
+      <input type="number" id="ad-qty-${n}" placeholder="1" min="0" style="text-align:right">
+    </div>
+    <button class="btn w" style="height:32px;padding:0 8px;font-size:14px;margin-top:${n===1?'18':'0'}px" onclick="ajoutDevisRemoveLigne(${n})" title="Supprimer">✕</button>`;
+  container.appendChild(div);
+}
+
+function ajoutDevisRemoveLigne(n){
+  const el=document.getElementById(`ad-ligne-${n}`);
+  if(el)el.remove();
+}
+
+function adMsg(txt,type){
+  const el=document.getElementById('ad-msg');
+  el.textContent=txt;
+  el.className='modal-msg '+(type==='ok'?'ok':'ko');
+}
+
+async function submitAjoutDevis(){
+  const btn=document.getElementById('ad-submit-btn');
+  // ── Validation ──
+  const devisRS=document.getElementById('ad-devis-rs').value.trim();
+  const client=document.getElementById('ad-client').value.trim();
+  const dateEmission=document.getElementById('ad-date-emission').value;
+  if(!devisRS){adMsg('Le N° de devis Fabrice est obligatoire.','ko');document.getElementById('ad-devis-rs').focus();return;}
+  if(!client){adMsg('Le client est obligatoire.','ko');document.getElementById('ad-client').focus();return;}
+
+  btn.disabled=true;
+  btn.textContent='⏳ Enregistrement...';
+
+  try{
+    // ── 1. Créer l'item dans Demandes_Devis ──
+    const body={
+      Title:`DEVIS-${devisRS}-${client}`.substring(0,255),
+      Devis_RS:devisRS,
+      Client:client,
+      Client_Contact:document.getElementById('ad-contact').value.trim()||null,
+      Client_Email:document.getElementById('ad-email').value.trim()||null,
+      Client_T_x00e9_l_x00e9_phone:document.getElementById('ad-telephone').value.trim()||null,
+      Chantier:document.getElementById('ad-chantier').value.trim()||null,
+      Vendeur_Assign_x00e9_:document.getElementById('ad-vendeur').value.trim()||'Fabrice',
+      Statut:'Devis envoyé',
+      Commentaires_Client:document.getElementById('ad-commentaires').value.trim()||null,
+      Notes_Internes:document.getElementById('ad-notes').value.trim()||null,
+    };
+    if(dateEmission)body['Date_x00c9_mission_Devis']=new Date(dateEmission).toISOString();
+
+    btn.textContent='⏳ Création devis...';
+    const created=await spPost('sites/BondeCommande','Demandes_Devis',body);
+    const newId=created.ID||created.id;
+    if(!newId)throw new Error('ID non retourné par SharePoint');
+
+    // Mettre à jour Numéro_Devis avec DEV-{ID}
+    await spPatch('sites/BondeCommande','Demandes_Devis',newId,{
+      Num_x00e9_ro_Devis:`DEV-${newId}`
+    });
+
+    // ── 2. Créer les lignes articles ──
+    btn.textContent='⏳ Création lignes...';
+    const lignePromises=[];
+    for(let n=1;n<=_adLigneCount;n++){
+      const refEl=document.getElementById(`ad-ref-${n}`);
+      const desEl=document.getElementById(`ad-des-${n}`);
+      const qtyEl=document.getElementById(`ad-qty-${n}`);
+      if(!refEl)continue; // ligne supprimée
+      const ref=refEl.value.trim();
+      const des=desEl.value.trim();
+      const qty=parseFloat(qtyEl.value)||0;
+      if(!ref&&!des)continue; // ligne vide — ignorer
+      lignePromises.push(spPost('sites/BondeCommande','Lignes_Demandes_Devis',{
+        Title:`DEV-${newId}-L${n}`,
+        Demande_DevisId:newId,
+        Num_x00e9_ro_Devis_Ref:`DEV-${newId}`,
+        Produit_R_x00e9_f_x00e9_rence:ref||null,
+        Produit_D_x00e9_signation:des||null,
+        Quantit_x00e9_:qty||null,
+        Type_Ligne:'Produit'
+      }));
+    }
+    if(lignePromises.length)await Promise.all(lignePromises);
+
+    // ── 3. Upload PDF ──
+    const pdfInput=document.getElementById('ad-pdf');
+    if(pdfInput.files&&pdfInput.files[0]){
+      btn.textContent='⏳ Upload PDF...';
+      const file=pdfInput.files[0];
+      const buf=await file.arrayBuffer();
+      await spAddAttachment('sites/BondeCommande','Demandes_Devis',newId,file.name,buf);
+    }
+
+    // ── 4. Succès ──
+    adMsg(`✅ Devis DEV-${newId} créé avec succès !`,'ok');
+    btn.textContent='✅ Enregistré';
+
+    // Refresh data et fermer après 1.5s
+    setTimeout(async()=>{
+      closeAjoutDevisModal();
+      await loadAll();
+      showTab('devis',document.querySelector('.tabs .tab[onclick*="devis"]'));
+    },1500);
+
+  }catch(e){
+    console.error('[Ajout Devis]',e);
+    adMsg(`Erreur : ${e.message}`,'ko');
+    btn.disabled=false;
+    btn.textContent='💾 Enregistrer le devis';
+  }
+}
+
 // ── PATCH REST SharePoint ──
 async function spPatch(site,list,id,body){
   const url=`${C.spRoot}/${site}/_api/web/lists/getbytitle('${list}')/items(${id})`;
@@ -2475,5 +2633,101 @@ async function init(){
 }
 init();
 </script>
+<!-- ══ MODAL AJOUT DEVIS MANUEL ══ -->
+<div class="modal-ov" id="modal-ajout-devis">
+  <div class="modal-box" style="width:680px;max-width:96vw">
+    <div class="modal-hd">
+      <span class="modal-hd-t">➕ Saisie manuelle devis — Réseaux Plus</span>
+      <button class="modal-x" onclick="closeAjoutDevisModal()">✕</button>
+    </div>
+    <div class="modal-bd" style="gap:10px">
+
+      <!-- Ligne 1 — N° Devis RS + Date émission -->
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+        <div class="mf">
+          <label>N° Devis Fabrice (Devis_RS) *</label>
+          <input type="text" id="ad-devis-rs" placeholder="ex: 716351">
+        </div>
+        <div class="mf">
+          <label>Date d'émission *</label>
+          <input type="date" id="ad-date-emission">
+        </div>
+      </div>
+
+      <!-- Ligne 2 — Client + Chantier -->
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+        <div class="mf">
+          <label>Client *</label>
+          <input type="text" id="ad-client" placeholder="Nom de l'entreprise cliente">
+        </div>
+        <div class="mf">
+          <label>Chantier</label>
+          <input type="text" id="ad-chantier" placeholder="ex: CCMG ZAE GRAND ANSE">
+        </div>
+      </div>
+
+      <!-- Ligne 3 — Contact + Téléphone -->
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+        <div class="mf">
+          <label>Contact</label>
+          <input type="text" id="ad-contact" placeholder="Nom du contact">
+        </div>
+        <div class="mf">
+          <label>Téléphone</label>
+          <input type="tel" id="ad-telephone" placeholder="0690 00 00 00">
+        </div>
+      </div>
+
+      <!-- Ligne 4 — Email + Vendeur -->
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+        <div class="mf">
+          <label>Email client</label>
+          <input type="email" id="ad-email" placeholder="client@exemple.com">
+        </div>
+        <div class="mf">
+          <label>Vendeur assigné</label>
+          <input type="text" id="ad-vendeur" value="Fabrice" placeholder="Fabrice">
+        </div>
+      </div>
+
+      <!-- Commentaires + Notes -->
+      <div class="mf">
+        <label>Commentaires client</label>
+        <textarea id="ad-commentaires" rows="2" placeholder="Remarques du client..."></textarea>
+      </div>
+      <div class="mf">
+        <label>Notes internes</label>
+        <textarea id="ad-notes" rows="2" placeholder="Notes internes..."></textarea>
+      </div>
+
+      <!-- Lignes articles -->
+      <div style="border-top:1px solid var(--border-light);padding-top:10px;margin-top:2px">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
+          <span style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--text-muted)">📦 Lignes articles</span>
+          <button class="btn teal" style="height:26px;font-size:11px" onclick="ajoutDevisAddLigne()">+ Ajouter ligne</button>
+        </div>
+        <div id="ad-lignes-container">
+          <!-- Lignes générées dynamiquement -->
+        </div>
+      </div>
+
+      <!-- PDF -->
+      <div style="border-top:1px solid var(--border-light);padding-top:10px;margin-top:2px">
+        <div class="mf">
+          <label>📎 PDF du devis *</label>
+          <input type="file" id="ad-pdf" accept=".pdf,.PDF" style="border:1px dashed var(--border);border-radius:var(--radius-sm);padding:8px;background:var(--grey-xlight);cursor:pointer;font-size:12px">
+          <div class="hint">Déposez le PDF du devis émis par Fabrice</div>
+        </div>
+      </div>
+
+      <div class="modal-msg" id="ad-msg"></div>
+    </div>
+    <div class="modal-ft">
+      <button class="mbtn cancel" onclick="closeAjoutDevisModal()">Annuler</button>
+      <button class="mbtn submit" id="ad-submit-btn" onclick="submitAjoutDevis()">💾 Enregistrer le devis</button>
+    </div>
+  </div>
+</div>
+
 </body>
 </html>
