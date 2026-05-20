@@ -132,6 +132,11 @@
   .b.dbr{background:var(--orange-light);color:var(--orange);}       .b.dbr::before{background:var(--orange);}
   .b.dcours{background:var(--blue-light);color:#0d47a1;}            .b.dcours::before{background:var(--blue);}
   .b.denvoye{background:var(--teal-light);color:var(--teal);}       .b.denvoye::before{background:var(--teal);}
+  .b.daccepte{background:var(--green-light);color:var(--green);}    .b.daccepte::before{background:var(--green);}
+  .b.dconverti{background:#e0f7fa;color:#006064;}                   .b.dconverti::before{background:#006064;}
+  .b.dexpire{background:#f5f5f5;color:#757575;}                     .b.dexpire::before{background:#9e9e9e;}
+  .b.drefuse{background:var(--red-light);color:var(--red);}         .b.drefuse::before{background:var(--red);}
+  .b.darchive{background:#eceff1;color:#546e7a;}                    .b.darchive::before{background:#78909c;}
   .ral-block{background:#f8fafc;border-radius:6px;padding:5px 8px;}
   .ral-line{display:flex;align-items:center;gap:7px;padding:3px 0;border-bottom:1px solid #eef0f3;font-size:11px;}
   .ral-line:last-child{border-bottom:none;}
@@ -454,7 +459,7 @@
         <div class="fb">
           <input class="fs" type="text" id="search-devis" placeholder="🔍 Recherche libre..." oninput="renderDevisTable()" style="min-width:160px">
           <select class="fs" id="filter-vendeur-devis" onchange="renderDevisTable()"><option value="all">Tous les vendeurs</option></select>
-          <select class="fs" id="filter-statut-devis" onchange="renderDevisTable()"><option value="all">Tous les statuts</option><option value="Nouvelle">🆕 Nouvelle</option><option value="En cours">En cours</option><option value="Devis envoyé">Devis envoyé</option></select>
+          <select class="fs" id="filter-statut-devis" onchange="renderDevisTable()"><option value="all">Tous les statuts</option><option value="Nouvelle">🆕 Nouvelle</option><option value="En cours">🔵 En cours</option><option value="Devis envoyé">✉️ Devis envoyé</option><option value="Accepté">✅ Accepté</option><option value="Converti en BC">🔄 Converti en BC</option><option value="Expiré">⏰ Expiré</option><option value="Refusé">❌ Refusé</option><option value="Archivé">📁 Archivé</option></select>
           <button class="btn" onclick="exportDevisCSV()">⬇ CSV</button>
         </div>
       </div>
@@ -582,7 +587,20 @@ function bFact(s){
   return `<span class="b ${m[s]||'nf'}">${s||'Non Facturé'}</span>`;
 }
 function bDBC(s){return s==='Relancé'||s==='Litigieux'?`<span class="b dbr">${s}</span>`:`<span class="b dba">${s||'En attente BC'}</span>`;}
-function bDevis(s){return s==='Devis envoyé'?`<span class="b denvoye">Devis envoyé</span>`:`<span class="b dcours">${s||'En cours'}</span>`;}
+function bDevis(s){
+  const m={
+    'Nouvelle':      'dcours',
+    'En cours':      'dcours',
+    'Devis envoyé':  'denvoye',
+    'Accepté':       'daccepte',
+    'Converti en BC':'dconverti',
+    'Expiré':        'dexpire',
+    'Refusé':        'drefuse',
+    'Archivé':       'darchive',
+  };
+  const cls=m[s]||'dcours';
+  return`<span class="b ${cls}">${s||'—'}</span>`;
+}
 
 // ═══ LOAD ═══
 async function loadAll(){
@@ -1094,7 +1112,7 @@ function renderAll(){
   document.getElementById('kpi-devis-matin').textContent=devisNouv;
   document.getElementById('kpi-devis-cours').textContent=dc;
   document.getElementById('kpi-devis-envoye').textContent=DATA.devis.filter(i=>f(i,'Statut')==='Devis envoyé'&&new Date(f(i,'Date_Devis')||'')>=mois).length;
-  document.getElementById('kpi-devis-stale').textContent=DATA.devis.filter(i=>daysSince(f(i,'Modified'))>7&&(f(i,'Statut')||'').startsWith('En cours')).length;
+  document.getElementById('kpi-devis-stale').textContent=DATA.devis.filter(i=>daysSince(f(i,'Modified'))>7&&['Nouvelle','En cours'].includes(f(i,'Statut'))).length;
   document.getElementById('kpi-devis-total').textContent=DATA.devis.length;
   // KPI matin
   const traiter=getMatinTraiter();
@@ -1259,17 +1277,25 @@ function renderDevisTable(){
     const vendeur=f(i,'Vendeur_Assign_x00e9_')||'';
     return [nd,client,chantier,vendeur].some(v=>v.toLowerCase().includes(q));
   });
+  const DEVIS_TERMINAL=['Accepté','Converti en BC','Expiré','Refusé','Archivé'];
   const b=document.getElementById('devis-body');
   b.innerHTML=items.length?items.map(i=>{
     const st=f(i,'Statut')||'—',mod=f(i,'Modified');
-    const stale=mod&&daysSince(mod)>7&&st==='En cours';
+    const isTerminal=DEVIS_TERMINAL.includes(st);
+    const isActive=['Nouvelle','En cours'].includes(st);
+    const stale=mod&&daysSince(mod)>7&&isActive;
     const isNew=st==='Nouvelle';
     const nd=f(i,'Num_x00e9_ro_Devis','Numero_Devis','Title')||`DEV-${i.ID}`;
-    // Boutons contextuels selon statut du devis
+    // Row color: stale=amber, nouvelle=green, terminal=muted, sent=normal
+    let rowCls='';
+    if(stale)rowCls='ru';
+    else if(isNew)rowCls='rr';
+    // Boutons contextuels — aucun sur statut terminal
     let btns='';
     if(isNew)btns=`<button class="btn blue" onclick="event.stopPropagation();passerEnCours(${i.ID})">📋 Prendre en charge</button>`;
     else if(st==='En cours')btns=`<button class="btn teal" onclick="event.stopPropagation();envoyerDevisFlow(${i.ID})">📨 Envoyer</button>`;
-    return`<tr class="${stale?'ru':isNew?'rr':''}" style="cursor:pointer" onclick="openDevisPanel(${i.ID})">
+    const rowStyle=isTerminal?'cursor:pointer;opacity:.65':'cursor:pointer';
+    return`<tr class="${rowCls}" style="${rowStyle}" onclick="openDevisPanel(${i.ID})">
       <td class="ref">${nd}</td>
       <td class="cname">${f(i,'Client')||'—'}</td>
       <td>${f(i,'Chantier')||'—'}</td>
@@ -1655,7 +1681,7 @@ async function openDevisPanel(id){
       <div class="pf"><div class="pf-lbl">Changer le statut</div>
         <div style="display:flex;gap:6px;align-items:center;margin-top:2px">
           <select id="panel-statut-devis" style="flex:1;border:1px solid var(--border);border-radius:5px;padding:5px 8px;font-size:12px;font-family:inherit">
-            ${['Nouvelle','En cours','Devis envoyé','Converti en BC','Expiré','Refusé'].map(s=>`<option value="${s}"${s===st?' selected':''}>${s}</option>`).join('')}
+            ${['Nouvelle','En cours','Devis envoyé','Accepté','Converti en BC','Expiré','Refusé','Archivé'].map(s=>`<option value="${s}"${s===st?' selected':''}>${s}</option>`).join('')}
           </select>
           <button class="pbtn blue" style="padding:5px 10px;font-size:11px" onclick="changerStatutDevis(${id})">💾 Changer</button>
         </div>
