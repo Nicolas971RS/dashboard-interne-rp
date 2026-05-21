@@ -3198,15 +3198,22 @@ async function openDevisPanel(id){
     let html=`
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:0">
         <div class="pf"><div class="pf-lbl">N° Devis</div><div class="pf-val mono">${nd}</div></div>
-        <div class="pf"><div class="pf-lbl">Statut actuel</div><div class="pf-val">${bDevis(st)}</div></div>
       </div>
-      <div class="pf"><div class="pf-lbl">Changer le statut</div>
-        <div style="display:flex;gap:6px;align-items:center;margin-top:2px">
-          <select id="panel-statut-devis" style="flex:1;border:1px solid var(--border);border-radius:5px;padding:5px 8px;font-size:12px;font-family:inherit">
+
+      <!-- BLOC STATUT — clair et visible -->
+      <div style="background:var(--grey-xlight);border:1px solid var(--border);border-radius:var(--radius);padding:12px 14px;margin-bottom:10px">
+        <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--text-muted);margin-bottom:8px">📋 Statut du devis</div>
+        <div style="display:flex;align-items:center;gap:6px;margin-bottom:8px">
+          <span style="font-size:11px;color:var(--text-secondary)">Actuel :</span>
+          ${bDevis(st)}
+        </div>
+        <div style="display:flex;gap:8px;align-items:center">
+          <select id="panel-statut-devis" style="flex:1;border:2px solid var(--teal-mid);border-radius:var(--radius-sm);padding:7px 10px;font-size:13px;font-family:var(--font-body);outline:none;background:white;cursor:pointer">
             ${['Nouvelle','En cours','Devis envoyé','Accepté','Converti en BC','Expiré','Refusé','Archivé'].map(s=>`<option value="${s}"${s===st?' selected':''}>${s}</option>`).join('')}
           </select>
-          <button class="pbtn blue" style="padding:5px 10px;font-size:11px" onclick="changerStatutDevis(${id})">💾 Changer</button>
+          <button id="btn-changer-statut-devis" class="pbtn blue" style="padding:9px 16px;font-size:13px;font-weight:700;white-space:nowrap;background:var(--teal-mid)" onclick="changerStatutDevis(${id})">💾 Enregistrer</button>
         </div>
+        <div id="devis-statut-msg" style="font-size:11.5px;margin-top:6px;min-height:16px"></div>
       </div>
       <div class="pf"><div class="pf-lbl">Client</div><div class="pf-val">${f(item,'Client')||'—'}</div></div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:0">
@@ -3314,19 +3321,23 @@ async function envoyerDevisFlow(id){
 // ── Changer statut devis depuis panneau ──
 async function changerStatutDevis(id){
   const sel=document.getElementById('panel-statut-devis');
-  if(!sel||!sel.value){return;}
-  const btn=sel.nextElementSibling;
-  if(btn){btn.disabled=true;btn.textContent='⏳...';}
+  const btn=document.getElementById('btn-changer-statut-devis');
+  const msg=document.getElementById('devis-statut-msg');
+  if(!sel||!sel.value)return;
+  const newStatut=sel.value;
+  if(btn){btn.disabled=true;btn.textContent='⏳ Enregistrement...';}
+  if(msg){msg.innerHTML='';}
   try{
-    await spPatch('sites/BondeCommande','Demandes_Devis',id,{'Statut':sel.value});
+    await spPatch('sites/BondeCommande','Demandes_Devis',id,{'Statut':newStatut});
     const idx=DATA.devis.findIndex(i=>i.ID===id);
-    if(idx!==-1)DATA.devis[idx]['Statut']=sel.value;
-    if(btn){btn.disabled=false;btn.textContent='✅ Mis à jour';}
+    if(idx!==-1)DATA.devis[idx]['Statut']=newStatut;
+    if(btn){btn.disabled=false;btn.textContent='💾 Enregistrer';}
+    if(msg){msg.innerHTML=`<span style="color:var(--green);font-weight:600">✅ Statut mis à jour : ${newStatut}</span>`;}
     renderDevisTable();
-    setTimeout(()=>loadAll(),2500);
+    setTimeout(()=>{if(msg)msg.innerHTML='';},3000);
   }catch(e){
-    if(btn){btn.disabled=false;btn.textContent='💾 Changer';}
-    alert('Erreur : '+e.message);
+    if(btn){btn.disabled=false;btn.textContent='💾 Enregistrer';}
+    if(msg){msg.innerHTML=`<span style="color:var(--red)">❌ Erreur : ${e.message}</span>`;}
   }
 }
 
