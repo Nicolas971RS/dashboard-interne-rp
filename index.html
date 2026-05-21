@@ -423,9 +423,9 @@
           </select>
           <div style="display:flex;align-items:center;gap:5px">
             <span style="font-size:11px;color:rgba(255,255,255,.6)">Du</span>
-            <input type="date" id="sg-date-from" onchange="rechercheGlobalBC()" class="fs" style="height:30px">
+            <input type="text" id="sg-date-from" onchange="rechercheGlobalBC()" class="fs" placeholder="jj/mm/aaaa" maxlength="10" style="width:100px;height:30px" oninput="autoFormatDate(this)">
             <span style="font-size:11px;color:rgba(255,255,255,.6)">au</span>
-            <input type="date" id="sg-date-to" onchange="rechercheGlobalBC()" class="fs" style="height:30px">
+            <input type="text" id="sg-date-to" onchange="rechercheGlobalBC()" class="fs" placeholder="jj/mm/aaaa" maxlength="10" style="width:100px;height:30px" oninput="autoFormatDate(this)">
           </div>
           <span id="sg-count" style="font-size:11px;color:rgba(255,255,255,.5)"></span>
         </div>
@@ -504,7 +504,8 @@
                 <th style="text-align:center" title="Entièrement facturé">💰 Facturé</th>
                 <th style="text-align:center" title="Statut = Terminé">📌 Terminé</th>
                 <th style="text-align:center" title="Envoyé à Docuware">📦 Docuware</th>
-                <th>Vendeur</th><th>Actions</th>
+                <th style="text-align:center" title="Vendeur assigné">👤 Vendeur</th>
+                <th>Actions</th>
               </tr>
             </thead>
             <tbody id="checklist-body"><tr class="empty-row"><td colspan="11">Chargement...</td></tr></tbody>
@@ -2479,6 +2480,23 @@ function buildSGVendeurs(){
   });
 }
 
+// ── Format date automatique dd/mm/yyyy ──
+function autoFormatDate(el){
+  let v=el.value.replace(/[^0-9]/g,'');
+  if(v.length>2)v=v.slice(0,2)+'/'+v.slice(2);
+  if(v.length>5)v=v.slice(0,5)+'/'+v.slice(5);
+  el.value=v.slice(0,10);
+  if(v.replace(/\//g,'').length===8)rechercheGlobalBC();
+}
+// Convertir dd/mm/yyyy → yyyy-mm-dd pour comparaison
+function parseDate(s){
+  if(!s)return'';
+  if(s.includes('-'))return s.slice(0,10); // déjà ISO
+  const [d,m,y]=s.split('/');
+  if(!d||!m||!y||y.length<4)return'';
+  return`${y}-${m.padStart(2,'0')}-${d.padStart(2,'0')}`;
+}
+
 function clearRechercheGlobalBC(){
   ['search-global-bc','sg-date-from','sg-date-to'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});
   ['sg-statut','sg-vendeur','sg-fact'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='all';});
@@ -2497,8 +2515,8 @@ function rechercheGlobalBC(){
   const statut=document.getElementById('sg-statut')?.value||'all';
   const vendeur=document.getElementById('sg-vendeur')?.value||'all';
   const fact=document.getElementById('sg-fact')?.value||'all';
-  const dateFrom=document.getElementById('sg-date-from')?.value||'';
-  const dateTo=document.getElementById('sg-date-to')?.value||'';
+  const dateFrom=parseDate(document.getElementById('sg-date-from')?.value||'');
+  const dateTo=parseDate(document.getElementById('sg-date-to')?.value||'');
 
   const hasFilter=q.length>=2||statut!=='all'||vendeur!=='all'||fact!=='all'||dateFrom||dateTo;
 
@@ -2824,33 +2842,39 @@ function trouverBCDepuisDevis(numDevis,devisRS){
 // ═══ CHECKLIST BCs ═══
 // ═══════════════════════════════════════════════════════════
 function getChecklistItems(){
+  const cutoff='2026-04-01'; // BCs avant cette date exclus
   return (DATA.suivi||[]).filter(i=>{
     const statut=getStatut(i);
     if(statut==='Annulé')return false;
+    // Seulement depuis le 01/04/2026
+    const dateRec=f(i,'Dateder_x00e9_ception')||'';
+    if(!dateRec||dateRec.slice(0,10)<cutoff)return false;
+    // Seulement les BCs reçus
+    if(!['Reçu','Entièrement livré','Terminé','Partiellement livré'].includes(statut))return false;
     const hasBL=!!(f(i,'N_x00b0_BL')||'').trim();
     const hasFC=!!(f(i,nFCKey())||'').trim();
+    const hasPJ=!!(i['A_des_Pi_x00e8_ces_Jointes']===true||i['A_des_Pi_x00e8_ces_Jointes']==='true'||i['Attachments']===true);
     const facture=getEtatFact(i)==='Entièrement facturé';
     const termine=statut==='Terminé';
-    const docuware=!!(f(i,'Envoyer_BC')==='Oui'||i['Envoyer_BC']===true);
-    const hasPJ=!!(i['A_des_Pi_x00e8_ces_Jointes']===true||i['A_des_Pi_x00e8_ces_Jointes']==='true'||i['Attachments']===true);
-    const recu=['Reçu','Entièrement livré','Terminé','Partiellement livré'].includes(statut);
-    if(!recu)return false;
-    return !hasBL||!hasFC||!hasPJ||!facture||!termine||!docuware;
+    const docuware=f(i,'Envoyer_BC')==='Oui'||i['Envoyer_BC']===true;
+    const hasVendeur=!!(f(i,'Vendeurencharge')||'').trim();
+    return !hasBL||!hasFC||!hasPJ||!facture||!termine||!docuware||!hasVendeur;
   }).sort((a,b)=>{
     const score=(i)=>{
       let s=0;
       if(!(f(i,'N_x00b0_BL')||'').trim())s++;
       if(!(f(i,nFCKey())||'').trim())s++;
-      const hasPJ=!!(i['A_des_Pi_x00e8_ces_Jointes']===true||i['A_des_Pi_x00e8_ces_Jointes']==='true'||i['Attachments']===true);
-      if(!hasPJ)s+=2; // priorité haute — sans PJ Docuware ne fonctionnera pas
+      if(!(i['A_des_Pi_x00e8_ces_Jointes']===true||i['Attachments']===true))s+=2;
       if(getEtatFact(i)!=='Entièrement facturé')s++;
       if(getStatut(i)!=='Terminé')s++;
-      if(!f(i,'Envoyer_BC')==='Oui')s++;
+      if(f(i,'Envoyer_BC')!=='Oui')s++;
+      if(!(f(i,'Vendeurencharge')||'').trim())s+=2;
       return s;
     };
     return score(b)-score(a);
   });
 }
+
 
 function chk(ok){
   return ok
@@ -2878,28 +2902,30 @@ function renderChecklist(){
     const facture=getEtatFact(i)==='Entièrement facturé';
     const termine=getStatut(i)==='Terminé';
     const docuware=!!(f(i,'Envoyer_BC')==='Oui'||i['Envoyer_BC']===true);
-    const cE=client.replace(/'/g,"\\'"),nE=numBC.replace(/'/g,"\\'");
+    const hasVendeur=!!(f(i,'Vendeurencharge')||'').trim();
+    const cE=client.replace(/'/g,"\'"),nE=numBC.replace(/'/g,"\'");
     return`<tr style="cursor:pointer" onclick="openBCPanel(${i.ID})">
       <td class="ref">${numBC}</td>
       <td class="cname">${client}</td>
       <td style="font-size:12px;color:var(--text-secondary)">${chantier}</td>
       <td>${chk(hasBL)}</td>
       <td>${chk(hasFC)}</td>
-      <td>${!hasPJ?`<span style="color:var(--red);font-size:13px;display:block;text-align:center" title="❌ Aucune PJ — Docuware ne fonctionnera pas">⚠️</span>`:chk(true)}</td>
+      <td>${!hasPJ?`<span style="color:var(--amber);font-size:13px;display:block;text-align:center" title="⚠️ Aucune PJ">⚠️</span>`:chk(true)}</td>
       <td>${chk(facture)}</td>
       <td>${chk(termine)}</td>
       <td>${chk(docuware)}</td>
-      <td style="font-size:12px">${vendeur}</td>
+      <td>${!hasVendeur?`<span style="color:var(--red);font-size:11px;font-weight:700;display:block;text-align:center">❌ Non assigné</span>`:`<span style="font-size:11px;display:block;text-align:center">${f(i,'Vendeurencharge')}</span>`}</td>
       <td onclick="event.stopPropagation()"><div class="btn-grp">
         <button class="btn" onclick="openBCPanel(${i.ID})">🔍 Détail</button>
         <button class="btn" onclick="openTraiterModal(${i.ID},'${nE}','${cE}')">🔧 Traiter</button>
-        ${!hasBL||!hasFC||!facture?`<button class="btn gr" onclick="openFacturerModal(${i.ID},'${nE}','${cE}')">💰</button>`:''}
+        ${!facture?`<button class="btn gr" onclick="openFacturerModal(${i.ID},'${nE}','${cE}')">💰</button>`:''}
         ${!docuware&&hasPJ?`<button class="btn" onclick="event.stopPropagation();envoyerBCFlow(${i.ID},'${nE}')">📦</button>`:''}
-        ${!hasPJ?`<button class="btn" onclick="openBCPanel(${i.ID})" title="Joindre la PJ d'abord" style="color:var(--red);border-color:var(--red)">📎 Joindre</button>`:''}
+        ${!hasPJ?`<button class="btn" onclick="openBCPanel(${i.ID})" style="color:var(--amber);border-color:var(--amber);font-size:10.5px">📎 Joindre</button>`:''}
       </div></td>
     </tr>`;
   }).join('');
 }
+
 
 function exportChecklistCSV(){
   const items=getChecklistItems();
