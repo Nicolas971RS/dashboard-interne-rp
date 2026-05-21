@@ -423,9 +423,9 @@
           </select>
           <div style="display:flex;align-items:center;gap:5px">
             <span style="font-size:11px;color:rgba(255,255,255,.6)">Du</span>
-            <input type="date" id="sg-date-from" onchange="rechercheGlobalBC()" class="fs" style="height:30px;min-width:130px">
+            <input type="date" id="sg-date-from" onchange="rechercheGlobalBC()" class="fs" lang="fr" style="height:30px;min-width:130px">
             <span style="font-size:11px;color:rgba(255,255,255,.6)">au</span>
-            <input type="date" id="sg-date-to" onchange="rechercheGlobalBC()" class="fs" style="height:30px;min-width:130px">
+            <input type="date" id="sg-date-to" onchange="rechercheGlobalBC()" class="fs" lang="fr" style="height:30px;min-width:130px">
           </div>
           <span id="sg-count" style="font-size:11px;color:rgba(255,255,255,.5)"></span>
         </div>
@@ -2849,11 +2849,10 @@ function getChecklistItems(){
   let items=(DATA.suivi||[]).filter(i=>{
     const statut=getStatut(i);
     if(statut==='Annulé')return false;
-    // Date de référence : réception en priorité, sinon date de création
-    const dateRec=f(i,'Dateder_x00e9_ception')||'';
-    const dateCreated=f(i,'Created')||'';
-    const dateRef=(dateRec||dateCreated).slice(0,10);
-    if(!dateRef||dateRef<cutoff)return false;
+    // Uniquement les BCs avec une vraie date de réception >= 01/04/2026
+    // PAS de fallback sur Created — un BC sans date de réception n'est pas encore reçu
+    const dateRec=(f(i,'Dateder_x00e9_ception')||'').slice(0,10);
+    if(!dateRec||dateRec<cutoff)return false;
     if(!['Reçu','Entièrement livré','Terminé','Partiellement livré'].includes(statut))return false;
     const hasBL=!!(f(i,'N_x00b0_BL')||'').trim();
     const hasFC=!!(f(i,nFCKey())||'').trim();
@@ -2866,8 +2865,8 @@ function getChecklistItems(){
   });
   const dir=typeof _checklistSortDir!=='undefined'?_checklistSortDir:'desc';
   items.sort((a,b)=>{
-    const da=(f(a,'Dateder_x00e9_ception')||f(a,'Created')||'').slice(0,10);
-    const db=(f(b,'Dateder_x00e9_ception')||f(b,'Created')||'').slice(0,10);
+    const da=(f(a,'Dateder_x00e9_ception')||'').slice(0,10);
+    const db=(f(b,'Dateder_x00e9_ception')||'').slice(0,10);
     return dir==='desc'?db.localeCompare(da):da.localeCompare(db);
   });
   return items;
