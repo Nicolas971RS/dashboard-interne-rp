@@ -423,9 +423,14 @@
           </select>
           <div style="display:flex;align-items:center;gap:5px">
             <span style="font-size:11px;color:rgba(255,255,255,.6)">Du</span>
-            <input type="date" id="sg-date-from" onchange="rechercheGlobalBC()" class="fs" lang="fr" style="height:30px;min-width:130px">
+            <div style="position:relative">
+              <input type="date" id="sg-date-from" onchange="rechercheGlobalBC()" class="fs" lang="fr" style="height:30px;min-width:130px;padding-right:4px">
+            </div>
             <span style="font-size:11px;color:rgba(255,255,255,.6)">au</span>
-            <input type="date" id="sg-date-to" onchange="rechercheGlobalBC()" class="fs" lang="fr" style="height:30px;min-width:130px">
+            <div style="position:relative">
+              <input type="date" id="sg-date-to" onchange="rechercheGlobalBC()" class="fs" lang="fr" style="height:30px;min-width:130px;padding-right:4px">
+            </div>
+            <span style="font-size:9px;color:rgba(255,255,255,.35);font-style:italic">jj/mm/aa</span>
           </div>
           <span id="sg-count" style="font-size:11px;color:rgba(255,255,255,.5)"></span>
         </div>
@@ -2861,6 +2866,8 @@ function getChecklistItems(){
     const termine=statut==='Terminé';
     const docuware=f(i,'Envoyer_BC')==='Oui'||i['Envoyer_BC']===true;
     const hasVendeur=!!(f(i,'Vendeurencharge')||'').trim();
+    // Si Terminé + Docuware envoyé → ne plus apparaître même si PJ manquante (déjà clôturé)
+    if(termine&&docuware&&facture)return false;
     return !hasBL||!hasFC||!hasPJ||!facture||!termine||!docuware||!hasVendeur;
   });
   const dir=typeof _checklistSortDir!=='undefined'?_checklistSortDir:'desc';
