@@ -500,13 +500,14 @@
                 <th>N° BC</th><th>Client</th><th>Chantier</th>
                 <th style="text-align:center" title="N° BL renseigné">🧾 BL</th>
                 <th style="text-align:center" title="N° FC renseigné">🏷️ FC</th>
+                <th style="text-align:center" title="Pièce jointe présente">📎 PJ</th>
                 <th style="text-align:center" title="Entièrement facturé">💰 Facturé</th>
                 <th style="text-align:center" title="Statut = Terminé">📌 Terminé</th>
                 <th style="text-align:center" title="Envoyé à Docuware">📦 Docuware</th>
                 <th>Vendeur</th><th>Actions</th>
               </tr>
             </thead>
-            <tbody id="checklist-body"><tr class="empty-row"><td colspan="10">Chargement...</td></tr></tbody>
+            <tbody id="checklist-body"><tr class="empty-row"><td colspan="11">Chargement...</td></tr></tbody>
           </table>
         </div>
       </div>
@@ -2823,25 +2824,25 @@ function trouverBCDepuisDevis(numDevis,devisRS){
 // ═══ CHECKLIST BCs ═══
 // ═══════════════════════════════════════════════════════════
 function getChecklistItems(){
-  // BCs qui ont au moins une case non cochée
   return (DATA.suivi||[]).filter(i=>{
     const statut=getStatut(i);
-    if(statut==='Annulé')return false; // ignorer les annulés
+    if(statut==='Annulé')return false;
     const hasBL=!!(f(i,'N_x00b0_BL')||'').trim();
     const hasFC=!!(f(i,nFCKey())||'').trim();
     const facture=getEtatFact(i)==='Entièrement facturé';
     const termine=statut==='Terminé';
     const docuware=!!(i['StatutBCLivr_x00e9_etFC']===true||i['StatutBCLivr_x00e9_etFC']==='true');
-    // Au moins une case manquante ET BC reçu (sinon pas pertinent)
+    const hasPJ=!!(i['A_des_Pi_x00e8_ces_Jointes']===true||i['A_des_Pi_x00e8_ces_Jointes']==='true'||i['Attachments']===true);
     const recu=['Reçu','Entièrement livré','Terminé','Partiellement livré'].includes(statut);
     if(!recu)return false;
-    return !hasBL||!hasFC||!facture||!termine||!docuware;
+    return !hasBL||!hasFC||!hasPJ||!facture||!termine||!docuware;
   }).sort((a,b)=>{
-    // Trier : le plus de cases manquantes en premier
     const score=(i)=>{
       let s=0;
       if(!(f(i,'N_x00b0_BL')||'').trim())s++;
       if(!(f(i,nFCKey())||'').trim())s++;
+      const hasPJ=!!(i['A_des_Pi_x00e8_ces_Jointes']===true||i['A_des_Pi_x00e8_ces_Jointes']==='true'||i['Attachments']===true);
+      if(!hasPJ)s+=2; // priorité haute — sans PJ Docuware ne fonctionnera pas
       if(getEtatFact(i)!=='Entièrement facturé')s++;
       if(getStatut(i)!=='Terminé')s++;
       if(!i['StatutBCLivr_x00e9_etFC'])s++;
@@ -2863,7 +2864,7 @@ function renderChecklist(){
   const cnt=document.getElementById('checklist-count');
   if(cnt)cnt.textContent=items.length;
   if(!items.length){
-    b.innerHTML='<tr class="empty-row"><td colspan="10" style="color:var(--green);font-weight:600">🎉 Tous les BCs sont complets !</td></tr>';
+    b.innerHTML='<tr class="empty-row"><td colspan="11" style="color:var(--green);font-weight:600">🎉 Tous les BCs sont complets !</td></tr>';
     return;
   }
   b.innerHTML=items.map(i=>{
@@ -2873,10 +2874,10 @@ function renderChecklist(){
     const vendeur=f(i,'Vendeurencharge')||'—';
     const hasBL=!!(f(i,'N_x00b0_BL')||'').trim();
     const hasFC=!!(f(i,nFCKey())||'').trim();
+    const hasPJ=!!(i['A_des_Pi_x00e8_ces_Jointes']===true||i['A_des_Pi_x00e8_ces_Jointes']==='true'||i['Attachments']===true);
     const facture=getEtatFact(i)==='Entièrement facturé';
     const termine=getStatut(i)==='Terminé';
     const docuware=!!(i['StatutBCLivr_x00e9_etFC']===true||i['StatutBCLivr_x00e9_etFC']==='true');
-    const missing=[!hasBL&&'BL',!hasFC&&'FC',!facture&&'Facturation',!termine&&'Terminé',!docuware&&'Docuware'].filter(Boolean);
     const cE=client.replace(/'/g,"\\'"),nE=numBC.replace(/'/g,"\\'");
     return`<tr style="cursor:pointer" onclick="openBCPanel(${i.ID})">
       <td class="ref">${numBC}</td>
@@ -2884,6 +2885,7 @@ function renderChecklist(){
       <td style="font-size:12px;color:var(--text-secondary)">${chantier}</td>
       <td>${chk(hasBL)}</td>
       <td>${chk(hasFC)}</td>
+      <td>${!hasPJ?`<span style="color:var(--red);font-size:13px;display:block;text-align:center" title="❌ Aucune PJ — Docuware ne fonctionnera pas">⚠️</span>`:chk(true)}</td>
       <td>${chk(facture)}</td>
       <td>${chk(termine)}</td>
       <td>${chk(docuware)}</td>
@@ -2892,7 +2894,8 @@ function renderChecklist(){
         <button class="btn" onclick="openBCPanel(${i.ID})">🔍 Détail</button>
         <button class="btn" onclick="openTraiterModal(${i.ID},'${nE}','${cE}')">🔧 Traiter</button>
         ${!hasBL||!hasFC||!facture?`<button class="btn gr" onclick="openFacturerModal(${i.ID},'${nE}','${cE}')">💰</button>`:''}
-        ${!docuware?`<button class="btn" onclick="event.stopPropagation();envoyerBCFlow(${i.ID},'${nE}')">📦</button>`:''}
+        ${!docuware&&hasPJ?`<button class="btn" onclick="event.stopPropagation();envoyerBCFlow(${i.ID},'${nE}')">📦</button>`:''}
+        ${!hasPJ?`<button class="btn" onclick="openBCPanel(${i.ID})" title="Joindre la PJ d'abord" style="color:var(--red);border-color:var(--red)">📎 Joindre</button>`:''}
       </div></td>
     </tr>`;
   }).join('');
@@ -2907,6 +2910,7 @@ function exportChecklistCSV(){
     {label:'Vendeur',     fn:i=>f(i,'Vendeurencharge')||''},
     {label:'BL',          fn:i=>(f(i,'N_x00b0_BL')||'').trim()?'✅':'❌'},
     {label:'N° FC',       fn:i=>(f(i,nFCKey())||'').trim()?'✅':'❌'},
+    {label:'PJ jointe',   fn:i=>(i['A_des_Pi_x00e8_ces_Jointes']===true||i['Attachments']===true)?'✅':'⚠️ MANQUANTE'},
     {label:'Facturé',     fn:i=>getEtatFact(i)==='Entièrement facturé'?'✅':'❌'},
     {label:'Terminé',     fn:i=>getStatut(i)==='Terminé'?'✅':'❌'},
     {label:'Docuware',    fn:i=>i['StatutBCLivr_x00e9_etFC']?'✅':'❌'},
