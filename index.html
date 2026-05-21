@@ -423,9 +423,9 @@
           </select>
           <div style="display:flex;align-items:center;gap:5px">
             <span style="font-size:11px;color:rgba(255,255,255,.6)">Du</span>
-            <input type="text" id="sg-date-from" onchange="rechercheGlobalBC()" class="fs" placeholder="jj/mm/aaaa" maxlength="10" style="width:100px;height:30px" oninput="autoFormatDate(this)">
+            <input type="date" id="sg-date-from" onchange="rechercheGlobalBC()" class="fs" style="height:30px;min-width:130px">
             <span style="font-size:11px;color:rgba(255,255,255,.6)">au</span>
-            <input type="text" id="sg-date-to" onchange="rechercheGlobalBC()" class="fs" placeholder="jj/mm/aaaa" maxlength="10" style="width:100px;height:30px" oninput="autoFormatDate(this)">
+            <input type="date" id="sg-date-to" onchange="rechercheGlobalBC()" class="fs" style="height:30px;min-width:130px">
           </div>
           <span id="sg-count" style="font-size:11px;color:rgba(255,255,255,.5)"></span>
         </div>
@@ -497,6 +497,7 @@
           <table>
             <thead>
               <tr>
+                <th style="cursor:pointer" onclick="sortChecklist('date')">📅 Date réc. ↕</th>
                 <th>N° BC</th><th>Client</th><th>Chantier</th>
                 <th style="text-align:center" title="N° BL renseigné">🧾 BL</th>
                 <th style="text-align:center" title="N° FC renseigné">🏷️ FC</th>
@@ -2515,8 +2516,8 @@ function rechercheGlobalBC(){
   const statut=document.getElementById('sg-statut')?.value||'all';
   const vendeur=document.getElementById('sg-vendeur')?.value||'all';
   const fact=document.getElementById('sg-fact')?.value||'all';
-  const dateFrom=parseDate(document.getElementById('sg-date-from')?.value||'');
-  const dateTo=parseDate(document.getElementById('sg-date-to')?.value||'');
+  const dateFrom=document.getElementById('sg-date-from')?.value||'';  // déjà yyyy-mm-dd
+  const dateTo=document.getElementById('sg-date-to')?.value||'';
 
   const hasFilter=q.length>=2||statut!=='all'||vendeur!=='all'||fact!=='all'||dateFrom||dateTo;
 
@@ -2842,14 +2843,15 @@ function trouverBCDepuisDevis(numDevis,devisRS){
 // ═══ CHECKLIST BCs ═══
 // ═══════════════════════════════════════════════════════════
 function getChecklistItems(){
-  const cutoff='2026-04-01'; // BCs avant cette date exclus
-  return (DATA.suivi||[]).filter(i=>{
+  const cutoff='2026-04-01';
+  let items=(DATA.suivi||[]).filter(i=>{
     const statut=getStatut(i);
     if(statut==='Annulé')return false;
-    // Seulement depuis le 01/04/2026
+    // Date de référence : réception en priorité, sinon date de création
     const dateRec=f(i,'Dateder_x00e9_ception')||'';
-    if(!dateRec||dateRec.slice(0,10)<cutoff)return false;
-    // Seulement les BCs reçus
+    const dateCreated=f(i,'Created')||'';
+    const dateRef=(dateRec||dateCreated).slice(0,10);
+    if(!dateRef||dateRef<cutoff)return false;
     if(!['Reçu','Entièrement livré','Terminé','Partiellement livré'].includes(statut))return false;
     const hasBL=!!(f(i,'N_x00b0_BL')||'').trim();
     const hasFC=!!(f(i,nFCKey())||'').trim();
@@ -2859,21 +2861,23 @@ function getChecklistItems(){
     const docuware=f(i,'Envoyer_BC')==='Oui'||i['Envoyer_BC']===true;
     const hasVendeur=!!(f(i,'Vendeurencharge')||'').trim();
     return !hasBL||!hasFC||!hasPJ||!facture||!termine||!docuware||!hasVendeur;
-  }).sort((a,b)=>{
-    const score=(i)=>{
-      let s=0;
-      if(!(f(i,'N_x00b0_BL')||'').trim())s++;
-      if(!(f(i,nFCKey())||'').trim())s++;
-      if(!(i['A_des_Pi_x00e8_ces_Jointes']===true||i['Attachments']===true))s+=2;
-      if(getEtatFact(i)!=='Entièrement facturé')s++;
-      if(getStatut(i)!=='Terminé')s++;
-      if(f(i,'Envoyer_BC')!=='Oui')s++;
-      if(!(f(i,'Vendeurencharge')||'').trim())s+=2;
-      return s;
-    };
-    return score(b)-score(a);
   });
+  const dir=typeof _checklistSortDir!=='undefined'?_checklistSortDir:'desc';
+  items.sort((a,b)=>{
+    const da=(f(a,'Dateder_x00e9_ception')||f(a,'Created')||'').slice(0,10);
+    const db=(f(b,'Dateder_x00e9_ception')||f(b,'Created')||'').slice(0,10);
+    return dir==='desc'?db.localeCompare(da):da.localeCompare(db);
+  });
+  return items;
 }
+let _checklistSortDir='desc';
+function sortChecklist(){
+  _checklistSortDir=_checklistSortDir==='desc'?'asc':'desc';
+  const th=document.querySelector('#acc-checklist thead th:first-child');
+  if(th)th.textContent=`📅 Date réc. ${_checklistSortDir==='desc'?'↓':'↑'}`;
+  renderChecklist();
+}
+
 
 
 function chk(ok){
@@ -2886,7 +2890,13 @@ function renderChecklist(){
   const items=getChecklistItems();
   const b=document.getElementById('checklist-body');
   const cnt=document.getElementById('checklist-count');
-  if(cnt)cnt.textContent=items.length;
+  if(cnt){
+    const sansVendeur=items.filter(i=>!(f(i,'Vendeurencharge')||'').trim()).length;
+    const sansBL=items.filter(i=>!(f(i,'N_x00b0_BL')||'').trim()).length;
+    cnt.textContent=items.length;
+    const subEl=document.getElementById('checklist-sub');
+    if(subEl)subEl.textContent=`${sansBL} sans BL · ${sansVendeur} sans vendeur — du ${fmtDate(items[items.length-1]?.(f(items[items.length-1],'Dateder_x00e9_ception')||f(items[items.length-1],'Created'))||'')} au ${fmtDate(items[0]?.(f(items[0],'Dateder_x00e9_ception')||f(items[0],'Created'))||'')}`;
+  }
   if(!items.length){
     b.innerHTML='<tr class="empty-row"><td colspan="11" style="color:var(--green);font-weight:600">🎉 Tous les BCs sont complets !</td></tr>';
     return;
@@ -2903,8 +2913,10 @@ function renderChecklist(){
     const termine=getStatut(i)==='Terminé';
     const docuware=!!(f(i,'Envoyer_BC')==='Oui'||i['Envoyer_BC']===true);
     const hasVendeur=!!(f(i,'Vendeurencharge')||'').trim();
+    const dateRec=fmtDate(f(i,'Dateder_x00e9_ception'));
     const cE=client.replace(/'/g,"\'"),nE=numBC.replace(/'/g,"\'");
     return`<tr style="cursor:pointer" onclick="openBCPanel(${i.ID})">
+      <td class="mono" style="font-size:11px;color:var(--text-muted)">${dateRec}</td>
       <td class="ref">${numBC}</td>
       <td class="cname">${client}</td>
       <td style="font-size:12px;color:var(--text-secondary)">${chantier}</td>
