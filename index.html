@@ -479,6 +479,38 @@
         </div>
       </div>
 
+
+      <!-- ACCORDÉON CHECKLIST — BCs avec actions en attente -->
+      <div class="acc-hd" onclick="toggleAcc('acc-checklist',this)" style="border-left:3px solid var(--red);margin-bottom:6px">
+        <div class="acc-hd-left">
+          <span class="acc-arrow">▼</span>
+          <div class="acc-hd-title">✅ Checklist BCs — Actions en attente</div>
+          <div class="acc-hd-meta">
+            <span class="ctag r" id="checklist-count">—</span>
+            <span style="font-size:10.5px;color:var(--text-muted)">BL · FC · Facturation · Statut Terminé · Docuware</span>
+          </div>
+        </div>
+        <button class="btn" onclick="event.stopPropagation();exportChecklistCSV()" style="font-size:10.5px">⬇ CSV</button>
+      </div>
+      <div class="acc-body" id="acc-checklist">
+        <div class="tc">
+          <table>
+            <thead>
+              <tr>
+                <th>N° BC</th><th>Client</th><th>Chantier</th>
+                <th style="text-align:center" title="N° BL renseigné">🧾 BL</th>
+                <th style="text-align:center" title="N° FC renseigné">🏷️ FC</th>
+                <th style="text-align:center" title="Entièrement facturé">💰 Facturé</th>
+                <th style="text-align:center" title="Statut = Terminé">📌 Terminé</th>
+                <th style="text-align:center" title="Envoyé à Docuware">📦 Docuware</th>
+                <th>Vendeur</th><th>Actions</th>
+              </tr>
+            </thead>
+            <tbody id="checklist-body"><tr class="empty-row"><td colspan="10">Chargement...</td></tr></tbody>
+          </table>
+        </div>
+      </div>
+
       <!-- ACCORDÉON 1 — Arrivées du jour -->
       <div class="acc-hd" onclick="toggleAcc('acc-recu',this)">
         <div class="acc-hd-left">
@@ -1682,7 +1714,7 @@ function renderAll(){
   const banner=document.getElementById('matin-ok-banner');
   if(banner)banner.style.display=allOk?'flex':'none';
 
-  renderDBCTable();renderDevisTable();
+  renderDBCTable();renderDevisTable();renderChecklist();
 }
 
 function renderSuiviEnCours(){renderHistorique();
@@ -2422,12 +2454,14 @@ document.addEventListener('keydown',e=>{
 // ═══ RECHERCHE GLOBALE BC ═══
 // ═══════════════════════════════════════════════════════════
 function bDocuware(i){
-  // Seul indicateur fiable : Lien_dossier renseigné (URL Docuware) 
-  // ou StatutBCLivréetFC qui est un booléen dédié à l'archivage Docuware
   const lien=i['Lien_dossier']||i['Liendossier']||i['Lien_Dossier'];
-  if(lien&&typeof lien==='string'&&lien.trim()&&lien.startsWith('http'))
-    return`<a href="${lien}" target="_blank" title="Ouvrir dans Docuware" style="color:var(--teal);font-size:11px;text-decoration:none">📦✅</a>`;
-  return'<span style="color:#ddd;font-size:11px" title="Non archivé">📦</span>';
+  if(lien&&typeof lien==='string'&&lien.startsWith('http'))
+    return`<a href="${lien}" target="_blank" title="Ouvrir dans Docuware" style="color:var(--teal);font-size:13px;text-decoration:none">📦✅</a>`;
+  // StatutBCLivréetFC = flag "envoyé Docuware" mis à true au clic bouton
+  const sent=i['StatutBCLivr_x00e9_etFC'];
+  if(sent===true||sent==='true'||sent==='1')
+    return`<span title="Envoyé à Docuware" style="color:var(--teal);font-size:13px">📦✅</span>`;
+  return`<span style="color:#ddd;font-size:13px" title="Non envoyé à Docuware">📦</span>`;
 }
 function buildSGVendeurs(){
   const sel=document.getElementById('sg-vendeur');
@@ -2783,6 +2817,100 @@ function trouverBCDepuisDevis(numDevis,devisRS){
       }
     },100);
   }
+}
+
+// ═══════════════════════════════════════════════════════════
+// ═══ CHECKLIST BCs ═══
+// ═══════════════════════════════════════════════════════════
+function getChecklistItems(){
+  // BCs qui ont au moins une case non cochée
+  return (DATA.suivi||[]).filter(i=>{
+    const statut=getStatut(i);
+    if(statut==='Annulé')return false; // ignorer les annulés
+    const hasBL=!!(f(i,'N_x00b0_BL')||'').trim();
+    const hasFC=!!(f(i,nFCKey())||'').trim();
+    const facture=getEtatFact(i)==='Entièrement facturé';
+    const termine=statut==='Terminé';
+    const docuware=!!(i['StatutBCLivr_x00e9_etFC']===true||i['StatutBCLivr_x00e9_etFC']==='true');
+    // Au moins une case manquante ET BC reçu (sinon pas pertinent)
+    const recu=['Reçu','Entièrement livré','Terminé','Partiellement livré'].includes(statut);
+    if(!recu)return false;
+    return !hasBL||!hasFC||!facture||!termine||!docuware;
+  }).sort((a,b)=>{
+    // Trier : le plus de cases manquantes en premier
+    const score=(i)=>{
+      let s=0;
+      if(!(f(i,'N_x00b0_BL')||'').trim())s++;
+      if(!(f(i,nFCKey())||'').trim())s++;
+      if(getEtatFact(i)!=='Entièrement facturé')s++;
+      if(getStatut(i)!=='Terminé')s++;
+      if(!i['StatutBCLivr_x00e9_etFC'])s++;
+      return s;
+    };
+    return score(b)-score(a);
+  });
+}
+
+function chk(ok){
+  return ok
+    ?`<span style="color:var(--green);font-size:15px;display:block;text-align:center" title="✅ OK">✅</span>`
+    :`<span style="color:var(--red);font-size:15px;display:block;text-align:center" title="❌ Manquant">❌</span>`;
+}
+
+function renderChecklist(){
+  const items=getChecklistItems();
+  const b=document.getElementById('checklist-body');
+  const cnt=document.getElementById('checklist-count');
+  if(cnt)cnt.textContent=items.length;
+  if(!items.length){
+    b.innerHTML='<tr class="empty-row"><td colspan="10" style="color:var(--green);font-weight:600">🎉 Tous les BCs sont complets !</td></tr>';
+    return;
+  }
+  b.innerHTML=items.map(i=>{
+    const numBC=f(i,'Title')||`BC-${i.ID}`;
+    const client=getClient(i);
+    const chantier=getChantier(i);
+    const vendeur=f(i,'Vendeurencharge')||'—';
+    const hasBL=!!(f(i,'N_x00b0_BL')||'').trim();
+    const hasFC=!!(f(i,nFCKey())||'').trim();
+    const facture=getEtatFact(i)==='Entièrement facturé';
+    const termine=getStatut(i)==='Terminé';
+    const docuware=!!(i['StatutBCLivr_x00e9_etFC']===true||i['StatutBCLivr_x00e9_etFC']==='true');
+    const missing=[!hasBL&&'BL',!hasFC&&'FC',!facture&&'Facturation',!termine&&'Terminé',!docuware&&'Docuware'].filter(Boolean);
+    const cE=client.replace(/'/g,"\\'"),nE=numBC.replace(/'/g,"\\'");
+    return`<tr style="cursor:pointer" onclick="openBCPanel(${i.ID})">
+      <td class="ref">${numBC}</td>
+      <td class="cname">${client}</td>
+      <td style="font-size:12px;color:var(--text-secondary)">${chantier}</td>
+      <td>${chk(hasBL)}</td>
+      <td>${chk(hasFC)}</td>
+      <td>${chk(facture)}</td>
+      <td>${chk(termine)}</td>
+      <td>${chk(docuware)}</td>
+      <td style="font-size:12px">${vendeur}</td>
+      <td onclick="event.stopPropagation()"><div class="btn-grp">
+        <button class="btn" onclick="openBCPanel(${i.ID})">🔍 Détail</button>
+        <button class="btn" onclick="openTraiterModal(${i.ID},'${nE}','${cE}')">🔧 Traiter</button>
+        ${!hasBL||!hasFC||!facture?`<button class="btn gr" onclick="openFacturerModal(${i.ID},'${nE}','${cE}')">💰</button>`:''}
+        ${!docuware?`<button class="btn" onclick="event.stopPropagation();envoyerBCFlow(${i.ID},'${nE}')">📦</button>`:''}
+      </div></td>
+    </tr>`;
+  }).join('');
+}
+
+function exportChecklistCSV(){
+  const items=getChecklistItems();
+  exportCSV(items,[
+    {label:'N° BC',       fn:i=>f(i,'Title')||`BC-${i.ID}`},
+    {label:'Client',      fn:i=>getClient(i)},
+    {label:'Chantier',    fn:i=>getChantier(i)},
+    {label:'Vendeur',     fn:i=>f(i,'Vendeurencharge')||''},
+    {label:'BL',          fn:i=>(f(i,'N_x00b0_BL')||'').trim()?'✅':'❌'},
+    {label:'N° FC',       fn:i=>(f(i,nFCKey())||'').trim()?'✅':'❌'},
+    {label:'Facturé',     fn:i=>getEtatFact(i)==='Entièrement facturé'?'✅':'❌'},
+    {label:'Terminé',     fn:i=>getStatut(i)==='Terminé'?'✅':'❌'},
+    {label:'Docuware',    fn:i=>i['StatutBCLivr_x00e9_etFC']?'✅':'❌'},
+  ],'checklist_BC.csv');
 }
 
 function exportRechercheCSV(){
@@ -3377,9 +3505,25 @@ async function envoyerBCFlow(id,numBC){
   const ok=await showConfirm('📦 Archiver dans Docuware',`Le flow va archiver les pièces jointes du BC <strong>${numBC||id}</strong> dans la GED Docuware.<br><br>Confirmer l'archivage ?`,'📦 Archiver','submit');
   if(!ok)return;
   try{
-    await spPatch('sites/RseauxPlus','Suivi_BC',id,{'Envoyer_Docuware':true});
-    alert('✅ Demande Docuware envoyée ! Le flow va s\'exécuter dans quelques secondes.');
-    setTimeout(()=>loadAll(),5000);
+    // Déclenche le flow + marque l'envoi Docuware dans SharePoint
+    await spPatch('sites/RseauxPlus','Suivi_BC',id,{
+      'Envoyer_Docuware':true,
+      'StatutBCLivr_x00e9_etFC':true  // flag "envoyé Docuware" visible dans le dashboard
+    });
+    // Mettre à jour DATA en mémoire immédiatement
+    const idx=DATA.suivi.findIndex(i=>i.ID===id);
+    if(idx!==-1){
+      DATA.suivi[idx]['Envoyer_Docuware']=true;
+      DATA.suivi[idx]['StatutBCLivr_x00e9_etFC']=true;
+    }
+    renderAll();updateBadges();
+    // Feedback non-bloquant
+    const toast=document.createElement('div');
+    toast.textContent='📦 Docuware — envoi déclenché ✅';
+    toast.style.cssText='position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:var(--teal-mid);color:white;padding:10px 24px;border-radius:var(--radius);font-weight:600;font-size:13px;z-index:9999;box-shadow:var(--shadow-md)';
+    document.body.appendChild(toast);
+    setTimeout(()=>toast.remove(),4000);
+    setTimeout(()=>loadAll(),6000);
   }catch(e){
     alert('Erreur : '+e.message);
   }
