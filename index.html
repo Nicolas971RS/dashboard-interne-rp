@@ -497,6 +497,7 @@
           <table>
             <thead>
               <tr>
+                <th style="cursor:pointer" onclick="sortChecklist('date')">📅 Date réc. ↕</th>
                 <th>N° BC</th><th>Client</th><th>Chantier</th>
                 <th style="text-align:center" title="N° BL renseigné">🧾 BL</th>
                 <th style="text-align:center" title="N° FC renseigné">🏷️ FC</th>
@@ -2842,14 +2843,12 @@ function trouverBCDepuisDevis(numDevis,devisRS){
 // ═══ CHECKLIST BCs ═══
 // ═══════════════════════════════════════════════════════════
 function getChecklistItems(){
-  const cutoff='2026-04-01'; // BCs avant cette date exclus
-  return (DATA.suivi||[]).filter(i=>{
+  const cutoff='2026-04-01';
+  let items=(DATA.suivi||[]).filter(i=>{
     const statut=getStatut(i);
     if(statut==='Annulé')return false;
-    // Seulement depuis le 01/04/2026
     const dateRec=f(i,'Dateder_x00e9_ception')||'';
     if(!dateRec||dateRec.slice(0,10)<cutoff)return false;
-    // Seulement les BCs reçus
     if(!['Reçu','Entièrement livré','Terminé','Partiellement livré'].includes(statut))return false;
     const hasBL=!!(f(i,'N_x00b0_BL')||'').trim();
     const hasFC=!!(f(i,nFCKey())||'').trim();
@@ -2859,21 +2858,24 @@ function getChecklistItems(){
     const docuware=f(i,'Envoyer_BC')==='Oui'||i['Envoyer_BC']===true;
     const hasVendeur=!!(f(i,'Vendeurencharge')||'').trim();
     return !hasBL||!hasFC||!hasPJ||!facture||!termine||!docuware||!hasVendeur;
-  }).sort((a,b)=>{
-    const score=(i)=>{
-      let s=0;
-      if(!(f(i,'N_x00b0_BL')||'').trim())s++;
-      if(!(f(i,nFCKey())||'').trim())s++;
-      if(!(i['A_des_Pi_x00e8_ces_Jointes']===true||i['Attachments']===true))s+=2;
-      if(getEtatFact(i)!=='Entièrement facturé')s++;
-      if(getStatut(i)!=='Terminé')s++;
-      if(f(i,'Envoyer_BC')!=='Oui')s++;
-      if(!(f(i,'Vendeurencharge')||'').trim())s+=2;
-      return s;
-    };
-    return score(b)-score(a);
   });
+  // Tri par date de réception décroissante (plus récent en premier)
+  const dir=typeof _checklistSortDir!=='undefined'?_checklistSortDir:'desc';
+  items.sort((a,b)=>{
+    const da=f(a,'Dateder_x00e9_ception')||'';
+    const db=f(b,'Dateder_x00e9_ception')||'';
+    return dir==='desc'?db.localeCompare(da):da.localeCompare(db);
+  });
+  return items;
 }
+let _checklistSortDir='desc';
+function sortChecklist(){
+  _checklistSortDir=_checklistSortDir==='desc'?'asc':'desc';
+  const th=document.querySelector('#acc-checklist thead th:first-child');
+  if(th)th.textContent=`📅 Date réc. ${_checklistSortDir==='desc'?'↓':'↑'}`;
+  renderChecklist();
+}
+
 
 
 function chk(ok){
@@ -2903,8 +2905,10 @@ function renderChecklist(){
     const termine=getStatut(i)==='Terminé';
     const docuware=!!(f(i,'Envoyer_BC')==='Oui'||i['Envoyer_BC']===true);
     const hasVendeur=!!(f(i,'Vendeurencharge')||'').trim();
+    const dateRec=fmtDate(f(i,'Dateder_x00e9_ception'));
     const cE=client.replace(/'/g,"\'"),nE=numBC.replace(/'/g,"\'");
     return`<tr style="cursor:pointer" onclick="openBCPanel(${i.ID})">
+      <td class="mono" style="font-size:11px;color:var(--text-muted)">${dateRec}</td>
       <td class="ref">${numBC}</td>
       <td class="cname">${client}</td>
       <td style="font-size:12px;color:var(--text-secondary)">${chantier}</td>
