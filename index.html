@@ -2455,13 +2455,13 @@ document.addEventListener('keydown',e=>{
 // ═══ RECHERCHE GLOBALE BC ═══
 // ═══════════════════════════════════════════════════════════
 function bDocuware(i){
+  // Envoyer_BC = "Oui" est écrit par le flow PA après envoi Docuware réussi
+  const sent=f(i,'Envoyer_BC');
   const lien=i['Lien_dossier']||i['Liendossier']||i['Lien_Dossier'];
   if(lien&&typeof lien==='string'&&lien.startsWith('http'))
     return`<a href="${lien}" target="_blank" title="Ouvrir dans Docuware" style="color:var(--teal);font-size:13px;text-decoration:none">📦✅</a>`;
-  // StatutBCLivréetFC = flag "envoyé Docuware" mis à true au clic bouton
-  const sent=i['StatutBCLivr_x00e9_etFC'];
-  if(sent===true||sent==='true'||sent==='1')
-    return`<span title="Envoyé à Docuware" style="color:var(--teal);font-size:13px">📦✅</span>`;
+  if(sent==='Oui'||sent===true||sent==='true')
+    return`<span title="Envoyé à Docuware ✅" style="color:var(--teal);font-size:13px">📦✅</span>`;
   return`<span style="color:#ddd;font-size:13px" title="Non envoyé à Docuware">📦</span>`;
 }
 function buildSGVendeurs(){
@@ -2831,7 +2831,7 @@ function getChecklistItems(){
     const hasFC=!!(f(i,nFCKey())||'').trim();
     const facture=getEtatFact(i)==='Entièrement facturé';
     const termine=statut==='Terminé';
-    const docuware=!!(i['StatutBCLivr_x00e9_etFC']===true||i['StatutBCLivr_x00e9_etFC']==='true');
+    const docuware=!!(f(i,'Envoyer_BC')==='Oui'||i['Envoyer_BC']===true);
     const hasPJ=!!(i['A_des_Pi_x00e8_ces_Jointes']===true||i['A_des_Pi_x00e8_ces_Jointes']==='true'||i['Attachments']===true);
     const recu=['Reçu','Entièrement livré','Terminé','Partiellement livré'].includes(statut);
     if(!recu)return false;
@@ -2845,7 +2845,7 @@ function getChecklistItems(){
       if(!hasPJ)s+=2; // priorité haute — sans PJ Docuware ne fonctionnera pas
       if(getEtatFact(i)!=='Entièrement facturé')s++;
       if(getStatut(i)!=='Terminé')s++;
-      if(!i['StatutBCLivr_x00e9_etFC'])s++;
+      if(!f(i,'Envoyer_BC')==='Oui')s++;
       return s;
     };
     return score(b)-score(a);
@@ -2877,7 +2877,7 @@ function renderChecklist(){
     const hasPJ=!!(i['A_des_Pi_x00e8_ces_Jointes']===true||i['A_des_Pi_x00e8_ces_Jointes']==='true'||i['Attachments']===true);
     const facture=getEtatFact(i)==='Entièrement facturé';
     const termine=getStatut(i)==='Terminé';
-    const docuware=!!(i['StatutBCLivr_x00e9_etFC']===true||i['StatutBCLivr_x00e9_etFC']==='true');
+    const docuware=!!(f(i,'Envoyer_BC')==='Oui'||i['Envoyer_BC']===true);
     const cE=client.replace(/'/g,"\\'"),nE=numBC.replace(/'/g,"\\'");
     return`<tr style="cursor:pointer" onclick="openBCPanel(${i.ID})">
       <td class="ref">${numBC}</td>
@@ -2913,7 +2913,7 @@ function exportChecklistCSV(){
     {label:'PJ jointe',   fn:i=>(i['A_des_Pi_x00e8_ces_Jointes']===true||i['Attachments']===true)?'✅':'⚠️ MANQUANTE'},
     {label:'Facturé',     fn:i=>getEtatFact(i)==='Entièrement facturé'?'✅':'❌'},
     {label:'Terminé',     fn:i=>getStatut(i)==='Terminé'?'✅':'❌'},
-    {label:'Docuware',    fn:i=>i['StatutBCLivr_x00e9_etFC']?'✅':'❌'},
+    {label:'Docuware',    fn:i=>f(i,'Envoyer_BC')==='Oui'?'✅':'❌'},
   ],'checklist_BC.csv');
 }
 
@@ -3509,17 +3509,13 @@ async function envoyerBCFlow(id,numBC){
   const ok=await showConfirm('📦 Archiver dans Docuware',`Le flow va archiver les pièces jointes du BC <strong>${numBC||id}</strong> dans la GED Docuware.<br><br>Confirmer l'archivage ?`,'📦 Archiver','submit');
   if(!ok)return;
   try{
-    // Déclenche le flow + marque l'envoi Docuware dans SharePoint
     await spPatch('sites/RseauxPlus','Suivi_BC',id,{
-      'Envoyer_Docuware':true,
-      'StatutBCLivr_x00e9_etFC':true  // flag "envoyé Docuware" visible dans le dashboard
+      'Envoyer_Docuware':true
+      // Envoyer_BC sera mis à "Oui" par le flow PA après exécution réussie
     });
-    // Mettre à jour DATA en mémoire immédiatement
+    // Marquer localement en mémoire pour feedback immédiat
     const idx=DATA.suivi.findIndex(i=>i.ID===id);
-    if(idx!==-1){
-      DATA.suivi[idx]['Envoyer_Docuware']=true;
-      DATA.suivi[idx]['StatutBCLivr_x00e9_etFC']=true;
-    }
+    if(idx!==-1)DATA.suivi[idx]['Envoyer_BC']='Oui';
     renderAll();updateBadges();
     // Feedback non-bloquant
     const toast=document.createElement('div');
