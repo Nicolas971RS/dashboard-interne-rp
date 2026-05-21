@@ -604,7 +604,7 @@
       <div class="sh">
         <div class="st">📄 Devis récents</div>
         <div class="fb">
-          <input class="fs" type="text" id="search-devis" placeholder="🔍 Recherche libre..." oninput="renderDevisTable()" style="min-width:160px">
+          <input class="fs" type="text" id="search-devis" placeholder="🔍 N° Devis, Devis RS, client, chantier..." oninput="renderDevisTable()" style="min-width:200px">
           <select class="fs" id="filter-vendeur-devis" onchange="renderDevisTable()"><option value="all">Tous les vendeurs</option></select>
           <select class="fs" id="filter-statut-devis" onchange="renderDevisTable()"><option value="all">Tous les statuts</option><option value="Nouvelle">🆕 Nouvelle</option><option value="En cours">🔵 En cours</option><option value="Devis envoyé">✉️ Devis envoyé</option><option value="Accepté">✅ Accepté</option><option value="Converti en BC">🔄 Converti en BC</option><option value="Expiré">⏰ Expiré</option><option value="Refusé">❌ Refusé</option><option value="Archivé">📁 Archivé</option></select>
           <button class="btn" onclick="exportDevisCSV()">⬇ CSV</button>
@@ -1804,7 +1804,8 @@ function renderDevisTable(){
     const client=f(i,'Client')||'';
     const chantier=getChantier(i);
     const vendeur=f(i,'Vendeur_Assign_x00e9_')||'';
-    return [nd,client,chantier,vendeur].some(v=>v.toLowerCase().includes(q));
+    const devisRS=f(i,'Devis_RS')||'';
+    return [nd,client,chantier,vendeur,devisRS].some(v=>String(v).toLowerCase().includes(q));
   });
   items=applySort(items,'devis-body',SORT_COLS_DEVIS);
   const DEVIS_TERMINAL=['Accepté','Converti en BC','Expiré','Refusé','Archivé'];
