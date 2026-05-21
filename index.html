@@ -2313,7 +2313,9 @@ async function openTraiterModal(id,numBC,client){
   openModal(`🔧 Traiter — ${numBC} · ${client}`,`
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
       <div class="mf"><label>Titre BC (N° interne)</label>
-        <input id="m-titre" value="${curTitre.replace(/"/g,'&quot;')}" placeholder="ex: TRA26-383">
+        <input id="m-titre" value="${curTitre.replace(/"/g,'&quot;')}" placeholder="ex: TRA26-383"
+          oninput="checkDoublonBC(this.value,${id})">
+        <div id="m-titre-warn" style="font-size:11px;margin-top:3px;min-height:14px"></div>
       </div>
       <div class="mf"><label>N° Devis</label>
         <input id="m-numdevis" value="${curNumDevis}" placeholder="ex: DEV-105">
@@ -2955,6 +2957,35 @@ function exportChecklistCSV(){
   ],'checklist_BC.csv');
 }
 
+// ── Anti-doublon N° BC dans modal Traiter ──
+function checkDoublonBC(val,currentId){
+  const warn=document.getElementById('m-titre-warn');
+  const input=document.getElementById('m-titre');
+  if(!warn||!input)return;
+  const q=(val||'').trim().toLowerCase();
+  if(!q){warn.innerHTML='';input.style.borderColor='';return;}
+  // Chercher dans DATA.suivi si ce titre existe sur un AUTRE BC
+  const doublons=(DATA.suivi||[]).filter(i=>
+    i.ID!==currentId&&
+    (f(i,'Title')||'').toLowerCase()===q
+  );
+  if(doublons.length){
+    const d=doublons[0];
+    const client=getClient(d);
+    const statut=getStatut(d);
+    warn.innerHTML=`<span style="color:var(--red);font-weight:600">⚠️ Ce N° BC existe déjà — BC-${d.ID} · ${client} · ${statut}</span>`;
+    input.style.borderColor='var(--red)';
+  }else{
+    warn.innerHTML=`<span style="color:var(--green)">✅ N° BC disponible</span>`;
+    input.style.borderColor='var(--green)';
+    setTimeout(()=>{
+      if(document.getElementById('m-titre-warn'))
+        document.getElementById('m-titre-warn').innerHTML='';
+      if(input)input.style.borderColor='';
+    },2000);
+  }
+}
+
 function exportRechercheCSV(){
   exportCSV(_lastRechercheItems,[
     {label:'N° BC',          fn:i=>f(i,'Title')||`BC-${i.ID}`},
@@ -3227,6 +3258,18 @@ async function openBCPanel(id){
         <div class="pf"><div class="pf-lbl">N° BC</div><div class="pf-val mono" style="font-size:15px;font-weight:800;color:var(--navy);display:flex;align-items:center;gap:8px">${numBC}<button onclick="navigator.clipboard.writeText('${numBC}').then(()=>{this.textContent='✅';setTimeout(()=>this.textContent='📋',1200)})" style="background:none;border:1px solid var(--border);border-radius:4px;padding:2px 7px;font-size:11px;cursor:pointer;color:var(--text-muted)">📋</button></div></div>
         <div class="pf"><div class="pf-lbl">Statut</div><div class="pf-val">${bStatut(s)}</div></div>
       </div>
+      ${(()=>{
+        const modBy=item.Editor?.DisplayName||item.Editor?.Value||f(item,'Editor')||'';
+        const modAt=f(item,'Modified');
+        if(!modBy&&!modAt)return'';
+        const mins=modAt?Math.round((Date.now()-new Date(modAt).getTime())/60000):null;
+        const when=mins===null?'':(mins<1?'à l\'instant':mins<60?`il y a ${mins} min`:`il y a ${Math.round(mins/60)}h`);
+        const isRecent=mins!==null&&mins<30;
+        return`<div style="background:${isRecent?'var(--amber-light)':'var(--grey-xlight)'};border:1px solid ${isRecent?'var(--amber)':'var(--border)'};border-radius:var(--radius-sm);padding:5px 10px;font-size:11.5px;color:${isRecent?'var(--amber)':'var(--text-muted)'};display:flex;align-items:center;gap:6px;margin-bottom:6px">
+          <span>${isRecent?'⚡':'✏️'}</span>
+          <span>Dernière modification par <strong>${modBy||'—'}</strong> ${when}</span>
+        </div>`;
+      })()}
       <div class="pf"><div class="pf-lbl">Client</div><div class="pf-val" style="font-size:14px;font-weight:700">${client}</div></div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:0">
         <div class="pf"><div class="pf-lbl">Chantier / Projet</div><div class="pf-val">${chantier}</div></div>
