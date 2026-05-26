@@ -637,8 +637,8 @@
         </div>
       </div>
       <div class="tc"><table>
-        <thead><tr><th>Urgence</th><th>Réf.</th><th>Client</th><th>Employé</th><th>N° Devis</th><th>Date enlèv.</th><th>Montant HT</th><th>Vendeur</th><th>Statut</th><th>Relances</th><th>Action</th></tr></thead>
-        <tbody id="dbc-body"><tr class="empty-row"><td colspan="11">Chargement...</td></tr></tbody>
+        <thead><tr><th>Urgence</th><th>Réf.</th><th>Client</th><th>Employé</th><th>N° Devis</th><th>N° BL</th><th>Date enlèv.</th><th>Montant HT</th><th>Vendeur</th><th>Statut</th><th>Relances</th><th>Action</th></tr></thead>
+        <tbody id="dbc-body"><tr class="empty-row"><td colspan="12">Chargement...</td></tr></tbody>
       </table></div>
     </div>
 
@@ -1885,11 +1885,11 @@ function renderDBCTable(){
     const hasAttach=f(i,'Attachments');
     const vendeur=getDBCVendeur(i);
     const isReceu=f(i,'Statut')==='BC Reçu';
-    return`<tr class="${urg.row}" style="cursor:pointer" onclick="openDBCPanel(${i.ID})"><td><span class="urg ${urg.cls}">${urg.lbl}</span></td><td class="ref">DBC-${i.ID}</td><td class="cname">${f(i,'NomClient')||f(i,'Title')||'—'}</td><td>${f(i,'Nom_Employ_x00e9_')||'—'}</td><td class="ref" style="color:var(--blue)">${devisRef}</td><td class="mono">${fmtDate(f(i,'Date_Enl_x00e8_vement'))}</td><td class="amt" style="${days>5&&!isReceu?'color:var(--red)':''}">${fmtMoney(f(i,'Montant_HT'))}</td><td>${vendeur}</td><td>${bDBC(f(i,'Statut'))}</td><td class="mono" style="text-align:center;${nbRel>=2?'color:var(--red);font-weight:700':''}">${nbRel}${hasAttach?' 📎':''}</td><td onclick="event.stopPropagation()"><div class="btn-grp">
+    return`<tr class="${urg.row}" style="cursor:pointer" onclick="openDBCPanel(${i.ID})"><td><span class="urg ${urg.cls}">${urg.lbl}</span></td><td class="ref">DBC-${i.ID}</td><td class="cname">${f(i,'NomClient')||f(i,'Title')||'—'}</td><td>${f(i,'Nom_Employ_x00e9_')||'—'}</td><td class="ref" style="color:var(--blue)">${devisRef}</td><td class="mono">${f(i,'N_x00b0_BL')||'—'}</td><td class="mono">${fmtDate(f(i,'Date_Enl_x00e8_vement'))}</td><td class="amt" style="${days>5&&!isReceu?'color:var(--red)':''}">${fmtMoney(f(i,'Montant_HT'))}</td><td>${vendeur}</td><td>${bDBC(f(i,'Statut'))}</td><td class="mono" style="text-align:center;${nbRel>=2?'color:var(--red);font-weight:700':''}">${nbRel}${hasAttach?' 📎':''}</td><td onclick="event.stopPropagation()"><div class="btn-grp">
       <button class="btn" onclick="openDBCPanel(${i.ID})">🔍 Détail</button>
       ${days>10&&!isReceu?`<button class="btn w" onclick="openDBCPanel(${i.ID})">⚡ Escalade</button>`:`<button class="btn" onclick="openDBCPanel(${i.ID})">📧 Relancer</button>`}
     </div></td></tr>`;
-  }).join(''):'<tr class="empty-row"><td colspan="11">Aucune demande BC en attente</td></tr>';
+  }).join(''):'<tr class="empty-row"><td colspan="12">Aucune demande BC en attente</td></tr>';
 }
 
 function renderDevisTable(){
@@ -2358,7 +2358,7 @@ async function openTraiterModal(id,numBC,client){
   const currentProjetId=currentItem.ProjetId||null;
   const vendeurs=getAllVendeurs();
   const vendOpts=vendeurs.map(v=>`<option value="${v}"${v===currentV?' selected':''}>${v}</option>`).join('');
-  const STATUTS_BC=['En préparation','Prêt à Livrer','Partiellement livré','Entièrement livré','En attente BC','Reçu','Annulé'];
+  const STATUTS_BC=['En préparation','Prêt à Livrer','Partiellement livré','Entièrement livré','En attente BC','Reçu','Terminé','Annulé'];
   const stOpts=STATUTS_BC.map(s=>`<option value="${s}"${s===currentStat?' selected':''}>${s}</option>`).join('');
   const curTitre=f(currentItem,'Title')||numBC;
   const curNumDevis=f(currentItem,'N_x00b0_Devis','Num_ro_Devis','NumeroDevis')||'';
