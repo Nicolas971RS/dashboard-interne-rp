@@ -1854,11 +1854,8 @@ function dbcRowCompact(i){
 }
 
 function getDevisRefForDBC(item){
-  const did=f(item,'ID_DevisId');
-  if(!did)return'—';
-  const dv=DATA.devis.find(d=>d.ID===parseInt(did));
-  if(dv)return f(dv,'Num_x00e9_ro_Devis','Numero_Devis','Title')||`DEV-${did}`;
-  return`DEV-${did}`;
+  // ID_Devis = champ texte libre (ex: 716632) — pas un lookup
+  return f(item,'ID_Devis')||f(item,'ID_DevisId')||'—';
 }
 
 function renderDBCTable(){
