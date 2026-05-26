@@ -477,6 +477,7 @@
             <option value="Partiellement livré">Partiellement livré</option>
             <option value="En attente BC">En attente BC</option>
             <option value="Entièrement livré">Entièrement livré</option>
+            <option value="Terminé">Terminé</option>
           </select>
           <select class="fs" id="filter-vendeur-bc" onchange="renderAll()"><option value="all">Tous les vendeurs</option></select>
           <select class="fs" id="filter-client-bc" onchange="renderAll()"><option value="all">Tous les clients</option></select>
@@ -564,7 +565,22 @@
         </table></div>
       </div>
 
-      <!-- ACCORDÉON 4 — Historique -->
+      <!-- ACCORDÉON 4 — Terminés / Archivés -->
+      <div class="acc-hd" onclick="toggleAcc('acc-termines',this)">
+        <div class="acc-hd-left">
+          <div class="acc-hd-title">✅ Terminés — BC envoyé à Commandes</div>
+          <div class="acc-hd-meta"><span class="ctag g" id="sd-termines-count">0</span><span class="site-tag rp">Envoyer_BC = Oui · Clôturés</span></div>
+        </div>
+        <span class="acc-arrow">▼</span>
+      </div>
+      <div class="acc-body" id="acc-termines">
+        <div class="tc"><table>
+          <thead><tr><th>N° BC</th><th>Client</th><th>Chantier</th><th>N° BL</th><th>N° FC</th><th>Montant HT</th><th>Date réception</th><th>Vendeur</th><th>Statut</th><th>État fact.</th><th>Doc.</th><th>Actions</th></tr></thead>
+          <tbody id="suivi-termines-body"><tr class="empty-row"><td colspan="12">Chargement...</td></tr></tbody>
+        </table></div>
+      </div>
+
+      <!-- ACCORDÉON 5 — Historique -->
       <div class="acc-hd" onclick="toggleAcc('acc-histo',this)">
         <div class="acc-hd-left">
           <div class="acc-hd-title">📋 Historique non soldé</div>
@@ -1028,7 +1044,19 @@ function getSuiviDocuware(){
     const ef=getEtatFact(i);
     const lienDW=f(i,'Lien_Docuware')||f(i,'LienDocuware')||'';
     if(ef!=='Entièrement facturé')return false;
-    if(lienDW)return false; // déjà archivé
+    if(lienDW)return false; // déjà archivé via lien Docuware
+    if(f(i,'Envoyer_BC')==='Oui'||i['Envoyer_BC']===true)return false; // déjà envoyé par flow PA
+    if(fV!=='all'&&f(i,'Vendeurencharge')!==fV)return false;
+    if(fC!=='all'&&getClient(i)!==fC)return false;
+    return true;
+  });
+}
+function getSuiviTermines(){
+  const fV=getFilterVendeur(),fC=getFilterClient();
+  return DATA.suivi.filter(i=>{
+    const sent=f(i,'Envoyer_BC')==='Oui'||i['Envoyer_BC']===true;
+    const lienDW=f(i,'Lien_Docuware')||f(i,'LienDocuware')||'';
+    if(!sent&&!lienDW)return false;
     if(fV!=='all'&&f(i,'Vendeurencharge')!==fV)return false;
     if(fC!=='all'&&getClient(i)!==fC)return false;
     return true;
@@ -1054,9 +1082,43 @@ function renderDocuware(){
       <div class="btn-grp">
         <button class="btn" onclick="openBCPanel(${i.ID})">🔍 Détail</button>
         <button class="btn" onclick="openTraiterModal(${i.ID},'${nE}','${cE}')">🔧 Traiter</button>
-        <button class="btn" onclick="envoyerBCFlow(${i.ID},'${nE}')">📦 Docuware</button>
       </div>
     </td></tr>`;
+  }).join('');
+}
+
+
+function renderTermines(){
+  const items=getSuiviTermines();
+  const el=document.getElementById('sd-termines-count');
+  if(el)el.textContent=items.length+' BC'+(items.length!==1?'s':'');
+  const b=document.getElementById('suivi-termines-body');
+  if(!b)return;
+  if(!items.length){b.innerHTML='<tr class="empty-row"><td colspan="12">Aucun BC clôturé</td></tr>';return;}
+  b.innerHTML=items.map(i=>{
+    const client=getClient(i),vendeur=f(i,'Vendeurencharge')||'—';
+    const numBC=f(i,'Title')||'BC-'+i.ID;
+    const bl=f(i,'N_x00b0_BL')||'—';
+    const fc=f(i,nFCKey())||'—';
+    const chantier=getChantier(i);
+    const dateRec=fmtDate(f(i,'Dateder_x00e9_ception'));
+    const montantRaw=f(i,'MontantHT','Montant_HT','MontantHTTotal');
+    const montantFmt=montantRaw?new Intl.NumberFormat('fr-FR',{style:'currency',currency:'EUR',maximumFractionDigits:0}).format(montantRaw):'—';
+    const s=getStatut(i),ef=getEtatFact(i);
+    return '<tr class="rr">'
+      +'<td class="ref">'+numBC+'</td>'
+      +'<td class="cname">'+client+'</td>'
+      +'<td style="font-size:12px;color:var(--text-secondary)">'+chantier+'</td>'
+      +'<td class="mono">'+bl+'</td>'
+      +'<td class="mono">'+fc+'</td>'
+      +'<td class="amt" style="font-size:11.5px">'+montantFmt+'</td>'
+      +'<td class="mono">'+dateRec+'</td>'
+      +'<td>'+vendeur+'</td>'
+      +'<td>'+bStatut(s)+'</td>'
+      +'<td>'+bFact(ef)+'</td>'
+      +'<td style="text-align:center">'+bDocuware(i)+'</td>'
+      +'<td><div class="btn-grp"><button class="btn" onclick="openBCPanel('+i.ID+')">🔍 Détail</button></div></td>'
+      +'</tr>';
   }).join('');
 }
 
@@ -1234,7 +1296,6 @@ function bcRow(i,showAction=true){
     <button class="btn gr" onclick="openFacturerModal(${i.ID},'${nE}','${cE}')">💰 Facturer</button>
     <button class="btn" onclick="openTraiterModal(${i.ID},'${nE}','${cE}')">🔧 Traiter</button>
     <button class="btn" onclick="livraisonPartielleFlow(${i.ID},'${nE}','${cE}')">🔀 Partielle</button>
-    <button class="btn" onclick="envoyerBCFlow(${i.ID},'${nE}')">📦 Docuware</button>
   </div></td>`:'';
   return`<tr class="rr" data-bc-id="${i.ID}"><td class="ref">${numBC}</td><td class="cname">${client}</td><td style="font-size:12px;color:var(--text-secondary)">${chantier}</td><td class="mono" style="color:var(--blue-mid);font-size:11px">${numDev}</td><td class="mono">${dateLiv}</td><td class="mono">${numBL}</td><td class="mono">${numFC!=='—'?`<span style="color:var(--teal)">${numFC}</span>`:numFC}</td><td class="amt" style="font-size:11.5px">${montantFmt}</td><td>${vendeur}</td><td>${bStatut(s)}</td><td>${bFact(ef)}</td>${act}</tr>`;
 }
@@ -1263,7 +1324,6 @@ function renderAFacturer(){
       <button class="btn gr" onclick="openFacturerModal(${i.ID},'${nE}','${cE}')">💰 Facturer</button>
       <button class="btn" onclick="openTraiterModal(${i.ID},'${nE}','${cE}')">🔧 Traiter</button>
       <button class="btn" onclick="livraisonPartielleFlow(${i.ID},'${nE}','${cE}')">🔀 Partielle</button>
-      <button class="btn" onclick="envoyerBCFlow(${i.ID},'${nE}')">📦 Docuware</button>
     </div></td></tr>`;
   }).join('');
 }
@@ -1675,6 +1735,7 @@ function renderAll(){
   document.getElementById('suivi-recu-body').innerHTML=recuHtml;
   renderAFacturer();
   renderDocuware();
+  renderTermines();
   renderHistorique();
   renderSuiviEnCours();
   // Vue Matin — 3 sections
@@ -1771,7 +1832,6 @@ function renderSuiviEnCours(){renderHistorique();
         <button class="btn gr" onclick="openFacturerModal(${i.ID},'${nE}','${cE}')">💰</button>
         <button class="btn" onclick="openTraiterModal(${i.ID},'${nE}','${cE}')">🔧</button>
         <button class="btn" onclick="livraisonPartielleFlow(${i.ID},'${nE}','${cE}')">🔀</button>
-        <button class="btn" onclick="envoyerBCFlow(${i.ID},'${nE}')">📦</button>
       </div></td>
     </tr>`;
   }).join('');
@@ -2623,7 +2683,6 @@ function rechercheGlobalBC(){
           <button class="btn" onclick="openBCPanel(${i.ID})">🔍 Détail</button>
           <button class="btn gr" onclick="openFacturerModal(${i.ID},'${nE}','${cE}')">💰</button>
           <button class="btn" onclick="openTraiterModal(${i.ID},'${nE}','${cE}')">🔧</button>
-          <button class="btn" onclick="event.stopPropagation();envoyerBCFlow(${i.ID},'${nE}')">📦</button>
         </div></td>
       </tr>`;
     }catch(e){
@@ -2939,7 +2998,7 @@ function renderChecklist(){
         <button class="btn" onclick="openBCPanel(${i.ID})">🔍 Détail</button>
         <button class="btn" onclick="openTraiterModal(${i.ID},'${nE}','${cE}')">🔧 Traiter</button>
         ${!facture?`<button class="btn gr" onclick="openFacturerModal(${i.ID},'${nE}','${cE}')">💰</button>`:''}
-        ${!docuware&&hasPJ?`<button class="btn" onclick="event.stopPropagation();envoyerBCFlow(${i.ID},'${nE}')">📦</button>`:''}
+
         ${!hasPJ?`<button class="btn" onclick="openBCPanel(${i.ID})" style="color:var(--amber);border-color:var(--amber);font-size:10.5px">📎 Joindre</button>`:''}
       </div></td>
     </tr>`;
