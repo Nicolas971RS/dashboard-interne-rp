@@ -860,7 +860,7 @@ const TODAY=new Date();TODAY.setHours(0,0,0,0);
 const daysSince=d=>{if(!d)return 0;const dt=new Date(d);dt.setHours(0,0,0,0);return Math.floor((TODAY-dt)/86400000);};
 const daysLate=d=>{if(!d)return -999;const dt=new Date(d);dt.setHours(0,0,0,0);return Math.floor((TODAY-dt)/86400000);};
 const fmtDate=d=>{if(!d)return '—';try{return new Date(d).toLocaleDateString('fr-FR');}catch(e){return '—';}};
-const fmtMoney=v=>{if(!v&&v!==0)return '—';return Number(v).toLocaleString('fr-FR',{minimumFractionDigits:0,maximumFractionDigits:0})+' €';};
+const fmtMoney=v=>{if(!v&&v!==0)return '—';return Number(v).toLocaleString('fr-FR',{minimumFractionDigits:2,maximumFractionDigits:2})+' €';};
 const urgFromDays=days=>{
   if(days>10)return{cls:'cr',lbl:'🚨 Critique +10j',row:'rc'};
   if(days>5) return{cls:'tu',lbl:'🔴 Très urgent',row:'rtu'};
@@ -915,7 +915,7 @@ async function loadAll(){
   try{
     const [suivi,projTitles,lignes,dbc,devis,clients]=await Promise.all([
       // Suivi_BC: $select=*
-      spFetch('sites/RseauxPlus','Suivi_BC','$select=*&$orderby=ID desc'),
+      spFetch('sites/RseauxPlus','Suivi_BC','$select=*,Editor/Title&$expand=Editor&$orderby=ID desc'),
       // Projet lookup titles — appel séparé compatible expand
       fetchProjetTitles(),
       // Lignes_BC
@@ -1103,7 +1103,7 @@ function renderTermines(){
     const chantier=getChantier(i);
     const dateRec=fmtDate(f(i,'Dateder_x00e9_ception'));
     const montantRaw=f(i,'MontantHT','Montant_HT','MontantHTTotal');
-    const montantFmt=montantRaw?new Intl.NumberFormat('fr-FR',{style:'currency',currency:'EUR',maximumFractionDigits:0}).format(montantRaw):'—';
+    const montantFmt=montantRaw?new Intl.NumberFormat('fr-FR',{style:'currency',currency:'EUR',minimumFractionDigits:2,maximumFractionDigits:2}).format(montantRaw):'—';
     const s=getStatut(i),ef=getEtatFact(i);
     return '<tr class="rr">'
       +'<td class="ref">'+numBC+'</td>'
@@ -1289,7 +1289,7 @@ function bcRow(i,showAction=true){
   const chantier=getChantier(i);
   const numDev=f(i,'N_x00b0_Devis','Num_ro_Devis','NumeroDevis')||'—';
   const montant=f(i,'MontantHT');
-  const montantFmt=montant?new Intl.NumberFormat('fr-FR',{style:'currency',currency:'EUR',maximumFractionDigits:0}).format(montant):'—';
+  const montantFmt=montant?new Intl.NumberFormat('fr-FR',{style:'currency',currency:'EUR',minimumFractionDigits:2,maximumFractionDigits:2}).format(montant):'—';
   const cE=client.replace(/'/g,"\\'"),nE=numBC.replace(/'/g,"\\'");
   const act=showAction?`<td><div class="btn-grp">
     <button class="btn" onclick="openBCPanel(${i.ID})">🔍 Détail</button>
@@ -1315,7 +1315,7 @@ function renderAFacturer(){
     const chantier=getChantier(i);
     const numDev=f(i,'N_x00b0_Devis','Num_ro_Devis','NumeroDevis')||'—';
     const montantRaw=f(i,'MontantHT','Montant_HT','MontantHTTotal');
-    const montantFmt=montantRaw?new Intl.NumberFormat('fr-FR',{style:'currency',currency:'EUR',maximumFractionDigits:0}).format(montantRaw):'—';
+    const montantFmt=montantRaw?new Intl.NumberFormat('fr-FR',{style:'currency',currency:'EUR',minimumFractionDigits:2,maximumFractionDigits:2}).format(montantRaw):'—';
     const dateRec=fmtDate(f(i,'Dateder_x00e9_ception'));
     const s=getStatut(i),ef=getEtatFact(i);
     const cE=client.replace(/'/g,"\\'"),nE=numBC.replace(/'/g,"\\'");
@@ -1347,7 +1347,7 @@ function renderHistorique(){
     const numDev=f(i,'N_x00b0_Devis','Num_ro_Devis','NumeroDevis')||'—';
     const chantier=getChantier(i);
     const montantRaw=f(i,'MontantHT','Montant_HT','MontantHTTotal');
-    const montantFmt=montantRaw?new Intl.NumberFormat('fr-FR',{style:'currency',currency:'EUR',maximumFractionDigits:0}).format(montantRaw):'—';
+    const montantFmt=montantRaw?new Intl.NumberFormat('fr-FR',{style:'currency',currency:'EUR',minimumFractionDigits:2,maximumFractionDigits:2}).format(montantRaw):'—';
     const dateLiv=f(i,'DateLivraisonpr_x00e9_vue');
     const late=daysLate(dateLiv);
     const urg=urgFromDays(late>0?late:0);
@@ -1811,7 +1811,7 @@ function renderSuiviEnCours(){renderHistorique();
     const chantier=getChantier(i);
     const numDev=f(i,'N_x00b0_Devis','Num_ro_Devis','NumeroDevis')||'—';
     const montantRaw=f(i,'MontantHT','Montant_HT','MontantHTTotal');
-    const montantFmt=montantRaw?new Intl.NumberFormat('fr-FR',{style:'currency',currency:'EUR',maximumFractionDigits:0}).format(montantRaw):'—';
+    const montantFmt=montantRaw?new Intl.NumberFormat('fr-FR',{style:'currency',currency:'EUR',minimumFractionDigits:2,maximumFractionDigits:2}).format(montantRaw):'—';
     const dateLiv=f(i,'DateLivraisonpr_x00e9_vue');
     const late=daysLate(dateLiv);
     const urg=urgFromDays(late>0?late:0);
@@ -2245,6 +2245,34 @@ async function spAddAttachment(site,list,itemId,fileName,fileArrayBuffer){
   if(!r.ok){const t=await r.text().catch(()=>'');throw new Error(`Upload: HTTP ${r.status} — ${t.substring(0,200)}`);}
 }
 
+async function spDeleteAttachment(site,list,itemId,fileName){
+  const safe=encodeURIComponent(fileName.replace(/['"]/g,'_'));
+  const url=`${C.spRoot}/${site}/_api/web/lists/getbytitle('${list}')/items(${itemId})/AttachmentFiles/getByFileName('${safe}')`;
+  const r=await fetch(url,{
+    method:'DELETE',
+    headers:{'Authorization':`Bearer ${getToken()}`,'Accept':'application/json;odata=nometadata','X-HTTP-Method':'DELETE','IF-MATCH':'*'}
+  });
+  if(!r.ok){const t=await r.text().catch(()=>'');throw new Error(`Suppression: HTTP ${r.status} — ${t.substring(0,200)}`);}
+}
+
+async function deleteDBCAttachment(id,fileName){
+  const ok=await showConfirm('🗑 Supprimer la pièce jointe',`Supprimer <strong>${fileName}</strong> ?<br>Cette action est irréversible.`,'🗑 Supprimer','delete');
+  if(!ok)return;
+  try{
+    await spDeleteAttachment('sites/BondeCommande','Demandes_BC',id,fileName);
+    setTimeout(()=>openDBCPanel(id),400);
+  }catch(e){alert('Erreur suppression : '+e.message);}
+}
+
+async function deleteBCAttachment(id,fileName){
+  const ok=await showConfirm('🗑 Supprimer la pièce jointe',`Supprimer <strong>${fileName}</strong> ?<br>Cette action est irréversible.`,'🗑 Supprimer','delete');
+  if(!ok)return;
+  try{
+    await spDeleteAttachment('sites/RseauxPlus','Suivi_BC',id,fileName);
+    setTimeout(()=>openBCPanel(id),400);
+  }catch(e){alert('Erreur suppression : '+e.message);}
+}
+
 // ── Récupérer pièces jointes ──
 async function getAttachments(site,list,id){
   const url=`${C.spRoot}/${site}/_api/web/lists/getbytitle('${list}')/items(${id})/AttachmentFiles`;
@@ -2659,7 +2687,7 @@ function rechercheGlobalBC(){
       const numFC=String(f(i,nFCKey())||'—');
       const numDev=String(f(i,'N_x00b0_Devis','Num_ro_Devis','NumeroDevis')||'—');
       const montantRaw=f(i,'MontantHT','Montant_HT','MontantHTTotal');
-      const montantFmt=montantRaw?new Intl.NumberFormat('fr-FR',{style:'currency',currency:'EUR',maximumFractionDigits:0}).format(montantRaw):'—';
+      const montantFmt=montantRaw?new Intl.NumberFormat('fr-FR',{style:'currency',currency:'EUR',minimumFractionDigits:2,maximumFractionDigits:2}).format(montantRaw):'—';
       const dateRec=fmtDate(f(i,'Dateder_x00e9_ception'));
       const cE=client.replace(/'/g,"\\'"),nE=numBC.replace(/'/g,"\\'");
       const docBadge=bDocuware(i);
@@ -3179,11 +3207,14 @@ async function openDBCPanel(id){
         const url=C.spRoot+(a.ServerRelativeUrl||'');
         const ext=(a.FileName||'').split('.').pop().toLowerCase();
         const icon=ext==='pdf'?'📄':['jpg','jpeg','png','gif'].includes(ext)?'🖼️':'📎';
-        html+=`<a class="pattach" onclick="openAttachment('${url}')">
-          <span style="font-size:18px">${icon}</span>
-          <div style="flex:1;overflow:hidden"><div class="pa-name">${a.FileName}</div><div class="pa-hint">${ext.toUpperCase()} · Cliquer pour ouvrir</div></div>
-          <span style="color:var(--teal);font-size:18px">→</span>
-        </a>`;
+        html+=`<div class="pattach" style="display:flex;align-items:center;gap:8px">
+          <a onclick="openAttachment('${url}')" style="display:flex;align-items:center;gap:10px;flex:1;text-decoration:none;color:inherit">
+            <span style="font-size:18px">${icon}</span>
+            <div style="flex:1;overflow:hidden"><div class="pa-name">${a.FileName}</div><div class="pa-hint">${ext.toUpperCase()} · Cliquer pour ouvrir</div></div>
+            <span style="color:var(--teal);font-size:18px">→</span>
+          </a>
+          <button onclick="deleteDBCAttachment(${id},'${a.FileName}')" style="background:none;border:1px solid var(--red);border-radius:4px;padding:2px 7px;font-size:11px;color:var(--red);cursor:pointer;flex-shrink:0" title="Supprimer">🗑</button>
+        </div>`;
       });
     }else{
       html+=`<div style="background:var(--grey-xlight);border:1px dashed var(--border);border-radius:var(--radius-sm);padding:14px;text-align:center;color:var(--text-muted);font-size:12.5px">Aucun BL scanné attaché</div>`;
@@ -3321,7 +3352,7 @@ async function openBCPanel(id){
         <div class="pf"><div class="pf-lbl">Statut</div><div class="pf-val">${bStatut(s)}</div></div>
       </div>
       ${(()=>{
-        const modBy=item.Editor?.DisplayName||item.Editor?.Value||f(item,'Editor')||'';
+        const modBy=item.Editor?.Title||item.Editor?.DisplayName||item.Editor?.LookupValue||f(item,'Editor')||'';
         const modAt=f(item,'Modified');
         if(!modBy&&!modAt)return'';
         const mins=modAt?Math.round((Date.now()-new Date(modAt).getTime())/60000):null;
@@ -3382,14 +3413,17 @@ async function openBCPanel(id){
         const url=C.spRoot+(a.ServerRelativeUrl||'');
         const ext=(a.FileName||'').split('.').pop().toLowerCase();
         const icon=ext==='pdf'?'📄':['jpg','jpeg','png','gif'].includes(ext)?'🖼️':ext==='xlsx'||ext==='xls'?'📊':'📎';
-        html+=`<a class="pattach" onclick="openAttachment('${url}')">
-          <span style="font-size:18px">${icon}</span>
-          <div style="flex:1;overflow:hidden">
-            <div class="pa-name">${a.FileName}</div>
-            <div class="pa-hint">${ext.toUpperCase()} · Cliquer pour ouvrir</div>
-          </div>
-          <span style="color:var(--teal);font-size:18px">→</span>
-        </a>`;
+        html+=`<div class="pattach" style="display:flex;align-items:center;gap:8px">
+          <a onclick="openAttachment('${url}')" style="display:flex;align-items:center;gap:10px;flex:1;text-decoration:none;color:inherit">
+            <span style="font-size:18px">${icon}</span>
+            <div style="flex:1;overflow:hidden">
+              <div class="pa-name">${a.FileName}</div>
+              <div class="pa-hint">${ext.toUpperCase()} · Cliquer pour ouvrir</div>
+            </div>
+            <span style="color:var(--teal);font-size:18px">→</span>
+          </a>
+          <button onclick="deleteBCAttachment(${id},'${a.FileName}')" style="background:none;border:1px solid var(--red);border-radius:4px;padding:2px 7px;font-size:11px;color:var(--red);cursor:pointer;flex-shrink:0" title="Supprimer">🗑</button>
+        </div>`;
       });
     }else{
       html+=`<div style="background:var(--grey-xlight);border:1px dashed var(--border);border-radius:var(--radius-sm);padding:14px;text-align:center;color:var(--text-muted);font-size:12.5px">
