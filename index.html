@@ -536,22 +536,21 @@
       </div>
 
       <!-- ACCORDÉON 1b — Tous les Reçus -->
-      <div class="acc-hd" onclick="toggleAcc('acc-tous-recu',this)">
+      <div class="acc-hd" onclick="toggleAcc('acc-tous-recu',this)" style="cursor:pointer">
         <div class="acc-hd-left">
           <div class="acc-hd-title">📦 Tous les BCs réceptionnés</div>
-          <div class="acc-hd-meta"><span class="ctag g" id="sd-tous-recu-count">0 BC</span><span class="site-tag rp">Statut = Reçu · Toutes dates</span></div>
+          <div class="acc-hd-meta"><span class="ctag g" id="sd-tous-recu-count">0 BC</span><span class="site-tag rp">Statut = Reçu · Depuis avril 2026</span>
+            <select class="fs" id="filter-tous-recu-periode" onchange="event.stopPropagation();renderTousRecu()" onclick="event.stopPropagation()" style="font-size:11px;margin-left:8px">
+              <option value="all">Toutes les dates</option>
+              <option value="7">7 derniers jours</option>
+              <option value="30">30 derniers jours</option>
+              <option value="60">60 derniers jours</option>
+            </select>
+          </div>
         </div>
         <span class="acc-arrow">▼</span>
       </div>
       <div class="acc-body" id="acc-tous-recu">
-        <div style="display:flex;gap:8px;align-items:center;padding:8px 12px 4px;flex-wrap:wrap">
-          <select class="fs" id="filter-tous-recu-periode" onchange="renderTousRecu()" style="font-size:12px">
-            <option value="all">Toutes les dates (depuis avril 2026)</option>
-            <option value="7">7 derniers jours</option>
-            <option value="30">30 derniers jours</option>
-            <option value="60">60 derniers jours</option>
-          </select>
-        </div>
         <div class="tc"><table>
           <thead><tr><th>N° BC</th><th>Client</th><th>Chantier</th><th>N° Devis</th><th>Date réception</th><th>N° BL</th><th>N° FC</th><th>Montant HT</th><th>Vendeur</th><th>Statut</th><th>État facturation</th><th>Action</th></tr></thead>
           <tbody id="suivi-tous-recu-body"><tr class="empty-row"><td colspan="12">Chargement...</td></tr></tbody>
