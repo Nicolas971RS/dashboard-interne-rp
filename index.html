@@ -535,6 +535,21 @@
         </table></div>
       </div>
 
+      <!-- ACCORDÉON 1b — Tous les Reçus -->
+      <div class="acc-hd" onclick="toggleAcc('acc-tous-recu',this)">
+        <div class="acc-hd-left">
+          <div class="acc-hd-title">📦 Tous les BCs réceptionnés</div>
+          <div class="acc-hd-meta"><span class="ctag g" id="sd-tous-recu-count">0 BC</span><span class="site-tag rp">Statut = Reçu · Toutes dates</span></div>
+        </div>
+        <span class="acc-arrow">▼</span>
+      </div>
+      <div class="acc-body" id="acc-tous-recu">
+        <div class="tc"><table>
+          <thead><tr><th>N° BC</th><th>Client</th><th>Chantier</th><th>N° Devis</th><th>Date réception</th><th>N° BL</th><th>N° FC</th><th>Montant HT</th><th>Vendeur</th><th>Statut</th><th>État facturation</th><th>Action</th></tr></thead>
+          <tbody id="suivi-tous-recu-body"><tr class="empty-row"><td colspan="12">Chargement...</td></tr></tbody>
+        </table></div>
+      </div>
+
       <!-- ACCORDÉON 2 — À facturer -->
       <div class="acc-hd" onclick="toggleAcc('acc-afact',this)">
         <div class="acc-hd-left">
@@ -1122,6 +1137,16 @@ function renderTermines(){
   }).join('');
 }
 
+function renderTousRecu(){
+  const items=getSuiviTousRecu();
+  const el=document.getElementById('sd-tous-recu-count');
+  if(el)el.textContent=items.length+' BC'+(items.length!==1?'s':'');
+  const b=document.getElementById('suivi-tous-recu-body');
+  if(!b)return;
+  if(!items.length){b.innerHTML='<tr class="empty-row"><td colspan="12">Aucun BC réceptionné</td></tr>';return;}
+  b.innerHTML=items.map(i=>bcRow(i,false)).join('');
+}
+
 // ═══ TOKEN POWER PLATFORM (silent — prompt=none) ═══
 const PP_SCOPE='https://service.flow.microsoft.com/user_impersonation openid';
 
@@ -1239,6 +1264,15 @@ const getSuiviRecu=()=>{
     const dateRec=f(i,'Dateder_x00e9_ception');
     if(!dateRec) return false;
     return dateRec.slice(0,10)===todayStr;
+  });
+};
+const getSuiviTousRecu=()=>{
+  const fV=getFilterVendeur(),fC=getFilterClient();
+  return DATA.suivi.filter(i=>{
+    if(getStatut(i)!=='Reçu')return false;
+    if(fV!=='all'&&f(i,'Vendeurencharge')!==fV)return false;
+    if(fC!=='all'&&getClient(i)!==fC)return false;
+    return true;
   });
 };
 const getSuiviAFacturer=()=>DATA.suivi.filter(i=>{
@@ -1735,6 +1769,7 @@ function renderAll(){
   document.getElementById('suivi-recu-body').innerHTML=recuHtml;
   renderAFacturer();
   renderDocuware();
+  renderTousRecu();
   renderTermines();
   renderHistorique();
   renderSuiviEnCours();
