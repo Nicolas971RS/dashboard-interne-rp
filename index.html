@@ -544,6 +544,14 @@
         <span class="acc-arrow">▼</span>
       </div>
       <div class="acc-body" id="acc-tous-recu">
+        <div style="display:flex;gap:8px;align-items:center;padding:8px 12px 4px;flex-wrap:wrap">
+          <select class="fs" id="filter-tous-recu-periode" onchange="renderTousRecu()" style="font-size:12px">
+            <option value="all">Toutes les dates (depuis avril 2026)</option>
+            <option value="7">7 derniers jours</option>
+            <option value="30">30 derniers jours</option>
+            <option value="60">60 derniers jours</option>
+          </select>
+        </div>
         <div class="tc"><table>
           <thead><tr><th>N° BC</th><th>Client</th><th>Chantier</th><th>N° Devis</th><th>Date réception</th><th>N° BL</th><th>N° FC</th><th>Montant HT</th><th>Vendeur</th><th>Statut</th><th>État facturation</th><th>Action</th></tr></thead>
           <tbody id="suivi-tous-recu-body"><tr class="empty-row"><td colspan="12">Chargement...</td></tr></tbody>
@@ -1143,8 +1151,8 @@ function renderTousRecu(){
   if(el)el.textContent=items.length+' BC'+(items.length!==1?'s':'');
   const b=document.getElementById('suivi-tous-recu-body');
   if(!b)return;
-  if(!items.length){b.innerHTML='<tr class="empty-row"><td colspan="12">Aucun BC réceptionné</td></tr>';return;}
-  b.innerHTML=items.map(i=>bcRow(i,false)).join('');
+  if(!items.length){b.innerHTML='<tr class="empty-row"><td colspan="12">Aucun BC réceptionné depuis le 1er avril 2026</td></tr>';return;}
+  b.innerHTML=items.map(i=>bcRow(i,true)).join('');
 }
 
 // ═══ TOKEN POWER PLATFORM (silent — prompt=none) ═══
@@ -1268,12 +1276,20 @@ const getSuiviRecu=()=>{
 };
 const getSuiviTousRecu=()=>{
   const fV=getFilterVendeur(),fC=getFilterClient();
+  const cutoff=new Date('2026-04-01');
+  const fP=document.getElementById('filter-tous-recu-periode')?.value||'all';
   return DATA.suivi.filter(i=>{
     if(getStatut(i)!=='Reçu')return false;
+    const dateRec=f(i,'Dateder_x00e9_ception');
+    if(!dateRec||new Date(dateRec)<cutoff)return false;
+    if(fP!=='all'){
+      const days={'7':7,'30':30,'60':60}[fP];
+      if(days&&daysSince(dateRec)>days)return false;
+    }
     if(fV!=='all'&&f(i,'Vendeurencharge')!==fV)return false;
     if(fC!=='all'&&getClient(i)!==fC)return false;
     return true;
-  });
+  }).sort((a,b)=>new Date(f(b,'Dateder_x00e9_ception')||0)-new Date(f(a,'Dateder_x00e9_ception')||0));
 };
 const getSuiviAFacturer=()=>DATA.suivi.filter(i=>{
   const bl=f(i,'N_x00b0_BL');
