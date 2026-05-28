@@ -542,9 +542,10 @@
           <div class="acc-hd-meta"><span class="ctag g" id="sd-tous-recu-count">0 BC</span><span class="site-tag rp">Statut = Reçu · Depuis avril 2026</span>
             <select class="fs" id="filter-tous-recu-periode" onchange="event.stopPropagation();renderTousRecu()" onclick="event.stopPropagation()" style="font-size:11px;margin-left:8px">
               <option value="all">Toutes les dates</option>
-              <option value="7">7 derniers jours</option>
-              <option value="30">30 derniers jours</option>
-              <option value="60">60 derniers jours</option>
+              <option value="0-7">0 — 7 jours</option>
+              <option value="7-10">7 — 10 jours</option>
+              <option value="10-30">10 — 30 jours</option>
+              <option value="30+">+ 30 jours</option>
             </select>
           </div>
         </div>
@@ -1282,8 +1283,11 @@ const getSuiviTousRecu=()=>{
     const dateRec=f(i,'Dateder_x00e9_ception');
     if(!dateRec||new Date(dateRec)<cutoff)return false;
     if(fP!=='all'){
-      const days={'7':7,'30':30,'60':60}[fP];
-      if(days&&daysSince(dateRec)>days)return false;
+      const d=daysSince(dateRec);
+      if(fP==='0-7'&&(d<0||d>7))return false;
+      if(fP==='7-10'&&(d<=7||d>10))return false;
+      if(fP==='10-30'&&(d<=10||d>30))return false;
+      if(fP==='30+'&&d<=30)return false;
     }
     if(fV!=='all'&&f(i,'Vendeurencharge')!==fV)return false;
     if(fC!=='all'&&getClient(i)!==fC)return false;
