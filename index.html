@@ -592,7 +592,7 @@
       <div class="acc-hd" onclick="toggleAcc('acc-termines',this)">
         <div class="acc-hd-left">
           <div class="acc-hd-title">✅ Terminés — BC envoyé à Commandes</div>
-          <div class="acc-hd-meta"><span class="ctag g" id="sd-termines-count">0</span><span class="site-tag rp">Envoyer_BC = Oui · Clôturés</span></div>
+          <div class="acc-hd-meta"><span class="ctag g" id="sd-termines-count">0</span><span class="site-tag rp">Envoyer_Docuware = true · Clôturés</span></div>
         </div>
         <span class="acc-arrow">▼</span>
       </div>
@@ -1068,7 +1068,7 @@ function getSuiviDocuware(){
     const lienDW=f(i,'Lien_Docuware')||f(i,'LienDocuware')||'';
     if(ef!=='Entièrement facturé')return false;
     if(lienDW)return false; // déjà archivé via lien Docuware
-    if(f(i,'Envoyer_BC')==='Oui'||i['Envoyer_BC']===true)return false; // déjà envoyé par flow PA
+    if(f(i,'Envoyer_Docuware')===true||f(i,'Envoyer_Docuware')==='Oui')return false; // déjà envoyé par flow PA
     if(fV!=='all'&&f(i,'Vendeurencharge')!==fV)return false;
     if(fC!=='all'&&getClient(i)!==fC)return false;
     return true;
@@ -1077,7 +1077,7 @@ function getSuiviDocuware(){
 function getSuiviTermines(){
   const fV=getFilterVendeur(),fC=getFilterClient();
   return DATA.suivi.filter(i=>{
-    const sent=f(i,'Envoyer_BC')==='Oui'||i['Envoyer_BC']===true;
+    const sent=f(i,'Envoyer_Docuware')===true||f(i,'Envoyer_Docuware')==='Oui';
     const lienDW=f(i,'Lien_Docuware')||f(i,'LienDocuware')||'';
     if(!sent&&!lienDW)return false;
     if(fV!=='all'&&f(i,'Vendeurencharge')!==fV)return false;
@@ -2603,8 +2603,8 @@ document.addEventListener('keydown',e=>{
 // ═══ RECHERCHE GLOBALE BC ═══
 // ═══════════════════════════════════════════════════════════
 function bDocuware(i){
-  // Envoyer_BC = "Oui" est écrit par le flow PA après envoi Docuware réussi
-  const sent=f(i,'Envoyer_BC');
+  // Envoyer_Docuware = true est écrit par le flow PA après envoi réussi
+  const sent=f(i,'Envoyer_Docuware')===true||f(i,'Envoyer_Docuware')==='Oui';
   const lien=i['Lien_dossier']||i['Liendossier']||i['Lien_Dossier'];
   if(lien&&typeof lien==='string'&&lien.startsWith('http'))
     return`<a href="${lien}" target="_blank" title="Ouvrir dans Docuware" style="color:var(--teal);font-size:13px;text-decoration:none">📦✅</a>`;
@@ -3002,7 +3002,7 @@ function getChecklistItems(){
     const hasPJ=!!(i['A_des_Pi_x00e8_ces_Jointes']===true||i['A_des_Pi_x00e8_ces_Jointes']==='true'||i['Attachments']===true);
     const facture=getEtatFact(i)==='Entièrement facturé';
     const termine=statut==='Terminé';
-    const docuware=f(i,'Envoyer_BC')==='Oui'||i['Envoyer_BC']===true;
+    const docuware=f(i,'Envoyer_Docuware')===true||f(i,'Envoyer_Docuware')==='Oui';
     const hasVendeur=!!(f(i,'Vendeurencharge')||'').trim();
     // Si Terminé + Docuware envoyé → ne plus apparaître même si PJ manquante (déjà clôturé)
     if(termine&&docuware&&facture)return false;
@@ -3057,7 +3057,7 @@ function renderChecklist(){
     const hasPJ=!!(i['A_des_Pi_x00e8_ces_Jointes']===true||i['A_des_Pi_x00e8_ces_Jointes']==='true'||i['Attachments']===true);
     const facture=getEtatFact(i)==='Entièrement facturé';
     const termine=getStatut(i)==='Terminé';
-    const docuware=!!(f(i,'Envoyer_BC')==='Oui'||i['Envoyer_BC']===true);
+    const docuware=!!(f(i,'Envoyer_Docuware')===true||f(i,'Envoyer_Docuware')==='Oui');
     const hasVendeur=!!(f(i,'Vendeurencharge')||'').trim();
     const dateRec=fmtDate(f(i,'Dateder_x00e9_ception'));
     const cE=client.replace(/'/g,"\'"),nE=numBC.replace(/'/g,"\'");
@@ -3097,7 +3097,7 @@ function exportChecklistCSV(){
     {label:'PJ jointe',   fn:i=>(i['A_des_Pi_x00e8_ces_Jointes']===true||i['Attachments']===true)?'✅':'⚠️ MANQUANTE'},
     {label:'Facturé',     fn:i=>getEtatFact(i)==='Entièrement facturé'?'✅':'❌'},
     {label:'Terminé',     fn:i=>getStatut(i)==='Terminé'?'✅':'❌'},
-    {label:'Docuware',    fn:i=>f(i,'Envoyer_BC')==='Oui'?'✅':'❌'},
+    {label:'Docuware',    fn:i=>f(i,'Envoyer_Docuware')===true||f(i,'Envoyer_Docuware')==='Oui'?'✅':'❌'},
   ],'checklist_BC.csv');
 }
 
@@ -3742,11 +3742,11 @@ async function envoyerBCFlow(id,numBC){
   try{
     await spPatch('sites/RseauxPlus','Suivi_BC',id,{
       'Envoyer_Docuware':true
-      // Envoyer_BC sera mis à "Oui" par le flow PA après exécution réussie
+      // Envoyer_Docuware sera mis à true par le flow PA après exécution réussie
     });
     // Marquer localement en mémoire pour feedback immédiat
     const idx=DATA.suivi.findIndex(i=>i.ID===id);
-    if(idx!==-1)DATA.suivi[idx]['Envoyer_BC']='Oui';
+    if(idx!==-1)DATA.suivi[idx]['Envoyer_Docuware']=true;
     renderAll();updateBadges();
     // Feedback non-bloquant
     const toast=document.createElement('div');
