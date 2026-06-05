@@ -1918,7 +1918,7 @@ function renderDBCTable(){
   const fS=document.getElementById('filter-statut-dbc')?.value||'all';
   const q=(document.getElementById('search-dbc')?.value||'').toLowerCase();
   if(fV!=='all')items=items.filter(i=>getDBCVendeur(i)===fV);
-  if(fS!=='all')items=items.filter(i=>(f(i,'Statut')||'').startsWith(fS));
+  if(fS!=='all')items=items.filter(i=>{const s=(f(i,'Statut')||'').trim().toLowerCase().normalize('NFC');return s===fS.trim().toLowerCase().normalize('NFC');});
   if(q)items=items.filter(i=>{
     const client=f(i,'NomClient')||f(i,'Title')||'';
     const employe=f(i,'Nom_Employ_x00e9_')||'';
@@ -2686,14 +2686,14 @@ function rechercheGlobalBC(){
         const client=String(getClient(i)||'').toLowerCase();
         const chantier=String(getChantier(i)||'').toLowerCase();
         // N° BL — scan exhaustif des variantes de noms possibles
-        const blRaw=f(i,'N_BL_Key','N_x00b0_BL','N_x00B0_BL','Num_x00e9_ro_BL','NumBL','N_BL') || scanField(i,'n_bl') || scanField(i,'_bl');
-        const bl=String(blRaw||'').toLowerCase();
+        // N° BL — le champ SharePoint s'appelle N_x00b0_BL sur ce tenant
+        const bl=String(f(i,'N_x00b0_BL','N_x00B0_BL')||'').toLowerCase();
         // N° FC
         const fc=String(f(i,nFCKey())||'').toLowerCase();
         const v=getVendeurStr(i).toLowerCase();
         // N° Devis — scan exhaustif
-        const devRaw=f(i,'N_x00b0_Devis','N_x00B0_Devis','Num_ro_Devis','NumeroDevis','N_Devis') || scanField(i,'_x00b0_devis') || scanField(i,'devis');
-        const numDev=String(devRaw||'').toLowerCase();
+        // N° Devis — le champ SharePoint s'appelle N_x00b0_Devis sur ce tenant
+        const numDev=String(f(i,'N_x00b0_Devis','N_x00B0_Devis','Num_ro_Devis','NumeroDevis')||'').toLowerCase();
         if(!numBC.includes(q)&&!client.includes(q)&&!chantier.includes(q)&&!bl.includes(q)&&!fc.includes(q)&&!v.includes(q)&&!numDev.includes(q))return false;
       }
       if(statut!=='all'&&getStatut(i)!==statut)return false;
