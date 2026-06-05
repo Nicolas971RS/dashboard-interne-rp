@@ -900,7 +900,7 @@ function bFact(s){
   const m={'Non Facturé':'nf','Partiellement facturé':'pf','Entièrement facturé':'ef'};
   return `<span class="b ${m[s]||'nf'}">${s||'Non Facturé'}</span>`;
 }
-function bDBC(s){return s==='Relancé'||s==='Litigieux'?`<span class="b dbr">${s}</span>`:`<span class="b dba">${s||'En attente BC'}</span>`;}
+function bDBC(s){if(s==="Litigieux")return`<span class="b dbr">${s}</span>`;if(s==="Relancé")return`<span class="b dbr">${s}</span>`;if(s==="Rappel Envoyé")return`<span class="b denvoye">${s}</span>`;if(s==="BC Reçu")return`<span class="b recu">${s}</span>`;return`<span class="b dba">${s||"En attente BC"}</span>`;}
 function bDevis(s){
   const m={
     'Nouvelle':      'dcours',
@@ -2686,7 +2686,7 @@ function rechercheGlobalBC(){
         const client=String(getClient(i)||'').toLowerCase();
         const chantier=String(getChantier(i)||'').toLowerCase();
         // N° BL — scan exhaustif des variantes de noms possibles
-        const blRaw=f(i,'N_x00b0_BL','N_x00B0_BL','Num_x00e9_ro_BL','NumBL','N_BL') || scanField(i,'_x00b0_bl') || scanField(i,'_bl');
+        const blRaw=f(i,'N_BL_Key','N_x00b0_BL','N_x00B0_BL','Num_x00e9_ro_BL','NumBL','N_BL') || scanField(i,'n_bl') || scanField(i,'_bl');
         const bl=String(blRaw||'').toLowerCase();
         // N° FC
         const fc=String(f(i,nFCKey())||'').toLowerCase();
@@ -3238,7 +3238,16 @@ async function openDBCPanel(id){
         <div class="pf"><div class="pf-lbl">N° Devis lié</div><div class="pf-val mono" style="color:var(--blue)">${devisRef}</div></div>
       </div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:0">
-        <div class="pf"><div class="pf-lbl">Vendeur</div><div class="pf-val">${vendeur}</div></div>
+        <div class="pf"><div class="pf-lbl">Vendeur</div>
+          <div style="display:flex;align-items:center;gap:10px;margin-top:4px">
+            ${vendeur!=='—'?`<span style="font-size:12.5px;font-weight:600;color:var(--navy)">${vendeur}</span>`:'<span style="color:var(--text-muted);font-size:12px;font-style:italic">Non assigné</span>'}
+            <select id="dbc-panel-vendeur" style="flex:1;border:1px solid var(--border);border-radius:5px;padding:5px 8px;font-size:12px;font-family:inherit">
+              <option value="">— Inchangé —</option>
+              ${VENDEURS_FIXES.map(v=>`<option value="${v}"${v===vendeur?' selected':''}>${v}</option>`).join('')}
+            </select>
+            <button class="pbtn blue" style="padding:5px 10px;font-size:11px" onclick="updateDBCVendeur(${id})">💾 Sauver</button>
+          </div>
+        </div>
         <div class="pf"><div class="pf-lbl">Nb relances</div><div class="pf-val" style="${nbRel>=2?'color:var(--red);font-weight:700':''}">
           ${nbRel} ${nbRel>=3?'🔴 Escalade requise':nbRel>=2?'🟠':''} ${dateRel?`<span style="font-size:10.5px;color:var(--text-muted)">· dernière ${dateRel}</span>`:''}
         </div></div>
@@ -3340,6 +3349,26 @@ async function uploadDBCAttachment(id){
     // Rafraîchir le panel
     setTimeout(()=>openDBCPanel(id),800);
   }catch(e){
+    if(msg)msg.innerHTML=`<div style="color:var(--red);font-size:12px">❌ ${e.message}</div>`;
+  }
+}
+
+async function updateDBCVendeur(id){
+  const sel=document.getElementById('dbc-panel-vendeur');
+  if(!sel)return;
+  const newVendeur=sel.value;
+  if(!newVendeur){alert('Sélectionnez un vendeur.');return;}
+  try{
+    await spPatch('sites/BondeCommande','Demandes_BC',id,{Vendeur:newVendeur});
+    const idx=DATA.dbc.findIndex(i=>i.ID===id);
+    if(idx!==-1)DATA.dbc[idx]['Vendeur']=newVendeur;
+    const msg=document.getElementById('dbc-panel-msg');
+    if(msg){msg.innerHTML=`<div style="color:var(--green);font-size:12px;padding:4px 0">✅ Vendeur mis à jour : ${newVendeur}</div>`;}
+    renderDBCTable();updateBadges();
+    // Rafraîchir le panel après 1s pour afficher le nouveau vendeur
+    setTimeout(()=>openDBCPanel(id),1000);
+  }catch(e){
+    const msg=document.getElementById('dbc-panel-msg');
     if(msg)msg.innerHTML=`<div style="color:var(--red);font-size:12px">❌ ${e.message}</div>`;
   }
 }
