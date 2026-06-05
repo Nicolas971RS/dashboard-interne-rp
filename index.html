@@ -655,7 +655,7 @@
         <div class="fb">
           <input class="fs" type="text" id="search-dbc" placeholder="🔍 Recherche libre..." oninput="renderDBCTable()" style="min-width:160px">
           <select class="fs" id="filter-vendeur-dbc" onchange="renderDBCTable()"><option value="all">Tous les vendeurs</option></select>
-          <select class="fs" id="filter-statut-dbc" onchange="renderDBCTable()"><option value="all">Tous les statuts</option><option value="En attente BC">En attente BC</option><option value="Relancé">Relancé</option><option value="Litigieux">Litigieux</option><option value="BC Reçu">BC Reçu</option></select>
+          <select class="fs" id="filter-statut-dbc" onchange="renderDBCTable()"><option value="all">Tous les statuts</option><option value="En attente BC">En attente BC</option><option value="Relancé">Relancé</option><option value="Rappel Envoyé">Rappel Envoyé</option><option value="Litigieux">Litigieux</option><option value="BC Reçu">BC Reçu</option></select>
           <button class="btn" onclick="exportDBCCSV()">⬇ CSV</button>
         </div>
       </div>
@@ -2685,10 +2685,15 @@ function rechercheGlobalBC(){
         const numBC=String(f(i,'Title')||'').toLowerCase();
         const client=String(getClient(i)||'').toLowerCase();
         const chantier=String(getChantier(i)||'').toLowerCase();
-        const bl=String(f(i,'N_x00b0_BL')||'').toLowerCase();
+        // N° BL — scan exhaustif des variantes de noms possibles
+        const blRaw=f(i,'N_x00b0_BL','N_x00B0_BL','Num_x00e9_ro_BL','NumBL','N_BL') || scanField(i,'_x00b0_bl') || scanField(i,'_bl');
+        const bl=String(blRaw||'').toLowerCase();
+        // N° FC
         const fc=String(f(i,nFCKey())||'').toLowerCase();
         const v=getVendeurStr(i).toLowerCase();
-        const numDev=String(f(i,'N_x00b0_Devis','Num_ro_Devis','NumeroDevis')||'').toLowerCase();
+        // N° Devis — scan exhaustif
+        const devRaw=f(i,'N_x00b0_Devis','N_x00B0_Devis','Num_ro_Devis','NumeroDevis','N_Devis') || scanField(i,'_x00b0_devis') || scanField(i,'devis');
+        const numDev=String(devRaw||'').toLowerCase();
         if(!numBC.includes(q)&&!client.includes(q)&&!chantier.includes(q)&&!bl.includes(q)&&!fc.includes(q)&&!v.includes(q)&&!numDev.includes(q))return false;
       }
       if(statut!=='all'&&getStatut(i)!==statut)return false;
@@ -3244,6 +3249,7 @@ async function openDBCPanel(id){
           ${!isReceu?`<select id="dbc-panel-statut" style="flex:1;border:1px solid var(--border);border-radius:5px;padding:5px 8px;font-size:12px;font-family:inherit">
             <option value="En attente BC"${statut==='En attente BC'?' selected':''}>En attente BC</option>
             <option value="Relancé"${statut==='Relancé'?' selected':''}>Relancé</option>
+            <option value="Rappel Envoyé"${statut==='Rappel Envoyé'?' selected':''}>Rappel Envoyé</option>
             <option value="Litigieux"${statut==='Litigieux'?' selected':''}>Litigieux</option>
             <option value="BC Reçu"${statut==='BC Reçu'?' selected':''}>BC Reçu</option>
           </select>
@@ -3783,6 +3789,12 @@ function openNouveauDBCModal(){
       <div class="mf"><label>Chef de chantier</label><input id="d-chef" placeholder="Nom du chef de chantier"></div>
       <div class="mf"><label>N° Devis lié (optionnel)</label><input id="d-numdevis" placeholder="ex: 716521"></div>
     </div>
+    <div class="mf"><label>Vendeur *</label>
+      <select id="d-vendeur" style="border:1px solid var(--border);border-radius:var(--radius-sm);padding:8px 10px;font-size:13px;font-family:var(--font-body);outline:none;">
+        <option value="">— Sélectionner un vendeur —</option>
+        ${VENDEURS_FIXES.map(v=>`<option value="${v}">${v}</option>`).join('')}
+      </select>
+    </div>
     <div class="mf"><label>Articles / Marchandise remise *</label><textarea id="d-articles" rows="2" placeholder="Description des articles, références, quantités..."></textarea></div>
     <div class="mf"><label>📎 BL signé — fichier (optionnel)</label>
       <input id="d-blfile" type="file" accept=".pdf,.jpg,.jpeg,.png" style="font-size:12px;padding:4px 0">
@@ -3794,11 +3806,13 @@ function openNouveauDBCModal(){
     const email=document.getElementById('d-email').value.trim();
     const montant=document.getElementById('d-montant').value;
     const articles=document.getElementById('d-articles').value.trim();
+    const vendeurVal=document.getElementById('d-vendeur').value;
     if(!client){document.getElementById('d-client').classList.add('err');throw new Error('Le nom du client est obligatoire.');}
     if(!employe){document.getElementById('d-employe').classList.add('err');throw new Error("Le nom de l'employé est obligatoire.");}
     if(!email){document.getElementById('d-email').classList.add('err');throw new Error('L\'email client est obligatoire.');}
     if(!montant||parseFloat(montant.replace(',','.'))<0){document.getElementById('d-montant').classList.add('err');throw new Error('Le montant HT est obligatoire.');}
     if(!articles){document.getElementById('d-articles').classList.add('err');throw new Error('La description des articles est obligatoire.');}
+    if(!vendeurVal){document.getElementById('d-vendeur').classList.add('err');throw new Error('Le vendeur est obligatoire.');}
 
     const dateEnlev=document.getElementById('d-dateenlev').value;
     const numbl=document.getElementById('d-numbl').value.trim();
@@ -3822,9 +3836,8 @@ function openNouveauDBCModal(){
     if(chef)body['Chefdechantier']=chef;
     const numDevis=document.getElementById('d-numdevis').value.trim();
     if(numDevis)body['ID_Devis']=numDevis;
-
-    // Vendeur : champ Personne — ne pas setter automatiquement (nom interne à confirmer)
-    // if(userId)body['VendeurId']=userId;
+    // Vendeur : champ texte simple dans Demandes_BC
+    if(vendeurVal)body['Vendeur']=vendeurVal;
 
     const created=await spPost('sites/BondeCommande','Demandes_BC',body);
     const newId=created.ID||created.id;
