@@ -200,7 +200,9 @@
   .btn.green:hover{background:#1b5e20;}
   .btn.teal{background:var(--teal-mid);color:white;border-color:var(--teal-mid);}
   .btn.teal:hover{background:var(--teal);}
-  .btn-grp{display:flex;gap:4px;flex-wrap:wrap;}
+  .btn-grp{display:flex;gap:4px;flex-wrap:nowrap;align-items:center;}
+  .btn-grp .btn{white-space:nowrap;font-size:11px;padding:5px 8px;}
+  td:last-child{min-width:340px;}
 
   /* ══ BANNER ══ */
   .banner{background:linear-gradient(135deg,#0d4e24,#1a7a3e);border-radius:var(--radius);padding:14px 20px;margin-bottom:13px;display:flex;align-items:center;gap:16px;color:white;}
