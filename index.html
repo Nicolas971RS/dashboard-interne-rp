@@ -2835,8 +2835,11 @@ function rechercheGlobalBC(){
       if(vendeur!=='all'&&getVendeurStr(i)!==vendeur)return false;
       if(fact!=='all'&&getEtatFact(i)!==fact)return false;
       const dateRec=String(f(i,'Dateder_x00e9_ception')||'').slice(0,10);
-      if(dateFrom&&dateRec&&dateRec<dateFrom)return false;
-      if(dateTo&&dateRec&&dateRec>dateTo)return false;
+      if(dateFrom||dateTo){
+        if(!dateRec)return false; // exclure BCs sans date réception quand filtre date actif
+        if(dateFrom&&dateRec<dateFrom)return false;
+        if(dateTo&&dateRec>dateTo)return false;
+      }
       return true;
     }catch(e){return false;}
   });
