@@ -456,13 +456,23 @@
       <!-- BANDEAU EN HAUT -->
       <div class="banner"><div class="pulse"></div><div class="banner-num" id="banner-num">0</div><div><div class="banner-lbl">BCs réceptionnés aujourd'hui — vérifier BL · mettre à jour facturation</div><div class="banner-sub">Créer la facture si livraison complète · Facturer partiellement si livraison partielle</div></div></div>
 
-      <!-- KPIs -->
+      <!-- KPIs CLIQUABLES -->
       <div class="kpi-row c5" style="margin-bottom:14px">
-        <div class="kc g"><div class="kl">💰 BL reçu non facturé</div><div class="kv" id="kpi-afacturer">—</div><div class="ks">À facturer maintenant</div></div>
-        <div class="kc a"><div class="kl">⏳ En préparation</div><div class="kv" id="kpi-prep">—</div><div class="ks">Chez fournisseur</div></div>
-        <div class="kc b"><div class="kl">📦 Prêt à livrer</div><div class="kv" id="kpi-pret">—</div><div class="ks">Livraison imminente</div></div>
-        <div class="kc o"><div class="kl">🔀 Partiellement livré</div><div class="kv" id="kpi-partiel">—</div><div class="ks">RAL Lignes_BC</div></div>
-        <div class="kc r"><div class="kl">🚨 Date dépassée</div><div class="kv" id="kpi-eta">—</div><div class="ks">Relancer fournisseur</div></div>
+        <div class="kc g" id="kpi-card-afacturer" onclick="focusKpiSuivi('afacturer')" style="cursor:pointer" title="Voir les BCs à facturer">
+          <div class="kl">💰 BL reçu non facturé</div><div class="kv" id="kpi-afacturer">—</div><div class="ks">À facturer maintenant</div>
+        </div>
+        <div class="kc a" id="kpi-card-prep" onclick="focusKpiSuivi('prep')" style="cursor:pointer" title="Voir les BCs en préparation">
+          <div class="kl">⏳ En préparation</div><div class="kv" id="kpi-prep">—</div><div class="ks">Chez fournisseur</div>
+        </div>
+        <div class="kc b" id="kpi-card-pret" onclick="focusKpiSuivi('pret')" style="cursor:pointer" title="Voir les BCs prêts à livrer">
+          <div class="kl">📦 Prêt à livrer</div><div class="kv" id="kpi-pret">—</div><div class="ks">Livraison imminente</div>
+        </div>
+        <div class="kc o" id="kpi-card-partiel" onclick="focusKpiSuivi('partiel')" style="cursor:pointer" title="Voir les BCs partiellement livrés">
+          <div class="kl">🔀 Partiellement livré</div><div class="kv" id="kpi-partiel">—</div><div class="ks">RAL Lignes_BC</div>
+        </div>
+        <div class="kc r" id="kpi-card-eta" onclick="focusKpiSuivi('retard')" style="cursor:pointer" title="Voir les BCs en retard">
+          <div class="kl">🚨 Date dépassée</div><div class="kv" id="kpi-eta">—</div><div class="ks">Relancer fournisseur</div>
+        </div>
       </div>
 
       <!-- FILTRES -->
@@ -486,58 +496,84 @@
       </div>
 
 
-      <!-- ACCORDÉON CHECKLIST — BCs avec actions en attente -->
-      <div class="acc-hd" onclick="toggleAcc('acc-checklist',this)" style="border-left:3px solid var(--red);margin-bottom:6px">
-        <div class="acc-hd-left">
-          <span class="acc-arrow">▼</span>
-          <div class="acc-hd-title">✅ Checklist BCs — Actions en attente</div>
-          <div class="acc-hd-meta">
-            <span class="ctag r" id="checklist-count">—</span>
-            <span style="font-size:10.5px;color:var(--text-muted)">BL · FC · Facturation · Statut Terminé · Docuware</span>
-          </div>
-        </div>
-        <button class="btn" onclick="event.stopPropagation();exportChecklistCSV()" style="font-size:10.5px">⬇ CSV</button>
-      </div>
-      <div class="acc-body" id="acc-checklist">
-        <div class="tc">
-          <table>
-            <thead>
-              <tr>
-                <th style="cursor:pointer" onclick="sortChecklist('date')">📅 Date réc. ↕</th>
-                <th>N° BC</th><th>Client</th><th>Chantier</th>
-                <th style="text-align:center" title="N° BL renseigné">🧾 BL</th>
-                <th style="text-align:center" title="N° FC renseigné">🏷️ FC</th>
-                <th style="text-align:center" title="Pièce jointe présente">📎 PJ</th>
-                <th style="text-align:center" title="Entièrement facturé">💰 Facturé</th>
-                <th style="text-align:center" title="Statut = Terminé">📌 Terminé</th>
-                <th style="text-align:center" title="Envoyé à Docuware">📦 Docuware</th>
-                <th style="text-align:center" title="Vendeur assigné">👤 Vendeur</th>
-                <th>Actions</th>
-              </tr>
-            </thead>
-            <tbody id="checklist-body"><tr class="empty-row"><td colspan="11">Chargement...</td></tr></tbody>
-          </table>
-        </div>
+      <!-- KPI FOCUS BANNER -->
+      <div id="kpi-focus-bar" style="display:none;background:white;border:1.5px solid var(--border);border-radius:var(--radius);padding:10px 16px;margin-bottom:10px;align-items:center;gap:12px;">
+        <span id="kpi-focus-icon" style="font-size:18px"></span>
+        <span id="kpi-focus-text" style="font-size:13px;font-weight:600;color:var(--text-primary);flex:1"></span>
+        <button onclick="clearKpiFocus()" style="background:none;border:none;color:var(--text-muted);cursor:pointer;font-size:13px;padding:4px 10px;border-radius:var(--radius-sm);font-family:var(--font-body);">✕ Retirer le filtre</button>
       </div>
 
-      <!-- ACCORDÉON 1 — Arrivées du jour -->
-      <div class="acc-hd" onclick="toggleAcc('acc-recu',this)">
+      <!-- ══ SECTION ARRIVÉES DU JOUR ══ -->
+      <div class="sd"><h2>📥 Arrivées du jour</h2><span class="site-tag rp">Statut = Reçu · Aujourd'hui</span><div class="sd-line"></div></div>
+      <div class="acc-hd open" onclick="toggleAcc('acc-recu',this)">
         <div class="acc-hd-left">
+          <span class="acc-arrow open">▼</span>
           <div class="acc-hd-title">📥 Arrivées du jour</div>
           <div class="acc-hd-meta"><span class="ctag g" id="sd-recu-count">0 BC</span><span class="site-tag rp">Statut = Reçu</span></div>
         </div>
-        <span class="acc-arrow open">▼</span>
       </div>
       <div class="acc-body open" id="acc-recu">
         <div class="tc"><table>
-          <thead><tr><th>N° BC</th><th>Client</th><th>Chantier</th><th>N° Devis</th><th>Date livraison</th><th>N° BL</th><th>N° FC</th><th>Montant HT</th><th>Vendeur</th><th>Statut</th><th>État facturation</th><th>Action</th></tr></thead>
-          <tbody id="suivi-recu-body"><tr class="empty-row"><td colspan="12">Chargement...</td></tr></tbody>
+          <thead><tr><th>N° BC</th><th>Client</th><th>Chantier</th><th>N° BL</th><th>N° FC</th><th>Montant HT</th><th>Vendeur</th><th>Statut fact.</th><th>Actions</th></tr></thead>
+          <tbody id="suivi-recu-body"><tr class="empty-row"><td colspan="9">Chargement...</td></tr></tbody>
         </table></div>
       </div>
 
-      <!-- ACCORDÉON 1b — Tous les Reçus -->
-      <div class="acc-hd" onclick="toggleAcc('acc-tous-recu',this)" style="cursor:pointer">
+      <!-- ══ SECTION ACTIONS REQUISES ══ -->
+      <div class="sd" style="margin-top:18px"><h2>🔥 Actions requises</h2><span class="site-tag rp">BCs post 01/04/2026</span><div class="sd-line"></div></div>
+
+      <!-- À FACTURER -->
+      <div class="acc-hd open" onclick="toggleAcc('acc-afact',this)" style="margin-bottom:4px">
         <div class="acc-hd-left">
+          <span class="acc-arrow open">▼</span>
+          <div class="acc-hd-title">💰 À facturer — BL reçu, non facturé</div>
+          <div class="acc-hd-meta"><span class="ctag g" id="sd-afacturer-count">0</span><span class="site-tag rp">N° BL renseigné · ≠ Entièrement facturé</span></div>
+        </div>
+      </div>
+      <div class="acc-body open" id="acc-afact" style="margin-bottom:4px">
+        <div class="tc"><table>
+          <thead><tr><th>Ancienneté</th><th>N° BC</th><th>Client</th><th>N° BL</th><th>N° FC</th><th>Montant HT</th><th>Date réception</th><th>Vendeur</th><th>Actions</th></tr></thead>
+          <tbody id="suivi-afacturer-body"><tr class="empty-row"><td colspan="9">Chargement...</td></tr></tbody>
+        </table></div>
+      </div>
+
+      <!-- BL MANQUANT -->
+      <div class="acc-hd open" onclick="toggleAcc('acc-bl-manquant',this)" style="margin-bottom:4px">
+        <div class="acc-hd-left">
+          <span class="acc-arrow open">▼</span>
+          <div class="acc-hd-title">🧾 BL manquant — Reçu sans N° BL</div>
+          <div class="acc-hd-meta"><span class="ctag a" id="sd-bl-manquant-count">0</span><span class="site-tag rp">Statut = Reçu · N° BL vide</span></div>
+        </div>
+      </div>
+      <div class="acc-body open" id="acc-bl-manquant" style="margin-bottom:4px">
+        <div class="tc"><table>
+          <thead><tr><th>Ancienneté</th><th>N° BC</th><th>Client</th><th>Chantier</th><th>N° FC</th><th>Montant HT</th><th>Date réception</th><th>Vendeur</th><th>Actions</th></tr></thead>
+          <tbody id="suivi-bl-manquant-body"><tr class="empty-row"><td colspan="9">Chargement...</td></tr></tbody>
+        </table></div>
+      </div>
+
+      <!-- ══ BCS EN COURS ══ -->
+      <div class="sd" style="margin-top:18px"><h2>⚙️ BCs en cours</h2><span class="site-tag rp">Actifs · Non soldés · Post 01/04/2026</span><div class="sd-line"></div></div>
+      <div class="acc-hd" onclick="toggleAcc('acc-encours',this)">
+        <div class="acc-hd-left">
+          <span class="acc-arrow">▼</span>
+          <div class="acc-hd-title">⚙️ BCs en cours — Non soldés</div>
+          <div class="acc-hd-meta"><span class="ctag o" id="sd-encours-count">0</span><span class="site-tag rp">≠ Reçu · ≠ Annulé · ≠ Ent. facturé</span></div>
+        </div>
+      </div>
+      <div class="acc-body" id="acc-encours">
+        <div class="note">ℹ️ RAL visible uniquement pour les BCs en livraison partielle.</div>
+        <div class="tc"><table>
+          <thead><tr><th>Urgence</th><th>N° BC</th><th>Client</th><th>Chantier</th><th>N° Devis</th><th>N° FC</th><th>Montant HT</th><th>ETA</th><th>Vendeur</th><th>Statut</th><th>RAL / Lignes</th><th>Actions</th></tr></thead>
+          <tbody id="suivi-encours-body"><tr class="empty-row"><td colspan="12">Chargement...</td></tr></tbody>
+        </table></div>
+      </div>
+
+      <!-- ══ HISTORIQUE RÉCEPTIONNÉS ══ -->
+      <div class="sd" style="margin-top:18px"><h2>📋 Historique réceptionnés</h2><span class="site-tag rp">Tous statuts · Post 01/04/2026</span><div class="sd-line"></div></div>
+      <div class="acc-hd" onclick="toggleAcc('acc-tous-recu',this)">
+        <div class="acc-hd-left">
+          <span class="acc-arrow">▼</span>
           <div class="acc-hd-title">📦 Tous les BCs réceptionnés</div>
           <div class="acc-hd-meta"><span class="ctag g" id="sd-tous-recu-count">0 BC</span><span class="site-tag rp">Statut = Reçu · Depuis avril 2026</span>
             <select class="fs" id="filter-tous-recu-periode" onchange="event.stopPropagation();renderTousRecu()" onclick="event.stopPropagation()" style="font-size:11px;margin-left:8px">
@@ -549,89 +585,54 @@
             </select>
           </div>
         </div>
-        <span class="acc-arrow">▼</span>
+        <span class="acc-arrow" style="display:none">▼</span>
       </div>
       <div class="acc-body" id="acc-tous-recu">
         <div class="tc"><table>
-          <thead><tr><th>N° BC</th><th>Client</th><th>Chantier</th><th>N° Devis</th><th>Date réception</th><th>N° BL</th><th>N° FC</th><th>Montant HT</th><th>Vendeur</th><th>Statut</th><th>État facturation</th><th>Action</th></tr></thead>
-          <tbody id="suivi-tous-recu-body"><tr class="empty-row"><td colspan="12">Chargement...</td></tr></tbody>
+          <thead><tr><th>N° BC</th><th>Client</th><th>Chantier</th><th>N° BL</th><th>N° FC</th><th>Montant HT</th><th>Date réception</th><th>Vendeur</th><th>Statut fact.</th><th>Actions</th></tr></thead>
+          <tbody id="suivi-tous-recu-body"><tr class="empty-row"><td colspan="10">Chargement...</td></tr></tbody>
         </table></div>
       </div>
 
-      <!-- ACCORDÉON 2 — À facturer -->
-      <div class="acc-hd" onclick="toggleAcc('acc-afact',this)">
-        <div class="acc-hd-left">
-          <div class="acc-hd-title">💰 À facturer — BL reçu non facturé</div>
-          <div class="acc-hd-meta"><span class="ctag g" id="sd-afacturer-count">0</span><span class="site-tag rp">N° BL renseigné · État ≠ Entièrement facturé</span></div>
+      <!-- ══ ARCHIVE À NETTOYER ══ -->
+      <div style="margin-top:28px;border:2px dashed #b0bec5;border-radius:var(--radius-lg);padding:4px 12px 10px;background:rgba(244,246,249,.6)">
+        <div style="display:flex;align-items:center;gap:10px;padding:12px 4px 6px">
+          <span style="font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.12em;color:var(--grey-mid)">🗂️ Archive à nettoyer</span>
+          <div style="flex:1;height:1px;background:#cfd8dc"></div>
+          <span class="ctag grey" id="sd-histo-count" style="background:var(--grey-mid)">0</span>
         </div>
-        <span class="acc-arrow open">▼</span>
-      </div>
-      <div class="acc-body open" id="acc-afact">
-        <div class="tc"><table>
-          <thead><tr><th>N° BC</th><th>Client</th><th>Chantier</th><th>N° Devis</th><th>N° BL</th><th>N° FC</th><th>Montant HT</th><th>Date réception</th><th>Vendeur</th><th>Statut</th><th>État facturation</th><th>Action</th></tr></thead>
-          <tbody id="suivi-afacturer-body"><tr class="empty-row"><td colspan="12">Chargement...</td></tr></tbody>
-        </table></div>
-      </div>
+        <div style="font-size:11px;color:var(--grey-mid);padding:0 4px 10px;font-style:italic">BCs antérieurs au 01/04/2026 — à qualifier manuellement. Ces entrées ne reflètent pas l'état opérationnel actuel.</div>
 
-      <!-- ACCORDÉON 3 — Facturés en attente Docuware -->
-      <div class="acc-hd" onclick="toggleAcc('acc-docuware',this)">
-        <div class="acc-hd-left">
-          <div class="acc-hd-title">📦 Facturés — En attente Docuware</div>
-          <div class="acc-hd-meta"><span class="ctag a" id="sd-docuware-count">0</span><span class="site-tag rp">Entièrement facturé · Non encore archivé</span></div>
+        <div class="acc-hd" onclick="toggleAcc('acc-histo',this)" style="background:rgba(255,255,255,.7);border-color:#cfd8dc;margin-bottom:4px">
+          <div class="acc-hd-left">
+            <span class="acc-arrow">▼</span>
+            <div class="acc-hd-title" style="color:var(--grey-mid)">📋 Historique non soldé</div>
+            <div class="acc-hd-meta"><span class="site-tag rp" style="background:#eceff1;color:var(--grey-mid)">Avant 01/04/2026 · À nettoyer</span></div>
+          </div>
         </div>
-        <span class="acc-arrow">▼</span>
-      </div>
-      <div class="acc-body" id="acc-docuware">
-        <div class="tc"><table>
-          <thead><tr><th>N° BC</th><th>Client</th><th>Chantier</th><th>N° BL</th><th>N° FC</th><th>Date réception</th><th>Vendeur</th><th>Actions</th></tr></thead>
-          <tbody id="suivi-docuware-body"><tr class="empty-row"><td colspan="8">Chargement...</td></tr></tbody>
-        </table></div>
-      </div>
+        <div class="acc-body" id="acc-histo" style="background:rgba(255,255,255,.7);border-color:#cfd8dc">
+          <div style="padding:10px 16px;background:#f9fafb;border-bottom:1px solid var(--border-light);">
+            <span style="font-size:12px;color:var(--grey);font-style:italic;">⚠️ Vérifier chaque ligne et clôturer ou archiver selon l'état réel.</span>
+          </div>
+          <div class="tc"><table>
+            <thead><tr><th>Urgence</th><th>N° BC</th><th>Client</th><th>Chantier</th><th>N° BL</th><th>N° FC</th><th>Montant HT</th><th>Date réception</th><th>Vendeur</th><th>Statut</th><th>RAL / Lignes</th><th>Actions</th></tr></thead>
+            <tbody id="suivi-histo-body"><tr class="empty-row"><td colspan="12">Chargement...</td></tr></tbody>
+          </table></div>
+        </div>
 
-      <!-- ACCORDÉON 4 — Terminés / Archivés -->
-      <div class="acc-hd" onclick="toggleAcc('acc-termines',this)">
-        <div class="acc-hd-left">
-          <div class="acc-hd-title">✅ Terminés — BC envoyé à Commandes</div>
-          <div class="acc-hd-meta"><span class="ctag g" id="sd-termines-count">0</span><span class="site-tag rp">Envoyer_Docuware = true · Clôturés</span></div>
+        <div class="acc-hd" onclick="toggleAcc('acc-termines',this)" style="background:rgba(255,255,255,.7);border-color:#cfd8dc;margin-top:4px">
+          <div class="acc-hd-left">
+            <span class="acc-arrow">▼</span>
+            <div class="acc-hd-title" style="color:var(--grey-mid)">✅ Terminés — Archivés Docuware</div>
+            <div class="acc-hd-meta"><span class="ctag g" id="sd-termines-count">0</span><span class="site-tag rp" style="background:#eceff1;color:var(--grey-mid)">Envoyer_Docuware = true · Clôturés</span></div>
+          </div>
         </div>
-        <span class="acc-arrow">▼</span>
-      </div>
-      <div class="acc-body" id="acc-termines">
-        <div class="tc"><table>
-          <thead><tr><th>N° BC</th><th>Client</th><th>Chantier</th><th>N° BL</th><th>N° FC</th><th>Montant HT</th><th>Date réception</th><th>Vendeur</th><th>Statut</th><th>État fact.</th><th>Doc.</th><th>Actions</th></tr></thead>
-          <tbody id="suivi-termines-body"><tr class="empty-row"><td colspan="12">Chargement...</td></tr></tbody>
-        </table></div>
-      </div>
-
-      <!-- ACCORDÉON 5 — Historique -->
-      <div class="acc-hd" onclick="toggleAcc('acc-histo',this)">
-        <div class="acc-hd-left">
-          <div class="acc-hd-title">📋 Historique non soldé</div>
-          <div class="acc-hd-meta"><span class="ctag a" id="sd-histo-count">0</span><span class="site-tag rp">BCs anciens · À nettoyer</span></div>
+        <div class="acc-body" id="acc-termines" style="background:rgba(255,255,255,.7);border-color:#cfd8dc">
+          <div class="tc"><table>
+            <thead><tr><th>N° BC</th><th>Client</th><th>Chantier</th><th>N° BL</th><th>N° FC</th><th>Montant HT</th><th>Date réception</th><th>Vendeur</th><th>Statut fact.</th><th>Doc.</th></tr></thead>
+            <tbody id="suivi-termines-body"><tr class="empty-row"><td colspan="10">Chargement...</td></tr></tbody>
+          </table></div>
         </div>
-        <span class="acc-arrow">▼</span>
-      </div>
-      <div class="acc-body" id="acc-histo">
-        <div class="tc"><table>
-          <thead><tr><th>Urgence</th><th>N° BC</th><th>Client</th><th>Chantier</th><th>N° Devis</th><th>N° BL</th><th>N° FC</th><th>Montant HT</th><th>Date réception</th><th>Vendeur</th><th>Statut</th><th>RAL / Lignes</th><th>État facturation</th><th>Actions</th></tr></thead>
-          <tbody id="suivi-histo-body"><tr class="empty-row"><td colspan="14">Chargement...</td></tr></tbody>
-        </table></div>
-      </div>
-
-      <!-- ACCORDÉON 5 — BCs en cours -->
-      <div class="acc-hd" onclick="toggleAcc('acc-encours',this)">
-        <div class="acc-hd-left">
-          <div class="acc-hd-title">⚙️ BCs en cours — Non soldés</div>
-          <div class="acc-hd-meta"><span class="ctag o" id="sd-encours-count">0</span><span class="site-tag rp">≠ Reçu · ≠ Annulé · ≠ Entièrement facturé</span></div>
-        </div>
-        <span class="acc-arrow">▼</span>
-      </div>
-      <div class="acc-body" id="acc-encours">
-        <div class="note">ℹ️ RAL visible uniquement pour les BCs en livraison partielle.</div>
-        <div class="tc"><table>
-          <thead><tr><th>Urgence</th><th>N° BC</th><th>Client</th><th>Chantier</th><th>N° Devis</th><th>Montant HT</th><th>ETA</th><th>Vendeur</th><th>Statut</th><th>RAL / Lignes</th><th>État fact.</th><th>Actions</th></tr></thead>
-          <tbody id="suivi-encours-body"><tr class="empty-row"><td colspan="12">Chargement...</td></tr></tbody>
-        </table></div>
       </div>
       </div><!-- /bc-accordeons -->
     </div>
@@ -1140,7 +1141,7 @@ function renderTermines(){
       +'<td>'+bStatut(s)+'</td>'
       +'<td>'+bFact(ef)+'</td>'
       +'<td style="text-align:center">'+bDocuware(i)+'</td>'
-      +'<td><div class="btn-grp"><button class="btn" onclick="openBCPanel('+i.ID+')">🔍 Détail</button></div></td>'
+      +'<td style="text-align:center">'+bDocuware(i)+'</td>'
       +'</tr>';
   }).join('');
 }
@@ -1152,7 +1153,33 @@ function renderTousRecu(){
   const b=document.getElementById('suivi-tous-recu-body');
   if(!b)return;
   if(!items.length){b.innerHTML='<tr class="empty-row"><td colspan="12">Aucun BC réceptionné depuis le 1er avril 2026</td></tr>';return;}
-  b.innerHTML=items.map(i=>bcRow(i,true)).join('');
+  b.innerHTML=items.map(i=>{
+    const client=getClient(i),vendeur=f(i,'Vendeurencharge')||'—';
+    const numBC=f(i,'Title')||`BC-${i.ID}`;
+    const bl=f(i,'N_x00b0_BL')||'—';
+    const fcVal=f(i,nFCKey())||'';
+    const chantier=getChantier(i);
+    const montantRaw=f(i,'MontantHT','Montant_HT','MontantHTTotal');
+    const montantFmt=montantRaw?new Intl.NumberFormat('fr-FR',{style:'currency',currency:'EUR',minimumFractionDigits:2,maximumFractionDigits:2}).format(montantRaw):'—';
+    const dateRec=f(i,'Dateder_x00e9_ception');
+    const ef=getEtatFact(i);
+    const cE=client.replace(/'/g,"\'"),nE=numBC.replace(/'/g,"\'");
+    return`<tr class="rr" data-bc-id="${i.ID}">
+      <td class="ref">${numBC}</td><td class="cname">${client}</td>
+      <td style="font-size:12px;color:var(--text-secondary)">${chantier}</td>
+      <td class="mono">${bl}</td>
+      <td>${fcPillHtml(fcVal)}</td>
+      <td class="amt" style="font-size:11.5px">${montantFmt}</td>
+      <td class="mono">${fmtDate(dateRec)}</td>
+      <td>${vendeur}</td>
+      <td>${bFact(ef)}</td>
+      <td><div class="btn-grp">
+        <button class="btn gr" onclick="openFacturerModal(${i.ID},'${nE}','${cE}')">💰 Facturer</button>
+        <button class="btn" onclick="openTraiterModal(${i.ID},'${nE}','${cE}')">🔧 Traiter</button>
+        <button class="btn" onclick="openBCPanel(${i.ID})">🔍 Détail</button>
+      </div></td>
+    </tr>`;
+  }).join('');
 }
 
 // ═══ TOKEN POWER PLATFORM (silent — prompt=none) ═══
@@ -1354,32 +1381,94 @@ function bcRow(i,showAction=true){
 }
 
 // ═══ RENDER ALL ═══
+function fcPillHtml(fcVal){
+  if(fcVal&&fcVal.trim()&&fcVal!=='—')
+    return`<span style="display:inline-flex;align-items:center;gap:4px;font-size:10.5px;font-weight:600;padding:2px 8px;border-radius:10px;background:var(--green-light);color:var(--green)">✅ ${fcVal}</span>`;
+  return`<span style="display:inline-flex;align-items:center;gap:4px;font-size:10.5px;font-weight:600;padding:2px 8px;border-radius:10px;background:var(--red-light);color:var(--red)">❌ FC manquant</span>`;
+}
+function agePillHtml(dateStr){
+  if(!dateStr)return'—';
+  const age=daysSince(dateStr);
+  const style=age>=7?'color:var(--red);font-weight:700;background:#ffebee':age>=3?'color:var(--amber);font-weight:600;background:var(--amber-light)':'color:var(--green);background:var(--green-light)';
+  return`<span style="font-family:var(--font-mono);font-size:11px;padding:2px 7px;border-radius:8px;${style}">${age}j</span>`;
+}
+
 function renderAFacturer(){
   const items=getSuiviAFacturer();
   document.getElementById('sd-afacturer-count').textContent=items.length+' BC'+(items.length!==1?'s':'');
   document.getElementById('kpi-afacturer').textContent=items.length;
   const b=document.getElementById('suivi-afacturer-body');
-  if(!items.length){b.innerHTML='<tr class="empty-row"><td colspan="8">✅ Aucun BC avec BL non facturé</td></tr>';return;}
+  if(!items.length){b.innerHTML='<tr class="empty-row"><td colspan="9">✅ Aucun BC avec BL non facturé</td></tr>';return;}
   b.innerHTML=items.map(i=>{
     const client=getClient(i),vendeur=f(i,'Vendeurencharge')||'—';
     const numBC=f(i,'Title')||`BC-${i.ID}`;
     const bl=f(i,'N_x00b0_BL')||'—';
-    const fc=f(i,nFCKey())||'—';
-    const chantier=getChantier(i);
-    const numDev=f(i,'N_x00b0_Devis','Num_ro_Devis','NumeroDevis')||'—';
+    const fcVal=f(i,nFCKey())||'';
     const montantRaw=f(i,'MontantHT','Montant_HT','MontantHTTotal');
     const montantFmt=montantRaw?new Intl.NumberFormat('fr-FR',{style:'currency',currency:'EUR',minimumFractionDigits:2,maximumFractionDigits:2}).format(montantRaw):'—';
-    const dateRec=fmtDate(f(i,'Dateder_x00e9_ception'));
-    const s=getStatut(i),ef=getEtatFact(i);
-    const cE=client.replace(/'/g,"\\'"),nE=numBC.replace(/'/g,"\\'");
-    return`<tr class="rr"><td class="ref">${numBC}</td><td class="cname">${client}</td><td style="font-size:12px;color:var(--text-secondary)">${chantier}</td><td class="mono" style="color:var(--blue-mid);font-size:11px">${numDev}</td><td class="mono">${bl}</td><td class="mono">${fc!=='—'?`<span style="color:var(--teal)">${fc}</span>`:fc}</td><td class="amt" style="font-size:11.5px">${montantFmt}</td><td class="mono">${dateRec}</td><td>${vendeur}</td><td>${bStatut(s)}</td><td>${bFact(ef)}</td><td><div class="btn-grp">
-      <button class="btn" onclick="openBCPanel(${i.ID})">🔍 Détail</button>
-      <button class="btn gr" onclick="openFacturerModal(${i.ID},'${nE}','${cE}')">💰 Facturer</button>
-      <button class="btn" onclick="openTraiterModal(${i.ID},'${nE}','${cE}')">🔧 Traiter</button>
-      <button class="btn" onclick="livraisonPartielleFlow(${i.ID},'${nE}','${cE}')">🔀 Partielle</button>
-    </div></td></tr>`;
+    const dateRec=f(i,'Dateder_x00e9_ception');
+    const cE=client.replace(/'/g,"\'"),nE=numBC.replace(/'/g,"\'");
+    return`<tr class="rr" data-bc-id="${i.ID}">
+      <td>${agePillHtml(dateRec)}</td>
+      <td class="ref">${numBC}</td><td class="cname">${client}</td>
+      <td class="mono">${bl}</td>
+      <td>${fcPillHtml(fcVal)}</td>
+      <td class="amt" style="font-size:11.5px">${montantFmt}</td>
+      <td class="mono">${fmtDate(dateRec)}</td>
+      <td>${vendeur}</td>
+      <td><div class="btn-grp">
+        <button class="btn gr" onclick="openFacturerModal(${i.ID},'${nE}','${cE}')">💰 Facturer</button>
+        <button class="btn" onclick="openTraiterModal(${i.ID},'${nE}','${cE}')">🔧 Traiter</button>
+        <button class="btn" onclick="openBCPanel(${i.ID})">🔍 Détail</button>
+      </div></td>
+    </tr>`;
   }).join('');
 }
+
+function renderBLManquant(){
+  const cutoff=new Date('2026-04-01');
+  const items=DATA.suivi.filter(i=>{
+    const s=getStatut(i);
+    if(s==='Annulé'||s==='Terminé')return false;
+    const bl=f(i,'N_x00b0_BL');
+    if(bl&&bl.trim())return false; // BL présent → pas manquant
+    const dateRec=f(i,'Dateder_x00e9_ception');
+    if(!dateRec||new Date(dateRec)<cutoff)return false;
+    const fV=getFilterVendeur(),fC=getFilterClient();
+    if(fV!=='all'&&f(i,'Vendeurencharge')!==fV)return false;
+    if(fC!=='all'&&getClient(i)!==fC)return false;
+    return true;
+  });
+  const el=document.getElementById('sd-bl-manquant-count');
+  if(el)el.textContent=items.length+' BC'+(items.length!==1?'s':'');
+  const b=document.getElementById('suivi-bl-manquant-body');
+  if(!b)return;
+  if(!items.length){b.innerHTML='<tr class="empty-row"><td colspan="9">✅ Aucun BC sans N° BL</td></tr>';return;}
+  b.innerHTML=items.map(i=>{
+    const client=getClient(i),vendeur=f(i,'Vendeurencharge')||'—';
+    const numBC=f(i,'Title')||`BC-${i.ID}`;
+    const chantier=getChantier(i);
+    const fcVal=f(i,nFCKey())||'';
+    const montantRaw=f(i,'MontantHT','Montant_HT','MontantHTTotal');
+    const montantFmt=montantRaw?new Intl.NumberFormat('fr-FR',{style:'currency',currency:'EUR',minimumFractionDigits:2,maximumFractionDigits:2}).format(montantRaw):'—';
+    const dateRec=f(i,'Dateder_x00e9_ception');
+    const cE=client.replace(/'/g,"\'"),nE=numBC.replace(/'/g,"\'");
+    return`<tr class="rr" data-bc-id="${i.ID}">
+      <td>${agePillHtml(dateRec)}</td>
+      <td class="ref">${numBC}</td><td class="cname">${client}</td>
+      <td style="font-size:12px;color:var(--text-secondary)">${chantier}</td>
+      <td>${fcPillHtml(fcVal)}</td>
+      <td class="amt" style="font-size:11.5px">${montantFmt}</td>
+      <td class="mono">${fmtDate(dateRec)}</td>
+      <td>${vendeur}</td>
+      <td><div class="btn-grp">
+        <button class="btn" onclick="openTraiterModal(${i.ID},'${nE}','${cE}')">🔧 Traiter</button>
+        <button class="btn" onclick="openBCPanel(${i.ID})">🔍 Détail</button>
+      </div></td>
+    </tr>`;
+  }).join('');
+}
+
 
 function renderHistorique(){
   let items=getSuiviHistorique();
@@ -1405,10 +1494,22 @@ function renderHistorique(){
     const late=daysLate(dateLiv);
     const urg=urgFromDays(late>0?late:0);
     const lignes=s==='Partiellement livré'?getLignesForBC(i.ID):[];
-    return`<tr class="${urg.row}"><td><span class="urg ${urg.cls}">${urg.lbl}</span></td><td class="ref">${numBC}</td><td class="cname">${client}</td><td style="font-size:12px;color:var(--text-secondary)">${chantier}</td><td class="mono" style="color:var(--blue-mid);font-size:11px">${numDev}</td><td class="mono">${numBL}</td><td class="mono">${numFC!=='—'?`<span style="color:var(--teal)">${numFC}</span>`:numFC}</td><td class="amt" style="font-size:11.5px">${montantFmt}</td><td class="mono">${fmtDate(f(i,'Dateder_x00e9_ception'))}</td><td>${vendeur}</td><td>${bStatut(s)}</td><td>${ralBlock(lignes)}</td><td>${bFact(ef)}</td><td><div class="btn-grp">
-      <button class="btn" onclick="openBCPanel(${i.ID})">🔍 Détail</button>
-      <button class="btn" onclick="openTraiterModal(${i.ID},'${numBC.replace(/'/g,"\\'")}','${client.replace(/'/g,"\\'")}')">🔧 Traiter</button>
-    </div></td></tr>`;
+    return`<tr class="${urg.row}" data-bc-id="${i.ID}">
+      <td><span class="urg ${urg.cls}">${urg.lbl}</span></td>
+      <td class="ref">${numBC}</td><td class="cname">${client}</td>
+      <td style="font-size:12px;color:var(--text-secondary)">${chantier}</td>
+      <td class="mono">${numBL}</td>
+      <td>${fcPillHtml(numFC!=='—'?numFC:'')}</td>
+      <td class="amt" style="font-size:11.5px">${montantFmt}</td>
+      <td class="mono">${fmtDate(f(i,'Dateder_x00e9_ception'))}</td>
+      <td>${vendeur}</td><td>${bStatut(s)}</td>
+      <td>${ralBlock(lignes)}</td>
+      <td><div class="btn-grp">
+        <button class="btn gr" onclick="openFacturerModal(${i.ID},'${numBC.replace(/'/g,"\'")}','${client.replace(/'/g,"\'")}')">💰 Facturer</button>
+        <button class="btn" onclick="openTraiterModal(${i.ID},'${numBC.replace(/'/g,"\'")}','${client.replace(/'/g,"\'")}')">🔧 Traiter</button>
+        <button class="btn" onclick="openBCPanel(${i.ID})">🔍 Détail</button>
+      </div></td>
+    </tr>`;
   }).join('');
   if(items.length>100){b.innerHTML+=`<tr class="empty-row"><td colspan="14">... et ${items.length-100} autres BCs — utilisez les filtres pour affiner</td></tr>`;}
 }
@@ -1784,7 +1885,32 @@ function renderAll(){
   document.getElementById('kpi-recu').textContent=traiter.length;
   document.getElementById('kpi-retard').textContent=relancer.length;
   // Tables Suivi BC (accordéons)
-  const recuHtml=recu.length?recu.map(i=>bcRow(i,true)).join(''):'<tr class="empty-row"><td colspan="10">✅ Aucun BC réceptionné aujourd\'hui</td></tr>';
+  const recuHtml=recu.length?recu.map(i=>{
+    const client=getClient(i),vendeur=f(i,'Vendeurencharge')||'—';
+    const numBC=f(i,'Title')||`BC-${i.ID}`;
+    const bl=f(i,'N_x00b0_BL')||'—';
+    const fcVal=f(i,nFCKey())||'';
+    const chantier=getChantier(i);
+    const montantRaw=f(i,'MontantHT','Montant_HT','MontantHTTotal');
+    const montantFmt=montantRaw?new Intl.NumberFormat('fr-FR',{style:'currency',currency:'EUR',minimumFractionDigits:2,maximumFractionDigits:2}).format(montantRaw):'—';
+    const ef=getEtatFact(i);
+    const cE=client.replace(/'/g,"\'"),nE=numBC.replace(/'/g,"\'");
+    return`<tr class="rr" data-bc-id="${i.ID}">
+      <td class="ref">${numBC}</td><td class="cname">${client}</td>
+      <td style="font-size:12px;color:var(--text-secondary)">${chantier}</td>
+      <td class="mono">${bl!=='—'?bl:'<span style="color:var(--red);font-weight:600">❌ Manquant</span>'}</td>
+      <td>${fcPillHtml(fcVal)}</td>
+      <td class="amt" style="font-size:11.5px">${montantFmt}</td>
+      <td>${vendeur}</td>
+      <td>${bFact(ef)}</td>
+      <td><div class="btn-grp">
+        <button class="btn" onclick="openTraiterModal(${i.ID},'${nE}','${cE}')">🔧 Traiter</button>
+        <button class="btn gr" onclick="openFacturerModal(${i.ID},'${nE}','${cE}')">💰 Facturer</button>
+        <button class="btn" onclick="livraisonPartielleFlow(${i.ID},'${nE}','${cE}')">🔀 Livraison Partielle</button>
+        <button class="btn" onclick="openBCPanel(${i.ID})">🔍 Détail</button>
+      </div></td>
+    </tr>`;
+  }).join(''):'<tr class="empty-row"><td colspan="9">✅ Aucun BC réceptionné aujourd\'hui</td></tr>';
   document.getElementById('suivi-recu-body').innerHTML=recuHtml;
   renderAFacturer();
   renderDocuware();
@@ -1837,10 +1963,10 @@ function renderAll(){
   const banner=document.getElementById('matin-ok-banner');
   if(banner)banner.style.display=allOk?'flex':'none';
 
-  renderDBCTable();renderDevisTable();renderChecklist();
+  renderDBCTable();renderDevisTable();renderBLManquant();
 }
 
-function renderSuiviEnCours(){renderHistorique();
+function renderSuiviEnCours(){renderHistorique();renderBLManquant();
   let ec=getSuiviEnCours();
   const fS=document.getElementById('filter-statut-bc')?.value||'all';
   const fV=document.getElementById('filter-vendeur-bc')?.value||'all';
@@ -1877,6 +2003,7 @@ function renderSuiviEnCours(){renderHistorique();
       <td class="ref">${numBC}</td><td class="cname">${client}</td>
       <td style="font-size:12px;color:var(--text-secondary)">${chantier}</td>
       <td class="mono" style="color:var(--blue-mid);font-size:11px">${numDev}</td>
+      <td>${fcPillHtml(f(i,nFCKey())||'')}</td>
       <td class="amt" style="font-size:11.5px">${montantFmt}</td>
       <td class="mono" style="${etaColor}">${fmtDate(dateLiv)}</td>
       <td>${vendeur}</td><td>${bStatut(s)}</td>
@@ -1885,7 +2012,7 @@ function renderSuiviEnCours(){renderHistorique();
         <button class="btn" onclick="openBCPanel(${i.ID})">🔍 Détail</button>
         <button class="btn gr" onclick="openFacturerModal(${i.ID},'${nE}','${cE}')">💰</button>
         <button class="btn" onclick="openTraiterModal(${i.ID},'${nE}','${cE}')">🔧</button>
-        <button class="btn" onclick="livraisonPartielleFlow(${i.ID},'${nE}','${cE}')">🔀</button>
+        <button class="btn" onclick="livraisonPartielleFlow(${i.ID},'${nE}','${cE}')">🔀 Livraison Partielle</button>
       </div></td>
     </tr>`;
   }).join('');
@@ -3089,6 +3216,43 @@ function renderChecklist(){
   }).join('');
 }
 
+
+// ═══ KPI FOCUS SUIVI BC ═══
+const KPI_SUIVI_MAP={
+  afacturer:{icon:'💰',text:'Filtre actif : BL reçu non facturé',section:'acc-afact',cardId:'kpi-card-afacturer'},
+  prep:     {icon:'⏳',text:'Filtre actif : En préparation',section:'acc-encours',cardId:'kpi-card-prep'},
+  pret:     {icon:'📦',text:'Filtre actif : Prêt à livrer',section:'acc-encours',cardId:'kpi-card-pret'},
+  partiel:  {icon:'🔀',text:'Filtre actif : Partiellement livré',section:'acc-encours',cardId:'kpi-card-partiel'},
+  retard:   {icon:'🚨',text:'Filtre actif : Date dépassée',section:'acc-encours',cardId:'kpi-card-eta'},
+};
+let _activeKpiSuivi=null;
+function focusKpiSuivi(key){
+  if(_activeKpiSuivi===key){clearKpiFocus();return;}
+  _activeKpiSuivi=key;
+  const cfg=KPI_SUIVI_MAP[key];
+  document.querySelectorAll('.kc').forEach(c=>c.style.outline='');
+  const card=document.getElementById(cfg.cardId);
+  if(card)card.style.outline='2px solid currentColor';
+  const bar=document.getElementById('kpi-focus-bar');
+  if(bar){
+    document.getElementById('kpi-focus-icon').textContent=cfg.icon;
+    document.getElementById('kpi-focus-text').textContent=cfg.text;
+    bar.style.display='flex';
+  }
+  const body=document.getElementById(cfg.section);
+  if(body&&!body.classList.contains('open')){
+    body.classList.add('open');
+    const hd=body.previousElementSibling;
+    if(hd){hd.classList.add('open');const arr=hd.querySelector('.acc-arrow');if(arr)arr.classList.add('open');}
+  }
+  setTimeout(()=>{if(body)body.scrollIntoView({behavior:'smooth',block:'start'});},80);
+}
+function clearKpiFocus(){
+  _activeKpiSuivi=null;
+  document.querySelectorAll('.kc').forEach(c=>c.style.outline='');
+  const bar=document.getElementById('kpi-focus-bar');
+  if(bar)bar.style.display='none';
+}
 
 function exportChecklistCSV(){
   const items=getChecklistItems();
