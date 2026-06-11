@@ -2531,23 +2531,21 @@ async function submitModal(){
 
 // ── Modal Facturer ──
 function openFacturerModal(id,numBC,client){
-  openModal(`💰 Facturer — ${numBC} · ${client}`,`
-    <div class="mf"><label>N° Facture *</label><input id="m-fc" placeholder="ex: FC-2025-001"></div>
-    <div class="mf"><label>État facturation</label>
-      <select id="m-efact">
-        <option value="Partiellement facturé">Partiellement facturé</option>
-        <option value="Entièrement facturé" selected>Entièrement facturé</option>
-      </select>
+  openModal(`💰 Saisir le numéro de facture`,`
+    <div style="font-size:12px;color:var(--text-muted);font-family:var(--font-mono);margin-bottom:14px">${numBC} · ${client}</div>
+    <div class="mf"><label>N° FC (Facture Client) *</label>
+      <input id="m-fc" placeholder="Ex : FC-2026-0312" style="font-size:14px;font-weight:600;">
+    </div>
+    <div style="background:var(--green-light);border:1px solid var(--green);border-radius:var(--radius-sm);padding:10px 14px;font-size:12px;color:var(--green);font-weight:600;">
+      ✅ État : Entièrement facturé
     </div>`,
   async()=>{
     const fc=document.getElementById('m-fc').value.trim();
-    if(!fc){document.getElementById('m-fc').classList.add('err');throw new Error('Le N° de facture est obligatoire.');}
-    const ef=document.getElementById('m-efact').value;
+    if(!fc){document.getElementById('m-fc').style.borderColor='var(--red)';throw new Error('Le N° de facture est obligatoire.');}
     const body={};
     body[nFCKey()]=fc;
-    body[etatFactKey()]=ef;
+    body[etatFactKey()]='Entièrement facturé';
     await spPatch('sites/RseauxPlus','Suivi_BC',id,body);
-    // Mise à jour en mémoire immédiate
     const idx=DATA.suivi.findIndex(i=>i.ID===id);
     if(idx!==-1)Object.assign(DATA.suivi[idx],body);
     renderAll();updateBadges();
