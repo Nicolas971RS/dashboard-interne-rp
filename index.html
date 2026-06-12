@@ -976,7 +976,9 @@ async function loadAll(){
     // Build client map: {ID → Title}
     // Stocker chantiers dans DATA pour vérification doublon
     DATA.chantiers=chantiers||[];
-    console.log('[loadAll] DATA.chantiers chargés:', DATA.chantiers.length, DATA.chantiers.map(c=>c.Title).slice(0,5));
+    console.log('[loadAll] DATA.chantiers chargés:', DATA.chantiers.length);
+    console.log('[loadAll] 5 premiers:', JSON.stringify(DATA.chantiers.slice(0,5).map(c=>({ID:c.ID,Title:c.Title}))));
+    console.log('[loadAll] Clés d un item:', DATA.chantiers[0]?Object.keys(DATA.chantiers[0]):'-');
 
     const clientMap={};
     clients.forEach(c=>{if(c.ID&&c.Title)clientMap[c.ID]=c.Title;});
