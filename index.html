@@ -486,7 +486,10 @@
 
       <!-- FILTRES -->
       <div class="sh" style="margin-bottom:10px">
-        <div class="st">🔍 Filtres accordéons</div>
+        <div style="display:flex;align-items:center;justify-content:space-between;width:100%">
+          <div class="st">🔍 Filtres accordéons</div>
+          <button class="btn navy" onclick="openNouveauProjet()" style="height:28px;font-size:11px;font-weight:600;white-space:nowrap;">➕ Nouveau projet</button>
+        </div>
         <div class="fb">
           <input class="fs" type="text" id="search-suivi" placeholder="🔍 Filtrer En cours..." oninput="renderSuiviEnCours()" style="min-width:160px">
           <select class="fs" id="filter-statut-bc" onchange="renderSuiviEnCours()">
