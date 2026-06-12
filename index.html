@@ -3302,8 +3302,11 @@ function openNouveauProjet(){
     if(!nom){document.getElementById('np-nom').style.borderColor='var(--red)';throw new Error('Le nom du projet est obligatoire.');}
     if(!clientId){document.getElementById('np-client').style.borderColor='var(--red)';throw new Error('Le client est obligatoire.');}
 
-    const body={Title:nom,ClientId:parseInt(clientId)};
-    if(desc)body['Description']=desc;
+    const body={Title:nom};
+    // Client = colonne Lookup vers Base_Clients
+    if(clientId)body['ClientId']=parseInt(clientId);
+    // Remarques projet = nom interne de la colonne description
+    if(desc)body['Remarques_x0020_projet']=desc;
 
     const res=await spPost('sites/RseauxPlus','Projets',body);
     // Ajouter au cache local pour que l'autocomplete Traiter le trouve immédiatement
