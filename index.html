@@ -891,7 +891,7 @@ function getEtatFact(item){
 function getStatut(item){return f(item,'Statut','statut') || '—';}
 
 // ═══ DATA ═══
-let DATA={suivi:[],lignes:[],dbc:[],devis:[],clients:{}};
+let DATA={suivi:[],lignes:[],dbc:[],devis:[],clients:{},chantiers:[]};
 const TODAY=new Date();TODAY.setHours(0,0,0,0);
 const daysSince=d=>{if(!d)return 0;const dt=new Date(d);dt.setHours(0,0,0,0);return Math.floor((TODAY-dt)/86400000);};
 const daysLate=d=>{if(!d)return -999;const dt=new Date(d);dt.setHours(0,0,0,0);return Math.floor((TODAY-dt)/86400000);};
@@ -976,10 +976,6 @@ async function loadAll(){
     // Build client map: {ID → Title}
     // Stocker chantiers dans DATA pour vérification doublon
     DATA.chantiers=chantiers||[];
-    console.log('[loadAll] DATA.chantiers chargés:', DATA.chantiers.length);
-    console.log('[loadAll] 5 premiers:', JSON.stringify(DATA.chantiers.slice(0,5).map(c=>({ID:c.ID,Title:c.Title}))));
-    console.log('[loadAll] Clés d un item:', DATA.chantiers[0]?Object.keys(DATA.chantiers[0]):'-');
-
     const clientMap={};
     clients.forEach(c=>{if(c.ID&&c.Title)clientMap[c.ID]=c.Title;});
 
@@ -3311,8 +3307,6 @@ function openNouveauProjet(){
 
     // Vérification doublon AVANT le POST (case-insensitive)
     const nomNorm=nom.toLowerCase();
-    console.log('[Doublon] Vérification:', nomNorm, 'Cache chantiers:', (DATA.chantiers||[]).length, 'items');
-    console.log('[Doublon] Titres:', (DATA.chantiers||[]).map(c=>c.Title));
     const doublonExistant=(DATA.chantiers||[]).find(c=>c.Title&&c.Title.toLowerCase()===nomNorm);
     if(doublonExistant){
       document.getElementById('np-nom').style.borderColor='var(--red)';
