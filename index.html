@@ -949,7 +949,7 @@ async function fetchProjetTitles(){
 async function loadAll(){
   setLoading(true);hideError();
   try{
-    const [suivi,projTitles,lignes,dbc,devis,clients]=await Promise.all([
+    const [suivi,projTitles,lignes,dbc,devis,clients,chantiers]=await Promise.all([
       // Suivi_BC: $select=*
       spFetch('sites/RseauxPlus','Suivi_BC','$select=*,Editor/Title&$expand=Editor&$orderby=ID desc'),
       // Projet lookup titles — appel séparé compatible expand
@@ -963,7 +963,9 @@ async function loadAll(){
       // Demandes_Devis
       spFetch('sites/BondeCommande','Demandes_Devis','$select=*&$orderby=ID desc'),
       // Base_Clients
-      spFetch('sites/RseauxPlus','Base_Clients','$select=ID,Title')
+      spFetch('sites/RseauxPlus','Base_Clients','$select=ID,Title'),
+      // Chantiers — pour vérification doublon à la création
+      spFetch('sites/RseauxPlus','Chantiers','$select=ID,Title&$top=500')
     ]);
 
     // Injecter ProjetTitle dans chaque item suivi
@@ -972,6 +974,9 @@ async function loadAll(){
     suivi.forEach(i=>{if(projMap[i.ID])i._ProjetTitle=projMap[i.ID];});
 
     // Build client map: {ID → Title}
+    // Stocker chantiers dans DATA pour vérification doublon
+    DATA.chantiers=chantiers||[];
+
     const clientMap={};
     clients.forEach(c=>{if(c.ID&&c.Title)clientMap[c.ID]=c.Title;});
 
@@ -3303,8 +3308,13 @@ function openNouveauProjet(){
 
     // Vérification doublon AVANT le POST (case-insensitive)
     const nomNorm=nom.toLowerCase();
+    console.log('[Doublon] Vérification:', nomNorm, 'Cache chantiers:', (DATA.chantiers||[]).length, 'items');
+    console.log('[Doublon] Titres:', (DATA.chantiers||[]).map(c=>c.Title));
     const doublonExistant=(DATA.chantiers||[]).find(c=>c.Title&&c.Title.toLowerCase()===nomNorm);
-    if(doublonExistant){document.getElementById('np-nom').style.borderColor='var(--red)';throw new Error(`Ce chantier existe déjà : "${doublonExistant.Title}"`);}
+    if(doublonExistant){
+      document.getElementById('np-nom').style.borderColor='var(--red)';
+      throw new Error(`Ce chantier existe déjà : "${doublonExistant.Title}"`);
+    }
 
     const body={Title:nom};
     if(clientId)body['ClientId']=parseInt(clientId);
