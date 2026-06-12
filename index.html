@@ -3282,6 +3282,7 @@ function npCheckDoublon(val){
   const msg=document.getElementById('np-dup-msg');
   if(!inp||!msg)return;
   if(v.length<3){inp.style.borderColor='';msg.style.display='none';return;}
+  console.log('[npCheckDoublon] val=',v,'chantiers=',DATA.chantiers.length,'sample=',DATA.chantiers.slice(0,3).map(c=>c.Title));
   const dup=(DATA.chantiers||[]).find(c=>c.Title&&c.Title.trim().toLowerCase()===v);
   if(dup){
     inp.style.borderColor='var(--red)';
