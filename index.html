@@ -3276,6 +3276,23 @@ function clearKpiFocus(){
 }
 
 // ═══ NOUVEAU PROJET ═══
+function npCheckDoublon(val){
+  const v=(val||'').trim().toLowerCase();
+  const inp=document.getElementById('np-nom');
+  const msg=document.getElementById('np-dup-msg');
+  if(!inp||!msg)return;
+  if(v.length<3){inp.style.borderColor='';msg.style.display='none';return;}
+  const dup=(DATA.chantiers||[]).find(c=>c.Title&&c.Title.trim().toLowerCase()===v);
+  if(dup){
+    inp.style.borderColor='var(--red)';
+    msg.textContent=`⚠️ Ce chantier existe déjà : "${dup.Title}"`;
+    msg.style.display='block';
+  }else{
+    inp.style.borderColor='';
+    msg.style.display='none';
+  }
+}
+
 function openNouveauProjet(){
   // Données clients pour autocomplete
   const clientData=Object.entries(DATA.clients||{})
@@ -3287,7 +3304,8 @@ function openNouveauProjet(){
       Crée un item dans la liste <span style="font-family:var(--font-mono);background:var(--grey-light);padding:1px 6px;border-radius:4px">Projets</span> sur sites/RseauxPlus
     </div>
     <div class="mf"><label>Nom du projet *</label>
-      <input id="np-nom" placeholder="Ex : 0161959 AEP ST-PROTAIS DOUVILLE" autofocus>
+      <input id="np-nom" placeholder="Ex : 0161959 AEP ST-PROTAIS DOUVILLE" autofocus oninput="npCheckDoublon(this.value)">
+      <div id="np-dup-msg" style="font-size:11px;color:var(--red);margin-top:3px;display:none;font-weight:600;"></div>
     </div>
     <div class="mf"><label>Client *</label>
       <input id="np-client-search" autocomplete="off" placeholder="Tapez 3 caractères..." style="width:100%;padding:6px 10px;border:1px solid var(--border);border-radius:var(--radius-sm);font-size:13px;font-family:var(--font-body);">
@@ -3335,26 +3353,6 @@ function openNouveauProjet(){
   // Setup autocomplete client après rendu de la modale
   setTimeout(()=>{
     // Vérification doublon en temps réel sur le nom du projet
-    const nomInput=document.getElementById('np-nom');
-    const dupMsg=document.createElement('div');
-    dupMsg.id='np-dup-msg';
-    dupMsg.style.cssText='font-size:11px;color:var(--red);margin-top:3px;display:none;font-weight:600;';
-    if(nomInput&&nomInput.parentNode)nomInput.parentNode.appendChild(dupMsg);
-    if(nomInput){
-      nomInput.addEventListener('input',()=>{
-        const v=nomInput.value.trim().toLowerCase();
-        const dup=(DATA.chantiers||[]).find(c=>c.Title&&c.Title.trim().toLowerCase()===v);
-        if(dup&&v.length>2){
-          nomInput.style.borderColor='var(--red)';
-          dupMsg.textContent=`⚠️ Ce chantier existe déjà : "${dup.Title}"`;
-          dupMsg.style.display='block';
-        }else{
-          nomInput.style.borderColor='';
-          dupMsg.style.display='none';
-        }
-      });
-    }
-
     const inp=document.getElementById('np-client-search');
     const drop=document.getElementById('np-client-drop');
     const hiddenId=document.getElementById('np-client-id');
