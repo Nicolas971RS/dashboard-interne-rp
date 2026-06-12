@@ -3338,6 +3338,27 @@ function openNouveauProjet(){
   });
   // Setup autocomplete client après rendu de la modale
   setTimeout(()=>{
+    // Vérification doublon en temps réel sur le nom du projet
+    const nomInput=document.getElementById('np-nom');
+    const dupMsg=document.createElement('div');
+    dupMsg.id='np-dup-msg';
+    dupMsg.style.cssText='font-size:11px;color:var(--red);margin-top:3px;display:none;font-weight:600;';
+    if(nomInput&&nomInput.parentNode)nomInput.parentNode.appendChild(dupMsg);
+    if(nomInput){
+      nomInput.addEventListener('input',()=>{
+        const v=nomInput.value.trim().toLowerCase();
+        const dup=(DATA.chantiers||[]).find(c=>c.Title&&c.Title.trim().toLowerCase()===v);
+        if(dup&&v.length>2){
+          nomInput.style.borderColor='var(--red)';
+          dupMsg.textContent=`⚠️ Ce chantier existe déjà : "${dup.Title}"`;
+          dupMsg.style.display='block';
+        }else{
+          nomInput.style.borderColor='';
+          dupMsg.style.display='none';
+        }
+      });
+    }
+
     const inp=document.getElementById('np-client-search');
     const drop=document.getElementById('np-client-drop');
     const hiddenId=document.getElementById('np-client-id');
