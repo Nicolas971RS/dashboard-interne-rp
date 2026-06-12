@@ -2695,7 +2695,7 @@ async function openTraiterModal(id,numBC,client){
     const chInput=document.getElementById('m-chantier-search');
     if(!chInput)return;
     try{
-      const chantiers=await spFetch('sites/RseauxPlus','Projets','$select=ID,Title,Client&$orderby=Title asc&$top=500');
+      const chantiers=await spFetch('sites/RseauxPlus','Chantiers','$select=ID,Title,Client&$orderby=Title asc&$top=500');
       chInput.disabled=false;
       chInput.placeholder='Tapez 3 caractères...';
       const chData=chantiers.map(c=>({id:String(c.ID),name:c.Title}));
@@ -3308,11 +3308,11 @@ function openNouveauProjet(){
     // Remarques projet = nom interne de la colonne description
     if(desc)body['Remarques_x0020_projet']=desc;
 
-    const res=await spPost('sites/RseauxPlus','Projets',body);
+    const res=await spPost('sites/RseauxPlus','Chantiers',body);
     // Ajouter au cache local pour que l'autocomplete Traiter le trouve immédiatement
     if(res&&res.ID){
-      if(!DATA.projets)DATA.projets=[];
-      DATA.projets.push({ID:res.ID,Title:nom});
+      if(!DATA.chantiers)DATA.chantiers=[];
+      DATA.chantiers.push({ID:res.ID,Title:nom});
     }
     // Toast de confirmation
     const clientName=DATA.clients[clientId]||clientId;
