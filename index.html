@@ -3273,11 +3273,10 @@ function clearKpiFocus(){
 
 // ═══ NOUVEAU PROJET ═══
 function openNouveauProjet(){
-  // Construire les options clients depuis le cache
-  const clientOpts=Object.entries(DATA.clients||{})
+  // Données clients pour autocomplete
+  const clientData=Object.entries(DATA.clients||{})
     .sort((a,b)=>a[1].localeCompare(b[1]))
-    .map(([id,name])=>`<option value="${id}">${name}</option>`)
-    .join('');
+    .map(([id,name])=>({id,name}));
 
   openModal('➕ Créer un nouveau projet',`
     <div style="font-size:11.5px;color:var(--text-muted);margin-bottom:14px">
@@ -3287,41 +3286,73 @@ function openNouveauProjet(){
       <input id="np-nom" placeholder="Ex : 0161959 AEP ST-PROTAIS DOUVILLE" autofocus>
     </div>
     <div class="mf"><label>Client *</label>
-      <select id="np-client">
-        <option value="">— Sélectionner un client —</option>
-        ${clientOpts}
-      </select>
+      <input id="np-client-search" autocomplete="off" placeholder="Tapez 3 caractères..." style="width:100%;padding:6px 10px;border:1px solid var(--border);border-radius:var(--radius-sm);font-size:13px;font-family:var(--font-body);">
+      <input type="hidden" id="np-client-id">
+      <div id="np-client-drop" style="position:relative;width:100%"></div>
+      <div style="font-size:10px;color:var(--text-muted);margin-top:2px">Tapez 3 caractères minimum</div>
     </div>
     <div class="mf"><label>Description (optionnel)</label>
       <textarea id="np-desc" rows="2" placeholder="Notes, localisation, référence..."></textarea>
     </div>`,
   async()=>{
     const nom=document.getElementById('np-nom').value.trim();
-    const clientId=document.getElementById('np-client').value;
+    const clientId=document.getElementById('np-client-id').value;
     const desc=document.getElementById('np-desc').value.trim();
     if(!nom){document.getElementById('np-nom').style.borderColor='var(--red)';throw new Error('Le nom du projet est obligatoire.');}
-    if(!clientId){document.getElementById('np-client').style.borderColor='var(--red)';throw new Error('Le client est obligatoire.');}
+    if(!clientId){document.getElementById('np-client-search').style.borderColor='var(--red)';throw new Error('Le client est obligatoire.');}
+
+    // Vérification doublon AVANT le POST (case-insensitive)
+    const nomNorm=nom.toLowerCase();
+    const doublonExistant=(DATA.chantiers||[]).find(c=>c.Title&&c.Title.toLowerCase()===nomNorm);
+    if(doublonExistant){document.getElementById('np-nom').style.borderColor='var(--red)';throw new Error(`Ce chantier existe déjà : "${doublonExistant.Title}"`);}
 
     const body={Title:nom};
-    // Client = colonne Lookup vers Base_Clients
     if(clientId)body['ClientId']=parseInt(clientId);
-    // Remarques projet = nom interne de la colonne description
     if(desc)body['Remarques_x0020_projet']=desc;
 
     const res=await spPost('sites/RseauxPlus','Chantiers',body);
-    // Ajouter au cache local pour que l'autocomplete Traiter le trouve immédiatement
     if(res&&res.ID){
       if(!DATA.chantiers)DATA.chantiers=[];
       DATA.chantiers.push({ID:res.ID,Title:nom});
     }
+
     // Toast de confirmation
-    const clientName=DATA.clients[clientId]||clientId;
+    const clientSearch=document.getElementById('np-client-search');
+    const clientName=clientSearch?clientSearch.value:(DATA.clients[clientId]||clientId);
     const t=document.createElement('div');
     t.textContent=`✅ Projet créé : ${nom} — ${clientName}`;
     Object.assign(t.style,{position:'fixed',bottom:'24px',right:'24px',background:'var(--green)',color:'white',padding:'12px 20px',borderRadius:'8px',fontWeight:'600',fontSize:'13px',boxShadow:'0 4px 16px rgba(0,0,0,.2)',zIndex:'9999'});
     document.body.appendChild(t);
     setTimeout(()=>{t.style.opacity='0';t.style.transition='opacity .3s';setTimeout(()=>t.remove(),300);},3000);
   });
+  // Setup autocomplete client après rendu de la modale
+  setTimeout(()=>{
+    const inp=document.getElementById('np-client-search');
+    const drop=document.getElementById('np-client-drop');
+    const hiddenId=document.getElementById('np-client-id');
+    if(!inp||!drop)return;
+    const allClients=Object.entries(DATA.clients||{}).map(([id,name])=>({id,name})).sort((a,b)=>a.name.localeCompare(b.name));
+    inp.addEventListener('input',()=>{
+      const q=inp.value.trim().toLowerCase();
+      drop.innerHTML='';
+      hiddenId.value='';
+      if(q.length<3)return;
+      const matches=allClients.filter(c=>c.name.toLowerCase().includes(q)).slice(0,10);
+      if(!matches.length){drop.innerHTML='<div style="padding:6px 10px;font-size:12px;color:var(--text-muted)">Aucun résultat</div>';return;}
+      const ul=document.createElement('ul');
+      Object.assign(ul.style,{listStyle:'none',margin:0,padding:'4px 0',background:'white',border:'1px solid var(--border)',borderRadius:'6px',boxShadow:'0 4px 12px rgba(0,0,0,.12)',position:'absolute',width:'100%',zIndex:'9999',maxHeight:'200px',overflowY:'auto'});
+      matches.forEach(c=>{
+        const li=document.createElement('li');
+        li.textContent=c.name;
+        Object.assign(li.style,{padding:'7px 12px',cursor:'pointer',fontSize:'13px'});
+        li.onmouseenter=()=>li.style.background='var(--grey-light)';
+        li.onmouseleave=()=>li.style.background='';
+        li.onclick=()=>{inp.value=c.name;hiddenId.value=c.id;drop.innerHTML='';inp.style.borderColor='';};
+        ul.appendChild(li);
+      });
+      drop.appendChild(ul);
+    });
+  },150);
 }
 
 function exportChecklistCSV(){
