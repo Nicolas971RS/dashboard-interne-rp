@@ -979,7 +979,7 @@ async function loadAll(){
     const clientMap={};
     clients.forEach(c=>{if(c.ID&&c.Title)clientMap[c.ID]=c.Title;});
 
-    DATA={suivi,lignes,dbc,devis,clients:clientMap};
+    DATA={suivi,lignes,dbc,devis,clients:clientMap,chantiers:chantiers||[]};
 
     // Debug: log first suivi item to help identify field names
     if(suivi.length>0){console.log('DEBUG Suivi_BC[0] keys:',Object.keys(suivi[0]).sort().join(', '));}
@@ -3282,8 +3282,9 @@ function npCheckDoublon(val){
   const msg=document.getElementById('np-dup-msg');
   if(!inp||!msg)return;
   if(v.length<3){inp.style.borderColor='';msg.style.display='none';return;}
-  console.log('[npCheckDoublon] val=',v,'chantiers=',DATA.chantiers.length,'sample=',DATA.chantiers.slice(0,3).map(c=>c.Title));
-  const dup=(DATA.chantiers||[]).find(c=>c.Title&&c.Title.trim().toLowerCase()===v);
+  const chantiersList=DATA.chantiers||[];
+  console.log('[npCheckDoublon] val=',v,'chantiers=',chantiersList.length);
+  const dup=chantiersList.find(c=>c.Title&&c.Title.trim().toLowerCase()===v);
   if(dup){
     inp.style.borderColor='var(--red)';
     msg.textContent=`⚠️ Ce chantier existe déjà : "${dup.Title}"`;
