@@ -2699,7 +2699,7 @@ async function openTraiterModal(id,numBC,client){
     const chInput=document.getElementById('m-chantier-search');
     if(!chInput)return;
     try{
-      const chantiers=await spFetch('sites/RseauxPlus','Chantiers','$select=ID,Title,Client&$orderby=Title asc&$top=500');
+      const chantiers=await spFetch('sites/RseauxPlus','Chantiers','$select=ID,Title&$orderby=Title asc&$top=500');
       chInput.disabled=false;
       chInput.placeholder='Tapez 3 caractères...';
       const chData=chantiers.map(c=>({id:String(c.ID),name:c.Title}));
@@ -3282,8 +3282,7 @@ function npCheckDoublon(val){
   const msg=document.getElementById('np-dup-msg');
   if(!inp||!msg)return;
   if(v.length<3){inp.style.borderColor='';msg.style.display='none';return;}
-  const chantiersList=DATA.chantiers||[];
-  console.log('[npCheckDoublon] val=',v,'chantiers=',chantiersList.length);
+  const chantiersList=Array.isArray(DATA.chantiers)?DATA.chantiers:[];
   const dup=chantiersList.find(c=>c.Title&&c.Title.trim().toLowerCase()===v);
   if(dup){
     inp.style.borderColor='var(--red)';
