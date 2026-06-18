@@ -341,6 +341,7 @@
   <div class="tabs">
     <button class="tab active" onclick="showTab('matin',this)">📊 Vue Matin</button>
     <button class="tab" onclick="showTab('suivi',this)">📦 Suivi BC <span class="tab-badge g" id="badge-recu">0</span><span class="tab-badge r" id="badge-retard">0</span></button>
+    <button class="tab" onclick="showTab('ral',this);renderRALTable()">🔀 Livraisons Partielles <span class="tab-badge a" id="badge-ral">0</span></button>
     <button class="tab" onclick="showTab('dbc',this)">🧾 Demandes BC <span class="tab-badge r" id="badge-dbc">0</span></button>
     <button class="tab" onclick="showTab('devis',this)">📄 Devis <span class="tab-badge a" id="badge-devis">0</span></button>
     <button class="tab" onclick="showTab('analytics',this);renderAnalytics()">📈 Analytics</button>
@@ -647,6 +648,32 @@
         </div>
       </div>
       </div><!-- /bc-accordeons -->
+    </div>
+
+    <!-- LIVRAISONS PARTIELLES -->
+    <div id="tab-ral" class="section-bloc">
+      <div class="page-header">
+        <div><h1>Livraisons Partielles — Reste à Livrer</h1><div class="sub">/sites/RseauxPlus · Lignes_BC</div></div>
+        <button class="btn-refresh" onclick="loadAll()">🔄 Actualiser</button>
+      </div>
+      <div class="kpi-row c3">
+        <div class="kc o"><div class="kl">🔀 Lignes avec RAL</div><div class="kv" id="kpi-ral-count">—</div><div class="ks">Toutes commandes</div></div>
+        <div class="kc r"><div class="kl">📦 Articles restant à livrer</div><div class="kv" id="kpi-ral-qte">—</div><div class="ks">Somme des RAL</div></div>
+        <div class="kc b"><div class="kl">🏗️ Chantiers concernés</div><div class="kv" id="kpi-ral-chantiers">—</div><div class="ks">Distincts</div></div>
+      </div>
+      <div class="sh">
+        <div class="st">🔀 Lignes avec reste à livrer</div>
+        <div class="fb">
+          <input class="fs" type="text" id="search-ral" placeholder="🔍 N° BC, référence, désignation, chantier..." oninput="renderRALTable()" style="min-width:220px">
+          <select class="fs" id="filter-vendeur-ral" onchange="renderRALTable()"><option value="all">Tous les vendeurs</option></select>
+          <select class="fs" id="filter-client-ral" onchange="renderRALTable()"><option value="all">Tous les clients</option></select>
+          <button class="btn" onclick="exportRALCSV()">⬇ CSV</button>
+        </div>
+      </div>
+      <div class="tc"><table>
+        <thead><tr><th>N° BC</th><th>Client</th><th>Chantier</th><th>Référence</th><th>Désignation</th><th>Cmd</th><th>Livré</th><th>RAL</th><th>Unité</th><th>BL</th><th>Action</th></tr></thead>
+        <tbody id="ral-body"><tr class="empty-row"><td colspan="11">Chargement...</td></tr></tbody>
+      </table></div>
     </div>
 
     <!-- DEMANDES BC -->
@@ -1043,7 +1070,7 @@ async function loadAll(){
       fetchProjetTitles(),
       // Lignes_BC
       spFetch('sites/RseauxPlus','Lignes_BC',
-        '$select=ID,Title,BCId,BC/Title,R_x00e9_f_x00e9_rence,Produit_x002f_D_x00e9_signation,Quantit_x00e9_command_x00e9_e,Quantit_x00e9_livr_x00e9_e,BLSign_x00e9_,Chantier&$expand=BC&$orderby=BCId asc'),
+        '$select=ID,Title,BCId,BC/Title,R_x00e9_f_x00e9_rence,Produit_x002f_D_x00e9_signation,Quantit_x00e9_command_x00e9_e,Quantit_x00e9_livr_x00e9_e,BLSign_x00e9_,Chantier,Unit_x00e9_&$expand=BC&$orderby=BCId asc'),
       // Demandes_BC
       spFetch('sites/BondeCommande','Demandes_BC',
         "$select=*&$orderby=Date_Enl_x00e8_vement asc&$top=500"),
@@ -2069,7 +2096,7 @@ function renderAll(){
   const banner=document.getElementById('matin-ok-banner');
   if(banner)banner.style.display=allOk?'flex':'none';
 
-  renderDBCTable();renderDevisTable();renderBLManquant();
+  renderDBCTable();renderDevisTable();renderBLManquant();renderRALTable();
 }
 
 function renderSuiviEnCours(){renderHistorique();renderBLManquant();
@@ -2324,6 +2351,111 @@ function renderDevisTable(){
   fillBody('devis-archive-body','sd-devis-archive-count',archive,'Aucun devis archivé');
 }
 
+// ═══ LIVRAISONS PARTIELLES — RAL ═══
+function getRALLignes(){
+  return (DATA.lignes||[]).map(l=>{
+    const qc=parseFloat(f(l,'Quantit_x00e9_command_x00e9_e'))||0;
+    const ql=parseFloat(f(l,'Quantit_x00e9_livr_x00e9_e'))||0;
+    return{ligne:l,qc,ql,ral:qc-ql};
+  }).filter(x=>x.ral>0);
+}
+
+function ralBcInfo(ligne){
+  const bcId=ligne.BCId||(ligne.BC&&ligne.BC.Id);
+  const bc=(DATA.suivi||[]).find(i=>i.ID===bcId||i.ID===parseInt(bcId));
+  return{
+    bcId,
+    numBC:f(ligne,'Title')||(bc?f(bc,'Title'):'')||(bcId?`BC-${bcId}`:'—'),
+    client:bc?getClient(bc):'—',
+    vendeur:bc?(f(bc,'Vendeurencharge')||'—'):'—'
+  };
+}
+
+function renderRALTable(){
+  const ralData=getRALLignes();
+  const fV=document.getElementById('filter-vendeur-ral')?.value||'all';
+  const fC=document.getElementById('filter-client-ral')?.value||'all';
+  const q=(document.getElementById('search-ral')?.value||'').toLowerCase();
+
+  // Peupler les selects vendeur/client dynamiquement (une fois)
+  const selV=document.getElementById('filter-vendeur-ral');
+  const selC=document.getElementById('filter-client-ral');
+  if(selV&&selV.options.length===1){
+    const vendeurs=[...new Set(ralData.map(x=>ralBcInfo(x.ligne).vendeur).filter(v=>v&&v!=='—'))].sort();
+    vendeurs.forEach(v=>{const o=document.createElement('option');o.value=v;o.textContent=v;selV.appendChild(o);});
+  }
+  if(selC&&selC.options.length===1){
+    const clients=[...new Set(ralData.map(x=>ralBcInfo(x.ligne).client).filter(c=>c&&c!=='—'))].sort();
+    clients.forEach(c=>{const o=document.createElement('option');o.value=c;o.textContent=c;selC.appendChild(o);});
+  }
+
+  let enriched=ralData.map(x=>({...x,info:ralBcInfo(x.ligne)}));
+  if(fV!=='all')enriched=enriched.filter(x=>x.info.vendeur===fV);
+  if(fC!=='all')enriched=enriched.filter(x=>x.info.client===fC);
+  if(q)enriched=enriched.filter(x=>{
+    const ref=f(x.ligne,'R_x00e9_f_x00e9_rence')||'';
+    const design=f(x.ligne,'Produit_x002f_D_x00e9_signation')||'';
+    const chantier=f(x.ligne,'Chantier')||'';
+    return [x.info.numBC,ref,design,chantier,x.info.client].some(v=>String(v).toLowerCase().includes(q));
+  });
+
+  const b=document.getElementById('ral-body');
+  if(b){
+    b.innerHTML=enriched.length?enriched.map(x=>{
+      const l=x.ligne;
+      const bl=f(l,'BLSign_x00e9_')||'—';
+      const unite=f(l,'Unit_x00e9_')||'';
+      return`<tr>
+        <td class="ref" style="cursor:pointer;color:var(--blue)" onclick="closePanel();openBCPanel(${x.info.bcId})">${x.info.numBC}</td>
+        <td class="cname">${x.info.client}</td>
+        <td style="font-size:12px;color:var(--text-secondary)">${f(l,'Chantier')||'—'}</td>
+        <td class="mono">${f(l,'R_x00e9_f_x00e9_rence')||'—'}</td>
+        <td style="font-size:11.5px">${f(l,'Produit_x002f_D_x00e9_signation')||'—'}</td>
+        <td style="text-align:right;font-weight:600">${x.qc}</td>
+        <td style="text-align:right;color:var(--green)">${x.ql}</td>
+        <td style="text-align:right;font-weight:700;color:var(--red)">${x.ral}</td>
+        <td style="text-align:center;font-size:11px">${unite||'—'}</td>
+        <td class="mono" style="font-size:10.5px">${bl}</td>
+        <td><button class="btn orange" style="height:24px;font-size:10.5px" onclick="openReceptionnerLigne(${l.ID},${x.info.bcId})">📦 Réceptionner</button></td>
+      </tr>`;
+    }).join(''):'<tr class="empty-row"><td colspan="11">Aucune ligne avec reste à livrer 🎉</td></tr>';
+  }
+
+  // KPIs
+  const totalRal=enriched.reduce((s,x)=>s+x.ral,0);
+  const chantiersDistinct=new Set(enriched.map(x=>f(x.ligne,'Chantier')).filter(Boolean)).size;
+  const kc=document.getElementById('kpi-ral-count');if(kc)kc.textContent=enriched.length;
+  const kq=document.getElementById('kpi-ral-qte');if(kq)kq.textContent=totalRal;
+  const kch=document.getElementById('kpi-ral-chantiers');if(kch)kch.textContent=chantiersDistinct;
+}
+
+function exportRALCSV(){
+  const ralData=getRALLignes();
+  const fV=document.getElementById('filter-vendeur-ral')?.value||'all';
+  const fC=document.getElementById('filter-client-ral')?.value||'all';
+  const q=(document.getElementById('search-ral')?.value||'').toLowerCase();
+  let enriched=ralData.map(x=>({...x,info:ralBcInfo(x.ligne)}));
+  if(fV!=='all')enriched=enriched.filter(x=>x.info.vendeur===fV);
+  if(fC!=='all')enriched=enriched.filter(x=>x.info.client===fC);
+  if(q)enriched=enriched.filter(x=>{
+    const ref=f(x.ligne,'R_x00e9_f_x00e9_rence')||'';
+    const design=f(x.ligne,'Produit_x002f_D_x00e9_signation')||'';
+    const chantier=f(x.ligne,'Chantier')||'';
+    return [x.info.numBC,ref,design,chantier,x.info.client].some(v=>String(v).toLowerCase().includes(q));
+  });
+  exportCSV(enriched,[
+    {label:'N° BC', fn:x=>x.info.numBC},
+    {label:'Client', fn:x=>x.info.client},
+    {label:'Chantier', fn:x=>f(x.ligne,'Chantier')||''},
+    {label:'Référence', fn:x=>f(x.ligne,'R_x00e9_f_x00e9_rence')||''},
+    {label:'Désignation', fn:x=>f(x.ligne,'Produit_x002f_D_x00e9_signation')||''},
+    {label:'Qté commandée', fn:x=>x.qc},
+    {label:'Qté livrée', fn:x=>x.ql},
+    {label:'RAL', fn:x=>x.ral},
+    {label:'BL', fn:x=>f(x.ligne,'BLSign_x00e9_')||''},
+  ], `livraisons_partielles_${new Date().toISOString().slice(0,10)}.csv`);
+}
+
 
 
 // ═══ BADGES ═══
@@ -2333,10 +2465,17 @@ function updateBadges(){
   const dbcActifs=DATA.dbc.filter(i=>f(i,'Statut')!=='BC Reçu');
   const dbcU=dbcActifs.filter(i=>daysSince(f(i,'Date_Enl_x00e8_vement'))>5).length;
   const dc=DATA.devis.filter(i=>(f(i,'Statut')||'').startsWith('En cours')||f(i,'Statut')==='Nouvelle').length;
+  const ralCount=(DATA.lignes||[]).filter(l=>{
+    const qc=parseFloat(f(l,'Quantit_x00e9_command_x00e9_e'))||0;
+    const ql=parseFloat(f(l,'Quantit_x00e9_livr_x00e9_e'))||0;
+    return qc-ql>0;
+  }).length;
   document.getElementById('badge-recu').textContent=traiter>0?traiter+' à traiter':'';
   document.getElementById('badge-retard').textContent=retard>0?retard+' retard':'';
   document.getElementById('badge-dbc').textContent=dbcU>0?dbcU+' urgents':'';
   document.getElementById('badge-devis').textContent=dc>0?dc+' actifs':'';
+  const badgeRal=document.getElementById('badge-ral');
+  if(badgeRal)badgeRal.textContent=ralCount>0?ralCount:'';
 }
 
 // ═══ TABS ═══
@@ -3925,6 +4064,7 @@ async function openBCPanel(id){
 
     // Lignes déjà en cache
     const lignes=(DATA.lignes||[]).filter(l=>l.BCId===id||parseInt(l.BCId)===id);
+    const cE=client.replace(/'/g,"\\'"),nE=numBC.replace(/'/g,"\\'");
 
     let html=`
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:0">
@@ -3966,23 +4106,33 @@ async function openBCPanel(id){
       const totalCmd=lignes.reduce((s,l)=>s+(parseFloat(f(l,'Quantit_x00e9_command_x00e9_e'))||0),0);
       const totalLiv=lignes.reduce((s,l)=>s+(parseFloat(f(l,'Quantit_x00e9_livr_x00e9_e'))||0),0);
       const ral=totalCmd-totalLiv;
-      html+=`<div class="pf"><div class="pf-lbl">📦 Articles (${lignes.length} ligne${lignes.length>1?'s':''}) · RAL total : <span style="color:${ral>0?'var(--red)':'var(--green)'};font-weight:700">${ral}</span></div>
-        <table class="ltable"><thead><tr><th>Référence</th><th>Désignation</th><th>Cmd</th><th>Livré</th><th>RAL</th></tr></thead><tbody>`;
+      html+=`<div class="pf"><div class="pf-lbl" style="display:flex;align-items:center;justify-content:space-between">
+        <span>📦 Articles (${lignes.length} ligne${lignes.length>1?'s':''}) · RAL total : <span style="color:${ral>0?'var(--red)':'var(--green)'};font-weight:700">${ral}</span></span>
+        <button class="btn navy" style="height:24px;font-size:10.5px" onclick="openAjouterLigneArticle(${id},'${nE}')">➕ Ligne article</button>
+      </div>
+        <table class="ltable"><thead><tr><th>Référence</th><th>Désignation</th><th>Cmd</th><th>Livré</th><th>RAL</th><th>BL</th><th></th></tr></thead><tbody>`;
       lignes.forEach(l=>{
         const qc=parseFloat(f(l,'Quantit_x00e9_command_x00e9_e'))||0;
         const ql=parseFloat(f(l,'Quantit_x00e9_livr_x00e9_e'))||0;
         const lr=qc-ql;
+        const blLigne=f(l,'BLSign_x00e9_')||'—';
         html+=`<tr>
           <td class="mono">${f(l,'R_x00e9_f_x00e9_rence')||'—'}</td>
           <td style="font-size:11px">${f(l,'Produit_x002f_D_x00e9_signation')||'—'}</td>
           <td style="text-align:right;font-weight:600">${qc}</td>
           <td style="text-align:right;color:var(--green)">${ql}</td>
           <td style="text-align:right;font-weight:700;color:${lr>0?'var(--red)':'var(--green)'}">${lr}</td>
+          <td class="mono" style="font-size:10.5px">${blLigne}</td>
+          <td>${lr>0?`<button class="btn orange" style="height:22px;font-size:10px;padding:0 7px" onclick="openReceptionnerLigne(${l.ID},${id})">📦 Réceptionner</button>`:''}</td>
         </tr>`;
       });
       html+=`</tbody></table></div>`;
     }else{
-      html+=`<div class="pf"><div class="pf-lbl">Articles</div><div class="pf-val" style="color:var(--grey);font-style:italic">Aucune ligne Lignes_BC trouvée</div></div>`;
+      html+=`<div class="pf"><div class="pf-lbl" style="display:flex;align-items:center;justify-content:space-between">
+        <span>Articles</span>
+        <button class="btn navy" style="height:24px;font-size:10.5px" onclick="openAjouterLigneArticle(${id},'${nE}')">➕ Ligne article</button>
+      </div>
+      <div class="pf-val" style="color:var(--grey);font-style:italic">Aucune ligne Lignes_BC trouvée</div></div>`;
     }
 
     // ── Pièces jointes ──
@@ -4013,7 +4163,6 @@ async function openBCPanel(id){
     html+=`</div>`;
 
     // ── Actions ──
-    const cE=client.replace(/'/g,"\\'"),nE=numBC.replace(/'/g,"\\'");
     html+=`<div class="pactions">
       <button class="pbtn green" onclick="closePanel();openFacturerModal(${id},'${nE}','${cE}')">💰 Facturer</button>
       <button class="pbtn blue" onclick="closePanel();openTraiterModal(${id},'${nE}','${cE}')">🔧 Traiter</button>
@@ -4246,6 +4395,104 @@ async function assignerVendeurDevis(id){
     if(btn){btn.disabled=false;btn.textContent='💾 Assigner';}
     alert('Erreur : '+e.message);
   }
+}
+
+// ── Ajouter une ligne article manuellement à un BC existant ──
+function openAjouterLigneArticle(bcId,numBC){
+  openModal(`➕ Ajouter une ligne article — ${numBC}`,`
+    <div style="font-size:11.5px;color:var(--text-muted);margin-bottom:14px">
+      Crée un item dans <span style="font-family:var(--font-mono);background:var(--grey-light);padding:1px 6px;border-radius:4px">Lignes_BC</span> rattaché à ce BC
+    </div>
+    <div class="mf"><label>Référence article</label>
+      <input id="lba-ref" placeholder="Ex : 038400">
+    </div>
+    <div class="mf"><label>Désignation *</label>
+      <textarea id="lba-design" rows="2" placeholder="Ex : TUYAU DIAM 400 de 3m" autofocus></textarea>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+      <div class="mf"><label>Quantité commandée *</label>
+        <input id="lba-qte" type="number" min="0" step="1" placeholder="0">
+      </div>
+      <div class="mf"><label>Unité</label>
+        <input id="lba-unite" placeholder="Pcs, m, ml...">
+      </div>
+    </div>
+    <div class="mf"><label>Chantier (optionnel)</label>
+      <input id="lba-chantier" placeholder="Repris automatiquement si vide">
+    </div>`,
+  async()=>{
+    const ref=document.getElementById('lba-ref').value.trim();
+    const design=document.getElementById('lba-design').value.trim();
+    const qte=parseFloat(document.getElementById('lba-qte').value);
+    const unite=document.getElementById('lba-unite').value.trim();
+    const chantier=document.getElementById('lba-chantier').value.trim();
+    if(!design){document.getElementById('lba-design').style.borderColor='var(--red)';throw new Error('La désignation est obligatoire.');}
+    if(!qte||qte<=0){document.getElementById('lba-qte').style.borderColor='var(--red)';throw new Error('La quantité commandée doit être supérieure à 0.');}
+
+    const item=DATA.suivi.find(i=>i.ID===bcId);
+    const chantierFinal=chantier||(item?getChantier(item):'')||'';
+
+    const body={
+      Title:numBC,
+      BCId:bcId,
+      R_x00e9_f_x00e9_rence:ref||'',
+      Produit_x002f_D_x00e9_signation:design,
+      Quantit_x00e9_command_x00e9_e:qte,
+      Quantit_x00e9_livr_x00e9_e:0,
+      Unit_x00e9_:unite||'',
+      Chantier:chantierFinal
+    };
+
+    await spPost('sites/RseauxPlus','Lignes_BC',body);
+    setTimeout(()=>loadAll(),1500);
+    setTimeout(()=>openBCPanel(bcId),2200);
+  });
+}
+
+// ── Réceptionner une ligne article (livraison partielle ou totale de la ligne) ──
+function openReceptionnerLigne(ligneId,bcId){
+  const ligne=(DATA.lignes||[]).find(l=>l.ID===ligneId);
+  if(!ligne){alert('Ligne non trouvée en cache.');return;}
+  const qc=parseFloat(f(ligne,'Quantit_x00e9_command_x00e9_e'))||0;
+  const ql=parseFloat(f(ligne,'Quantit_x00e9_livr_x00e9_e'))||0;
+  const ral=qc-ql;
+  const design=f(ligne,'Produit_x002f_D_x00e9_signation')||'Article';
+  const blActuel=f(ligne,'BLSign_x00e9_')||'';
+
+  openModal(`📦 Réceptionner — ${design}`,`
+    <div style="font-size:11.5px;color:var(--text-muted);margin-bottom:14px">
+      Commandé : <strong>${qc}</strong> · Déjà livré : <strong>${ql}</strong> · Reste à livrer : <strong style="color:var(--red)">${ral}</strong>
+    </div>
+    <div class="mf"><label>Quantité reçue aujourd'hui *</label>
+      <input id="rl-qte" type="number" min="0" max="${ral}" step="1" placeholder="Max ${ral}" autofocus>
+    </div>
+    <div class="mf"><label>N° BL Signé</label>
+      <input id="rl-bl" value="${blActuel}" placeholder="Ex : 820094">
+    </div>
+    <div class="mf"><label>Scan / Photo BL (optionnel)</label>
+      <input type="file" id="rl-file" accept=".pdf,.jpg,.jpeg,.png" style="font-size:12px;padding:4px 0">
+    </div>`,
+  async()=>{
+    const qteRecue=parseFloat(document.getElementById('rl-qte').value);
+    const bl=document.getElementById('rl-bl').value.trim();
+    const file=document.getElementById('rl-file').files[0];
+    if(!qteRecue||qteRecue<=0){document.getElementById('rl-qte').style.borderColor='var(--red)';throw new Error('La quantité reçue doit être supérieure à 0.');}
+    if(qteRecue>ral){document.getElementById('rl-qte').style.borderColor='var(--red)';throw new Error(`La quantité reçue ne peut pas dépasser le RAL (${ral}).`);}
+
+    const nouvelleQteLivree=ql+qteRecue;
+    const body={Quantit_x00e9_livr_x00e9_e:nouvelleQteLivree};
+    if(bl)body['BLSign_x00e9_']=bl;
+
+    await spPatch('sites/RseauxPlus','Lignes_BC',ligneId,body);
+
+    if(file){
+      const buf=await file.arrayBuffer();
+      await spAddAttachment('sites/RseauxPlus','Lignes_BC',ligneId,file.name,buf);
+    }
+
+    setTimeout(()=>loadAll(),1500);
+    if(bcId)setTimeout(()=>openBCPanel(bcId),2200);
+  });
 }
 
 function openLivraisonPartielle(id){
