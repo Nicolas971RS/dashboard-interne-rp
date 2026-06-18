@@ -1204,8 +1204,8 @@ function renderDocuware(){
     const cE=client.replace(/'/g,"\\'"),nE=numBC.replace(/'/g,"\\'");
     return`<tr class="rr"><td class="ref">${numBC}</td><td class="cname">${client}</td><td style="font-size:12px;color:var(--text-secondary)">${chantier}</td><td class="mono">${bl}</td><td class="mono">${fc}</td><td class="mono">${dateRec}</td><td>${vendeur}</td><td>
       <div class="btn-grp">
-        <button class="btn navy" onclick="openTraiterModal(${i.ID})">🔧 Traiter</button>
         <button class="btn" onclick="openBCPanel(${i.ID})">Voir BC</button>
+        <button class="btn navy" onclick="openTraiterModal(${i.ID})">🔧 Traiter</button>
       </div>
     </td></tr>`;
   }).join('');
@@ -1275,9 +1275,9 @@ function renderTousRecu(){
       <td>${bFact(ef)}</td>
       <td><div class="btn-grp">
         <button class="btn green" onclick="openFacturerModal(${i.ID})">💰 Facturer</button>
+        <button class="btn" onclick="openBCPanel(${i.ID})">Voir BC</button>
         <button class="btn navy" onclick="openTraiterModal(${i.ID})">🔧 Traiter</button>
         <button class="btn orange" onclick="openLivraisonPartielle(${i.ID})">🔀 Livraison Partielle</button>
-        <button class="btn" onclick="openBCPanel(${i.ID})">Voir BC</button>
       </div></td>
     </tr>`;
   }).join('');
@@ -1474,9 +1474,9 @@ function bcRow(i,showAction=true){
   const cE=client.replace(/'/g,"\\'"),nE=numBC.replace(/'/g,"\\'");
   const act=showAction?`<td><div class="btn-grp">
     <button class="btn green" onclick="openFacturerModal(${i.ID})">💰 Facturer</button>
-    <button class="btn navy" onclick="openTraiterModal(${i.ID})">🔧 Traiter</button>
-    <button class="btn orange" onclick="livraisonPartielleFlow(${i.ID},'${nE}','${cE}')">🔀 Livraison Partielle</button>
     <button class="btn" onclick="openBCPanel(${i.ID})">Voir BC</button>
+        <button class="btn navy" onclick="openTraiterModal(${i.ID})">🔧 Traiter</button>
+    <button class="btn orange" onclick="livraisonPartielleFlow(${i.ID},'${nE}','${cE}')">🔀 Livraison Partielle</button>
   </div></td>`:'';
   return`<tr class="rr" data-bc-id="${i.ID}"><td class="ref">${numBC}</td><td class="cname">${client}</td><td style="font-size:12px;color:var(--text-secondary)">${chantier}</td><td class="mono" style="color:var(--blue-mid);font-size:11px">${numDev}</td><td class="mono">${dateLiv}</td><td class="mono">${numBL}</td><td class="mono">${numFC!=='—'?`<span style="color:var(--teal)">${numFC}</span>`:numFC}</td><td class="amt" style="font-size:11.5px">${montantFmt}</td><td>${vendeur}</td><td>${bStatut(s)}</td><td>${bFact(ef)}</td>${act}</tr>`;
 }
@@ -1519,9 +1519,9 @@ function renderAFacturer(){
       <td>${vendeur}</td>
       <td><div class="btn-grp">
         <button class="btn green" onclick="openFacturerModal(${i.ID})">💰 Facturer</button>
+        <button class="btn" onclick="openBCPanel(${i.ID})">Voir BC</button>
         <button class="btn navy" onclick="openTraiterModal(${i.ID})">🔧 Traiter</button>
         <button class="btn orange" onclick="openLivraisonPartielle(${i.ID})">🔀 Livraison Partielle</button>
-        <button class="btn" onclick="openBCPanel(${i.ID})">Voir BC</button>
       </div></td>
     </tr>`;
   }).join('');
@@ -1564,8 +1564,8 @@ function renderBLManquant(){
       <td class="mono">${fmtDate(dateRec)}</td>
       <td>${vendeur}</td>
       <td><div class="btn-grp">
-        <button class="btn navy" onclick="openTraiterModal(${i.ID})">🔧 Traiter</button>
         <button class="btn" onclick="openBCPanel(${i.ID})">Voir BC</button>
+        <button class="btn navy" onclick="openTraiterModal(${i.ID})">🔧 Traiter</button>
       </div></td>
     </tr>`;
   }).join('');
@@ -2006,10 +2006,11 @@ function renderAll(){
       <td>${vendeur}</td>
       <td>${bFact(ef)}</td>
       <td><div class="btn-grp">
+        
+        <button class="btn" onclick="openBCPanel(${i.ID})">Voir BC</button>
         <button class="btn navy" onclick="openTraiterModal(${i.ID})">🔧 Traiter</button>
         <button class="btn green" onclick="openFacturerModal(${i.ID})">💰 Facturer</button>
         <button class="btn orange" onclick="livraisonPartielleFlow(${i.ID},'${nE}','${cE}')">🔀 Livraison Partielle</button>
-        <button class="btn" onclick="openBCPanel(${i.ID})">Voir BC</button>
       </div></td>
     </tr>`;
   }).join(''):'<tr class="empty-row"><td colspan="9">✅ Aucun BC réceptionné aujourd\'hui</td></tr>';
@@ -2029,8 +2030,8 @@ function renderAll(){
     const cE=client.replace(/'/g,"\\'"),nE=numBC.replace(/'/g,"\\'");
     return`<tr class="rr"><td class="ref">${numBC}</td><td class="cname">${client}</td><td style="font-size:12px;color:var(--text-secondary)">${chantier}</td><td class="mono">${bl}</td><td class="mono">${dateRec}</td><td>${vendeur}</td><td>${bStatut(getStatut(i))}</td><td>${bFact(getEtatFact(i))}</td><td><div class="btn-grp">
       <button class="btn green" onclick="openFacturerModal(${i.ID})">💰 Facturer</button>
-      <button class="btn navy" onclick="openTraiterModal(${i.ID})">🔧 Traiter</button>
       <button class="btn" onclick="openBCPanel(${i.ID})">Voir BC</button>
+      <button class="btn navy" onclick="openTraiterModal(${i.ID})">🔧 Traiter</button>
     </div></td></tr>`;
   }).join(''):'<tr class="empty-row"><td colspan="9">✅ Aucun BL reçu non facturé</td></tr>';
   document.getElementById('matin-traiter-body').innerHTML=traiterHtml;
@@ -2045,8 +2046,8 @@ function renderAll(){
     const lignes=getStatut(i)==='Partiellement livré'?getLignesForBC(i.ID):[];
     const cE=client.replace(/'/g,"\\'"),nE=numBC.replace(/'/g,"\\'");
     return`<tr class="${urg.row}"><td><span class="urg ${urg.cls}">${urg.lbl}</span></td><td class="ref">${numBC}</td><td class="cname">${client}</td><td style="font-size:12px;color:var(--text-secondary)">${chantier}</td><td class="mono" style="color:var(--red)">${fmtDate(dateLiv)}</td><td>${vendeur}</td><td>${bStatut(getStatut(i))}</td><td>${ralBlock(lignes)}</td><td><div class="btn-grp">
-      <button class="btn navy" onclick="openTraiterModal(${i.ID})">🔧 Traiter</button>
       <button class="btn" onclick="openBCPanel(${i.ID})">Voir BC</button>
+      <button class="btn navy" onclick="openTraiterModal(${i.ID})">🔧 Traiter</button>
     </div></td></tr>`;
   }).join(''):'<tr class="empty-row"><td colspan="9">✅ Aucun BC en retard fournisseur</td></tr>';
   document.getElementById('matin-retard-body').innerHTML=relancerHtml;
@@ -2112,9 +2113,9 @@ function renderSuiviEnCours(){renderHistorique();renderBLManquant();
       <td>${ralBlock(lignes)}</td><td>${bFact(ef)}</td>
       <td><div class="btn-grp">
         <button class="btn green" onclick="openFacturerModal(${i.ID})">💰 Facturer</button>
+        <button class="btn" onclick="openBCPanel(${i.ID})">Voir BC</button>
         <button class="btn navy" onclick="openTraiterModal(${i.ID})">🔧 Traiter</button>
         <button class="btn orange" onclick="livraisonPartielleFlow(${i.ID},'${nE}','${cE}')">🔀 Livraison Partielle</button>
-        <button class="btn" onclick="openBCPanel(${i.ID})">Voir BC</button>
       </div></td>
     </tr>`;
   }).join('');
@@ -3422,8 +3423,8 @@ function renderChecklist(){
       <td>${chk(docuware)}</td>
       <td>${!hasVendeur?`<span style="color:var(--red);font-size:11px;font-weight:700;display:block;text-align:center">❌ Non assigné</span>`:`<span style="font-size:11px;display:block;text-align:center">${f(i,'Vendeurencharge')}</span>`}</td>
       <td onclick="event.stopPropagation()"><div class="btn-grp">
-        <button class="btn navy" onclick="openTraiterModal(${i.ID})">🔧 Traiter</button>
         <button class="btn" onclick="openBCPanel(${i.ID})">Voir BC</button>
+        <button class="btn navy" onclick="openTraiterModal(${i.ID})">🔧 Traiter</button>
         ${!facture?`<button class="btn green" onclick="openFacturerModal(${i.ID})">💰</button>`:''}
 
         ${!hasPJ?`<button class="btn" onclick="openBCPanel(${i.ID})" style="color:var(--amber);border-color:var(--amber);font-size:10.5px">📎 Joindre</button>`:''}
