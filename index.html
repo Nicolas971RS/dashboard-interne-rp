@@ -2363,9 +2363,10 @@ function getRALLignes(){
 function ralBcInfo(ligne){
   const bcId=ligne.BCId||(ligne.BC&&ligne.BC.Id);
   const bc=(DATA.suivi||[]).find(i=>i.ID===bcId||i.ID===parseInt(bcId));
+  const bcTitleFromExpand=ligne.BC&&ligne.BC.Title;
   return{
     bcId,
-    numBC:f(ligne,'Title')||(bc?f(bc,'Title'):'')||(bcId?`BC-${bcId}`:'—'),
+    numBC:bcTitleFromExpand||(bc?f(bc,'Title'):'')||(bcId?`BC-${bcId}`:'—'),
     client:bc?getClient(bc):'—',
     vendeur:bc?(f(bc,'Vendeurencharge')||'—'):'—'
   };
