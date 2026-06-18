@@ -664,7 +664,7 @@
         <div class="kc a"><div class="kl">🟡 En attente &lt;5 jours</div><div class="kv" id="kpi-dbc-ok">—</div><div class="ks">Délai normal</div></div>
       </div>
       <div class="sh">
-        <div class="st">🧾 Toutes les demandes en cours</div>
+        <div class="st">🧾 Filtres</div>
         <div class="fb">
           <input class="fs" type="text" id="search-dbc" placeholder="🔍 Recherche libre..." oninput="renderDBCTable()" style="min-width:160px">
           <select class="fs" id="filter-vendeur-dbc" onchange="renderDBCTable()"><option value="all">Tous les vendeurs</option></select>
@@ -672,10 +672,56 @@
           <button class="btn" onclick="exportDBCCSV()">⬇ CSV</button>
         </div>
       </div>
-      <div class="tc"><table>
-        <thead><tr><th>Urgence</th><th>Réf.</th><th>Client</th><th>Employé</th><th>N° Devis</th><th>N° BL</th><th>Date enlèv.</th><th>Montant HT</th><th>Vendeur</th><th>Statut</th><th>Relances</th><th>Action</th></tr></thead>
-        <tbody id="dbc-body"><tr class="empty-row"><td colspan="12">Chargement...</td></tr></tbody>
-      </table></div>
+
+      <div id="dbc-accordeons-vendeurs"><!-- généré dynamiquement par vendeur --></div>
+
+      <!-- ══ RELANCÉ ══ -->
+      <div class="sd" style="margin-top:18px"><h2>🔁 Relancé</h2><span class="site-tag rp">Tous vendeurs</span><div class="sd-line"></div></div>
+      <div class="acc-hd" onclick="toggleAcc('acc-dbc-relance',this)">
+        <div class="acc-hd-left">
+          <span class="acc-arrow">▼</span>
+          <div class="acc-hd-title">🔁 Demandes relancées</div>
+          <div class="acc-hd-meta"><span class="ctag o" id="sd-dbc-relance-count">0</span></div>
+        </div>
+      </div>
+      <div class="acc-body" id="acc-dbc-relance">
+        <div class="tc"><table>
+          <thead><tr><th>Urgence</th><th>Réf.</th><th>Client</th><th>Employé</th><th>N° Devis</th><th>N° BL</th><th>Date enlèv.</th><th>Montant HT</th><th>Vendeur</th><th>Statut</th><th>Relances</th><th>Action</th></tr></thead>
+          <tbody id="dbc-relance-body"><tr class="empty-row"><td colspan="12">Chargement...</td></tr></tbody>
+        </table></div>
+      </div>
+
+      <!-- ══ BC REÇU ══ -->
+      <div class="sd" style="margin-top:18px"><h2>✅ BC Reçu</h2><span class="site-tag rp">Tous vendeurs</span><div class="sd-line"></div></div>
+      <div class="acc-hd" onclick="toggleAcc('acc-dbc-recu',this)">
+        <div class="acc-hd-left">
+          <span class="acc-arrow">▼</span>
+          <div class="acc-hd-title">✅ Demandes régularisées</div>
+          <div class="acc-hd-meta"><span class="ctag g" id="sd-dbc-recu-count">0</span></div>
+        </div>
+      </div>
+      <div class="acc-body" id="acc-dbc-recu">
+        <div class="tc"><table>
+          <thead><tr><th>Urgence</th><th>Réf.</th><th>Client</th><th>Employé</th><th>N° Devis</th><th>N° BL</th><th>Date enlèv.</th><th>Montant HT</th><th>Vendeur</th><th>Statut</th><th>Relances</th><th>Action</th></tr></thead>
+          <tbody id="dbc-recu-body"><tr class="empty-row"><td colspan="12">Chargement...</td></tr></tbody>
+        </table></div>
+      </div>
+
+      <!-- ══ LITIGIEUX ══ -->
+      <div class="sd" style="margin-top:18px"><h2>⚠️ Litigieux</h2><span class="site-tag rp">Tous vendeurs</span><div class="sd-line"></div></div>
+      <div class="acc-hd" onclick="toggleAcc('acc-dbc-litige',this)">
+        <div class="acc-hd-left">
+          <span class="acc-arrow">▼</span>
+          <div class="acc-hd-title">⚠️ Demandes litigieuses</div>
+          <div class="acc-hd-meta"><span class="ctag r" id="sd-dbc-litige-count">0</span></div>
+        </div>
+      </div>
+      <div class="acc-body" id="acc-dbc-litige">
+        <div class="tc"><table>
+          <thead><tr><th>Urgence</th><th>Réf.</th><th>Client</th><th>Employé</th><th>N° Devis</th><th>N° BL</th><th>Date enlèv.</th><th>Montant HT</th><th>Vendeur</th><th>Statut</th><th>Relances</th><th>Action</th></tr></thead>
+          <tbody id="dbc-litige-body"><tr class="empty-row"><td colspan="12">Chargement...</td></tr></tbody>
+        </table></div>
+      </div>
     </div>
 
     <!-- DEVIS -->
@@ -2057,6 +2103,20 @@ function getDevisRefForDBC(item){
   return f(item,'ID_Devis')||f(item,'ID_DevisId')||'—';
 }
 
+function dbcRowFull(i){
+  const urg=getDBCUrgence(i);
+  const days=daysSince(f(i,'Date_Enl_x00e8_vement'));
+  const nbRel=f(i,'Nb_Relances')||0;
+  const devisRef=getDevisRefForDBC(i);
+  const hasAttach=f(i,'Attachments');
+  const vendeur=getDBCVendeur(i);
+  const isReceu=f(i,'Statut')==='BC Reçu';
+  return`<tr class="${urg.row}" style="cursor:pointer" onclick="openDBCPanel(${i.ID})"><td><span class="urg ${urg.cls}">${urg.lbl}</span></td><td class="ref">DBC-${i.ID}</td><td class="cname">${f(i,'NomClient')||f(i,'Title')||'—'}</td><td>${f(i,'Nom_Employ_x00e9_')||'—'}</td><td class="ref" style="color:var(--blue)">${devisRef}</td><td class="mono">${f(i,'N_x00b0_BL')||'—'}</td><td class="mono">${fmtDate(f(i,'Date_Enl_x00e8_vement'))}</td><td class="amt" style="${days>5&&!isReceu?'color:var(--red)':''}">${fmtMoney(f(i,'Montant_HT'))}</td><td>${vendeur}</td><td>${bDBC(f(i,'Statut'))}</td><td class="mono" style="text-align:center;${nbRel>=2?'color:var(--red);font-weight:700':''}">${nbRel}${hasAttach?' 📎':''}</td><td onclick="event.stopPropagation()"><div class="btn-grp">
+    <button class="btn" onclick="openDBCPanel(${i.ID})">🔍 Détail</button>
+    ${days>10&&!isReceu?`<button class="btn w" onclick="openDBCPanel(${i.ID})">⚡ Escalade</button>`:`<button class="btn" onclick="openDBCPanel(${i.ID})">📧 Relancer</button>`}
+  </div></td></tr>`;
+}
+
 function renderDBCTable(){
   let items=[...DATA.dbc];
   const fV=document.getElementById('filter-vendeur-dbc')?.value||'all';
@@ -2072,20 +2132,57 @@ function renderDBCTable(){
     return [client,employe,vendeur,devisRef,`DBC-${i.ID}`].some(v=>v.toLowerCase().includes(q));
   });
   items=applySort(items,'dbc-body',SORT_COLS_DBC);
-  const b=document.getElementById('dbc-body');
-  b.innerHTML=items.length?items.map(i=>{
-    const urg=getDBCUrgence(i);
-    const days=daysSince(f(i,'Date_Enl_x00e8_vement'));
-    const nbRel=f(i,'Nb_Relances')||0;
-    const devisRef=getDevisRefForDBC(i);
-    const hasAttach=f(i,'Attachments');
-    const vendeur=getDBCVendeur(i);
-    const isReceu=f(i,'Statut')==='BC Reçu';
-    return`<tr class="${urg.row}" style="cursor:pointer" onclick="openDBCPanel(${i.ID})"><td><span class="urg ${urg.cls}">${urg.lbl}</span></td><td class="ref">DBC-${i.ID}</td><td class="cname">${f(i,'NomClient')||f(i,'Title')||'—'}</td><td>${f(i,'Nom_Employ_x00e9_')||'—'}</td><td class="ref" style="color:var(--blue)">${devisRef}</td><td class="mono">${f(i,'N_x00b0_BL')||'—'}</td><td class="mono">${fmtDate(f(i,'Date_Enl_x00e8_vement'))}</td><td class="amt" style="${days>5&&!isReceu?'color:var(--red)':''}">${fmtMoney(f(i,'Montant_HT'))}</td><td>${vendeur}</td><td>${bDBC(f(i,'Statut'))}</td><td class="mono" style="text-align:center;${nbRel>=2?'color:var(--red);font-weight:700':''}">${nbRel}${hasAttach?' 📎':''}</td><td onclick="event.stopPropagation()"><div class="btn-grp">
-      <button class="btn" onclick="openDBCPanel(${i.ID})">🔍 Détail</button>
-      ${days>10&&!isReceu?`<button class="btn w" onclick="openDBCPanel(${i.ID})">⚡ Escalade</button>`:`<button class="btn" onclick="openDBCPanel(${i.ID})">📧 Relancer</button>`}
-    </div></td></tr>`;
-  }).join(''):'<tr class="empty-row"><td colspan="12">Aucune demande BC en attente</td></tr>';
+
+  const norm=s=>(s||'').trim().toLowerCase().normalize('NFC');
+  const enAttente=items.filter(i=>{const s=norm(f(i,'Statut'));return s===''||s==='en attente bc';});
+  const relance=items.filter(i=>['relancé','rappel envoyé'].includes(norm(f(i,'Statut'))));
+  const recu=items.filter(i=>norm(f(i,'Statut'))==='bc reçu');
+  const litige=items.filter(i=>norm(f(i,'Statut'))==='litigieux');
+
+  // ── Accordéons par vendeur (En attente BC uniquement) ──
+  const vendeurs={};
+  enAttente.forEach(i=>{
+    const v=getDBCVendeur(i);
+    if(!vendeurs[v])vendeurs[v]=[];
+    vendeurs[v].push(i);
+  });
+  const vendeurNames=Object.keys(vendeurs).sort((a,b)=>a==='—'?1:b==='—'?-1:a.localeCompare(b));
+  const wrap=document.getElementById('dbc-accordeons-vendeurs');
+  if(wrap){
+    if(!vendeurNames.length){
+      wrap.innerHTML='<div class="tc" style="padding:20px;text-align:center;color:var(--text-muted)">Aucune demande en attente de BC 🎉</div>';
+    }else{
+      wrap.innerHTML=vendeurNames.map((v,idx)=>{
+        const list=vendeurs[v];
+        const urgentCount=list.filter(i=>daysSince(f(i,'Date_Enl_x00e8_vement'))>5).length;
+        const accId='acc-dbc-vendeur-'+idx;
+        return`<div class="acc-hd" onclick="toggleAcc('${accId}',this)" style="margin-top:10px">
+          <div class="acc-hd-left">
+            <span class="acc-arrow open">▼</span>
+            <div class="acc-hd-title">👤 ${v}</div>
+            <div class="acc-hd-meta"><span class="ctag o">${list.length} en attente</span>${urgentCount?`<span class="ctag r">${urgentCount} &gt;5j</span>`:''}</div>
+          </div>
+        </div>
+        <div class="acc-body open" id="${accId}">
+          <div class="tc"><table>
+            <thead><tr><th>Urgence</th><th>Réf.</th><th>Client</th><th>Employé</th><th>N° Devis</th><th>N° BL</th><th>Date enlèv.</th><th>Montant HT</th><th>Vendeur</th><th>Statut</th><th>Relances</th><th>Action</th></tr></thead>
+            <tbody>${list.map(dbcRowFull).join('')}</tbody>
+          </table></div>
+        </div>`;
+      }).join('');
+    }
+  }
+
+  // ── Accordéons par statut (toujours présents, remplis ou vides) ──
+  const fillBody=(bodyId,countId,list,emptyMsg)=>{
+    const b=document.getElementById(bodyId);
+    if(b)b.innerHTML=list.length?list.map(dbcRowFull).join(''):`<tr class="empty-row"><td colspan="12">${emptyMsg}</td></tr>`;
+    const c=document.getElementById(countId);
+    if(c)c.textContent=list.length;
+  };
+  fillBody('dbc-relance-body','sd-dbc-relance-count',relance,'Aucune demande relancée');
+  fillBody('dbc-recu-body','sd-dbc-recu-count',recu,'Aucun BC reçu');
+  fillBody('dbc-litige-body','sd-dbc-litige-count',litige,'Aucune demande litigieuse');
 }
 
 function renderDevisTable(){
