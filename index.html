@@ -740,7 +740,7 @@
         <div class="kc g"><div class="kl">✅ Total devis</div><div class="kv" id="kpi-devis-total">—</div><div class="ks">Toutes périodes</div></div>
       </div>
       <div class="sh">
-        <div class="st">📄 Devis récents</div>
+        <div class="st">📄 Filtres</div>
         <div class="fb">
           <input class="fs" type="text" id="search-devis" placeholder="🔍 N° Devis, Devis RS, client, chantier..." oninput="renderDevisTable()" style="min-width:200px">
           <select class="fs" id="filter-vendeur-devis" onchange="renderDevisTable()"><option value="all">Tous les vendeurs</option></select>
@@ -748,10 +748,48 @@
           <button class="btn" onclick="exportDevisCSV()">⬇ CSV</button>
         </div>
       </div>
-      <div class="tc"><table>
-        <thead><tr><th>N° Devis</th><th>Client</th><th>Chantier</th><th>Date</th><th>Devis RS</th><th>Vendeur</th><th>Statut</th><th>Dernière MàJ</th><th>Actions</th></tr></thead>
-        <tbody id="devis-body"><tr class="empty-row"><td colspan="7">Chargement...</td></tr></tbody>
-      </table></div>
+
+      <div id="devis-accordeons-vendeurs"><!-- généré dynamiquement par vendeur — Nouvelle + En cours --></div>
+
+      <!-- ══ DEVIS ENVOYÉ ══ -->
+      <div class="sd" style="margin-top:18px"><h2>✉️ Devis envoyé</h2><span class="site-tag rp">Tous vendeurs</span><div class="sd-line"></div></div>
+      <div class="acc-hd" onclick="toggleAcc('acc-devis-envoye',this)">
+        <div class="acc-hd-left">
+          <span class="acc-arrow">▼</span>
+          <div class="acc-hd-title">✉️ Devis envoyés — en attente de réponse client</div>
+          <div class="acc-hd-meta"><span class="ctag o" id="sd-devis-envoye-count">0</span></div>
+        </div>
+      </div>
+      <div class="acc-body" id="acc-devis-envoye">
+        <div class="tc"><table>
+          <thead><tr><th>N° Devis</th><th>Client</th><th>Chantier</th><th>Date</th><th>Devis RS</th><th>Vendeur</th><th>Statut</th><th>Dernière MàJ</th><th>Actions</th></tr></thead>
+          <tbody id="devis-envoye-body"><tr class="empty-row"><td colspan="9">Chargement...</td></tr></tbody>
+        </table></div>
+      </div>
+
+      <!-- ══ ARCHIVE ══ -->
+      <div style="margin-top:28px;border:2px dashed #b0bec5;border-radius:var(--radius-lg);padding:4px 12px 10px;background:rgba(244,246,249,.6)">
+        <div style="display:flex;align-items:center;gap:10px;padding:12px 4px 6px">
+          <span style="font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.12em;color:var(--grey-mid)">🗂️ Archive</span>
+          <div style="flex:1;height:1px;background:#cfd8dc"></div>
+          <span class="ctag grey" id="sd-devis-archive-count" style="background:var(--grey-mid)">0</span>
+        </div>
+        <div style="font-size:11px;color:var(--grey-mid);padding:0 4px 10px;font-style:italic">Accepté · Converti en BC · Expiré · Refusé · Archivé</div>
+
+        <div class="acc-hd" onclick="toggleAcc('acc-devis-archive',this)" style="background:rgba(255,255,255,.7);border-color:#cfd8dc">
+          <div class="acc-hd-left">
+            <span class="acc-arrow">▼</span>
+            <div class="acc-hd-title" style="color:var(--grey-mid)">🗂️ Devis archivés / terminés</div>
+            <div class="acc-hd-meta"><span class="site-tag rp" style="background:#eceff1;color:var(--grey-mid)">Statut final</span></div>
+          </div>
+        </div>
+        <div class="acc-body" id="acc-devis-archive" style="background:rgba(255,255,255,.7);border-color:#cfd8dc">
+          <div class="tc"><table>
+            <thead><tr><th>N° Devis</th><th>Client</th><th>Chantier</th><th>Date</th><th>Devis RS</th><th>Vendeur</th><th>Statut</th><th>Dernière MàJ</th><th>Actions</th></tr></thead>
+            <tbody id="devis-archive-body"><tr class="empty-row"><td colspan="9">Chargement...</td></tr></tbody>
+          </table></div>
+        </div>
+      </div>
     </div>
 
     <!-- ANALYTICS -->
@@ -2185,6 +2223,35 @@ function renderDBCTable(){
   fillBody('dbc-litige-body','sd-dbc-litige-count',litige,'Aucune demande litigieuse');
 }
 
+function devisRowFull(i){
+  const DEVIS_TERMINAL=['Accepté','Converti en BC','Expiré','Refusé','Archivé'];
+  const st=f(i,'Statut')||'—',mod=f(i,'Modified');
+  const isTerminal=DEVIS_TERMINAL.includes(st);
+  const isActive=['Nouvelle','En cours'].includes(st);
+  const stale=mod&&daysSince(mod)>7&&isActive;
+  const isNew=st==='Nouvelle';
+  const nd=f(i,'Num_x00e9_ro_Devis','Numero_Devis','Title')||`DEV-${i.ID}`;
+  let rowCls='';
+  if(stale)rowCls='ru';
+  else if(isNew)rowCls='rr';
+  let btns='';
+  if(isNew)btns=`<button class="btn blue" onclick="event.stopPropagation();passerEnCours(${i.ID})">📋 Prendre en charge</button>`;
+  else if(st==='En cours')btns=`<button class="btn teal" onclick="event.stopPropagation();envoyerDevisFlow(${i.ID})">📨 Envoyer</button>`;
+  const rowStyle=isTerminal?'cursor:pointer;opacity:.65':'cursor:pointer';
+  return`<tr class="${rowCls}" style="${rowStyle}" onclick="openDevisPanel(${i.ID})">
+    <td class="ref">${nd}</td>
+    <td class="cname">${f(i,'Client')||'—'}</td>
+    <td>${getChantier(i)}</td>
+    <td class="mono">${fmtDate(f(i,'Date_Devis'))}</td>
+    <td class="mono">${f(i,'Devis_RS')||'—'}</td>
+    <td>${f(i,'Vendeur_Assign_x00e9_')||'—'}</td>
+    <td>${bDevis(st)}</td>
+    <td class="mono" style="${stale?'color:var(--amber)':''}">${fmtDate(mod)}</td>
+    <td onclick="event.stopPropagation()"><div class="btn-grp">
+      <button class="btn" onclick="openDevisPanel(${i.ID})">🔍 Détail</button>${btns}
+    </div></td></tr>`;
+}
+
 function renderDevisTable(){
   let items=[...DATA.devis];
   const fV=document.getElementById('filter-vendeur-devis')?.value||'all';
@@ -2201,38 +2268,59 @@ function renderDevisTable(){
     return [nd,client,chantier,vendeur,devisRS].some(v=>String(v).toLowerCase().includes(q));
   });
   items=applySort(items,'devis-body',SORT_COLS_DEVIS);
-  const DEVIS_TERMINAL=['Accepté','Converti en BC','Expiré','Refusé','Archivé'];
-  const b=document.getElementById('devis-body');
-  b.innerHTML=items.length?items.map(i=>{
-    const st=f(i,'Statut')||'—',mod=f(i,'Modified');
-    const isTerminal=DEVIS_TERMINAL.includes(st);
-    const isActive=['Nouvelle','En cours'].includes(st);
-    const stale=mod&&daysSince(mod)>7&&isActive;
-    const isNew=st==='Nouvelle';
-    const nd=f(i,'Num_x00e9_ro_Devis','Numero_Devis','Title')||`DEV-${i.ID}`;
-    // Row color: stale=amber, nouvelle=green, terminal=muted, sent=normal
-    let rowCls='';
-    if(stale)rowCls='ru';
-    else if(isNew)rowCls='rr';
-    // Boutons contextuels — aucun sur statut terminal
-    let btns='';
-    if(isNew)btns=`<button class="btn blue" onclick="event.stopPropagation();passerEnCours(${i.ID})">📋 Prendre en charge</button>`;
-    else if(st==='En cours')btns=`<button class="btn teal" onclick="event.stopPropagation();envoyerDevisFlow(${i.ID})">📨 Envoyer</button>`;
-    const rowStyle=isTerminal?'cursor:pointer;opacity:.65':'cursor:pointer';
-    return`<tr class="${rowCls}" style="${rowStyle}" onclick="openDevisPanel(${i.ID})">
-      <td class="ref">${nd}</td>
-      <td class="cname">${f(i,'Client')||'—'}</td>
-      <td>${getChantier(i)}</td>
-      <td class="mono">${fmtDate(f(i,'Date_Devis'))}</td>
-      <td class="mono">${f(i,'Devis_RS')||'—'}</td>
-      <td>${f(i,'Vendeur_Assign_x00e9_')||'—'}</td>
-      <td>${bDevis(st)}</td>
-      <td class="mono" style="${stale?'color:var(--amber)':''}">${fmtDate(mod)}</td>
-      <td onclick="event.stopPropagation()"><div class="btn-grp">
-        <button class="btn" onclick="openDevisPanel(${i.ID})">🔍 Détail</button>${btns}
-      </div></td></tr>`;
-  }).join(''):'<tr class="empty-row"><td colspan="9">Aucun devis correspondant</td></tr>';
+
+  const DEVIS_ARCHIVE=['Accepté','Converti en BC','Expiré','Refusé','Archivé'];
+  const actifs=items.filter(i=>['Nouvelle','En cours'].includes(f(i,'Statut')));
+  const envoye=items.filter(i=>f(i,'Statut')==='Devis envoyé');
+  const archive=items.filter(i=>DEVIS_ARCHIVE.includes(f(i,'Statut')));
+
+  // ── Accordéons par vendeur (Nouvelle + En cours uniquement) ──
+  const vendeurs={};
+  actifs.forEach(i=>{
+    const v=f(i,'Vendeur_Assign_x00e9_')||'—';
+    if(!vendeurs[v])vendeurs[v]=[];
+    vendeurs[v].push(i);
+  });
+  const vendeurNames=Object.keys(vendeurs).sort((a,b)=>a==='—'?1:b==='—'?-1:a.localeCompare(b));
+  const wrap=document.getElementById('devis-accordeons-vendeurs');
+  if(wrap){
+    if(!vendeurNames.length){
+      wrap.innerHTML='<div class="tc" style="padding:20px;text-align:center;color:var(--text-muted)">Aucun devis actif 🎉</div>';
+    }else{
+      wrap.innerHTML=vendeurNames.map((v,idx)=>{
+        const list=vendeurs[v];
+        const newCount=list.filter(i=>f(i,'Statut')==='Nouvelle').length;
+        const staleCount=list.filter(i=>{const mod=f(i,'Modified');return mod&&daysSince(mod)>7;}).length;
+        const accId='acc-devis-vendeur-'+idx;
+        return`<div class="acc-hd" onclick="toggleAcc('${accId}',this)" style="margin-top:10px">
+          <div class="acc-hd-left">
+            <span class="acc-arrow open">▼</span>
+            <div class="acc-hd-title">👤 ${v}</div>
+            <div class="acc-hd-meta"><span class="ctag o">${list.length} actif${list.length>1?'s':''}</span>${newCount?`<span class="ctag g">${newCount} nouvelle${newCount>1?'s':''}</span>`:''}${staleCount?`<span class="ctag r">${staleCount} &gt;7j</span>`:''}</div>
+          </div>
+        </div>
+        <div class="acc-body open" id="${accId}">
+          <div class="tc"><table>
+            <thead><tr><th>N° Devis</th><th>Client</th><th>Chantier</th><th>Date</th><th>Devis RS</th><th>Vendeur</th><th>Statut</th><th>Dernière MàJ</th><th>Actions</th></tr></thead>
+            <tbody>${list.map(devisRowFull).join('')}</tbody>
+          </table></div>
+        </div>`;
+      }).join('');
+    }
+  }
+
+  // ── Accordéons fixes (Envoyé / Archive) ──
+  const fillBody=(bodyId,countId,list,emptyMsg)=>{
+    const b=document.getElementById(bodyId);
+    if(b)b.innerHTML=list.length?list.map(devisRowFull).join(''):`<tr class="empty-row"><td colspan="9">${emptyMsg}</td></tr>`;
+    const c=document.getElementById(countId);
+    if(c)c.textContent=list.length;
+  };
+  fillBody('devis-envoye-body','sd-devis-envoye-count',envoye,'Aucun devis envoyé en attente');
+  fillBody('devis-archive-body','sd-devis-archive-count',archive,'Aucun devis archivé');
 }
+
+
 
 // ═══ BADGES ═══
 function updateBadges(){
