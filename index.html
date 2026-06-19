@@ -4314,19 +4314,38 @@ async function openDevisPanel(id){
         <div class="pf"><div class="pf-lbl">N° Devis</div><div class="pf-val mono">${nd}</div></div>
       </div>
 
-      <!-- BLOC STATUT — clair et visible -->
+      <!-- BLOC STATUT + INFOS — un seul formulaire, un seul bouton Enregistrer -->
       <div style="background:var(--grey-xlight);border:1px solid var(--border);border-radius:var(--radius);padding:12px 14px;margin-bottom:10px">
         <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--text-muted);margin-bottom:8px">📋 Statut du devis</div>
-        <div style="display:flex;align-items:center;gap:6px;margin-bottom:8px">
+        <div style="display:flex;align-items:center;gap:6px;margin-bottom:10px">
           <span style="font-size:11px;color:var(--text-secondary)">Actuel :</span>
           ${bDevis(st)}
         </div>
-        <div style="display:flex;gap:8px;align-items:center">
-          <select id="panel-statut-devis" style="flex:1;border:2px solid var(--teal-mid);border-radius:var(--radius-sm);padding:7px 10px;font-size:13px;font-family:var(--font-body);outline:none;background:white;cursor:pointer">
-            ${['Nouvelle','En cours','Devis envoyé','Accepté','Converti en BC','Expiré','Refusé','Archivé'].map(s=>`<option value="${s}"${s===st?' selected':''}>${s}</option>`).join('')}
-          </select>
-          <button id="btn-changer-statut-devis" class="pbtn blue" style="padding:9px 16px;font-size:13px;font-weight:700;white-space:nowrap;background:var(--teal-mid)" onclick="changerStatutDevis(${id})">💾 Enregistrer</button>
+        <select id="panel-statut-devis" style="width:100%;border:2px solid var(--teal-mid);border-radius:var(--radius-sm);padding:7px 10px;font-size:13px;font-family:var(--font-body);outline:none;background:white;cursor:pointer;margin-bottom:10px">
+          ${['Nouvelle','En cours','Devis envoyé','Accepté','Converti en BC','Expiré','Refusé','Archivé'].map(s=>`<option value="${s}"${s===st?' selected':''}>${s}</option>`).join('')}
+        </select>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px">
+          <div><label style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--text-muted)">Date émission</label>
+            <input type="date" id="panel-date-emission" value="${(f(item,'Date__x00c9_mission_Devis')||'').slice(0,10)}" style="width:100%;border:1px solid var(--border);border-radius:5px;padding:5px 8px;font-size:12px;font-family:inherit;margin-top:3px">
+          </div>
+          <div><label style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--text-muted)">Devis RS</label>
+            <input id="panel-devis-rs" value="${f(item,'Devis_RS')||''}" placeholder="Ex : 716506" style="width:100%;border:1px solid var(--border);border-radius:5px;padding:5px 8px;font-size:12px;font-family:var(--font-mono);margin-top:3px">
+          </div>
         </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px">
+          <div><label style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--text-muted)">⏱ Délai validité</label>
+            <select id="panel-delai-validite" style="width:100%;border:1px solid var(--border);border-radius:5px;padding:5px 8px;font-size:12px;font-family:inherit;margin-top:3px">
+              ${[7,10,15,20,30].map(n=>`<option value="${n}" ${String(f(item,'D_x00e9_lai_Validit_x00e9__Jours','Delai_Validite_Jours','D_lai_Validit_Jours')||'15')===String(n)?'selected':''}>${n} jours</option>`).join('')}
+            </select>
+          </div>
+          <div><label style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--text-muted)">Vendeur assigné</label>
+            <select id="panel-vendeur" style="width:100%;border:1px solid var(--border);border-radius:5px;padding:5px 8px;font-size:12px;font-family:inherit;margin-top:3px">
+              <option value="">— Non assigné —</option>${vOpts}
+            </select>
+          </div>
+        </div>
+        <div style="font-size:10.5px;color:var(--text-muted);margin-bottom:8px">📧 Email envoyé : ${f(item,'Email_Envoy_x00e9_','Email_Envoye')?'<span style="color:var(--green);font-weight:600">✅ Oui</span>':'<span>Non</span>'}</div>
+        <button id="btn-enregistrer-devis" class="pbtn blue" style="width:100%;padding:10px;font-size:13px;font-weight:700;background:var(--teal-mid)" onclick="enregistrerDevisComplet(${id})">💾 Enregistrer les modifications</button>
         <div id="devis-statut-msg" style="font-size:11.5px;margin-top:6px;min-height:16px"></div>
       </div>
       <div class="pf"><div class="pf-lbl">Client</div><div class="pf-val">${f(item,'Client')||'—'}</div></div>
@@ -4336,36 +4355,6 @@ async function openDevisPanel(id){
       </div>
       <div class="pf"><div class="pf-lbl">Email</div><div class="pf-val mono">${f(item,'Client_Email')||'—'}</div></div>
       <div class="pf"><div class="pf-lbl">Chantier</div><div class="pf-val">${getChantier(item)}</div></div>
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:0">
-        <div class="pf"><div class="pf-lbl">Date émission</div>
-          <input type="date" id="panel-date-emission" value="${(f(item,'Date__x00c9_mission_Devis')||'').slice(0,10)}" style="width:100%;border:1px solid var(--border);border-radius:5px;padding:5px 8px;font-size:12px;font-family:inherit;margin-top:2px">
-        </div>
-        <div class="pf"><div class="pf-lbl">Devis RS</div>
-          <div style="display:flex;gap:6px;align-items:center;margin-top:2px">
-            <input id="panel-devis-rs" value="${f(item,'Devis_RS')||''}" placeholder="Ex : 716506" style="flex:1;border:1px solid var(--border);border-radius:5px;padding:5px 8px;font-size:12px;font-family:var(--font-mono)">
-          </div>
-        </div>
-      </div>
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:0">
-        <div class="pf"><div class="pf-lbl">⏱ Délai validité</div>
-          <select id="panel-delai-validite" style="width:100%;border:1px solid var(--border);border-radius:5px;padding:5px 8px;font-size:12px;font-family:inherit;margin-top:2px">
-            ${[7,10,15,20,30].map(n=>`<option value="${n}" ${String(f(item,'D_x00e9_lai_Validit_x00e9__Jours','Delai_Validite_Jours','D_lai_Validit_Jours')||'15')===String(n)?'selected':''}>${n} jours</option>`).join('')}
-          </select>
-        </div>
-        <div class="pf"><div class="pf-lbl">📧 Email envoyé</div><div class="pf-val" style="margin-top:8px">${f(item,'Email_Envoy_x00e9_','Email_Envoye')?'<span style="color:var(--green);font-weight:600">✅ Oui</span>':'<span style="color:var(--text-muted)">Non</span>'}</div></div>
-      </div>
-      <div class="pf" style="margin-top:-6px">
-        <button class="pbtn blue" style="padding:6px 14px;font-size:11.5px" onclick="enregistrerDevisRS(${id})">💾 Enregistrer Devis RS + Délai</button>
-        <span id="devis-rs-msg" style="font-size:11px;margin-left:8px"></span>
-      </div>
-      <div class="pf"><div class="pf-lbl">Vendeur assigné</div>
-        <div style="display:flex;gap:6px;align-items:center;margin-top:2px">
-          <select id="panel-vendeur" style="flex:1;border:1px solid var(--border);border-radius:5px;padding:5px 8px;font-size:12px;font-family:inherit">
-            <option value="">— Non assigné —</option>${vOpts}
-          </select>
-          <button class="pbtn blue" style="padding:5px 10px;font-size:11px" onclick="assignerVendeurDevis(${id})">💾 Assigner</button>
-        </div>
-      </div>
       ${f(item,'Commentaires_Client')?`<div class="pf"><div class="pf-lbl">💬 Commentaires client</div><div class="pf-val" style="background:var(--blue-xlight);padding:8px 10px;border-radius:5px;border-left:3px solid var(--blue-mid);font-size:12px;line-height:1.6">${f(item,'Commentaires_Client')}</div></div>`:''}
       ${f(item,'Notes_Internes')?`<div class="pf"><div class="pf-lbl">📝 Notes internes</div><div class="pf-val" style="background:#fffbf0;padding:8px 10px;border-radius:5px;border-left:3px solid var(--amber);font-size:12px;line-height:1.6">${f(item,'Notes_Internes')}</div></div>`:''}
       ${f(item,'Contenu_Email')?`<div class="pf"><div class="pf-lbl">📧 Contenu email client</div><div class="pf-val" style="background:var(--grey-xlight);padding:8px 10px;border-radius:5px;border:1px solid var(--border);font-size:11.5px;line-height:1.6;max-height:120px;overflow-y:auto">${f(item,'Contenu_Email')}</div></div>`:''}
@@ -4452,64 +4441,52 @@ async function envoyerDevisFlow(id){
 }
 
 // ── Changer statut devis depuis panneau ──
-async function changerStatutDevis(id){
-  const sel=document.getElementById('panel-statut-devis');
-  const btn=document.getElementById('btn-changer-statut-devis');
-  const msg=document.getElementById('devis-statut-msg');
-  if(!sel||!sel.value)return;
-  const newStatut=sel.value;
-  if(btn){btn.disabled=true;btn.textContent='⏳ Enregistrement...';}
-  if(msg){msg.innerHTML='';}
-  try{
-    await spPatch('sites/BondeCommande','Demandes_Devis',id,{'Statut':newStatut});
-    const idx=DATA.devis.findIndex(i=>i.ID===id);
-    if(idx!==-1)DATA.devis[idx]['Statut']=newStatut;
-    if(btn){btn.disabled=false;btn.textContent='💾 Enregistrer';}
-    if(msg){msg.innerHTML=`<span style="color:var(--green);font-weight:600">✅ Statut mis à jour : ${newStatut}</span>`;}
-    renderDevisTable();
-    setTimeout(()=>{if(msg)msg.innerHTML='';},3000);
-  }catch(e){
-    if(btn){btn.disabled=false;btn.textContent='💾 Enregistrer';}
-    if(msg){msg.innerHTML=`<span style="color:var(--red)">❌ Erreur : ${e.message}</span>`;}
-  }
-}
-
-// ── Enregistrer Devis RS + Délai validité (calcule Date_Validité depuis Date_Attribution ou aujourd'hui) ──
-async function enregistrerDevisRS(id){
+// ── Enregistrer toutes les modifications du devis en une fois (statut, devis RS, délai, date émission, vendeur) ──
+async function enregistrerDevisComplet(id){
+  const statutSel=document.getElementById('panel-statut-devis');
   const rsInput=document.getElementById('panel-devis-rs');
   const delaiSelect=document.getElementById('panel-delai-validite');
   const dateEmissionInput=document.getElementById('panel-date-emission');
-  const msg=document.getElementById('devis-rs-msg');
-  const btn=event?.target;
-  if(!rsInput||!delaiSelect)return;
-  const devisRS=rsInput.value.trim();
-  const delai=parseInt(delaiSelect.value);
-  const dateEmission=dateEmissionInput?dateEmissionInput.value:'';
+  const vendeurSel=document.getElementById('panel-vendeur');
+  const btn=document.getElementById('btn-enregistrer-devis');
+  const msg=document.getElementById('devis-statut-msg');
 
-  if(btn){btn.disabled=true;btn.textContent='⏳...';}
-  if(msg){msg.textContent='';msg.style.color='';}
+  const newStatut=statutSel?statutSel.value:null;
+  const devisRS=rsInput?rsInput.value.trim():'';
+  const delai=delaiSelect?parseInt(delaiSelect.value):null;
+  const dateEmission=dateEmissionInput?dateEmissionInput.value:'';
+  const vendeur=vendeurSel?vendeurSel.value:'';
+
+  if(btn){btn.disabled=true;btn.textContent='⏳ Enregistrement...';}
+  if(msg){msg.innerHTML='';}
 
   try{
     const body={};
+    if(newStatut)body['Statut']=newStatut;
     if(devisRS)body['Devis_RS']=devisRS;
-    body['D_x00e9_lai_Validit_x00e9__Jours']=delai;
+    if(delai)body['D_x00e9_lai_Validit_x00e9__Jours']=delai;
     if(dateEmission)body['Date__x00c9_mission_Devis']=dateEmission;
+    body['Vendeur_Assign_x00e9_']=vendeur;
 
+    console.log('[enregistrerDevisComplet] body envoyé:',JSON.stringify(body));
     await spPatch('sites/BondeCommande','Demandes_Devis',id,body);
 
     const idx=DATA.devis.findIndex(i=>i.ID===id);
     if(idx!==-1){
+      if(newStatut)DATA.devis[idx]['Statut']=newStatut;
       if(devisRS)DATA.devis[idx]['Devis_RS']=devisRS;
-      DATA.devis[idx]['D_x00e9_lai_Validit_x00e9__Jours']=delai;
+      if(delai)DATA.devis[idx]['D_x00e9_lai_Validit_x00e9__Jours']=delai;
       if(dateEmission)DATA.devis[idx]['Date__x00c9_mission_Devis']=dateEmission;
+      DATA.devis[idx]['Vendeur_Assign_x00e9_']=vendeur;
     }
 
-    if(msg){msg.textContent='✅ Enregistré';msg.style.color='var(--green)';}
-    if(btn){btn.disabled=false;btn.textContent='💾 Enregistrer Devis RS + Délai';}
+    if(btn){btn.disabled=false;btn.textContent='💾 Enregistrer les modifications';}
+    if(msg){msg.innerHTML=`<span style="color:var(--green);font-weight:600">✅ Modifications enregistrées</span>`;}
     renderDevisTable();
+    setTimeout(()=>{if(msg)msg.innerHTML='';},3000);
   }catch(e){
-    if(msg){msg.textContent='❌ '+e.message;msg.style.color='var(--red)';}
-    if(btn){btn.disabled=false;btn.textContent='💾 Enregistrer Devis RS + Délai';}
+    if(btn){btn.disabled=false;btn.textContent='💾 Enregistrer les modifications';}
+    if(msg){msg.innerHTML=`<span style="color:var(--red)">❌ Erreur : ${e.message}</span>`;}
   }
 }
 
@@ -4534,23 +4511,6 @@ async function uploadDevisPDF(id){
   }catch(e){
     if(msg){msg.textContent='❌ '+e.message;msg.style.color='var(--red)';}
     if(btn){btn.disabled=false;btn.textContent='⬆ Joindre PDF';}
-  }
-}
-
-async function assignerVendeurDevis(id){
-  const sel=document.getElementById('panel-vendeur');
-  if(!sel||!sel.value){alert('Sélectionne un vendeur avant d\'assigner.');return;}
-  const btn=sel.nextElementSibling;
-  if(btn){btn.disabled=true;btn.textContent='⏳...';}
-  try{
-    await spPatch('sites/BondeCommande','Demandes_Devis',id,{'Vendeur_Assign_x00e9_':sel.value});
-    const idx=DATA.devis.findIndex(i=>i.ID===id);
-    if(idx!==-1)DATA.devis[idx]['Vendeur_Assign_x00e9_']=sel.value;
-    if(btn){btn.disabled=false;btn.textContent='✅ Assigné';}
-    renderDevisTable();
-  }catch(e){
-    if(btn){btn.disabled=false;btn.textContent='💾 Assigner';}
-    alert('Erreur : '+e.message);
   }
 }
 
