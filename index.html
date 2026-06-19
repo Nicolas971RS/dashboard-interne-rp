@@ -3917,7 +3917,7 @@ async function openDBCPanel(id){
     const devisRef=f(item,'ID_Devis')||f(item,'N_x00b0_Devis')||'—';
     const articles=f(item,'Articles')||'—';
     const dateRel=fmtDate(f(item,'Date_Relance'));
-    const notes=f(item,'Notes_Interne')||'';
+    const notes=f(item,'Notes_Internes','Notes_Interne')||'';
     // BC lié si reçu
     const bcLieId=f(item,'ID_Suivi_BC','ID_Suivi_BCId');
 
@@ -3942,36 +3942,36 @@ async function openDBCPanel(id){
         <div class="pf"><div class="pf-lbl">N° BL</div><div class="pf-val mono">${numBL}</div></div>
         <div class="pf"><div class="pf-lbl">N° Devis lié</div><div class="pf-val mono" style="color:var(--blue)">${devisRef}</div></div>
       </div>
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:0">
-        <div class="pf"><div class="pf-lbl">Vendeur</div>
-          <div style="display:flex;align-items:center;gap:10px;margin-top:4px">
-            ${vendeur!=='—'?`<span style="font-size:12.5px;font-weight:600;color:var(--navy)">${vendeur}</span>`:'<span style="color:var(--text-muted);font-size:12px;font-style:italic">Non assigné</span>'}
-            <select id="dbc-panel-vendeur" style="flex:1;border:1px solid var(--border);border-radius:5px;padding:5px 8px;font-size:12px;font-family:inherit">
-              <option value="">— Inchangé —</option>
+      <div style="background:var(--grey-xlight);border:1px solid var(--border);border-radius:var(--radius);padding:12px 14px;margin:8px 0">
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px">
+          <div>
+            <label style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--text-muted)">Vendeur</label>
+            <select id="dbc-panel-vendeur" style="width:100%;border:1px solid var(--border);border-radius:5px;padding:5px 8px;font-size:12px;font-family:inherit;margin-top:3px">
               ${VENDEURS_FIXES.map(v=>`<option value="${v}"${v===vendeur?' selected':''}>${v}</option>`).join('')}
             </select>
-            <button class="pbtn blue" style="padding:5px 10px;font-size:11px" onclick="updateDBCVendeur(${id})">💾 Sauver</button>
+          </div>
+          <div>
+            <label style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--text-muted)">Statut</label>
+            ${!isReceu?`<select id="dbc-panel-statut" style="width:100%;border:1px solid var(--border);border-radius:5px;padding:5px 8px;font-size:12px;font-family:inherit;margin-top:3px">
+              <option value="En attente BC"${statut==='En attente BC'?' selected':''}>En attente BC</option>
+              <option value="Relancé"${statut==='Relancé'?' selected':''}>Relancé</option>
+              <option value="Rappel Envoyé"${statut==='Rappel Envoyé'?' selected':''}>Rappel Envoyé</option>
+              <option value="Litigieux"${statut==='Litigieux'?' selected':''}>Litigieux</option>
+              <option value="BC Reçu"${statut==='BC Reçu'?' selected':''}>BC Reçu</option>
+            </select>`:`<div style="margin-top:6px">${bDBC(statut)}</div>`}
           </div>
         </div>
-        <div class="pf"><div class="pf-lbl">Nb relances</div><div class="pf-val" style="${nbRel>=2?'color:var(--red);font-weight:700':''}">
-          ${nbRel} ${nbRel>=3?'🔴 Escalade requise':nbRel>=2?'🟠':''} ${dateRel?`<span style="font-size:10.5px;color:var(--text-muted)">· dernière ${dateRel}</span>`:''}
-        </div></div>
-      </div>
-      <div class="pf"><div class="pf-lbl">Statut</div>
-        <div style="display:flex;align-items:center;gap:10px;margin-top:4px">
-          ${bDBC(statut)}
-          ${!isReceu?`<select id="dbc-panel-statut" style="flex:1;border:1px solid var(--border);border-radius:5px;padding:5px 8px;font-size:12px;font-family:inherit">
-            <option value="En attente BC"${statut==='En attente BC'?' selected':''}>En attente BC</option>
-            <option value="Relancé"${statut==='Relancé'?' selected':''}>Relancé</option>
-            <option value="Rappel Envoyé"${statut==='Rappel Envoyé'?' selected':''}>Rappel Envoyé</option>
-            <option value="Litigieux"${statut==='Litigieux'?' selected':''}>Litigieux</option>
-            <option value="BC Reçu"${statut==='BC Reçu'?' selected':''}>BC Reçu</option>
-          </select>
-          <button class="pbtn blue" style="padding:5px 10px;font-size:11px" onclick="updateDBCStatut(${id})">💾 Sauver</button>`:'<span style="color:var(--green);font-weight:600;font-size:12.5px">✅ BC reçu — dossier clôturé</span>'}
+        <div style="margin-bottom:10px">
+          <label style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--text-muted)">📝 Notes internes</label>
+          <textarea id="dbc-panel-notes" rows="2" placeholder="Notes, contexte, litige..." style="width:100%;border:1px solid var(--border);border-radius:5px;padding:6px 8px;font-size:12px;font-family:inherit;margin-top:3px;resize:vertical">${notes}</textarea>
         </div>
+        <button class="pbtn blue" style="width:100%;padding:9px;font-size:12.5px;font-weight:700" onclick="updateDBCPanel(${id})">💾 Sauver</button>
+        <div id="dbc-save-msg" style="font-size:11.5px;margin-top:6px;min-height:14px"></div>
       </div>
+      <div class="pf"><div class="pf-lbl">Nb relances</div><div class="pf-val" style="${nbRel>=2?'color:var(--red);font-weight:700':''}">
+        ${nbRel} ${nbRel>=3?'🔴 Escalade requise':nbRel>=2?'🟠':''} ${dateRel?`<span style="font-size:10.5px;color:var(--text-muted)">· dernière ${dateRel}</span>`:''}
+      </div></div>
       ${articles&&articles!=='—'?`<div class="pf"><div class="pf-lbl">📦 Articles / Marchandise</div><div class="pf-val" style="background:var(--grey-xlight);padding:8px 10px;border-radius:5px;border:1px solid var(--border);font-size:12px;line-height:1.6;white-space:pre-wrap">${articles}</div></div>`:''}
-      ${notes?`<div class="pf"><div class="pf-lbl">📝 Notes internes</div><div class="pf-val" style="background:#fffbf0;padding:8px 10px;border-radius:5px;border-left:3px solid var(--amber);font-size:12px">${notes}</div></div>`:''}
       ${bcLieId?`<div class="pf"><div class="pf-lbl">🔗 BC créé</div><div class="pf-val"><button class="pbtn grey" style="background:var(--teal-light);color:var(--teal);border:1px solid var(--teal);font-size:11.5px;padding:4px 10px" onclick="closePanel();showTab('suivi',document.querySelector('.tabs .tab[onclick*=&quot;suivi&quot;]'));document.getElementById('search-global-bc').value='${bcLieId}';rechercheGlobalBC()">Voir BC associé →</button></div></div>`:''}
       <hr style="border:none;border-top:1px solid var(--border);margin:6px 0 12px">
       <div class="pf"><div class="pf-lbl">📎 Pièces jointes (${attachments.length})</div>`;
@@ -4020,20 +4020,43 @@ async function openDBCPanel(id){
 }
 
 // ── Actions DBC depuis le panel ──
-async function updateDBCStatut(id){
-  const sel=document.getElementById('dbc-panel-statut');
-  if(!sel)return;
-  const newStatut=sel.value;
+// ── Sauver Vendeur + Statut + Notes internes en une fois ──
+async function updateDBCPanel(id){
+  const selVendeur=document.getElementById('dbc-panel-vendeur');
+  const selStatut=document.getElementById('dbc-panel-statut');
+  const notesInput=document.getElementById('dbc-panel-notes');
+  const btn=event?.target;
+  const msg=document.getElementById('dbc-save-msg');
+
+  const newVendeur=selVendeur?selVendeur.value:null;
+  const newStatut=selStatut?selStatut.value:null;
+  const newNotes=notesInput?notesInput.value.trim():'';
+
+  if(btn){btn.disabled=true;btn.textContent='⏳ Enregistrement...';}
+  if(msg)msg.innerHTML='';
+
   try{
-    await spPatch('sites/BondeCommande','Demandes_BC',id,{Statut:newStatut});
+    const body={};
+    if(newVendeur)body['Vendeur']=newVendeur;
+    if(newStatut)body['Statut']=newStatut;
+    body['Notes_Internes']=newNotes;
+
+    await spPatch('sites/BondeCommande','Demandes_BC',id,body);
+
     const idx=DATA.dbc.findIndex(i=>i.ID===id);
-    if(idx!==-1)DATA.dbc[idx]['Statut']=newStatut;
-    const msg=document.getElementById('dbc-panel-msg');
-    if(msg){msg.innerHTML=`<div style="color:var(--green);font-size:12px;padding:4px 0">✅ Statut mis à jour : ${newStatut}</div>`;}
+    if(idx!==-1){
+      if(newVendeur)DATA.dbc[idx]['Vendeur']=newVendeur;
+      if(newStatut)DATA.dbc[idx]['Statut']=newStatut;
+      DATA.dbc[idx]['Notes_Internes']=newNotes;
+    }
+
+    if(btn){btn.disabled=false;btn.textContent='💾 Sauver';}
+    if(msg)msg.innerHTML='<span style="color:var(--green);font-weight:600">✅ Enregistré</span>';
     renderDBCTable();updateBadges();
+    setTimeout(()=>{if(msg)msg.innerHTML='';},3000);
   }catch(e){
-    const msg=document.getElementById('dbc-panel-msg');
-    if(msg)msg.innerHTML=`<div style="color:var(--red);font-size:12px">❌ ${e.message}</div>`;
+    if(btn){btn.disabled=false;btn.textContent='💾 Sauver';}
+    if(msg)msg.innerHTML=`<span style="color:var(--red)">❌ ${e.message}</span>`;
   }
 }
 
@@ -4058,25 +4081,7 @@ async function uploadDBCAttachment(id){
   }
 }
 
-async function updateDBCVendeur(id){
-  const sel=document.getElementById('dbc-panel-vendeur');
-  if(!sel)return;
-  const newVendeur=sel.value;
-  if(!newVendeur){alert('Sélectionnez un vendeur.');return;}
-  try{
-    await spPatch('sites/BondeCommande','Demandes_BC',id,{Vendeur:newVendeur});
-    const idx=DATA.dbc.findIndex(i=>i.ID===id);
-    if(idx!==-1)DATA.dbc[idx]['Vendeur']=newVendeur;
-    const msg=document.getElementById('dbc-panel-msg');
-    if(msg){msg.innerHTML=`<div style="color:var(--green);font-size:12px;padding:4px 0">✅ Vendeur mis à jour : ${newVendeur}</div>`;}
-    renderDBCTable();updateBadges();
-    // Rafraîchir le panel après 1s pour afficher le nouveau vendeur
-    setTimeout(()=>openDBCPanel(id),1000);
-  }catch(e){
-    const msg=document.getElementById('dbc-panel-msg');
-    if(msg)msg.innerHTML=`<div style="color:var(--red);font-size:12px">❌ ${e.message}</div>`;
-  }
-}
+// (updateDBCVendeur fusionnée dans updateDBCPanel)
 
 async function relancerDBC(id,email){
   const ok=await showConfirm('📧 Relancer le client',`Un email de relance va être envoyé à <strong>${email}</strong> pour lui demander de fournir son bon de commande.<br><br>Confirmer l'envoi ?`,'📧 Envoyer relance','submit');
