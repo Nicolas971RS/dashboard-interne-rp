@@ -3917,7 +3917,7 @@ async function openDBCPanel(id){
     const devisRef=f(item,'ID_Devis')||f(item,'N_x00b0_Devis')||'—';
     const articles=f(item,'Articles')||'—';
     const dateRel=fmtDate(f(item,'Date_Relance'));
-    const notes=f(item,'Notes_Internes','Notes_Interne')||'';
+    const notes=f(item,'Notes_Interne')||'';
     // BC lié si reçu
     const bcLieId=f(item,'ID_Suivi_BC','ID_Suivi_BCId');
 
@@ -4039,7 +4039,7 @@ async function updateDBCPanel(id){
     const body={};
     if(newVendeur)body['Vendeur']=newVendeur;
     if(newStatut)body['Statut']=newStatut;
-    body['Notes_Internes']=newNotes;
+    body['Notes_Interne']=newNotes;
 
     await spPatch('sites/BondeCommande','Demandes_BC',id,body);
 
@@ -4047,7 +4047,7 @@ async function updateDBCPanel(id){
     if(idx!==-1){
       if(newVendeur)DATA.dbc[idx]['Vendeur']=newVendeur;
       if(newStatut)DATA.dbc[idx]['Statut']=newStatut;
-      DATA.dbc[idx]['Notes_Internes']=newNotes;
+      DATA.dbc[idx]['Notes_Interne']=newNotes;
     }
 
     if(btn){btn.disabled=false;btn.textContent='💾 Sauver';}
@@ -4361,7 +4361,9 @@ async function openDevisPanel(id){
       <div class="pf"><div class="pf-lbl">Email</div><div class="pf-val mono">${f(item,'Client_Email')||'—'}</div></div>
       <div class="pf"><div class="pf-lbl">Chantier</div><div class="pf-val">${getChantier(item)}</div></div>
       ${f(item,'Commentaires_Client')?`<div class="pf"><div class="pf-lbl">💬 Commentaires client</div><div class="pf-val" style="background:var(--blue-xlight);padding:8px 10px;border-radius:5px;border-left:3px solid var(--blue-mid);font-size:12px;line-height:1.6">${f(item,'Commentaires_Client')}</div></div>`:''}
-      ${f(item,'Notes_Internes')?`<div class="pf"><div class="pf-lbl">📝 Notes internes</div><div class="pf-val" style="background:#fffbf0;padding:8px 10px;border-radius:5px;border-left:3px solid var(--amber);font-size:12px;line-height:1.6">${f(item,'Notes_Internes')}</div></div>`:''}
+      <div class="pf"><div class="pf-lbl">📝 Notes internes</div>
+        <textarea id="panel-devis-notes" rows="2" placeholder="Notes, contexte..." style="width:100%;border:1px solid var(--border);border-radius:5px;padding:6px 8px;font-size:12px;font-family:inherit;margin-top:3px;resize:vertical;background:#fffbf0">${f(item,'Notes_Internes')||''}</textarea>
+      </div>
       ${f(item,'Contenu_Email')?`<div class="pf"><div class="pf-lbl">📧 Contenu email client</div><div class="pf-val" style="background:var(--grey-xlight);padding:8px 10px;border-radius:5px;border:1px solid var(--border);font-size:11.5px;line-height:1.6;max-height:120px;overflow-y:auto">${f(item,'Contenu_Email')}</div></div>`:''}
       <hr style="border:none;border-top:1px solid var(--border);margin:4px 0 10px">`;
     if(lignes.length){
@@ -4453,6 +4455,7 @@ async function enregistrerDevisComplet(id){
   const delaiSelect=document.getElementById('panel-delai-validite');
   const dateEmissionInput=document.getElementById('panel-date-emission');
   const vendeurSel=document.getElementById('panel-vendeur');
+  const notesInput=document.getElementById('panel-devis-notes');
   const btn=document.getElementById('btn-enregistrer-devis');
   const msg=document.getElementById('devis-statut-msg');
 
@@ -4461,31 +4464,27 @@ async function enregistrerDevisComplet(id){
   const delai=delaiSelect?parseInt(delaiSelect.value):null;
   const dateEmission=dateEmissionInput?dateEmissionInput.value:'';
   const vendeur=vendeurSel?vendeurSel.value:'';
+  const notes=notesInput?notesInput.value.trim():'';
 
   if(btn){btn.disabled=true;btn.textContent='⏳ Enregistrement...';}
   if(msg){msg.innerHTML='';}
 
   try{
-    // PATCH séparés pour isoler le champ qui génère l'erreur 400
+    // PATCH séparés — la colonne Délai validité est typée Texte côté SharePoint
     if(newStatut){
-      console.log('[PATCH 1/5] Statut:',newStatut);
       await spPatch('sites/BondeCommande','Demandes_Devis',id,{'Statut':newStatut});
     }
     if(devisRS){
-      console.log('[PATCH 2/5] Devis_RS:',devisRS);
       await spPatch('sites/BondeCommande','Demandes_Devis',id,{'Devis_RS':devisRS});
     }
     if(delai){
-      console.log('[PATCH 3/5] Délai:',delai,typeof delai);
       await spPatch('sites/BondeCommande','Demandes_Devis',id,{'D_x00e9_lai_Validit_x00e9__Jours':String(delai)});
     }
     if(dateEmission){
       const dateIso=new Date(dateEmission+'T12:00:00').toISOString();
-      console.log('[PATCH 4/5] Date émission:',dateIso);
       await spPatch('sites/BondeCommande','Demandes_Devis',id,{'Date__x00c9_mission_Devis':dateIso});
     }
-    console.log('[PATCH 5/5] Vendeur:',vendeur);
-    await spPatch('sites/BondeCommande','Demandes_Devis',id,{'Vendeur_Assign_x00e9_':vendeur});
+    await spPatch('sites/BondeCommande','Demandes_Devis',id,{'Vendeur_Assign_x00e9_':vendeur,'Notes_Internes':notes});
 
     const idx=DATA.devis.findIndex(i=>i.ID===id);
     if(idx!==-1){
@@ -4494,6 +4493,7 @@ async function enregistrerDevisComplet(id){
       if(delai)DATA.devis[idx]['D_x00e9_lai_Validit_x00e9__Jours']=delai;
       if(dateEmission)DATA.devis[idx]['Date__x00c9_mission_Devis']=dateEmission;
       DATA.devis[idx]['Vendeur_Assign_x00e9_']=vendeur;
+      DATA.devis[idx]['Notes_Internes']=notes;
     }
 
     if(btn){btn.disabled=false;btn.textContent='💾 Enregistrer les modifications';}
