@@ -681,8 +681,8 @@
         </div>
       </div>
       <div class="tc"><table>
-        <thead><tr><th>N° BC</th><th>Ligne</th><th>Client</th><th>Chantier</th><th>Référence</th><th>Désignation</th><th>Cmd</th><th>Livré</th><th>RAL</th><th>Unité</th><th>BL</th><th>Action</th></tr></thead>
-        <tbody id="ral-body"><tr class="empty-row"><td colspan="12">Chargement...</td></tr></tbody>
+        <thead><tr><th>N° BC</th><th>Date BC</th><th>Ligne</th><th>Client</th><th>Chantier</th><th>Référence</th><th>Désignation</th><th>Cmd</th><th>Livré</th><th>RAL</th><th>Unité</th><th>BL</th><th>Action</th></tr></thead>
+        <tbody id="ral-body"><tr class="empty-row"><td colspan="13">Chargement...</td></tr></tbody>
       </table></div>
     </div>
 
@@ -2378,7 +2378,8 @@ function ralBcInfo(ligne){
     bcId,
     numBC:bcTitleFromExpand||(bc?f(bc,'Title'):'')||(bcId?`BC-${bcId}`:'—'),
     client:bc?getClient(bc):'—',
-    vendeur:bc?(f(bc,'Vendeurencharge')||'—'):'—'
+    vendeur:bc?(f(bc,'Vendeurencharge')||'—'):'—',
+    dateBC:bc?f(bc,'Dateder_x00e9_ception'):null
   };
 }
 
@@ -2418,6 +2419,7 @@ function renderRALTable(){
       const unite=f(l,'Unit_x00e9_')||'';
       return`<tr>
         <td class="ref" style="cursor:pointer;color:var(--blue)" onclick="closePanel();openBCPanel(${x.info.bcId})">${x.info.numBC}</td>
+        <td class="mono" style="font-size:11px">${fmtDate(x.info.dateBC)}</td>
         <td class="mono" style="text-align:center;font-weight:600">${f(l,'Title')||'—'}</td>
         <td class="cname">${x.info.client}</td>
         <td style="font-size:12px;color:var(--text-secondary)">${f(l,'Chantier')||'—'}</td>
@@ -2430,7 +2432,7 @@ function renderRALTable(){
         <td class="mono" style="font-size:10.5px">${bl}</td>
         <td><button class="btn orange" style="height:24px;font-size:10.5px" onclick="openReceptionnerLigne(${l.ID},${x.info.bcId})">🔄 Mettre à jour RAL</button></td>
       </tr>`;
-    }).join(''):'<tr class="empty-row"><td colspan="12">Aucune ligne avec reste à livrer 🎉</td></tr>';
+    }).join(''):'<tr class="empty-row"><td colspan="13">Aucune ligne avec reste à livrer 🎉</td></tr>';
   }
 
   // KPIs
@@ -2458,6 +2460,7 @@ function exportRALCSV(){
   });
   exportCSV(enriched,[
     {label:'N° BC', fn:x=>x.info.numBC},
+    {label:'Date BC', fn:x=>fmtDate(x.info.dateBC)},
     {label:'Client', fn:x=>x.info.client},
     {label:'Chantier', fn:x=>f(x.ligne,'Chantier')||''},
     {label:'Référence', fn:x=>f(x.ligne,'R_x00e9_f_x00e9_rence')||''},
