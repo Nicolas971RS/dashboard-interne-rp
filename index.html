@@ -4472,7 +4472,7 @@ async function enregistrerDevisComplet(id){
     }
     if(delai){
       console.log('[PATCH 3/5] Délai:',delai,typeof delai);
-      await spPatch('sites/BondeCommande','Demandes_Devis',id,{'D_x00e9_lai_Validit_x00e9__Jours':delai});
+      await spPatch('sites/BondeCommande','Demandes_Devis',id,{'D_x00e9_lai_Validit_x00e9__Jours':String(delai)});
     }
     if(dateEmission){
       const dateIso=new Date(dateEmission+'T12:00:00').toISOString();
