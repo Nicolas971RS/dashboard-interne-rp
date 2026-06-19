@@ -4338,12 +4338,23 @@ async function openDevisPanel(id){
       <div class="pf"><div class="pf-lbl">Chantier</div><div class="pf-val">${getChantier(item)}</div></div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:0">
         <div class="pf"><div class="pf-lbl">Date émission</div><div class="pf-val">${fmtDate(f(item,'Date__x00c9_mission_Devis'))}</div></div>
-        <div class="pf"><div class="pf-lbl">Devis RS</div><div class="pf-val">${f(item,'Devis_RS')||'—'}</div></div>
+        <div class="pf"><div class="pf-lbl">Devis RS</div>
+          <div style="display:flex;gap:6px;align-items:center;margin-top:2px">
+            <input id="panel-devis-rs" value="${f(item,'Devis_RS')||''}" placeholder="Ex : 716506" style="flex:1;border:1px solid var(--border);border-radius:5px;padding:5px 8px;font-size:12px;font-family:var(--font-mono)">
+          </div>
+        </div>
       </div>
-      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:0">
-        <div class="pf"><div class="pf-lbl">⏱ Délai validité</div><div class="pf-val">${f(item,'D_x00e9_lai_Validit_x00e9__Jours','Delai_Validite_Jours','D_lai_Validit_Jours')?f(item,'D_x00e9_lai_Validit_x00e9__Jours','Delai_Validite_Jours','D_lai_Validit_Jours')+' jours':'—'}</div></div>
-        <div class="pf"><div class="pf-lbl">📅 Date validité</div><div class="pf-val">${fmtDate(f(item,'Date_Validit_x00e9_','Date_Validite'))}</div></div>
-        <div class="pf"><div class="pf-lbl">📧 Email envoyé</div><div class="pf-val">${f(item,'Email_Envoy_x00e9_','Email_Envoye')?'<span style="color:var(--green);font-weight:600">✅ Oui</span>':'<span style="color:var(--text-muted)">Non</span>'}</div></div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:0">
+        <div class="pf"><div class="pf-lbl">⏱ Délai validité</div>
+          <select id="panel-delai-validite" style="width:100%;border:1px solid var(--border);border-radius:5px;padding:5px 8px;font-size:12px;font-family:inherit;margin-top:2px">
+            ${[7,10,15,20,30].map(n=>`<option value="${n}" ${String(f(item,'D_x00e9_lai_Validit_x00e9__Jours','Delai_Validite_Jours','D_lai_Validit_Jours')||'15')===String(n)?'selected':''}>${n} jours</option>`).join('')}
+          </select>
+        </div>
+        <div class="pf"><div class="pf-lbl">📧 Email envoyé</div><div class="pf-val" style="margin-top:8px">${f(item,'Email_Envoy_x00e9_','Email_Envoye')?'<span style="color:var(--green);font-weight:600">✅ Oui</span>':'<span style="color:var(--text-muted)">Non</span>'}</div></div>
+      </div>
+      <div class="pf" style="margin-top:-6px">
+        <button class="pbtn blue" style="padding:6px 14px;font-size:11.5px" onclick="enregistrerDevisRS(${id})">💾 Enregistrer Devis RS + Délai</button>
+        <span id="devis-rs-msg" style="font-size:11px;margin-left:8px"></span>
       </div>
       <div class="pf"><div class="pf-lbl">Vendeur assigné</div>
         <div style="display:flex;gap:6px;align-items:center;margin-top:2px">
@@ -4381,7 +4392,12 @@ async function openDevisPanel(id){
     }else{
       html+=`<div style="color:var(--grey);font-size:12px;font-style:italic;padding:4px 0">Aucun PDF joint</div>`;
     }
-    html+=`</div><div class="pactions">`;
+    html+=`<div style="margin-top:8px;display:flex;gap:8px;align-items:center">
+      <input type="file" id="devis-pdf-file" accept=".pdf" style="font-size:11.5px;flex:1">
+      <button class="pbtn blue" style="padding:5px 12px;font-size:11px;white-space:nowrap" onclick="uploadDevisPDF(${id})">⬆ Joindre PDF</button>
+    </div>
+    <div id="devis-pdf-msg" style="font-size:11px;margin-top:4px"></div>
+    </div><div class="pactions">`;
     if(st!=='En cours de traitement'&&st!=='Devis envoyé'){
       html+=`<button class="pbtn blue" onclick="passerEnCours(${id},true)">📋 Prendre en charge</button>`;
     }
@@ -4403,7 +4419,8 @@ async function passerEnCours(id,fromPanel=false){
   const target=fromPanel?document.querySelector('#panel-body .pbtn.blue'):null;
   if(target){target.disabled=true;target.textContent='⏳...';}
   try{
-    await spPatch('sites/BondeCommande','Demandes_Devis',id,{'Statut':'En cours'});
+    const today=new Date().toISOString().slice(0,10);
+    await spPatch('sites/BondeCommande','Demandes_Devis',id,{'Statut':'En cours','Date_Attribution':today});
     if(fromPanel)closePanel();
     loadAll();
   }catch(e){
@@ -4455,7 +4472,73 @@ async function changerStatutDevis(id){
   }
 }
 
-// ── Assigner vendeur depuis panneau Devis ──
+// ── Enregistrer Devis RS + Délai validité (calcule Date_Validité depuis Date_Attribution ou aujourd'hui) ──
+async function enregistrerDevisRS(id){
+  const rsInput=document.getElementById('panel-devis-rs');
+  const delaiSelect=document.getElementById('panel-delai-validite');
+  const msg=document.getElementById('devis-rs-msg');
+  const btn=event?.target;
+  if(!rsInput||!delaiSelect)return;
+  const devisRS=rsInput.value.trim();
+  const delai=parseInt(delaiSelect.value);
+
+  if(btn){btn.disabled=true;btn.textContent='⏳...';}
+  if(msg){msg.textContent='';msg.style.color='';}
+
+  try{
+    const item=DATA.devis.find(i=>i.ID===id);
+    const dateAttrib=item?f(item,'Date_Attribution'):null;
+    const baseDate=dateAttrib?new Date(dateAttrib.slice(0,10)+'T12:00:00'):new Date();
+    const dateValidite=new Date(baseDate);
+    dateValidite.setDate(dateValidite.getDate()+delai);
+
+    const body={};
+    if(devisRS)body['Devis_RS']=devisRS;
+    body['D_x00e9_lai_Validit_x00e9__Jours']=delai;
+    body['Date_Validit_x00e9_']=dateValidite.toISOString().slice(0,10);
+
+    await spPatch('sites/BondeCommande','Demandes_Devis',id,body);
+
+    const idx=DATA.devis.findIndex(i=>i.ID===id);
+    if(idx!==-1){
+      if(devisRS)DATA.devis[idx]['Devis_RS']=devisRS;
+      DATA.devis[idx]['D_x00e9_lai_Validit_x00e9__Jours']=delai;
+      DATA.devis[idx]['Date_Validit_x00e9_']=dateValidite.toISOString().slice(0,10);
+    }
+
+    if(msg){msg.textContent='✅ Enregistré';msg.style.color='var(--green)';}
+    if(btn){btn.disabled=false;btn.textContent='💾 Enregistrer Devis RS + Délai';}
+    renderDevisTable();
+  }catch(e){
+    if(msg){msg.textContent='❌ '+e.message;msg.style.color='var(--red)';}
+    if(btn){btn.disabled=false;btn.textContent='💾 Enregistrer Devis RS + Délai';}
+  }
+}
+
+// ── Upload PDF devis (pièce jointe) ──
+async function uploadDevisPDF(id){
+  const fileInput=document.getElementById('devis-pdf-file');
+  const msg=document.getElementById('devis-pdf-msg');
+  const btn=event?.target;
+  if(!fileInput||!fileInput.files[0]){
+    if(msg){msg.textContent='⚠️ Sélectionnez un fichier PDF';msg.style.color='var(--amber)';}
+    return;
+  }
+  const file=fileInput.files[0];
+  if(btn){btn.disabled=true;btn.textContent='⏳...';}
+  if(msg){msg.textContent='';msg.style.color='';}
+  try{
+    const buf=await file.arrayBuffer();
+    await spAddAttachment('sites/BondeCommande','Demandes_Devis',id,file.name,buf);
+    if(msg){msg.textContent='✅ PDF joint avec succès';msg.style.color='var(--green)';}
+    if(btn){btn.disabled=false;btn.textContent='⬆ Joindre PDF';}
+    setTimeout(()=>openDevisPanel(id),1200);
+  }catch(e){
+    if(msg){msg.textContent='❌ '+e.message;msg.style.color='var(--red)';}
+    if(btn){btn.disabled=false;btn.textContent='⬆ Joindre PDF';}
+  }
+}
+
 async function assignerVendeurDevis(id){
   const sel=document.getElementById('panel-vendeur');
   if(!sel||!sel.value){alert('Sélectionne un vendeur avant d\'assigner.');return;}
