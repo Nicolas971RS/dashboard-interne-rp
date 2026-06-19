@@ -4337,7 +4337,9 @@ async function openDevisPanel(id){
       <div class="pf"><div class="pf-lbl">Email</div><div class="pf-val mono">${f(item,'Client_Email')||'—'}</div></div>
       <div class="pf"><div class="pf-lbl">Chantier</div><div class="pf-val">${getChantier(item)}</div></div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:0">
-        <div class="pf"><div class="pf-lbl">Date émission</div><div class="pf-val">${fmtDate(f(item,'Date__x00c9_mission_Devis'))}</div></div>
+        <div class="pf"><div class="pf-lbl">Date émission</div>
+          <input type="date" id="panel-date-emission" value="${(f(item,'Date__x00c9_mission_Devis')||'').slice(0,10)}" style="width:100%;border:1px solid var(--border);border-radius:5px;padding:5px 8px;font-size:12px;font-family:inherit;margin-top:2px">
+        </div>
         <div class="pf"><div class="pf-lbl">Devis RS</div>
           <div style="display:flex;gap:6px;align-items:center;margin-top:2px">
             <input id="panel-devis-rs" value="${f(item,'Devis_RS')||''}" placeholder="Ex : 716506" style="flex:1;border:1px solid var(--border);border-radius:5px;padding:5px 8px;font-size:12px;font-family:var(--font-mono)">
@@ -4476,26 +4478,22 @@ async function changerStatutDevis(id){
 async function enregistrerDevisRS(id){
   const rsInput=document.getElementById('panel-devis-rs');
   const delaiSelect=document.getElementById('panel-delai-validite');
+  const dateEmissionInput=document.getElementById('panel-date-emission');
   const msg=document.getElementById('devis-rs-msg');
   const btn=event?.target;
   if(!rsInput||!delaiSelect)return;
   const devisRS=rsInput.value.trim();
   const delai=parseInt(delaiSelect.value);
+  const dateEmission=dateEmissionInput?dateEmissionInput.value:'';
 
   if(btn){btn.disabled=true;btn.textContent='⏳...';}
   if(msg){msg.textContent='';msg.style.color='';}
 
   try{
-    const item=DATA.devis.find(i=>i.ID===id);
-    const dateAttrib=item?f(item,'Date_Attribution'):null;
-    const baseDate=dateAttrib?new Date(dateAttrib.slice(0,10)+'T12:00:00'):new Date();
-    const dateValidite=new Date(baseDate);
-    dateValidite.setDate(dateValidite.getDate()+delai);
-
     const body={};
     if(devisRS)body['Devis_RS']=devisRS;
     body['D_x00e9_lai_Validit_x00e9__Jours']=delai;
-    body['Date_Validit_x00e9_']=dateValidite.toISOString().slice(0,10);
+    if(dateEmission)body['Date__x00c9_mission_Devis']=dateEmission;
 
     await spPatch('sites/BondeCommande','Demandes_Devis',id,body);
 
@@ -4503,7 +4501,7 @@ async function enregistrerDevisRS(id){
     if(idx!==-1){
       if(devisRS)DATA.devis[idx]['Devis_RS']=devisRS;
       DATA.devis[idx]['D_x00e9_lai_Validit_x00e9__Jours']=delai;
-      DATA.devis[idx]['Date_Validit_x00e9_']=dateValidite.toISOString().slice(0,10);
+      if(dateEmission)DATA.devis[idx]['Date__x00c9_mission_Devis']=dateEmission;
     }
 
     if(msg){msg.textContent='✅ Enregistré';msg.style.color='var(--green)';}
