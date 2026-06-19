@@ -4461,15 +4461,26 @@ async function enregistrerDevisComplet(id){
   if(msg){msg.innerHTML='';}
 
   try{
-    const body={};
-    if(newStatut)body['Statut']=newStatut;
-    if(devisRS)body['Devis_RS']=devisRS;
-    if(delai)body['D_x00e9_lai_Validit_x00e9__Jours']=delai;
-    if(dateEmission)body['Date__x00c9_mission_Devis']=dateEmission;
-    body['Vendeur_Assign_x00e9_']=vendeur;
-
-    console.log('[enregistrerDevisComplet] body envoyé:',JSON.stringify(body));
-    await spPatch('sites/BondeCommande','Demandes_Devis',id,body);
+    // PATCH séparés pour isoler le champ qui génère l'erreur 400
+    if(newStatut){
+      console.log('[PATCH 1/5] Statut:',newStatut);
+      await spPatch('sites/BondeCommande','Demandes_Devis',id,{'Statut':newStatut});
+    }
+    if(devisRS){
+      console.log('[PATCH 2/5] Devis_RS:',devisRS);
+      await spPatch('sites/BondeCommande','Demandes_Devis',id,{'Devis_RS':devisRS});
+    }
+    if(delai){
+      console.log('[PATCH 3/5] Délai:',delai,typeof delai);
+      await spPatch('sites/BondeCommande','Demandes_Devis',id,{'D_x00e9_lai_Validit_x00e9__Jours':delai});
+    }
+    if(dateEmission){
+      const dateIso=new Date(dateEmission+'T12:00:00').toISOString();
+      console.log('[PATCH 4/5] Date émission:',dateIso);
+      await spPatch('sites/BondeCommande','Demandes_Devis',id,{'Date__x00c9_mission_Devis':dateIso});
+    }
+    console.log('[PATCH 5/5] Vendeur:',vendeur);
+    await spPatch('sites/BondeCommande','Demandes_Devis',id,{'Vendeur_Assign_x00e9_':vendeur});
 
     const idx=DATA.devis.findIndex(i=>i.ID===id);
     if(idx!==-1){
