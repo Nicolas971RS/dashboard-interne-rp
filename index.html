@@ -4350,6 +4350,9 @@ async function openDevisPanel(id){
           </div>
         </div>
         <div style="font-size:10.5px;color:var(--text-muted);margin-bottom:8px">📧 Email envoyé : ${f(item,'Email_Envoy_x00e9_','Email_Envoye')?'<span style="color:var(--green);font-weight:600">✅ Oui</span>':'<span>Non</span>'}</div>
+        <div style="margin-bottom:10px"><label style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--text-muted)">📝 Notes internes</label>
+          <textarea id="panel-devis-notes" rows="2" placeholder="Notes, contexte..." style="width:100%;border:1px solid var(--border);border-radius:5px;padding:6px 8px;font-size:12px;font-family:inherit;margin-top:3px;resize:vertical;background:white">${f(item,'Notes_Internes')||''}</textarea>
+        </div>
         <button id="btn-enregistrer-devis" class="pbtn blue" style="width:100%;padding:10px;font-size:13px;font-weight:700;background:var(--teal-mid)" onclick="enregistrerDevisComplet(${id})">💾 Enregistrer les modifications</button>
         <div id="devis-statut-msg" style="font-size:11.5px;margin-top:6px;min-height:16px"></div>
       </div>
@@ -4361,9 +4364,6 @@ async function openDevisPanel(id){
       <div class="pf"><div class="pf-lbl">Email</div><div class="pf-val mono">${f(item,'Client_Email')||'—'}</div></div>
       <div class="pf"><div class="pf-lbl">Chantier</div><div class="pf-val">${getChantier(item)}</div></div>
       ${f(item,'Commentaires_Client')?`<div class="pf"><div class="pf-lbl">💬 Commentaires client</div><div class="pf-val" style="background:var(--blue-xlight);padding:8px 10px;border-radius:5px;border-left:3px solid var(--blue-mid);font-size:12px;line-height:1.6">${f(item,'Commentaires_Client')}</div></div>`:''}
-      <div class="pf"><div class="pf-lbl">📝 Notes internes</div>
-        <textarea id="panel-devis-notes" rows="2" placeholder="Notes, contexte..." style="width:100%;border:1px solid var(--border);border-radius:5px;padding:6px 8px;font-size:12px;font-family:inherit;margin-top:3px;resize:vertical;background:#fffbf0">${f(item,'Notes_Internes')||''}</textarea>
-      </div>
       ${f(item,'Contenu_Email')?`<div class="pf"><div class="pf-lbl">📧 Contenu email client</div><div class="pf-val" style="background:var(--grey-xlight);padding:8px 10px;border-radius:5px;border:1px solid var(--border);font-size:11.5px;line-height:1.6;max-height:120px;overflow-y:auto">${f(item,'Contenu_Email')}</div></div>`:''}
       <hr style="border:none;border-top:1px solid var(--border);margin:4px 0 10px">`;
     if(lignes.length){
