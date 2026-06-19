@@ -654,7 +654,10 @@
     <div id="tab-ral" class="section-bloc">
       <div class="page-header">
         <div><h1>Livraisons Partielles — Reste à Livrer</h1><div class="sub">/sites/RseauxPlus · Lignes_BC</div></div>
-        <button class="btn-refresh" onclick="loadAll()">🔄 Actualiser</button>
+        <div style="display:flex;gap:8px">
+          <button class="btn navy" data-label="1" onclick="openAjouterLigneArticle(null,null)" style="height:32px;font-size:12px;font-weight:600">➕ Ajouter une ligne</button>
+          <button class="btn-refresh" onclick="loadAll()">🔄 Actualiser</button>
+        </div>
       </div>
       <div class="kpi-row c3">
         <div class="kc o"><div class="kl">🔀 Lignes avec RAL</div><div class="kv" id="kpi-ral-count">—</div><div class="ks">Toutes commandes</div></div>
@@ -671,8 +674,8 @@
         </div>
       </div>
       <div class="tc"><table>
-        <thead><tr><th>N° BC</th><th>Client</th><th>Chantier</th><th>Référence</th><th>Désignation</th><th>Cmd</th><th>Livré</th><th>RAL</th><th>Unité</th><th>BL</th><th>Action</th></tr></thead>
-        <tbody id="ral-body"><tr class="empty-row"><td colspan="11">Chargement...</td></tr></tbody>
+        <thead><tr><th>N° BC</th><th>Ligne</th><th>Client</th><th>Chantier</th><th>Référence</th><th>Désignation</th><th>Cmd</th><th>Livré</th><th>RAL</th><th>Unité</th><th>BL</th><th>Action</th></tr></thead>
+        <tbody id="ral-body"><tr class="empty-row"><td colspan="12">Chargement...</td></tr></tbody>
       </table></div>
     </div>
 
@@ -1005,7 +1008,7 @@ function getEtatFact(item){
 function getStatut(item){return f(item,'Statut','statut') || '—';}
 
 // ═══ DATA ═══
-let DATA={suivi:[],lignes:[],dbc:[],devis:[],clients:{},chantiers:[]};
+let DATA={suivi:[],lignes:[],dbc:[],devis:[],clients:{},chantiers:[],catalogue:[]};
 const TODAY=new Date();TODAY.setHours(0,0,0,0);
 const daysSince=d=>{if(!d)return 0;const dt=new Date(d);dt.setHours(0,0,0,0);return Math.floor((TODAY-dt)/86400000);};
 const daysLate=d=>{if(!d)return -999;const dt=new Date(d);dt.setHours(0,0,0,0);return Math.floor((TODAY-dt)/86400000);};
@@ -1063,7 +1066,7 @@ async function fetchProjetTitles(){
 async function loadAll(){
   setLoading(true);hideError();
   try{
-    const [suivi,projTitles,lignes,dbc,devis,clients,chantiers]=await Promise.all([
+    const [suivi,projTitles,lignes,dbc,devis,clients,chantiers,catalogue]=await Promise.all([
       // Suivi_BC: $select=*
       spFetch('sites/RseauxPlus','Suivi_BC','$select=*,Editor/Title&$expand=Editor&$orderby=ID desc'),
       // Projet lookup titles — appel séparé compatible expand
@@ -1079,7 +1082,9 @@ async function loadAll(){
       // Base_Clients
       spFetch('sites/RseauxPlus','Base_Clients','$select=ID,Title'),
       // Chantiers — pour vérification doublon à la création
-      spFetch('sites/RseauxPlus','Chantiers','$select=ID,Title&$top=500')
+      spFetch('sites/RseauxPlus','Chantiers','$select=ID,Title&$top=500'),
+      // Cathalogue_Produits — pour autocomplete ajout ligne article
+      spFetch('sites/BondeCommande','Cathalogue_Produits','$select=ID,Title,D_x00e9_signation,Unit_x00e9_,Cat_x00e9_gorie,Statut&$top=2000')
     ]);
 
     // Injecter ProjetTitle dans chaque item suivi
@@ -1088,12 +1093,10 @@ async function loadAll(){
     suivi.forEach(i=>{if(projMap[i.ID])i._ProjetTitle=projMap[i.ID];});
 
     // Build client map: {ID → Title}
-    // Stocker chantiers dans DATA pour vérification doublon
-    DATA.chantiers=chantiers||[];
     const clientMap={};
     clients.forEach(c=>{if(c.ID&&c.Title)clientMap[c.ID]=c.Title;});
 
-    DATA={suivi,lignes,dbc,devis,clients:clientMap,chantiers:chantiers||[]};
+    DATA={suivi,lignes,dbc,devis,clients:clientMap,chantiers:chantiers||[],catalogue:catalogue||[]};
 
     // Debug: log first suivi item to help identify field names
     if(suivi.length>0){console.log('DEBUG Suivi_BC[0] keys:',Object.keys(suivi[0]).sort().join(', '));}
@@ -2408,6 +2411,7 @@ function renderRALTable(){
       const unite=f(l,'Unit_x00e9_')||'';
       return`<tr>
         <td class="ref" style="cursor:pointer;color:var(--blue)" onclick="closePanel();openBCPanel(${x.info.bcId})">${x.info.numBC}</td>
+        <td class="mono" style="text-align:center;font-weight:600">${f(l,'Title')||'—'}</td>
         <td class="cname">${x.info.client}</td>
         <td style="font-size:12px;color:var(--text-secondary)">${f(l,'Chantier')||'—'}</td>
         <td class="mono">${f(l,'R_x00e9_f_x00e9_rence')||'—'}</td>
@@ -2417,9 +2421,9 @@ function renderRALTable(){
         <td style="text-align:right;font-weight:700;color:var(--red)">${x.ral}</td>
         <td style="text-align:center;font-size:11px">${unite||'—'}</td>
         <td class="mono" style="font-size:10.5px">${bl}</td>
-        <td><button class="btn orange" style="height:24px;font-size:10.5px" onclick="openReceptionnerLigne(${l.ID},${x.info.bcId})">📦 Réceptionner</button></td>
+        <td><button class="btn orange" style="height:24px;font-size:10.5px" onclick="openReceptionnerLigne(${l.ID},${x.info.bcId})">🔄 Mettre à jour RAL</button></td>
       </tr>`;
-    }).join(''):'<tr class="empty-row"><td colspan="11">Aucune ligne avec reste à livrer 🎉</td></tr>';
+    }).join(''):'<tr class="empty-row"><td colspan="12">Aucune ligne avec reste à livrer 🎉</td></tr>';
   }
 
   // KPIs
@@ -4111,20 +4115,21 @@ async function openBCPanel(id){
         <span>📦 Articles (${lignes.length} ligne${lignes.length>1?'s':''}) · RAL total : <span style="color:${ral>0?'var(--red)':'var(--green)'};font-weight:700">${ral}</span></span>
         <button class="btn navy" style="height:24px;font-size:10.5px" onclick="openAjouterLigneArticle(${id},'${nE}')">➕ Ligne article</button>
       </div>
-        <table class="ltable"><thead><tr><th>Référence</th><th>Désignation</th><th>Cmd</th><th>Livré</th><th>RAL</th><th>BL</th><th></th></tr></thead><tbody>`;
+        <table class="ltable"><thead><tr><th>Ligne</th><th>Référence</th><th>Désignation</th><th>Cmd</th><th>Livré</th><th>RAL</th><th>BL</th><th></th></tr></thead><tbody>`;
       lignes.forEach(l=>{
         const qc=parseFloat(f(l,'Quantit_x00e9_command_x00e9_e'))||0;
         const ql=parseFloat(f(l,'Quantit_x00e9_livr_x00e9_e'))||0;
         const lr=qc-ql;
         const blLigne=f(l,'BLSign_x00e9_')||'—';
         html+=`<tr>
+          <td class="mono" style="text-align:center;font-weight:600">${f(l,'Title')||'—'}</td>
           <td class="mono">${f(l,'R_x00e9_f_x00e9_rence')||'—'}</td>
           <td style="font-size:11px">${f(l,'Produit_x002f_D_x00e9_signation')||'—'}</td>
           <td style="text-align:right;font-weight:600">${qc}</td>
           <td style="text-align:right;color:var(--green)">${ql}</td>
           <td style="text-align:right;font-weight:700;color:${lr>0?'var(--red)':'var(--green)'}">${lr}</td>
           <td class="mono" style="font-size:10.5px">${blLigne}</td>
-          <td>${lr>0?`<button class="btn orange" style="height:22px;font-size:10px;padding:0 7px" onclick="openReceptionnerLigne(${l.ID},${id})">📦 Réceptionner</button>`:''}</td>
+          <td>${lr>0?`<button class="btn orange" style="height:22px;font-size:10px;padding:0 7px" onclick="openReceptionnerLigne(${l.ID},${id})">🔄 Mettre à jour RAL</button>`:''}</td>
         </tr>`;
       });
       html+=`</tbody></table></div>`;
@@ -4399,16 +4404,33 @@ async function assignerVendeurDevis(id){
 }
 
 // ── Ajouter une ligne article manuellement à un BC existant ──
+// ── Ajouter une ligne article (depuis panneau BC : bcId/numBC fournis ; depuis onglet RAL : bcId=null, sélection BC dans la modale) ──
 function openAjouterLigneArticle(bcId,numBC){
-  openModal(`➕ Ajouter une ligne article — ${numBC}`,`
+  const bcPreselected=!!bcId;
+  const bc=bcPreselected?DATA.suivi.find(i=>i.ID===bcId):null;
+  const chantierAuto=bc?getChantier(bc):'';
+
+  openModal(`➕ Ajouter une ligne article${bcPreselected?` — ${numBC}`:''}`,`
     <div style="font-size:11.5px;color:var(--text-muted);margin-bottom:14px">
-      Crée un item dans <span style="font-family:var(--font-mono);background:var(--grey-light);padding:1px 6px;border-radius:4px">Lignes_BC</span> rattaché à ce BC
+      Crée un item dans <span style="font-family:var(--font-mono);background:var(--grey-light);padding:1px 6px;border-radius:4px">Lignes_BC</span>
     </div>
-    <div class="mf"><label>Référence article</label>
-      <input id="lba-ref" placeholder="Ex : 038400">
+    ${bcPreselected?`
+    <div class="mf"><label>N° BC</label>
+      <input value="${numBC}" disabled style="background:var(--grey-xlight);color:var(--text-muted);font-weight:700">
+    </div>`:`
+    <div class="mf"><label>N° BC *</label>
+      <input id="lba-bc-search" autocomplete="off" placeholder="Tapez 3 caractères (N° BC)..." style="width:100%;padding:6px 10px;border:1px solid var(--border);border-radius:var(--radius-sm);font-size:13px;font-family:var(--font-body);">
+      <input type="hidden" id="lba-bc-id">
+      <div id="lba-bc-drop" style="position:relative;width:100%"></div>
+      <div style="font-size:10px;color:var(--text-muted);margin-top:2px">Le chantier sera repris automatiquement du BC sélectionné</div>
+    </div>`}
+    <div class="mf"><label>Référence / Désignation article *</label>
+      <input id="lba-search" autocomplete="off" placeholder="Tapez 3 caractères (réf. ou nom produit)..." style="width:100%;padding:6px 10px;border:1px solid var(--border);border-radius:var(--radius-sm);font-size:13px;font-family:var(--font-body);">
+      <input type="hidden" id="lba-ref">
+      <div id="lba-search-drop" style="position:relative;width:100%"></div>
     </div>
-    <div class="mf"><label>Désignation *</label>
-      <textarea id="lba-design" rows="2" placeholder="Ex : TUYAU DIAM 400 de 3m" autofocus></textarea>
+    <div class="mf"><label>Désignation (modifiable) *</label>
+      <textarea id="lba-design" rows="2" placeholder="Ex : TUYAU DIAM 400 de 3m"></textarea>
     </div>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
       <div class="mf"><label>Quantité commandée *</label>
@@ -4418,24 +4440,35 @@ function openAjouterLigneArticle(bcId,numBC){
         <input id="lba-unite" placeholder="Pcs, m, ml...">
       </div>
     </div>
-    <div class="mf"><label>Chantier (optionnel)</label>
-      <input id="lba-chantier" placeholder="Repris automatiquement si vide">
+    <div class="mf"><label>Chantier</label>
+      <input id="lba-chantier" value="${chantierAuto}" placeholder="Repris automatiquement du BC">
     </div>`,
   async()=>{
+    const finalBcId=bcPreselected?bcId:parseInt(document.getElementById('lba-bc-id')?.value||'0');
+    const finalNumBC=bcPreselected?numBC:document.getElementById('lba-bc-search')?.value.trim();
     const ref=document.getElementById('lba-ref').value.trim();
     const design=document.getElementById('lba-design').value.trim();
     const qte=parseFloat(document.getElementById('lba-qte').value);
     const unite=document.getElementById('lba-unite').value.trim();
     const chantier=document.getElementById('lba-chantier').value.trim();
+
+    if(!bcPreselected&&!finalBcId){
+      document.getElementById('lba-bc-search').style.borderColor='var(--red)';
+      throw new Error('Veuillez sélectionner un BC existant dans la liste.');
+    }
     if(!design){document.getElementById('lba-design').style.borderColor='var(--red)';throw new Error('La désignation est obligatoire.');}
     if(!qte||qte<=0){document.getElementById('lba-qte').style.borderColor='var(--red)';throw new Error('La quantité commandée doit être supérieure à 0.');}
 
-    const item=DATA.suivi.find(i=>i.ID===bcId);
-    const chantierFinal=chantier||(item?getChantier(item):'')||'';
+    // Numéro de ligne auto : max existant pour ce BC + 1
+    const lignesExistantes=(DATA.lignes||[]).filter(l=>l.BCId===finalBcId||parseInt(l.BCId)===finalBcId);
+    const maxLigne=lignesExistantes.reduce((max,l)=>{const n=parseInt(f(l,'Title'))||0;return n>max?n:max;},0);
+    const nouveauNumLigne=maxLigne+1;
+
+    const chantierFinal=chantier||chantierAuto||'';
 
     const body={
-      Title:numBC,
-      BCId:bcId,
+      Title:String(nouveauNumLigne),
+      BCId:finalBcId,
       R_x00e9_f_x00e9_rence:ref||'',
       Produit_x002f_D_x00e9_signation:design,
       Quantit_x00e9_command_x00e9_e:qte,
@@ -4446,8 +4479,86 @@ function openAjouterLigneArticle(bcId,numBC){
 
     await spPost('sites/RseauxPlus','Lignes_BC',body);
     setTimeout(()=>loadAll(),1500);
-    setTimeout(()=>openBCPanel(bcId),2200);
+    if(bcPreselected)setTimeout(()=>openBCPanel(finalBcId),2200);
   });
+
+  // Setup autocomplete après rendu de la modale
+  setTimeout(()=>{
+    // Autocomplete BC (uniquement si pas pré-sélectionné)
+    if(!bcPreselected){
+      const bcInp=document.getElementById('lba-bc-search');
+      const bcDrop=document.getElementById('lba-bc-drop');
+      const bcHidden=document.getElementById('lba-bc-id');
+      if(bcInp&&bcDrop){
+        bcInp.addEventListener('input',()=>{
+          const q=bcInp.value.trim().toLowerCase();
+          bcDrop.innerHTML='';bcHidden.value='';
+          if(q.length<3)return;
+          const matches=(DATA.suivi||[]).filter(i=>(f(i,'Title')||'').toLowerCase().includes(q)).slice(0,10);
+          if(!matches.length){bcDrop.innerHTML='<div style="padding:6px 10px;font-size:12px;color:var(--text-muted)">Aucun résultat</div>';return;}
+          const ul=document.createElement('ul');
+          Object.assign(ul.style,{listStyle:'none',margin:0,padding:'4px 0',background:'white',border:'1px solid var(--border)',borderRadius:'6px',boxShadow:'0 4px 12px rgba(0,0,0,.12)',position:'absolute',width:'100%',zIndex:'9999',maxHeight:'200px',overflowY:'auto'});
+          matches.forEach(bc=>{
+            const li=document.createElement('li');
+            const numBCli=f(bc,'Title')||`BC-${bc.ID}`;
+            const cli=getClient(bc);
+            li.innerHTML=`<strong>${numBCli}</strong> <span style="color:var(--text-muted);font-size:11px">${cli}</span>`;
+            Object.assign(li.style,{padding:'7px 12px',cursor:'pointer',fontSize:'13px'});
+            li.onmouseenter=()=>li.style.background='var(--grey-light)';
+            li.onmouseleave=()=>li.style.background='';
+            li.onclick=()=>{
+              bcInp.value=numBCli;bcHidden.value=bc.ID;bcDrop.innerHTML='';bcInp.style.borderColor='';
+              const chField=document.getElementById('lba-chantier');
+              if(chField&&!chField.value)chField.value=getChantier(bc);
+            };
+            ul.appendChild(li);
+          });
+          bcDrop.appendChild(ul);
+        });
+      }
+    }
+
+    // Autocomplete catalogue produits
+    const pInp=document.getElementById('lba-search');
+    const pDrop=document.getElementById('lba-search-drop');
+    const pHiddenRef=document.getElementById('lba-ref');
+    const designField=document.getElementById('lba-design');
+    const uniteField=document.getElementById('lba-unite');
+    if(pInp&&pDrop){
+      pInp.addEventListener('input',()=>{
+        const q=pInp.value.trim().toLowerCase();
+        pDrop.innerHTML='';
+        if(q.length<3)return;
+        const matches=(DATA.catalogue||[]).filter(p=>{
+          const ref=(f(p,'Title')||'').toLowerCase();
+          const des=(f(p,'D_x00e9_signation')||'').toLowerCase();
+          return ref.includes(q)||des.includes(q);
+        }).slice(0,12);
+        if(!matches.length){pDrop.innerHTML='<div style="padding:6px 10px;font-size:12px;color:var(--text-muted)">Aucun résultat — saisie libre possible</div>';return;}
+        const ul=document.createElement('ul');
+        Object.assign(ul.style,{listStyle:'none',margin:0,padding:'4px 0',background:'white',border:'1px solid var(--border)',borderRadius:'6px',boxShadow:'0 4px 12px rgba(0,0,0,.12)',position:'absolute',width:'100%',zIndex:'9999',maxHeight:'220px',overflowY:'auto'});
+        matches.forEach(p=>{
+          const ref=f(p,'Title')||'';
+          const des=f(p,'D_x00e9_signation')||'';
+          const unite=f(p,'Unit_x00e9_')||'';
+          const li=document.createElement('li');
+          li.innerHTML=`<span class="mono" style="font-weight:700">${ref}</span> <span style="color:var(--text-muted);font-size:11px">${des}</span>`;
+          Object.assign(li.style,{padding:'7px 12px',cursor:'pointer',fontSize:'13px'});
+          li.onmouseenter=()=>li.style.background='var(--grey-light)';
+          li.onmouseleave=()=>li.style.background='';
+          li.onclick=()=>{
+            pInp.value=`${ref} — ${des}`;
+            pHiddenRef.value=ref;
+            if(designField)designField.value=des;
+            if(uniteField&&unite)uniteField.value=unite;
+            pDrop.innerHTML='';pInp.style.borderColor='';
+          };
+          ul.appendChild(li);
+        });
+        pDrop.appendChild(ul);
+      });
+    }
+  },150);
 }
 
 // ── Réceptionner une ligne article (livraison partielle ou totale de la ligne) ──
@@ -4460,7 +4571,7 @@ function openReceptionnerLigne(ligneId,bcId){
   const design=f(ligne,'Produit_x002f_D_x00e9_signation')||'Article';
   const blActuel=f(ligne,'BLSign_x00e9_')||'';
 
-  openModal(`📦 Réceptionner — ${design}`,`
+  openModal(`🔄 Mettre à jour RAL — ${design}`,`
     <div style="font-size:11.5px;color:var(--text-muted);margin-bottom:14px">
       Commandé : <strong>${qc}</strong> · Déjà livré : <strong>${ql}</strong> · Reste à livrer : <strong style="color:var(--red)">${ral}</strong>
     </div>
