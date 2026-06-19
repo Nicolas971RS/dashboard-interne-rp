@@ -1084,7 +1084,7 @@ async function loadAll(){
       // Chantiers — pour vérification doublon à la création
       spFetch('sites/RseauxPlus','Chantiers','$select=ID,Title&$top=500'),
       // Cathalogue_Produits — pour autocomplete ajout ligne article
-      spFetch('sites/BondeCommande','Cathalogue_Produits','$select=ID,Title,D_x00e9_signation,Unit_x00e9_,Cat_x00e9_gorie,Statut&$top=2000')
+      spFetch('sites/BondeCommande','Cathalogue_Produits','$select=*&$top=2000')
     ]);
 
     // Injecter ProjetTitle dans chaque item suivi
@@ -1100,6 +1100,7 @@ async function loadAll(){
 
     // Debug: log first suivi item to help identify field names
     if(suivi.length>0){console.log('DEBUG Suivi_BC[0] keys:',Object.keys(suivi[0]).sort().join(', '));}
+    if(catalogue.length>0){console.log('DEBUG Catalogue[0] keys:',Object.keys(catalogue[0]).sort().join(', '));console.log('DEBUG Catalogue[0]:',JSON.stringify(catalogue[0]));}
 
     _lastLoad=Date.now();updateTimer();
     buildFilters();renderAll();updateBadges();buildSGVendeurs();
@@ -4531,7 +4532,7 @@ function openAjouterLigneArticle(bcId,numBC){
         if(q.length<3)return;
         const matches=(DATA.catalogue||[]).filter(p=>{
           const ref=(f(p,'Title')||'').toLowerCase();
-          const des=(f(p,'D_x00e9_signation')||'').toLowerCase();
+          const des=(f(p,'D_x00e9_signation','Designation','D_x00e9_signation_x0020_')||'').toLowerCase();
           return ref.includes(q)||des.includes(q);
         }).slice(0,12);
         if(!matches.length){pDrop.innerHTML='<div style="padding:6px 10px;font-size:12px;color:var(--text-muted)">Aucun résultat — saisie libre possible</div>';return;}
@@ -4539,8 +4540,8 @@ function openAjouterLigneArticle(bcId,numBC){
         Object.assign(ul.style,{listStyle:'none',margin:0,padding:'4px 0',background:'white',border:'1px solid var(--border)',borderRadius:'6px',boxShadow:'0 4px 12px rgba(0,0,0,.12)',position:'absolute',width:'100%',zIndex:'9999',maxHeight:'220px',overflowY:'auto'});
         matches.forEach(p=>{
           const ref=f(p,'Title')||'';
-          const des=f(p,'D_x00e9_signation')||'';
-          const unite=f(p,'Unit_x00e9_')||'';
+          const des=f(p,'D_x00e9_signation','Designation')||'';
+          const unite=f(p,'Unit_x00e9_','Unite')||'';
           const li=document.createElement('li');
           li.innerHTML=`<span class="mono" style="font-weight:700">${ref}</span> <span style="color:var(--text-muted);font-size:11px">${des}</span>`;
           Object.assign(li.style,{padding:'7px 12px',cursor:'pointer',fontSize:'13px'});
