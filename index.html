@@ -684,6 +684,22 @@
         <thead><tr><th>N° BC</th><th>Date BC</th><th>Ligne</th><th>Client</th><th>Chantier</th><th>Référence</th><th>Désignation</th><th>Cmd</th><th>Livré</th><th>RAL</th><th>Unité</th><th>BL</th><th>Action</th></tr></thead>
         <tbody id="ral-body"><tr class="empty-row"><td colspan="13">Chargement...</td></tr></tbody>
       </table></div>
+
+      <!-- ══ COMPLÈTEMENT LIVRÉ ══ -->
+      <div class="sd" style="margin-top:18px"><h2>✅ Complètement livré</h2><span class="site-tag rp">RAL = 0</span><div class="sd-line"></div></div>
+      <div class="acc-hd" onclick="toggleAcc('acc-ral-complet',this)">
+        <div class="acc-hd-left">
+          <span class="acc-arrow">▼</span>
+          <div class="acc-hd-title">✅ Lignes entièrement livrées</div>
+          <div class="acc-hd-meta"><span class="ctag g" id="sd-ral-complet-count">0</span></div>
+        </div>
+      </div>
+      <div class="acc-body" id="acc-ral-complet">
+        <div class="tc"><table>
+          <thead><tr><th>N° BC</th><th>Date BC</th><th>Ligne</th><th>Client</th><th>Chantier</th><th>Référence</th><th>Désignation</th><th>Cmd</th><th>Livré</th><th>Unité</th><th>BL</th></tr></thead>
+          <tbody id="ral-complet-body"><tr class="empty-row"><td colspan="11">Chargement...</td></tr></tbody>
+        </table></div>
+      </div>
     </div>
 
     <!-- DEMANDES BC -->
@@ -2370,6 +2386,14 @@ function getRALLignes(){
   }).filter(x=>x.ral>0);
 }
 
+function getCompletLignes(){
+  return (DATA.lignes||[]).map(l=>{
+    const qc=parseFloat(f(l,'Quantit_x00e9_command_x00e9_e'))||0;
+    const ql=parseFloat(f(l,'Quantit_x00e9_livr_x00e9_e'))||0;
+    return{ligne:l,qc,ql,ral:qc-ql};
+  }).filter(x=>x.ral<=0&&x.qc>0);
+}
+
 function ralBcInfo(ligne){
   const bcId=ligne.BCId||(ligne.BC&&ligne.BC.Id);
   const bc=(DATA.suivi||[]).find(i=>i.ID===bcId||i.ID===parseInt(bcId));
@@ -2442,6 +2466,41 @@ function renderRALTable(){
   const countLbl=document.getElementById('ral-count-label');if(countLbl)countLbl.textContent=enriched.length+' résultat'+(enriched.length>1?'s':'');
   const kq=document.getElementById('kpi-ral-qte');if(kq)kq.textContent=totalRal;
   const kch=document.getElementById('kpi-ral-chantiers');if(kch)kch.textContent=chantiersDistinct;
+
+  // ── Accordéon Complètement livré (RAL=0) ──
+  const completData=getCompletLignes();
+  let completEnriched=completData.map(x=>({...x,info:ralBcInfo(x.ligne)}));
+  if(fV!=='all')completEnriched=completEnriched.filter(x=>x.info.vendeur===fV);
+  if(fC!=='all')completEnriched=completEnriched.filter(x=>x.info.client===fC);
+  if(q)completEnriched=completEnriched.filter(x=>{
+    const ref=f(x.ligne,'R_x00e9_f_x00e9_rence')||'';
+    const design=f(x.ligne,'Produit_x002f_D_x00e9_signation')||'';
+    const chantier=f(x.ligne,'Chantier')||'';
+    return [x.info.numBC,ref,design,chantier,x.info.client].some(v=>String(v).toLowerCase().includes(q));
+  });
+  const bComplet=document.getElementById('ral-complet-body');
+  if(bComplet){
+    bComplet.innerHTML=completEnriched.length?completEnriched.map(x=>{
+      const l=x.ligne;
+      const bl=f(l,'BLSign_x00e9_')||'—';
+      const unite=f(l,'Unit_x00e9_')||'';
+      return`<tr>
+        <td class="ref" style="cursor:pointer;color:var(--blue)" onclick="closePanel();openBCPanel(${x.info.bcId})">${x.info.numBC}</td>
+        <td class="mono" style="font-size:11px">${fmtDate(x.info.dateBC)}</td>
+        <td class="mono" style="text-align:center;font-weight:600">${f(l,'Title')||'—'}</td>
+        <td class="cname">${x.info.client}</td>
+        <td style="font-size:12px;color:var(--text-secondary)">${f(l,'Chantier')||'—'}</td>
+        <td class="mono">${f(l,'R_x00e9_f_x00e9_rence')||'—'}</td>
+        <td style="font-size:11.5px">${f(l,'Produit_x002f_D_x00e9_signation')||'—'}</td>
+        <td style="text-align:right;font-weight:600">${x.qc}</td>
+        <td style="text-align:right;color:var(--green);font-weight:700">${x.ql}</td>
+        <td style="text-align:center;font-size:11px">${unite||'—'}</td>
+        <td class="mono" style="font-size:10.5px">${bl}</td>
+      </tr>`;
+    }).join(''):'<tr class="empty-row"><td colspan="11">Aucune ligne entièrement livrée</td></tr>';
+  }
+  const sdComplet=document.getElementById('sd-ral-complet-count');
+  if(sdComplet)sdComplet.textContent=completEnriched.length;
 }
 
 function exportRALCSV(){
