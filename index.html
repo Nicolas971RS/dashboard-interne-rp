@@ -664,13 +664,20 @@
         <div class="kc r"><div class="kl">📦 Articles restant à livrer</div><div class="kv" id="kpi-ral-qte">—</div><div class="ks">Somme des RAL</div></div>
         <div class="kc b"><div class="kl">🏗️ Chantiers concernés</div><div class="kv" id="kpi-ral-chantiers">—</div><div class="ks">Distincts</div></div>
       </div>
-      <div class="sh">
-        <div class="st">🔀 Lignes avec reste à livrer</div>
-        <div class="fb">
-          <input class="fs" type="text" id="search-ral" placeholder="🔍 N° BC, référence, désignation, chantier..." oninput="renderRALTable()" style="min-width:220px">
-          <select class="fs" id="filter-vendeur-ral" onchange="renderRALTable()"><option value="all">Tous les vendeurs</option></select>
-          <select class="fs" id="filter-client-ral" onchange="renderRALTable()"><option value="all">Tous les clients</option></select>
-          <button class="btn" onclick="exportRALCSV()">⬇ CSV</button>
+      <!-- RECHERCHE GLOBALE RAL -->
+      <div style="background:var(--navy);border-radius:var(--radius);padding:14px 18px;margin-bottom:14px">
+        <div style="display:flex;align-items:center;gap:12px;margin-bottom:10px">
+          <span style="font-size:20px">🔍</span>
+          <input type="text" id="search-ral" placeholder="Recherche rapide — N° BC, référence, désignation, chantier..."
+            style="flex:1;background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.2);border-radius:var(--radius-sm);padding:9px 14px;font-size:13.5px;color:white;font-family:var(--font-body);outline:none"
+            oninput="renderRALTable()">
+          <button class="btn" style="border-color:rgba(255,255,255,.3);color:rgba(255,255,255,.7);background:none;white-space:nowrap" onclick="document.getElementById('search-ral').value='';renderRALTable()">✕ Effacer</button>
+        </div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:2px">
+          <select id="filter-vendeur-ral" onchange="renderRALTable()" class="fs"><option value="all">Tous les vendeurs</option></select>
+          <select id="filter-client-ral" onchange="renderRALTable()" class="fs"><option value="all">Tous les clients</option></select>
+          <button class="btn" style="border-color:rgba(255,255,255,.3);color:rgba(255,255,255,.7);background:none" onclick="exportRALCSV()">⬇ CSV</button>
+          <span id="ral-count-label" style="font-size:11px;color:rgba(255,255,255,.5)"></span>
         </div>
       </div>
       <div class="tc"><table>
@@ -2430,6 +2437,7 @@ function renderRALTable(){
   const totalRal=enriched.reduce((s,x)=>s+x.ral,0);
   const chantiersDistinct=new Set(enriched.map(x=>f(x.ligne,'Chantier')).filter(Boolean)).size;
   const kc=document.getElementById('kpi-ral-count');if(kc)kc.textContent=enriched.length;
+  const countLbl=document.getElementById('ral-count-label');if(countLbl)countLbl.textContent=enriched.length+' résultat'+(enriched.length>1?'s':'');
   const kq=document.getElementById('kpi-ral-qte');if(kq)kq.textContent=totalRal;
   const kch=document.getElementById('kpi-ral-chantiers');if(kch)kch.textContent=chantiersDistinct;
 }
@@ -4440,6 +4448,9 @@ function openAjouterLigneArticle(bcId,numBC){
         <input id="lba-unite" placeholder="Pcs, m, ml...">
       </div>
     </div>
+    <div class="mf"><label>Quantité déjà livrée <span style="color:var(--text-muted);font-weight:400;text-transform:none">(si une partie a déjà été reçue)</span></label>
+      <input id="lba-qte-livree" type="number" min="0" step="1" placeholder="0">
+    </div>
     <div class="mf"><label>Chantier</label>
       <input id="lba-chantier" value="${chantierAuto}" placeholder="Repris automatiquement du BC">
     </div>`,
@@ -4451,6 +4462,8 @@ function openAjouterLigneArticle(bcId,numBC){
     const qte=parseFloat(document.getElementById('lba-qte').value);
     const unite=document.getElementById('lba-unite').value.trim();
     const chantier=document.getElementById('lba-chantier').value.trim();
+    const qteLivreeRaw=document.getElementById('lba-qte-livree').value;
+    const qteLivree=qteLivreeRaw?parseFloat(qteLivreeRaw):0;
 
     if(!bcPreselected&&!finalBcId){
       document.getElementById('lba-bc-search').style.borderColor='var(--red)';
@@ -4458,6 +4471,8 @@ function openAjouterLigneArticle(bcId,numBC){
     }
     if(!design){document.getElementById('lba-design').style.borderColor='var(--red)';throw new Error('La désignation est obligatoire.');}
     if(!qte||qte<=0){document.getElementById('lba-qte').style.borderColor='var(--red)';throw new Error('La quantité commandée doit être supérieure à 0.');}
+    if(qteLivree<0){document.getElementById('lba-qte-livree').style.borderColor='var(--red)';throw new Error('La quantité livrée ne peut pas être négative.');}
+    if(qteLivree>qte){document.getElementById('lba-qte-livree').style.borderColor='var(--red)';throw new Error('La quantité livrée ne peut pas dépasser la quantité commandée.');}
 
     // Numéro de ligne auto : max existant pour ce BC + 1
     const lignesExistantes=(DATA.lignes||[]).filter(l=>l.BCId===finalBcId||parseInt(l.BCId)===finalBcId);
@@ -4472,7 +4487,7 @@ function openAjouterLigneArticle(bcId,numBC){
       R_x00e9_f_x00e9_rence:ref||'',
       Produit_x002f_D_x00e9_signation:design,
       Quantit_x00e9_command_x00e9_e:qte,
-      Quantit_x00e9_livr_x00e9_e:0,
+      Quantit_x00e9_livr_x00e9_e:qteLivree,
       Unit_x00e9_:unite||'',
       Chantier:chantierFinal
     };
