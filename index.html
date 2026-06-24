@@ -101,6 +101,7 @@
   .kpi-row{display:grid;gap:12px;margin-bottom:14px;}
   .kpi-row.c4{grid-template-columns:repeat(4,1fr);}
   .kpi-row.c3{grid-template-columns:repeat(3,1fr);}
+  .kpi-row.c2{grid-template-columns:repeat(2,1fr);}
   .kpi-row.c5{grid-template-columns:repeat(5,1fr);}
   .kc{background:var(--surface);border-radius:var(--radius);padding:15px 18px;box-shadow:var(--shadow-xs);border:1px solid var(--border-light);position:relative;overflow:hidden;transition:box-shadow .2s;}
   .kc:hover{box-shadow:var(--shadow-sm);}
@@ -342,6 +343,7 @@
     <button class="tab active" onclick="showTab('matin',this)">📊 Vue Matin</button>
     <button class="tab" onclick="showTab('suivi',this)">📦 Suivi BC <span class="tab-badge g" id="badge-recu">0</span><span class="tab-badge r" id="badge-retard">0</span></button>
     <button class="tab" onclick="showTab('ral',this);renderRALTable()">🔀 Livraisons Partielles <span class="tab-badge a" id="badge-ral">0</span></button>
+    <button class="tab" onclick="showTab('prepscan',this);renderPreparations()">📦 Préparations Scan <span class="tab-badge a" id="badge-prepscan">0</span></button>
     <button class="tab" onclick="showTab('dbc',this)">🧾 Demandes BC <span class="tab-badge r" id="badge-dbc">0</span></button>
     <button class="tab" onclick="showTab('devis',this)">📄 Devis <span class="tab-badge a" id="badge-devis">0</span></button>
     <button class="tab" onclick="showTab('analytics',this);renderAnalytics()">📈 Analytics</button>
@@ -699,6 +701,53 @@
           <thead><tr><th>N° BC</th><th>Date BC</th><th>Ligne</th><th>Client</th><th>Chantier</th><th>Référence</th><th>Désignation</th><th>Cmd</th><th>Livré</th><th>Unité</th><th>BL</th></tr></thead>
           <tbody id="ral-complet-body"><tr class="empty-row"><td colspan="11">Chargement...</td></tr></tbody>
         </table></div>
+      </div>
+    </div>
+
+    <!-- PRÉPARATIONS SCAN -->
+    <div id="tab-prepscan" class="section-bloc">
+      <div class="page-header">
+        <div><h1>Préparations Scan — BL confiés à l'avance</h1><div class="sub">/sites/BondeCommande · Sessions_Scan · Portail terrain</div></div>
+        <div style="display:flex;gap:8px">
+          <button class="btn-refresh" onclick="loadAll()">🔄 Actualiser</button>
+        </div>
+      </div>
+      <div class="kpi-row c4">
+        <div class="kc a"><div class="kl">⏳ En attente de préparation</div><div class="kv" id="kpi-prep-attente">—</div><div class="ks">Pas encore pris en charge</div></div>
+        <div class="kc r"><div class="kl">⚠️ En attente +2 jours</div><div class="kv" id="kpi-prep-retard">—</div><div class="ks">À relancer auprès du magasinier</div></div>
+        <div class="kc b"><div class="kl">⏱ Délai moyen de prise en charge</div><div class="kv" id="kpi-prep-delai">—</div><div class="ks">Émission → début du scan</div></div>
+        <div class="kc g"><div class="kl">✅ Total préparations (30j)</div><div class="kv" id="kpi-prep-total">—</div><div class="ks">Tous statuts confondus</div></div>
+      </div>
+
+      <div class="sh">
+        <div class="st">📦 Filtres</div>
+        <div class="fb">
+          <input class="fs" type="text" id="search-prep" placeholder="🔍 N° BL, client..." oninput="renderPreparations()" style="min-width:200px">
+          <select class="fs" id="filter-vendeur-prep" onchange="renderPreparations()"><option value="all">Tous les vendeurs</option></select>
+          <select class="fs" id="filter-magasinier-prep" onchange="renderPreparations()"><option value="all">Tous les magasiniers</option></select>
+        </div>
+      </div>
+
+      <div class="tc"><table>
+        <thead><tr><th>N° BL</th><th>Client</th><th>Vendeur</th><th>Émis le</th><th>En attente depuis</th><th>Statut</th></tr></thead>
+        <tbody id="prep-attente-body"><tr class="empty-row"><td colspan="6">Chargement...</td></tr></tbody>
+      </table></div>
+
+      <div class="kpi-row c2" style="margin-top:18px">
+        <div>
+          <div class="sd"><h2>👤 Par vendeur — qui confie le plus de préparations</h2><div class="sd-line"></div></div>
+          <div class="tc"><table>
+            <thead><tr><th>Vendeur</th><th>Confiées</th><th>En attente</th><th>Traitées</th></tr></thead>
+            <tbody id="prep-vendeur-body"><tr class="empty-row"><td colspan="4">Chargement...</td></tr></tbody>
+          </table></div>
+        </div>
+        <div>
+          <div class="sd"><h2>🧰 Par magasinier — volume et délai de traitement</h2><div class="sd-line"></div></div>
+          <div class="tc"><table>
+            <thead><tr><th>Magasinier</th><th>Traitées</th><th>Délai moyen</th></tr></thead>
+            <tbody id="prep-magasinier-body"><tr class="empty-row"><td colspan="3">Chargement...</td></tr></tbody>
+          </table></div>
+        </div>
       </div>
     </div>
 
@@ -1089,7 +1138,7 @@ async function fetchProjetTitles(){
 async function loadAll(){
   setLoading(true);hideError();
   try{
-    const [suivi,projTitles,lignes,dbc,devis,clients,chantiers,catalogue]=await Promise.all([
+    const [suivi,projTitles,lignes,dbc,devis,clients,chantiers,catalogue,sessionsScan]=await Promise.all([
       // Suivi_BC: $select=*
       spFetch('sites/RseauxPlus','Suivi_BC','$select=*,Editor/Title&$expand=Editor&$orderby=ID desc'),
       // Projet lookup titles — appel séparé compatible expand
@@ -1107,7 +1156,10 @@ async function loadAll(){
       // Chantiers — pour vérification doublon à la création
       spFetch('sites/RseauxPlus','Chantiers','$select=ID,Title&$top=500'),
       // Cathalogue_Produits — pour autocomplete ajout ligne article
-      spFetch('sites/BondeCommande','Cathalogue_Produits','$select=ID,Title,field_1,field_3,field_4,field_7&$top=2000')
+      spFetch('sites/BondeCommande','Cathalogue_Produits','$select=ID,Title,field_1,field_3,field_4,field_7&$top=2000'),
+      // Sessions_Scan — portail scan BL (préparations, livraisons, inventaires)
+      spFetch('sites/BondeCommande','Sessions_Scan',
+        '$select=ID,Title,Numero_BL,Client,Type_Operation,Vendeur_Emetteur,Magasinier,Date_Emission,Date_Scan,Statut,Nb_Articles_Scannes,Nb_Ecarts,Preparation_Avance&$orderby=ID desc&$top=2000')
     ]);
 
     // Injecter ProjetTitle dans chaque item suivi
@@ -1119,7 +1171,7 @@ async function loadAll(){
     const clientMap={};
     clients.forEach(c=>{if(c.ID&&c.Title)clientMap[c.ID]=c.Title;});
 
-    DATA={suivi,lignes,dbc,devis,clients:clientMap,chantiers:chantiers||[],catalogue:catalogue||[]};
+    DATA={suivi,lignes,dbc,devis,clients:clientMap,chantiers:chantiers||[],catalogue:catalogue||[],sessionsScan:sessionsScan||[]};
 
     // Debug: log first suivi item to help identify field names
     if(suivi.length>0){console.log('DEBUG Suivi_BC[0] keys:',Object.keys(suivi[0]).sort().join(', '));}
@@ -2122,7 +2174,7 @@ function renderAll(){
   const banner=document.getElementById('matin-ok-banner');
   if(banner)banner.style.display=allOk?'flex':'none';
 
-  renderDBCTable();renderDevisTable();renderBLManquant();renderRALTable();
+  renderDBCTable();renderDevisTable();renderBLManquant();renderRALTable();renderPreparations();
 }
 
 function renderSuiviEnCours(){renderHistorique();renderBLManquant();
@@ -2503,6 +2555,113 @@ function renderRALTable(){
   if(sdComplet)sdComplet.textContent=completEnriched.length;
 }
 
+// ═══ PRÉPARATIONS SCAN — BL confiés à l'avance (portail-scan-rp) ═══
+function renderPreparations(){
+  const isPrep=s=>s.Preparation_Avance===true||s.Preparation_Avance==='Yes'||s.Preparation_Avance==='1';
+  const all=(DATA.sessionsScan||[]).filter(isPrep);
+
+  const q=(document.getElementById('search-prep')?.value||'').toLowerCase();
+  const fV=document.getElementById('filter-vendeur-prep')?.value||'all';
+  const fM=document.getElementById('filter-magasinier-prep')?.value||'all';
+
+  // Peupler les selects vendeur/magasinier dynamiquement (une fois)
+  const selV=document.getElementById('filter-vendeur-prep');
+  const selM=document.getElementById('filter-magasinier-prep');
+  if(selV&&selV.options.length===1){
+    const vendeurs=[...new Set(all.map(s=>f(s,'Vendeur_Emetteur')).filter(Boolean))].sort();
+    vendeurs.forEach(v=>{const o=document.createElement('option');o.value=v;o.textContent=v;selV.appendChild(o);});
+  }
+  if(selM&&selM.options.length===1){
+    const mags=[...new Set(all.map(s=>f(s,'Magasinier')).filter(Boolean))].sort();
+    mags.forEach(m=>{const o=document.createElement('option');o.value=m;o.textContent=m;selM.appendChild(o);});
+  }
+
+  let filtered=all;
+  if(fV!=='all')filtered=filtered.filter(s=>f(s,'Vendeur_Emetteur')===fV);
+  if(fM!=='all')filtered=filtered.filter(s=>f(s,'Magasinier')===fM);
+  if(q)filtered=filtered.filter(s=>{
+    const bl=(f(s,'Numero_BL')||'').toLowerCase();
+    const cl=(f(s,'Client')||'').toLowerCase();
+    return bl.includes(q)||cl.includes(q);
+  });
+
+  const attente=filtered.filter(s=>f(s,'Statut')==='BL Émis')
+    .sort((a,b)=>new Date(f(a,'Date_Emission'))-new Date(f(b,'Date_Emission')));
+  const retard=attente.filter(s=>daysSince(f(s,'Date_Emission'))>2);
+
+  // Délai moyen de prise en charge — calculé sur l'ensemble (non affecté par les filtres d'affichage)
+  const traitees=all.filter(s=>f(s,'Statut')!=='BL Émis'&&f(s,'Date_Scan'));
+  let delaiMoyenH=null;
+  if(traitees.length){
+    const totalH=traitees.reduce((sum,s)=>{
+      const d1=new Date(f(s,'Date_Emission')),d2=new Date(f(s,'Date_Scan'));
+      return sum+Math.max(0,(d2-d1)/3600000);
+    },0);
+    delaiMoyenH=totalH/traitees.length;
+  }
+  const fmtDelai=h=>h===null?'—':(h<24?Math.round(h)+' h':(h/24).toFixed(1)+' j');
+  const total30j=all.filter(s=>daysSince(f(s,'Date_Emission'))<=30).length;
+
+  const setTxt=(id,v)=>{const el=document.getElementById(id);if(el)el.textContent=v;};
+  setTxt('kpi-prep-attente',attente.length);
+  setTxt('kpi-prep-retard',retard.length);
+  setTxt('kpi-prep-delai',fmtDelai(delaiMoyenH));
+  setTxt('kpi-prep-total',total30j);
+
+  const body=document.getElementById('prep-attente-body');
+  if(body){
+    body.innerHTML=attente.length?attente.map(s=>{
+      const jours=daysSince(f(s,'Date_Emission'));
+      const urgent=jours>2;
+      return`<tr${urgent?' style="background:rgba(220,38,38,.06)"':''}>
+        <td class="ref">${f(s,'Numero_BL')||'—'}</td>
+        <td class="cname">${f(s,'Client')||'—'}</td>
+        <td>${f(s,'Vendeur_Emetteur')||'—'}</td>
+        <td class="mono" style="font-size:11px">${fmtDate(f(s,'Date_Emission'))}</td>
+        <td>${urgent?'<span class="ctag r">'+jours+' j</span>':jours+' j'}</td>
+        <td><span class="ctag a">À préparer</span></td>
+      </tr>`;
+    }).join(''):'<tr class="empty-row"><td colspan="6">✅ Aucune préparation en attente</td></tr>';
+  }
+
+  // Par vendeur — qui confie le plus
+  const vendeurMap={};
+  all.forEach(s=>{
+    const v=f(s,'Vendeur_Emetteur')||'—';
+    if(!vendeurMap[v])vendeurMap[v]={confiees:0,attente:0,traitees:0};
+    vendeurMap[v].confiees++;
+    if(f(s,'Statut')==='BL Émis')vendeurMap[v].attente++;else vendeurMap[v].traitees++;
+  });
+  const bodyV=document.getElementById('prep-vendeur-body');
+  if(bodyV){
+    const rows=Object.entries(vendeurMap).sort((a,b)=>b[1].confiees-a[1].confiees);
+    bodyV.innerHTML=rows.length?rows.map(([v,d])=>
+      `<tr><td>${v}</td><td style="text-align:center;font-weight:700">${d.confiees}</td><td style="text-align:center">${d.attente||0}</td><td style="text-align:center">${d.traitees||0}</td></tr>`
+    ).join(''):'<tr class="empty-row"><td colspan="4">Aucune donnée</td></tr>';
+  }
+
+  // Par magasinier — volume traité + délai moyen
+  const magMap={};
+  all.filter(s=>f(s,'Magasinier')&&f(s,'Statut')!=='BL Émis').forEach(s=>{
+    const m=f(s,'Magasinier');
+    if(!magMap[m])magMap[m]={count:0,totalH:0,withDelai:0};
+    magMap[m].count++;
+    if(f(s,'Date_Scan')){
+      const d1=new Date(f(s,'Date_Emission')),d2=new Date(f(s,'Date_Scan'));
+      magMap[m].totalH+=Math.max(0,(d2-d1)/3600000);
+      magMap[m].withDelai++;
+    }
+  });
+  const bodyM=document.getElementById('prep-magasinier-body');
+  if(bodyM){
+    const rows=Object.entries(magMap).sort((a,b)=>b[1].count-a[1].count);
+    bodyM.innerHTML=rows.length?rows.map(([m,d])=>{
+      const moy=d.withDelai?d.totalH/d.withDelai:null;
+      return`<tr><td>${m}</td><td style="text-align:center;font-weight:700">${d.count}</td><td style="text-align:center">${fmtDelai(moy)}</td></tr>`;
+    }).join(''):'<tr class="empty-row"><td colspan="3">Aucune donnée</td></tr>';
+  }
+}
+
 function exportRALCSV(){
   const ralData=getRALLignes();
   const fV=document.getElementById('filter-vendeur-ral')?.value||'all';
@@ -2551,6 +2710,9 @@ function updateBadges(){
   document.getElementById('badge-devis').textContent=dc>0?dc+' actifs':'';
   const badgeRal=document.getElementById('badge-ral');
   if(badgeRal)badgeRal.textContent=ralCount>0?ralCount:'';
+  const prepCount=(DATA.sessionsScan||[]).filter(s=>s.Preparation_Avance===true&&f(s,'Statut')==='BL Émis').length;
+  const badgePrep=document.getElementById('badge-prepscan');
+  if(badgePrep)badgePrep.textContent=prepCount>0?prepCount+' en attente':'';
 }
 
 // ═══ TABS ═══
