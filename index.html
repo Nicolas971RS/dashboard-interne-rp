@@ -707,16 +707,16 @@
     <!-- PRÉPARATIONS SCAN -->
     <div id="tab-prepscan" class="section-bloc">
       <div class="page-header">
-        <div><h1>Préparations Scan — BL confiés à l'avance</h1><div class="sub">/sites/BondeCommande · Sessions_Scan · Portail terrain</div></div>
+        <div><h1>BL en attente & Préparations Scan</h1><div class="sub">/sites/BondeCommande · Sessions_Scan · Portail terrain</div></div>
         <div style="display:flex;gap:8px">
           <button class="btn-refresh" onclick="loadAll()">🔄 Actualiser</button>
         </div>
       </div>
       <div class="kpi-row c4">
-        <div class="kc a"><div class="kl">⏳ En attente de préparation</div><div class="kv" id="kpi-prep-attente">—</div><div class="ks">Pas encore pris en charge</div></div>
+        <div class="kc a"><div class="kl">⏳ BL en attente de prise en charge</div><div class="kv" id="kpi-prep-attente">—</div><div class="ks">Tous types confondus</div></div>
+        <div class="kc o"><div class="kl">📋 Dont préparations à l'avance</div><div class="kv" id="kpi-prep-aprep">—</div><div class="ks">Confiées sans urgence</div></div>
         <div class="kc r"><div class="kl">⚠️ En attente +2 jours</div><div class="kv" id="kpi-prep-retard">—</div><div class="ks">À relancer auprès du magasinier</div></div>
         <div class="kc b"><div class="kl">⏱ Délai moyen de prise en charge</div><div class="kv" id="kpi-prep-delai">—</div><div class="ks">Émission → début du scan</div></div>
-        <div class="kc g"><div class="kl">✅ Total préparations (30j)</div><div class="kv" id="kpi-prep-total">—</div><div class="ks">Tous statuts confondus</div></div>
       </div>
 
       <div class="sh">
@@ -724,18 +724,22 @@
         <div class="fb">
           <input class="fs" type="text" id="search-prep" placeholder="🔍 N° BL, client..." oninput="renderPreparations()" style="min-width:200px">
           <select class="fs" id="filter-vendeur-prep" onchange="renderPreparations()"><option value="all">Tous les vendeurs</option></select>
-          <select class="fs" id="filter-magasinier-prep" onchange="renderPreparations()"><option value="all">Tous les magasiniers</option></select>
+          <select class="fs" id="filter-type-prep" onchange="renderPreparations()">
+            <option value="all">Tous les types</option>
+            <option value="Livraison client">Livraison client</option>
+            <option value="Inventaire physique">Inventaire physique</option>
+          </select>
         </div>
       </div>
 
       <div class="tc"><table>
-        <thead><tr><th>N° BL</th><th>Client</th><th>Vendeur</th><th>Émis le</th><th>En attente depuis</th><th>Statut</th></tr></thead>
-        <tbody id="prep-attente-body"><tr class="empty-row"><td colspan="6">Chargement...</td></tr></tbody>
+        <thead><tr><th>N° BL</th><th>Client</th><th>Type</th><th>Vendeur</th><th>Émis le</th><th>En attente depuis</th><th>Préparation</th></tr></thead>
+        <tbody id="prep-attente-body"><tr class="empty-row"><td colspan="7">Chargement...</td></tr></tbody>
       </table></div>
 
       <div class="kpi-row c2" style="margin-top:18px">
         <div>
-          <div class="sd"><h2>👤 Par vendeur — qui confie le plus de préparations</h2><div class="sd-line"></div></div>
+          <div class="sd"><h2>👤 Par vendeur — volume confié</h2><div class="sd-line"></div></div>
           <div class="tc"><table>
             <thead><tr><th>Vendeur</th><th>Confiées</th><th>En attente</th><th>Traitées</th></tr></thead>
             <tbody id="prep-vendeur-body"><tr class="empty-row"><td colspan="4">Chargement...</td></tr></tbody>
@@ -2558,38 +2562,35 @@ function renderRALTable(){
 // ═══ PRÉPARATIONS SCAN — BL confiés à l'avance (portail-scan-rp) ═══
 function renderPreparations(){
   const isPrep=s=>s.Preparation_Avance===true||s.Preparation_Avance==='Yes'||s.Preparation_Avance==='1';
-  const all=(DATA.sessionsScan||[]).filter(isPrep);
+  const all=DATA.sessionsScan||[];
 
   const q=(document.getElementById('search-prep')?.value||'').toLowerCase();
   const fV=document.getElementById('filter-vendeur-prep')?.value||'all';
-  const fM=document.getElementById('filter-magasinier-prep')?.value||'all';
+  const fT=document.getElementById('filter-type-prep')?.value||'all';
 
-  // Peupler les selects vendeur/magasinier dynamiquement (une fois)
+  // Peupler le select vendeur dynamiquement (une fois)
   const selV=document.getElementById('filter-vendeur-prep');
-  const selM=document.getElementById('filter-magasinier-prep');
   if(selV&&selV.options.length===1){
     const vendeurs=[...new Set(all.map(s=>f(s,'Vendeur_Emetteur')).filter(Boolean))].sort();
     vendeurs.forEach(v=>{const o=document.createElement('option');o.value=v;o.textContent=v;selV.appendChild(o);});
   }
-  if(selM&&selM.options.length===1){
-    const mags=[...new Set(all.map(s=>f(s,'Magasinier')).filter(Boolean))].sort();
-    mags.forEach(m=>{const o=document.createElement('option');o.value=m;o.textContent=m;selM.appendChild(o);});
-  }
 
-  let filtered=all;
-  if(fV!=='all')filtered=filtered.filter(s=>f(s,'Vendeur_Emetteur')===fV);
-  if(fM!=='all')filtered=filtered.filter(s=>f(s,'Magasinier')===fM);
-  if(q)filtered=filtered.filter(s=>{
+  // File d'attente réelle : tout BL/session pas encore pris en charge, tous types confondus
+  let pending=all.filter(s=>f(s,'Statut')==='BL Émis');
+  if(fV!=='all')pending=pending.filter(s=>f(s,'Vendeur_Emetteur')===fV);
+  if(fT!=='all')pending=pending.filter(s=>f(s,'Type_Operation')===fT);
+  if(q)pending=pending.filter(s=>{
     const bl=(f(s,'Numero_BL')||'').toLowerCase();
     const cl=(f(s,'Client')||'').toLowerCase();
     return bl.includes(q)||cl.includes(q);
   });
+  pending.sort((a,b)=>new Date(f(a,'Date_Emission'))-new Date(f(b,'Date_Emission')));
 
-  const attente=filtered.filter(s=>f(s,'Statut')==='BL Émis')
-    .sort((a,b)=>new Date(f(a,'Date_Emission'))-new Date(f(b,'Date_Emission')));
-  const retard=attente.filter(s=>daysSince(f(s,'Date_Emission'))>2);
+  const totalAttente=all.filter(s=>f(s,'Statut')==='BL Émis');
+  const aPreparer=totalAttente.filter(isPrep);
+  const retard=totalAttente.filter(s=>daysSince(f(s,'Date_Emission'))>2);
 
-  // Délai moyen de prise en charge — calculé sur l'ensemble (non affecté par les filtres d'affichage)
+  // Délai moyen de prise en charge — sur l'ensemble des sessions déjà traitées, tous types/statuts confondus
   const traitees=all.filter(s=>f(s,'Statut')!=='BL Émis'&&f(s,'Date_Scan'));
   let delaiMoyenH=null;
   if(traitees.length){
@@ -2600,31 +2601,34 @@ function renderPreparations(){
     delaiMoyenH=totalH/traitees.length;
   }
   const fmtDelai=h=>h===null?'—':(h<24?Math.round(h)+' h':(h/24).toFixed(1)+' j');
-  const total30j=all.filter(s=>daysSince(f(s,'Date_Emission'))<=30).length;
 
   const setTxt=(id,v)=>{const el=document.getElementById(id);if(el)el.textContent=v;};
-  setTxt('kpi-prep-attente',attente.length);
+  setTxt('kpi-prep-attente',totalAttente.length);
+  setTxt('kpi-prep-aprep',aPreparer.length);
   setTxt('kpi-prep-retard',retard.length);
   setTxt('kpi-prep-delai',fmtDelai(delaiMoyenH));
-  setTxt('kpi-prep-total',total30j);
 
   const body=document.getElementById('prep-attente-body');
   if(body){
-    body.innerHTML=attente.length?attente.map(s=>{
+    body.innerHTML=pending.length?pending.map(s=>{
       const jours=daysSince(f(s,'Date_Emission'));
       const urgent=jours>2;
+      const type=f(s,'Type_Operation')||'—';
+      const isLiv=type==='Livraison client';
+      const prep=isPrep(s);
       return`<tr${urgent?' style="background:rgba(220,38,38,.06)"':''}>
         <td class="ref">${f(s,'Numero_BL')||'—'}</td>
-        <td class="cname">${f(s,'Client')||'—'}</td>
+        <td class="cname">${isLiv?(f(s,'Client')||'—'):'—'}</td>
+        <td><span class="ctag ${isLiv?'o':'a'}">${type}</span></td>
         <td>${f(s,'Vendeur_Emetteur')||'—'}</td>
         <td class="mono" style="font-size:11px">${fmtDate(f(s,'Date_Emission'))}</td>
         <td>${urgent?'<span class="ctag r">'+jours+' j</span>':jours+' j'}</td>
-        <td><span class="ctag a">À préparer</span></td>
+        <td>${prep?'<span class="ctag o">À préparer</span>':'<span style="color:var(--text-muted);font-size:11px">Standard</span>'}</td>
       </tr>`;
-    }).join(''):'<tr class="empty-row"><td colspan="6">✅ Aucune préparation en attente</td></tr>';
+    }).join(''):'<tr class="empty-row"><td colspan="7">✅ Aucun BL en attente</td></tr>';
   }
 
-  // Par vendeur — qui confie le plus
+  // Par vendeur — volume confié (tous types, tous statuts)
   const vendeurMap={};
   all.forEach(s=>{
     const v=f(s,'Vendeur_Emetteur')||'—';
@@ -2640,7 +2644,7 @@ function renderPreparations(){
     ).join(''):'<tr class="empty-row"><td colspan="4">Aucune donnée</td></tr>';
   }
 
-  // Par magasinier — volume traité + délai moyen
+  // Par magasinier — volume traité + délai moyen (sessions déjà prises en charge)
   const magMap={};
   all.filter(s=>f(s,'Magasinier')&&f(s,'Statut')!=='BL Émis').forEach(s=>{
     const m=f(s,'Magasinier');
@@ -2710,7 +2714,7 @@ function updateBadges(){
   document.getElementById('badge-devis').textContent=dc>0?dc+' actifs':'';
   const badgeRal=document.getElementById('badge-ral');
   if(badgeRal)badgeRal.textContent=ralCount>0?ralCount:'';
-  const prepCount=(DATA.sessionsScan||[]).filter(s=>s.Preparation_Avance===true&&f(s,'Statut')==='BL Émis').length;
+  const prepCount=(DATA.sessionsScan||[]).filter(s=>f(s,'Statut')==='BL Émis').length;
   const badgePrep=document.getElementById('badge-prepscan');
   if(badgePrep)badgePrep.textContent=prepCount>0?prepCount+' en attente':'';
 }
