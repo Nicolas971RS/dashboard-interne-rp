@@ -2578,7 +2578,7 @@ function renderPreparations(){
   // File d'attente réelle : tout BL/session pas encore pris en charge, tous types confondus
   let pending=all.filter(s=>f(s,'Statut')==='BL Émis');
   if(fV!=='all')pending=pending.filter(s=>f(s,'Vendeur_Emetteur')===fV);
-  if(fT!=='all')pending=pending.filter(s=>f(s,'Type_Operation')===fT);
+  if(fT!=='all')pending=pending.filter(s=>(f(s,'Type_Operation')||'').toLowerCase()===fT.toLowerCase());
   if(q)pending=pending.filter(s=>{
     const bl=(f(s,'Numero_BL')||'').toLowerCase();
     const cl=(f(s,'Client')||'').toLowerCase();
@@ -2614,7 +2614,7 @@ function renderPreparations(){
       const jours=daysSince(f(s,'Date_Emission'));
       const urgent=jours>2;
       const type=f(s,'Type_Operation')||'—';
-      const isLiv=type==='Livraison client';
+      const isLiv=type.toLowerCase()==='livraison client';
       const prep=isPrep(s);
       return`<tr${urgent?' style="background:rgba(220,38,38,.06)"':''}>
         <td class="ref">${f(s,'Numero_BL')||'—'}</td>
