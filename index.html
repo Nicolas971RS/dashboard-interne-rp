@@ -753,6 +753,12 @@
           </table></div>
         </div>
       </div>
+
+      <div class="sd" style="margin-top:18px"><h2>✂️ Livraisons partielles — suivi des reports</h2><div class="sd-line"></div></div>
+      <div class="tc"><table>
+        <thead><tr><th>BL d'origine</th><th>Étape</th><th>Client</th><th>Statut</th><th>Scanné / Écarts</th><th>Date</th></tr></thead>
+        <tbody id="prep-partielles-body"><tr class="empty-row"><td colspan="6">Chargement...</td></tr></tbody>
+      </table></div>
     </div>
 
     <!-- DEMANDES BC -->
@@ -1163,7 +1169,7 @@ async function loadAll(){
       spFetch('sites/BondeCommande','Cathalogue_Produits','$select=ID,Title,field_1,field_3,field_4,field_7&$top=2000'),
       // Sessions_Scan — portail scan BL (préparations, livraisons, inventaires)
       spFetch('sites/BondeCommande','Sessions_Scan',
-        '$select=ID,Title,Numero_BL,Client,Type_Operation,Vendeur_Emetteur,Magasinier,Date_Emission,Date_Scan,Statut,Nb_Articles_Scannes,Nb_Ecarts,Preparation_Avance&$orderby=ID desc&$top=2000')
+        '$select=ID,Title,Numero_BL,Client,Type_Operation,Vendeur_Emetteur,Magasinier,Date_Emission,Date_Scan,Statut,Nb_Articles_Scannes,Nb_Ecarts,Preparation_Avance,BL_Racine&$orderby=ID desc&$top=2000')
     ]);
 
     // Injecter ProjetTitle dans chaque item suivi
@@ -2663,6 +2669,39 @@ function renderPreparations(){
       const moy=d.withDelai?d.totalH/d.withDelai:null;
       return`<tr><td>${m}</td><td style="text-align:center;font-weight:700">${d.count}</td><td style="text-align:center">${fmtDelai(moy)}</td></tr>`;
     }).join(''):'<tr class="empty-row"><td colspan="3">Aucune donnée</td></tr>';
+  }
+
+  // Livraisons partielles — sessions liées par BL_Racine, ou marquées Partiellement livrée
+  const isPartielleFamily=s=>{
+    const racine=f(s,'BL_Racine');
+    const statut=(f(s,'Statut')||'').toLowerCase();
+    return !!racine || statut==='partiellement livrée'||statut==='partiellement livree';
+  };
+  const famille=all.filter(isPartielleFamily);
+  const racines=[...new Set(famille.map(s=>f(s,'BL_Racine')||f(s,'Numero_BL')))];
+  const chaineComplete=[];
+  racines.forEach(rac=>{
+    const sessions=all.filter(s=>(f(s,'BL_Racine')||f(s,'Numero_BL'))===rac)
+      .sort((a,b)=>new Date(f(a,'Date_Emission'))-new Date(f(b,'Date_Emission')));
+    sessions.forEach(s=>chaineComplete.push({s,racine:rac}));
+  });
+  const bodyPart=document.getElementById('prep-partielles-body');
+  if(bodyPart){
+    bodyPart.innerHTML=chaineComplete.length?chaineComplete.map(({s,racine})=>{
+      const statut=f(s,'Statut')||'—';
+      const statutLow=statut.toLowerCase();
+      const tagClass=statutLow.includes('partiellement')?'a':(statutLow.includes('écart')||statutLow.includes('ecart'))?'r':(statutLow==='bl émis')?'g':'o';
+      const scanEc=(f(s,'Nb_Articles_Scannes')??'—')+' scannées · '+(f(s,'Nb_Ecarts')??0)+' écarts';
+      const dateAff=fmtDate(f(s,'Date_Scan')||f(s,'Date_Emission'));
+      return`<tr>
+        <td class="mono" style="font-size:11px">${racine}</td>
+        <td class="ref">${f(s,'Numero_BL')||'—'}</td>
+        <td class="cname">${f(s,'Client')||'—'}</td>
+        <td><span class="ctag ${tagClass}">${statut}</span></td>
+        <td style="font-size:12px">${scanEc}</td>
+        <td class="mono" style="font-size:11px">${dateAff}</td>
+      </tr>`;
+    }).join(''):'<tr class="empty-row"><td colspan="6">Aucune livraison partielle pour le moment</td></tr>';
   }
 }
 
