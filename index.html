@@ -719,10 +719,15 @@
         <div class="kc b"><div class="kl">⏱ Délai moyen de prise en charge</div><div class="kv" id="kpi-prep-delai">—</div><div class="ks">Émission → début du scan</div></div>
       </div>
 
-      <div class="sh">
-        <div class="st">📦 Filtres</div>
-        <div class="fb">
-          <input class="fs" type="text" id="search-prep" placeholder="🔍 N° BL, client..." oninput="renderPreparations()" style="min-width:200px">
+      <div style="background:var(--navy);border-radius:var(--radius);padding:14px 18px;margin-bottom:14px">
+        <div style="display:flex;align-items:center;gap:12px;margin-bottom:10px">
+          <span style="font-size:20px">🔍</span>
+          <input type="text" id="search-prep" placeholder="Recherche rapide — N° BL, client..."
+            style="flex:1;background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.2);border-radius:var(--radius-sm);padding:9px 14px;font-size:13.5px;color:white;font-family:var(--font-body);outline:none"
+            oninput="renderPreparations()">
+          <button class="btn" style="border-color:rgba(255,255,255,.3);color:rgba(255,255,255,.7);background:none;white-space:nowrap" onclick="document.getElementById('search-prep').value='';renderPreparations()">✕ Effacer</button>
+        </div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:2px">
           <select class="fs" id="filter-vendeur-prep" onchange="renderPreparations()"><option value="all">Tous les vendeurs</option></select>
           <select class="fs" id="filter-type-prep" onchange="renderPreparations()">
             <option value="all">Tous les types</option>
@@ -735,6 +740,26 @@
       <div class="tc"><table>
         <thead><tr><th>N° BL</th><th>Client</th><th>Type</th><th>Vendeur</th><th>Émis le</th><th>En attente depuis</th><th>Préparation</th></tr></thead>
         <tbody id="prep-attente-body"><tr class="empty-row"><td colspan="7">Chargement...</td></tr></tbody>
+      </table></div>
+
+      <div class="sd" style="margin-top:18px"><h2>✅ BL livrés récemment</h2><span class="site-tag rp">Cliquer une ligne pour voir les articles</span><div class="sd-line"></div></div>
+      <div style="background:var(--navy);border-radius:var(--radius);padding:14px 18px;margin-bottom:14px">
+        <div style="display:flex;align-items:center;gap:12px;margin-bottom:10px">
+          <span style="font-size:20px">🔍</span>
+          <input type="text" id="search-livres" placeholder="Recherche rapide — N° BL, client..."
+            style="flex:1;background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.2);border-radius:var(--radius-sm);padding:9px 14px;font-size:13.5px;color:white;font-family:var(--font-body);outline:none"
+            oninput="renderLivres()">
+          <button class="btn" style="border-color:rgba(255,255,255,.3);color:rgba(255,255,255,.7);background:none;white-space:nowrap" onclick="document.getElementById('search-livres').value='';renderLivres()">✕ Effacer</button>
+        </div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:2px">
+          <select class="fs" id="filter-vendeur-livres" onchange="renderLivres()"><option value="all">Tous les vendeurs</option></select>
+          <select class="fs" id="filter-statut-livres" onchange="renderLivres()"><option value="all">Tous les statuts</option></select>
+          <span id="livres-count-label" style="font-size:11px;color:rgba(255,255,255,.5)"></span>
+        </div>
+      </div>
+      <div class="tc"><table>
+        <thead><tr><th>N° BL</th><th>Client</th><th>Type</th><th>Vendeur</th><th>Livré le</th><th>Statut</th><th>Articles</th></tr></thead>
+        <tbody id="prep-livres-body"><tr class="empty-row"><td colspan="7">Chargement...</td></tr></tbody>
       </table></div>
 
       <div class="kpi-row c2" style="margin-top:18px">
@@ -1159,7 +1184,7 @@ async function fetchProjetTitles(){
 async function loadAll(){
   setLoading(true);hideError();
   try{
-    const [suivi,projTitles,lignes,dbc,devis,clients,chantiers,catalogue,sessionsScan]=await Promise.all([
+    const [suivi,projTitles,lignes,dbc,devis,clients,chantiers,catalogue,sessionsScan,lignesScan]=await Promise.all([
       // Suivi_BC: $select=*
       spFetch('sites/RseauxPlus','Suivi_BC','$select=*,Editor/Title&$expand=Editor&$orderby=ID desc'),
       // Projet lookup titles — appel séparé compatible expand
@@ -1180,7 +1205,10 @@ async function loadAll(){
       spFetch('sites/BondeCommande','Cathalogue_Produits','$select=ID,Title,field_1,field_3,field_4,field_7&$top=2000'),
       // Sessions_Scan — portail scan BL (préparations, livraisons, inventaires)
       spFetch('sites/BondeCommande','Sessions_Scan',
-        '$select=ID,Title,Numero_BL,Client,Type_Operation,Vendeur_Emetteur,Magasinier,Date_Emission,Date_Scan,Statut,Nb_Articles_Scannes,Nb_Ecarts,Preparation_Avance,BL_Racine&$orderby=ID desc&$top=2000')
+        '$select=ID,Title,Numero_BL,Client,Type_Operation,Vendeur_Emetteur,Magasinier,Date_Emission,Date_Scan,Statut,Nb_Articles_Scannes,Nb_Ecarts,Preparation_Avance,BL_Racine&$orderby=ID desc&$top=2000'),
+      // Lignes_Scan — détail des articles scannés par session
+      spFetch('sites/BondeCommande','Lignes_Scan',
+        '$select=ID,Title,Session_ScanId,Session_Scan/Id,Reference_Article,Designation,Quantite_Attendue,Quantite_Scannee&$expand=Session_Scan&$orderby=ID asc&$top=5000')
     ]);
 
     // Injecter ProjetTitle dans chaque item suivi
@@ -1192,7 +1220,7 @@ async function loadAll(){
     const clientMap={};
     clients.forEach(c=>{if(c.ID&&c.Title)clientMap[c.ID]=c.Title;});
 
-    DATA={suivi,lignes,dbc,devis,clients:clientMap,chantiers:chantiers||[],catalogue:catalogue||[],sessionsScan:sessionsScan||[]};
+    DATA={suivi,lignes,dbc,devis,clients:clientMap,chantiers:chantiers||[],catalogue:catalogue||[],sessionsScan:sessionsScan||[],lignesScan:lignesScan||[]};
 
     // Debug: log first suivi item to help identify field names
     if(suivi.length>0){console.log('DEBUG Suivi_BC[0] keys:',Object.keys(suivi[0]).sort().join(', '));}
@@ -2638,8 +2666,8 @@ function renderPreparations(){
       const type=f(s,'Type_Operation')||'—';
       const isLiv=type.toLowerCase()==='livraison client';
       const prep=isPrep(s);
-      return`<tr${urgent?' style="background:rgba(220,38,38,.06)"':''}>
-        <td class="ref">${f(s,'Numero_BL')||'—'}</td>
+      return`<tr${urgent?' style="background:rgba(220,38,38,.06);cursor:pointer"':' style="cursor:pointer"'} onclick="openSessionPanel(${s.ID})">
+        <td class="ref" style="color:var(--blue)">${f(s,'Numero_BL')||'—'}</td>
         <td class="cname">${isLiv?(f(s,'Client')||'—'):'—'}</td>
         <td><span class="ctag ${isLiv?'o':'a'}">${type}</span></td>
         <td>${f(s,'Vendeur_Emetteur')||'—'}</td>
@@ -2710,6 +2738,25 @@ function renderPreparations(){
     selSt.innerHTML='<option value="all">Tous les statuts</option>'+statuts.map(c=>`<option value="${c}">${c}</option>`).join('');
     if([...selSt.options].some(o=>o.value===cur))selSt.value=cur;
   }
+  // BL livrés — peupler filtres puis déléguer
+  const isLivre=s=>{const st=(f(s,'Statut')||'').toLowerCase();return st==='terminée'||st==='terminee'||st==='partiellement livrée'||st==='partiellement livree'||st.includes('écart')||st.includes('ecart');};
+  const livres=all.filter(isLivre);
+  const selVL=document.getElementById('filter-vendeur-livres');
+  if(selVL){
+    const cur=selVL.value;
+    const vds=[...new Set(livres.map(s=>f(s,'Vendeur_Emetteur')).filter(Boolean))].sort();
+    selVL.innerHTML='<option value="all">Tous les vendeurs</option>'+vds.map(v=>`<option value="${v}">${v}</option>`).join('');
+    if([...selVL.options].some(o=>o.value===cur))selVL.value=cur;
+  }
+  const selSL=document.getElementById('filter-statut-livres');
+  if(selSL){
+    const cur=selSL.value;
+    const sts=[...new Set(livres.map(s=>f(s,'Statut')).filter(Boolean))].sort();
+    selSL.innerHTML='<option value="all">Tous les statuts</option>'+sts.map(v=>`<option value="${v}">${v}</option>`).join('');
+    if([...selSL.options].some(o=>o.value===cur))selSL.value=cur;
+  }
+  renderLivres();
+
   renderPartielles();
 }
 
@@ -2808,6 +2855,109 @@ function renderPartielles(){
       </table></div>
     </div>`;
   }).join('');
+}
+
+// Résout l'ID de session d'une ligne scannée (gère les variantes lookup)
+function lineSessionId(l){
+  if(l.Session_ScanId!=null)return l.Session_ScanId;
+  if(l.Session_Scan&&typeof l.Session_Scan==='object')return l.Session_Scan.Id!=null?l.Session_Scan.Id:l.Session_Scan.Value;
+  return l.Session_Scan;
+}
+
+function renderLivres(){
+  const all=DATA.sessionsScan||[];
+  const body=document.getElementById('prep-livres-body');
+  if(!body)return;
+  const isLivre=s=>{const st=(f(s,'Statut')||'').toLowerCase();return st==='terminée'||st==='terminee'||st==='partiellement livrée'||st==='partiellement livree'||st.includes('écart')||st.includes('ecart');};
+  let livres=all.filter(isLivre);
+
+  const q=(document.getElementById('search-livres')?.value||'').toLowerCase();
+  const fV=document.getElementById('filter-vendeur-livres')?.value||'all';
+  const fS=document.getElementById('filter-statut-livres')?.value||'all';
+  if(fV!=='all')livres=livres.filter(s=>f(s,'Vendeur_Emetteur')===fV);
+  if(fS!=='all')livres=livres.filter(s=>f(s,'Statut')===fS);
+  if(q)livres=livres.filter(s=>[f(s,'Numero_BL'),f(s,'Client')].some(v=>String(v||'').toLowerCase().includes(q)));
+
+  livres.sort((a,b)=>new Date(f(b,'Date_Scan')||f(b,'Date_Emission'))-new Date(f(a,'Date_Scan')||f(a,'Date_Emission')));
+
+  const lbl=document.getElementById('livres-count-label');
+  if(lbl)lbl.textContent=livres.length?livres.length+' BL livré'+(livres.length>1?'s':''):'';
+
+  const tag=statut=>{
+    const low=(statut||'').toLowerCase();
+    const cls=low.includes('partiellement')?'a':(low.includes('écart')||low.includes('ecart'))?'r':(low==='terminée'||low==='terminee')?'g':'o';
+    return `<span class="ctag ${cls}">${statut||'—'}</span>`;
+  };
+
+  body.innerHTML=livres.length?livres.map(s=>{
+    const type=f(s,'Type_Operation')||'—';
+    const isLiv=type.toLowerCase()==='livraison client';
+    const nbArt=f(s,'Nb_Articles_Scannes')??'—';
+    return`<tr style="cursor:pointer" onclick="openSessionPanel(${s.ID})">
+      <td class="ref" style="color:var(--blue)">${f(s,'Numero_BL')||'—'}</td>
+      <td class="cname">${isLiv?(f(s,'Client')||'—'):'—'}</td>
+      <td><span class="ctag ${isLiv?'o':'a'}">${type}</span></td>
+      <td>${f(s,'Vendeur_Emetteur')||'—'}</td>
+      <td class="mono" style="font-size:11px">${fmtDate(f(s,'Date_Scan')||f(s,'Date_Emission'))}</td>
+      <td>${tag(f(s,'Statut'))}</td>
+      <td style="text-align:center">${nbArt}</td>
+    </tr>`;
+  }).join(''):'<tr class="empty-row"><td colspan="7">Aucun BL livré pour le moment</td></tr>';
+}
+
+function openSessionPanel(id){
+  const all=DATA.sessionsScan||[];
+  const s=all.find(x=>x.ID===id);
+  if(!s){openPanel('Session','<div class="pspin">Session introuvable</div>');return;}
+
+  const type=f(s,'Type_Operation')||'—';
+  const isLiv=type.toLowerCase()==='livraison client';
+
+  // Lignes de cette session
+  const lignes=(DATA.lignesScan||[]).filter(l=>String(lineSessionId(l))===String(id));
+  const statut=f(s,'Statut')||'—';
+  const low=statut.toLowerCase();
+  const stCls=low.includes('partiellement')?'a':(low.includes('écart')||low.includes('ecart'))?'r':(low==='terminée'||low==='terminee'||low==='bl émis')?'g':'o';
+
+  const infoLine=(lib,val)=>`<div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--border-light)"><span style="color:var(--text-muted);font-size:12px">${lib}</span><span style="font-size:13px;font-weight:600">${val}</span></div>`;
+
+  let rows;
+  if(!lignes.length){
+    rows='<tr class="empty-row"><td colspan="4">Aucun article scanné sur cette session</td></tr>';
+  }else{
+    rows=lignes.map(l=>{
+      const att=Number(f(l,'Quantite_Attendue')||0);
+      const scan=Number(f(l,'Quantite_Scannee')||0);
+      const ecart=scan-att;
+      const ecartTxt=ecart===0?'<span class="ctag g">OK</span>':'<span class="ctag '+(ecart<0?'r':'o')+'">'+(ecart>0?'+':'')+ecart+'</span>';
+      return`<tr>
+        <td class="ref">${f(l,'Reference_Article')||'—'}</td>
+        <td style="font-size:12px">${f(l,'Designation')||'—'}</td>
+        <td style="text-align:center">${scan} / ${att}</td>
+        <td style="text-align:center">${ecartTxt}</td>
+      </tr>`;
+    }).join('');
+  }
+
+  const html=`
+    <div style="margin-bottom:16px">
+      ${infoLine('N° BL',f(s,'Numero_BL')||'—')}
+      ${isLiv?infoLine('Client',f(s,'Client')||'—'):''}
+      ${infoLine('Type',type)}
+      ${infoLine('Vendeur',f(s,'Vendeur_Emetteur')||'—')}
+      ${infoLine('Magasinier',f(s,'Magasinier')||'—')}
+      ${infoLine('Émis le',fmtDate(f(s,'Date_Emission')))}
+      ${infoLine('Scanné le',fmtDate(f(s,'Date_Scan')))}
+      ${infoLine('Statut','<span class="ctag '+stCls+'">'+statut+'</span>')}
+      ${f(s,'BL_Racine')?infoLine('BL d’origine',f(s,'BL_Racine')):''}
+    </div>
+    <div class="sd"><h2 style="font-size:14px">📋 Articles ${isLiv?'livrés':'inventoriés'}</h2><div class="sd-line"></div></div>
+    <div class="tc"><table>
+      <thead><tr><th>Référence</th><th>Désignation</th><th>Scanné / Attendu</th><th>Écart</th></tr></thead>
+      <tbody>${rows}</tbody>
+    </table></div>`;
+
+  openPanel('📦 '+(f(s,'Numero_BL')||'BL'),html);
 }
 
 function exportRALCSV(){
