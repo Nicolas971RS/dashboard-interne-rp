@@ -91,7 +91,7 @@
   .site-tag.bc{background:var(--blue-xlight);color:var(--navy-light);}
 
   /* ══ STATUS TAGS ══ */
-  .ctag{font-size:10px;font-weight:700;padding:2px 9px;border-radius:12px;color:white;letter-spacing:.02em;}
+  .ctag{font-size:10px;font-weight:700;padding:2px 9px;border-radius:12px;color:white;letter-spacing:.02em;white-space:nowrap;display:inline-block;}
   .ctag.g{background:var(--green);}
   .ctag.r{background:var(--red);}
   .ctag.a{background:var(--amber);}
@@ -755,10 +755,21 @@
       </div>
 
       <div class="sd" style="margin-top:18px"><h2>✂️ Livraisons partielles — suivi des reports</h2><div class="sd-line"></div></div>
-      <div class="tc"><table>
-        <thead><tr><th>BL d'origine</th><th>Étape</th><th>Client</th><th>Statut</th><th>Scanné / Écarts</th><th>Date</th></tr></thead>
-        <tbody id="prep-partielles-body"><tr class="empty-row"><td colspan="6">Chargement...</td></tr></tbody>
-      </table></div>
+      <div style="background:var(--navy);border-radius:var(--radius);padding:14px 18px;margin-bottom:14px">
+        <div style="display:flex;align-items:center;gap:12px;margin-bottom:10px">
+          <span style="font-size:20px">🔍</span>
+          <input type="text" id="search-part" placeholder="Recherche rapide — BL d'origine, BL, client..."
+            style="flex:1;background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.2);border-radius:var(--radius-sm);padding:9px 14px;font-size:13.5px;color:white;font-family:var(--font-body);outline:none"
+            oninput="renderPartielles()">
+          <button class="btn" style="border-color:rgba(255,255,255,.3);color:rgba(255,255,255,.7);background:none;white-space:nowrap" onclick="document.getElementById('search-part').value='';renderPartielles()">✕ Effacer</button>
+        </div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:2px">
+          <select id="filter-client-part" onchange="renderPartielles()" class="fs"><option value="all">Tous les clients</option></select>
+          <select id="filter-statut-part" onchange="renderPartielles()" class="fs"><option value="all">Tous les statuts</option></select>
+          <span id="part-count-label" style="font-size:11px;color:rgba(255,255,255,.5)"></span>
+        </div>
+      </div>
+      <div id="prep-partielles-body"><div class="empty-row" style="padding:14px">Chargement...</div></div>
     </div>
 
     <!-- DEMANDES BC -->
@@ -2606,7 +2617,12 @@ function renderPreparations(){
     },0);
     delaiMoyenH=totalH/traitees.length;
   }
-  const fmtDelai=h=>h===null?'—':(h<24?Math.round(h)+' h':(h/24).toFixed(1)+' j');
+  const fmtDelai=h=>{
+    if(h===null)return '—';
+    if(h<1)return Math.max(1,Math.round(h*60))+' min';
+    if(h<24)return (h<10?h.toFixed(1):Math.round(h))+' h';
+    return (h/24).toFixed(1)+' j';
+  };
 
   const setTxt=(id,v)=>{const el=document.getElementById(id);if(el)el.textContent=v;};
   setTxt('kpi-prep-attente',totalAttente.length);
@@ -2671,38 +2687,127 @@ function renderPreparations(){
     }).join(''):'<tr class="empty-row"><td colspan="3">Aucune donnée</td></tr>';
   }
 
-  // Livraisons partielles — sessions liées par BL_Racine, ou marquées Partiellement livrée
+  // Livraisons partielles — peupler les filtres puis déléguer le rendu
   const isPartielleFamily=s=>{
     const racine=f(s,'BL_Racine');
     const statut=(f(s,'Statut')||'').toLowerCase();
     return !!racine || statut==='partiellement livrée'||statut==='partiellement livree';
   };
-  const famille=all.filter(isPartielleFamily);
-  const racines=[...new Set(famille.map(s=>f(s,'BL_Racine')||f(s,'Numero_BL')))];
-  const chaineComplete=[];
-  racines.forEach(rac=>{
+  const familleInit=all.filter(isPartielleFamily);
+  const racinesInit=[...new Set(familleInit.map(s=>f(s,'BL_Racine')||f(s,'Numero_BL')))];
+  const sessionsFamille=all.filter(s=>racinesInit.includes(f(s,'BL_Racine')||f(s,'Numero_BL')));
+  const selCli=document.getElementById('filter-client-part');
+  if(selCli){
+    const cur=selCli.value;
+    const clients=[...new Set(sessionsFamille.map(s=>f(s,'Client')).filter(Boolean))].sort();
+    selCli.innerHTML='<option value="all">Tous les clients</option>'+clients.map(c=>`<option value="${c}">${c}</option>`).join('');
+    if([...selCli.options].some(o=>o.value===cur))selCli.value=cur;
+  }
+  const selSt=document.getElementById('filter-statut-part');
+  if(selSt){
+    const cur=selSt.value;
+    const statuts=[...new Set(sessionsFamille.map(s=>f(s,'Statut')).filter(Boolean))].sort();
+    selSt.innerHTML='<option value="all">Tous les statuts</option>'+statuts.map(c=>`<option value="${c}">${c}</option>`).join('');
+    if([...selSt.options].some(o=>o.value===cur))selSt.value=cur;
+  }
+  renderPartielles();
+}
+
+function renderPartielles(){
+  const all=DATA.sessionsScan||[];
+  const body=document.getElementById('prep-partielles-body');
+  if(!body)return;
+
+  const isPartielleFamily=s=>{
+    const racine=f(s,'BL_Racine');
+    const statut=(f(s,'Statut')||'').toLowerCase();
+    return !!racine || statut==='partiellement livrée'||statut==='partiellement livree';
+  };
+  const familleInit=all.filter(isPartielleFamily);
+  const racines=[...new Set(familleInit.map(s=>f(s,'BL_Racine')||f(s,'Numero_BL')))];
+
+  const q=(document.getElementById('search-part')?.value||'').toLowerCase();
+  const fC=document.getElementById('filter-client-part')?.value||'all';
+  const fS=document.getElementById('filter-statut-part')?.value||'all';
+
+  // Construire les groupes : une racine = un accordéon, ses sessions triées chronologiquement
+  let groupes=racines.map(rac=>{
     const sessions=all.filter(s=>(f(s,'BL_Racine')||f(s,'Numero_BL'))===rac)
       .sort((a,b)=>new Date(f(a,'Date_Emission'))-new Date(f(b,'Date_Emission')));
-    sessions.forEach(s=>chaineComplete.push({s,racine:rac}));
+    const client=f(sessions[0],'Client')||'—';
+    return {rac,sessions,client};
   });
-  const bodyPart=document.getElementById('prep-partielles-body');
-  if(bodyPart){
-    bodyPart.innerHTML=chaineComplete.length?chaineComplete.map(({s,racine})=>{
+
+  // Appliquer les filtres au niveau du groupe (un groupe reste si au moins une étape correspond)
+  groupes=groupes.filter(g=>{
+    if(fC!=='all'&&g.client!==fC)return false;
+    if(fS!=='all'&&!g.sessions.some(s=>f(s,'Statut')===fS))return false;
+    if(q){
+      const hit=g.sessions.some(s=>[g.rac,f(s,'Numero_BL'),f(s,'Client')]
+        .some(v=>String(v||'').toLowerCase().includes(q)));
+      if(!hit)return false;
+    }
+    return true;
+  });
+
+  // Plus récent en haut (date de la dernière étape de chaque groupe)
+  groupes.sort((a,b)=>{
+    const da=new Date(f(a.sessions[a.sessions.length-1],'Date_Emission'));
+    const db=new Date(f(b.sessions[b.sessions.length-1],'Date_Emission'));
+    return db-da;
+  });
+
+  const lbl=document.getElementById('part-count-label');
+  if(lbl)lbl.textContent=groupes.length?groupes.length+(groupes.length>1?' chaînes':' chaîne'):'';
+
+  if(!groupes.length){
+    body.innerHTML='<div class="empty-row" style="padding:14px">Aucune livraison partielle pour le moment</div>';
+    return;
+  }
+
+  const tag=statut=>{
+    const low=(statut||'').toLowerCase();
+    const cls=low.includes('partiellement')?'a':(low.includes('écart')||low.includes('ecart'))?'r':(low==='bl émis')?'g':(low==='terminée'||low==='terminee')?'g':'o';
+    return `<span class="ctag ${cls}">${statut||'—'}</span>`;
+  };
+
+  body.innerHTML=groupes.map((g,i)=>{
+    const accId='acc-part-'+i;
+    const nb=g.sessions.length;
+    // Statut de synthèse = statut de la dernière étape (l'état courant de la chaîne)
+    const statutCourant=f(g.sessions[g.sessions.length-1],'Statut')||'—';
+    const enCours=g.sessions.some(s=>{const st=(f(s,'Statut')||'').toLowerCase();return st==='bl émis'||st==='en cours de scan';});
+    const rows=g.sessions.map((s,idx)=>{
       const statut=f(s,'Statut')||'—';
-      const statutLow=statut.toLowerCase();
-      const tagClass=statutLow.includes('partiellement')?'a':(statutLow.includes('écart')||statutLow.includes('ecart'))?'r':(statutLow==='bl émis')?'g':'o';
+      const etape=idx===0?'Origine':'Report '+String.fromCharCode(64+idx);
       const scanEc=(f(s,'Nb_Articles_Scannes')??'—')+' scannées · '+(f(s,'Nb_Ecarts')??0)+' écarts';
       const dateAff=fmtDate(f(s,'Date_Scan')||f(s,'Date_Emission'));
       return`<tr>
-        <td class="mono" style="font-size:11px">${racine}</td>
+        <td style="font-size:11px;font-weight:700;color:var(--text-muted)">${etape}</td>
         <td class="ref">${f(s,'Numero_BL')||'—'}</td>
-        <td class="cname">${f(s,'Client')||'—'}</td>
-        <td><span class="ctag ${tagClass}">${statut}</span></td>
+        <td>${tag(statut)}</td>
         <td style="font-size:12px">${scanEc}</td>
         <td class="mono" style="font-size:11px">${dateAff}</td>
       </tr>`;
-    }).join(''):'<tr class="empty-row"><td colspan="6">Aucune livraison partielle pour le moment</td></tr>';
-  }
+    }).join('');
+    return`<div class="acc-hd" onclick="toggleAcc('${accId}',this)" style="margin-bottom:4px">
+      <div class="acc-hd-left">
+        <span class="acc-arrow">▼</span>
+        <div class="acc-hd-title">📦 ${g.rac}</div>
+        <div class="acc-hd-meta">
+          <span class="cname" style="font-size:11.5px">${g.client}</span>
+          <span class="ctag o">${nb} étape${nb>1?'s':''}</span>
+          ${enCours?'<span class="ctag a">en cours</span>':tag(statutCourant)}
+        </div>
+      </div>
+    </div>
+    <div class="acc-body" id="${accId}">
+      <div class="tc"><table>
+        <thead><tr><th>Étape</th><th>N° BL</th><th>Statut</th><th>Scanné / Écarts</th><th>Date</th></tr></thead>
+        <tbody>${rows}</tbody>
+      </table></div>
+    </div>`;
+  }).join('');
 }
 
 function exportRALCSV(){
