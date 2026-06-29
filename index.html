@@ -2929,7 +2929,10 @@ function openSessionPanel(id){
       const att=Number(f(l,'Quantite_Attendue')||0);
       const scan=Number(f(l,'Quantite_Scannee')||0);
       const ecart=scan-att;
-      const ecartTxt=ecart===0?'<span class="ctag g">OK</span>':'<span class="ctag '+(ecart<0?'r':'o')+'">'+(ecart>0?'+':'')+ecart+'</span>';
+      let ecartTxt;
+      if(ecart===0)ecartTxt='<span class="ctag g">Complet</span>';
+      else if(ecart<0)ecartTxt='<span class="ctag r">manque '+Math.abs(ecart)+'</span>';
+      else ecartTxt='<span class="ctag o">surplus '+ecart+'</span>';
       return`<tr>
         <td class="ref">${f(l,'Reference_Article')||'—'}</td>
         <td style="font-size:12px">${f(l,'Designation')||'—'}</td>
@@ -2953,7 +2956,7 @@ function openSessionPanel(id){
     </div>
     <div class="sd"><h2 style="font-size:14px">📋 Articles ${isLiv?'livrés':'inventoriés'}</h2><div class="sd-line"></div></div>
     <div class="tc"><table>
-      <thead><tr><th>Référence</th><th>Désignation</th><th>Scanné / Attendu</th><th>Écart</th></tr></thead>
+      <thead><tr><th>Référence</th><th>Désignation</th><th>${isLiv?'Livré / Prévu':'Scanné / Attendu'}</th><th>Écart</th></tr></thead>
       <tbody>${rows}</tbody>
     </table></div>`;
 
