@@ -244,6 +244,8 @@
   .modal-bd{padding:20px;display:flex;flex-direction:column;gap:12px;overflow-y:auto;}
   .modal-ft{display:flex;justify-content:flex-end;gap:8px;padding:13px 20px;border-top:1px solid var(--border-light);}
   .mbtn{padding:9px 20px;border-radius:var(--radius);font-size:12.5px;font-weight:600;cursor:pointer;font-family:var(--font-body);border:none;transition:opacity .15s;}
+  .em-type-btn{flex:1;padding:12px 8px;border:2px solid var(--border);background:white;border-radius:var(--radius-sm);font-size:12.5px;font-weight:600;color:var(--text-muted);cursor:pointer;font-family:var(--font-body);transition:all .15s;}
+  .em-type-btn.em-active{border-color:var(--blue);background:var(--blue-xlight);color:var(--blue);}
   .mbtn:disabled{opacity:.5;cursor:not-allowed;}
   .mbtn.cancel{background:#f0f3f8;color:var(--navy);}
   .mbtn.cancel:hover{background:#e4e9f2;}
@@ -709,6 +711,7 @@
       <div class="page-header">
         <div><h1>BL en attente & Préparations Scan</h1><div class="sub">/sites/BondeCommande · Sessions_Scan · Portail terrain</div></div>
         <div style="display:flex;gap:8px">
+          <button class="btn-refresh" style="background:var(--blue);color:white;border-color:var(--blue)" onclick="openEmissionBL()">➕ Nouveau BL à livrer</button>
           <button class="btn-refresh" onclick="loadAll()">🔄 Actualiser</button>
         </div>
       </div>
@@ -4347,6 +4350,124 @@ function setupAC(inputId,hiddenId,dropId,data){
   input.onfocus=()=>{if(input.value.length>=3)input.dispatchEvent(new Event('input'));};
 }
 
+// ── Émission d'un nouveau BL à livrer (depuis le dashboard) ──
+let _emissionType='Livraison client';
+
+function openEmissionBL(){
+  const vendeurs=['Nicolas','Fred','Fritz','Fabrice'];
+  const html=`
+    <div style="display:flex;flex-direction:column;gap:14px">
+      <div>
+        <label style="font-size:12px;font-weight:700;color:var(--text-muted);display:block;margin-bottom:6px">Type d'opération</label>
+        <div style="display:flex;gap:8px">
+          <button type="button" id="em-type-liv" class="em-type-btn em-active" onclick="setEmissionType('Livraison client')">📦 Livraison client</button>
+          <button type="button" id="em-type-inv" class="em-type-btn" onclick="setEmissionType('Inventaire physique')">📋 Inventaire physique</button>
+        </div>
+      </div>
+      <div>
+        <label style="font-size:12px;font-weight:700;color:var(--text-muted);display:block;margin-bottom:6px">N° de BL <span style="color:var(--red)">*</span></label>
+        <input type="text" id="em-numero" placeholder="Ex: 820950" oninput="checkEmissionDoublon()"
+          style="width:100%;padding:9px 12px;border:1px solid var(--border);border-radius:var(--radius-sm);font-size:13.5px;font-family:var(--font-body);box-sizing:border-box">
+        <div id="em-doublon-warn" style="font-size:11.5px;color:var(--red);margin-top:5px;display:none"></div>
+      </div>
+      <div id="em-field-client">
+        <label style="font-size:12px;font-weight:700;color:var(--text-muted);display:block;margin-bottom:6px">Client <span style="color:var(--red)">*</span> <span style="font-weight:400;color:var(--text-muted)">— tapez pour rechercher, ou saisissez un nouveau nom</span></label>
+        <div style="position:relative">
+          <input type="text" id="em-client-search" autocomplete="off" placeholder="Nom du client..."
+            style="width:100%;padding:9px 12px;border:1px solid var(--border);border-radius:var(--radius-sm);font-size:13.5px;font-family:var(--font-body);box-sizing:border-box">
+          <input type="hidden" id="em-client-id">
+          <div id="em-client-drop" style="position:absolute;top:100%;left:0;right:0;background:white;border:1px solid var(--border);border-radius:var(--radius-sm);box-shadow:0 4px 12px rgba(0,0,0,.1);z-index:50;display:none;max-height:200px;overflow-y:auto"></div>
+        </div>
+      </div>
+      <div>
+        <label style="font-size:12px;font-weight:700;color:var(--text-muted);display:block;margin-bottom:6px">Vendeur émetteur <span style="color:var(--red)">*</span></label>
+        <select id="em-vendeur" style="width:100%;padding:9px 12px;border:1px solid var(--border);border-radius:var(--radius-sm);font-size:13.5px;font-family:var(--font-body);box-sizing:border-box">
+          <option value="">— Choisir —</option>
+          ${vendeurs.map(v=>`<option value="${v}">${v}</option>`).join('')}
+        </select>
+      </div>
+      <div id="em-field-prep">
+        <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer">
+          <input type="checkbox" id="em-prep" style="width:16px;height:16px">
+          Préparation à l'avance (le magasinier prépare avant l'arrivée du client)
+        </label>
+      </div>
+    </div>`;
+
+  _emissionType='Livraison client';
+  openModal('➕ Nouveau BL à livrer',html,emettreBL);
+
+  // Autocomplete client avec saisie libre (setupAC laisse le texte tapé si rien n'est choisi)
+  setTimeout(()=>{
+    const clientData=Object.entries(DATA.clients||{}).map(([cid,cname])=>({id:cid,name:cname}));
+    setupAC('em-client-search','em-client-id','em-client-drop',clientData);
+  },60);
+}
+
+function setEmissionType(type){
+  _emissionType=type;
+  document.getElementById('em-type-liv').classList.toggle('em-active',type==='Livraison client');
+  document.getElementById('em-type-inv').classList.toggle('em-active',type==='Inventaire physique');
+  // Client + préparation masqués pour un inventaire
+  const isInv=type==='Inventaire physique';
+  document.getElementById('em-field-client').style.display=isInv?'none':'block';
+  document.getElementById('em-field-prep').style.display=isInv?'none':'block';
+}
+
+function checkEmissionDoublon(){
+  const num=document.getElementById('em-numero').value.trim();
+  const warn=document.getElementById('em-doublon-warn');
+  if(!num){warn.style.display='none';return;}
+  const existe=(DATA.sessionsScan||[]).find(s=>String(f(s,'Numero_BL')||'').trim().toLowerCase()===num.toLowerCase());
+  if(existe){
+    warn.textContent='⚠️ Ce N° de BL existe déjà (session « '+(f(existe,'Statut')||'?')+' »). Vérifiez avant d\'émettre.';
+    warn.style.display='block';
+  }else{
+    warn.style.display='none';
+  }
+}
+
+async function emettreBL(){
+  const msgEl=document.getElementById('modal-msg');
+  const numero=document.getElementById('em-numero').value.trim();
+  const isInv=_emissionType==='Inventaire physique';
+  const client=isInv?'':document.getElementById('em-client-search').value.trim();
+  const vendeur=document.getElementById('em-vendeur').value;
+  const prep=isInv?false:document.getElementById('em-prep').checked;
+
+  // Validation
+  if(!numero){throw new Error('Le N° de BL est obligatoire.');}
+  if(!vendeur){throw new Error('Le vendeur émetteur est obligatoire.');}
+  if(!isInv&&!client){throw new Error('Le client est obligatoire pour une livraison.');}
+
+  // Garde-fou anti-doublon — bloquant
+  const existe=(DATA.sessionsScan||[]).find(s=>String(f(s,'Numero_BL')||'').trim().toLowerCase()===numero.toLowerCase());
+  if(existe){
+    throw new Error('Le N° de BL « '+numero+' » existe déjà (session « '+(f(existe,'Statut')||'?')+' »). Choisissez un autre numéro.');
+  }
+
+  const titre=isInv?`${numero} - Inventaire`:`${numero} - ${client}`;
+  const payload={
+    Titre:titre,
+    Type_Operation:_emissionType,
+    Numero_BL:numero,
+    Client:client,
+    Vendeur_Emetteur:vendeur,
+    Date_Emission:new Date().toISOString().slice(0,10)+'T12:00:00Z',
+    Statut:'BL Émis',
+    Preparation_Avance:prep,
+    _token:SCAN_TOKEN
+  };
+
+  // Appel iso-portail : no-cors / text-plain (réponse opaque, on rafraîchit après)
+  await fetch(PA_FLOWS.emissionBL,{
+    method:'POST',
+    mode:'no-cors',
+    headers:{'Content-Type':'text/plain'},
+    body:JSON.stringify(payload)
+  });
+}
+
 // ────────────────────────────────────────────────────────────
 // ═══ SYSTÈME PANNEAU LATÉRAL ═══
 // ────────────────────────────────────────────────────────────
@@ -5336,7 +5457,9 @@ function openNouveauDBCModal(){
 }
 
 // ── URLs HTTP trigger des flows Power Automate (déclenchement direct via sig) ──
+const SCAN_TOKEN = 'rp2026scan';
 const PA_FLOWS = {
+  emissionBL:         'https://defaultd441528bbc7746368d248ac9d38aed.63.environment.api.powerplatform.com:443/powerautomate/automations/direct/workflows/0db017b2f2954242aed6ed1d44c8b66d/triggers/manual/paths/invoke?api-version=1&sp=%2Ftriggers%2Fmanual%2Frun&sv=1.0&sig=rOol4RrtpshNenaL3TxQuib5rCHvd9FvkynRWWcAXiU',
   envoyerDevis:       'https://defaultd441528bbc7746368d248ac9d38aed.63.environment.api.powerplatform.com:443/powerautomate/automations/direct/workflows/41c98ae2c6964b1b87f5cfa75cb46776/triggers/manual/paths/invoke?api-version=1&sp=%2Ftriggers%2Fmanual%2Frun&sv=1.0&sig=1S-A55JhnRiF4McOqSKBXJwfDPacLRlNNSt072hwZ9Y',
   livraisonPartielle: 'https://defaultd441528bbc7746368d248ac9d38aed.63.environment.api.powerplatform.com:443/powerautomate/automations/direct/workflows/5150617ef47e450085a2c9adaefd54a0/triggers/manual/paths/invoke?api-version=1&sp=%2Ftriggers%2Fmanual%2Frun&sv=1.0&sig=3ahWz9NDUmjJcU9nBr8Whir2g4fjQIZl2ac0NoZiLqA',
   envoyerBC:          'https://defaultd441528bbc7746368d248ac9d38aed.63.environment.api.powerplatform.com:443/powerautomate/automations/direct/workflows/59f86f49474a4739ba5563104919af7b/triggers/manual/paths/invoke?api-version=1' // ⚠️ URL tronquée — &sp=&sv=&sig= manquants
