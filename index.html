@@ -716,9 +716,9 @@
         </div>
       </div>
       <div class="kpi-row c4">
-        <div class="kc a"><div class="kl">⏳ BL en attente de prise en charge</div><div class="kv" id="kpi-prep-attente">—</div><div class="ks">Tous types confondus</div></div>
-        <div class="kc o"><div class="kl">📋 Dont préparations à l'avance</div><div class="kv" id="kpi-prep-aprep">—</div><div class="ks">Confiées sans urgence</div></div>
-        <div class="kc r"><div class="kl">⚠️ En attente +2 jours</div><div class="kv" id="kpi-prep-retard">—</div><div class="ks">À relancer auprès du magasinier</div></div>
+        <div class="kc a"><div class="kl">⏳ En attente de prise en charge</div><div class="kv" id="kpi-prep-attente">—</div><div class="ks">Personne ne l'a encore pris</div></div>
+        <div class="kc t"><div class="kl">🔧 En cours de préparation</div><div class="kv" id="kpi-prep-encours">—</div><div class="ks">Pris en charge, scan en cours</div></div>
+        <div class="kc r" id="kc-prep-retard" style="cursor:pointer" onclick="togglePrepRetard()"><div class="kl">⚠️ En retard +2 jours</div><div class="kv" id="kpi-prep-retard">—</div><div class="ks" id="ks-prep-retard">Cliquer pour filtrer la liste</div></div>
         <div class="kc b"><div class="kl">⏱ Délai moyen de prise en charge</div><div class="kv" id="kpi-prep-delai">—</div><div class="ks">Émission → début du scan</div></div>
       </div>
 
@@ -739,6 +739,8 @@
           </select>
         </div>
       </div>
+
+      <div id="prep-search-result" style="display:none;margin-bottom:14px"></div>
 
       <div class="tc"><table>
         <thead><tr><th>N° BL</th><th>Client</th><th>Type</th><th>Vendeur</th><th>Émis le</th><th>En attente depuis</th><th>Préparation</th></tr></thead>
@@ -765,24 +767,27 @@
         <tbody id="prep-livres-body"><tr class="empty-row"><td colspan="7">Chargement...</td></tr></tbody>
       </table></div>
 
-      <div class="kpi-row c2" style="margin-top:18px">
-        <div>
-          <div class="sd"><h2>👤 Par vendeur — volume confié</h2><div class="sd-line"></div></div>
-          <div class="tc"><table>
-            <thead><tr><th>Vendeur</th><th>Confiées</th><th>En attente</th><th>Traitées</th></tr></thead>
-            <tbody id="prep-vendeur-body"><tr class="empty-row"><td colspan="4">Chargement...</td></tr></tbody>
-          </table></div>
+      <details style="margin-top:18px;background:var(--surface);border:1px solid var(--border-light);border-radius:var(--radius);padding:4px 14px">
+        <summary style="cursor:pointer;font-weight:700;font-size:14px;color:var(--text-secondary);padding:10px 0;list-style:none">📊 Pilotage — volume par vendeur &amp; par magasinier <span style="font-weight:400;font-size:12px;color:var(--text-muted)">(cliquer pour ouvrir)</span></summary>
+        <div class="kpi-row c2" style="margin-top:4px;margin-bottom:10px">
+          <div>
+            <div class="sd"><h2>👤 Par vendeur — volume confié</h2><div class="sd-line"></div></div>
+            <div class="tc"><table>
+              <thead><tr><th>Vendeur</th><th>Confiées</th><th>En attente</th><th>Traitées</th></tr></thead>
+              <tbody id="prep-vendeur-body"><tr class="empty-row"><td colspan="4">Chargement...</td></tr></tbody>
+            </table></div>
+          </div>
+          <div>
+            <div class="sd"><h2>🧰 Par magasinier — volume et délai de traitement</h2><div class="sd-line"></div></div>
+            <div class="tc"><table>
+              <thead><tr><th>Magasinier</th><th>Traitées</th><th>Délai moyen</th></tr></thead>
+              <tbody id="prep-magasinier-body"><tr class="empty-row"><td colspan="3">Chargement...</td></tr></tbody>
+            </table></div>
+          </div>
         </div>
-        <div>
-          <div class="sd"><h2>🧰 Par magasinier — volume et délai de traitement</h2><div class="sd-line"></div></div>
-          <div class="tc"><table>
-            <thead><tr><th>Magasinier</th><th>Traitées</th><th>Délai moyen</th></tr></thead>
-            <tbody id="prep-magasinier-body"><tr class="empty-row"><td colspan="3">Chargement...</td></tr></tbody>
-          </table></div>
-        </div>
-      </div>
+      </details>
 
-      <div class="sd" style="margin-top:18px"><h2>✂️ Livraisons partielles — suivi des reports</h2><div class="sd-line"></div></div>
+      <div class="sd" style="margin-top:18px"><h2>✂️ Livraisons partielles de BL — suivi des reports</h2><span class="site-tag rp">Reports de bons de livraison (distinct de l'onglet Livraisons Partielles = BC)</span><div class="sd-line"></div></div>
       <div style="background:var(--navy);border-radius:var(--radius);padding:14px 18px;margin-bottom:14px">
         <div style="display:flex;align-items:center;gap:12px;margin-bottom:10px">
           <span style="font-size:20px">🔍</span>
@@ -1161,6 +1166,13 @@ const TODAY=new Date();TODAY.setHours(0,0,0,0);
 const daysSince=d=>{if(!d)return 0;const dt=new Date(d);dt.setHours(0,0,0,0);return Math.floor((TODAY-dt)/86400000);};
 const daysLate=d=>{if(!d)return -999;const dt=new Date(d);dt.setHours(0,0,0,0);return Math.floor((TODAY-dt)/86400000);};
 const fmtDate=d=>{if(!d)return '—';try{return new Date(d).toLocaleDateString('fr-FR');}catch(e){return '—';}};
+// ══ Bascule process scan ══ Tant que null : on compte tout (comportement actuel).
+// Le jour du passage en production, mettre 'AAAA-MM-JJ' (ex: '2026-07-15') :
+// les BL émis AVANT cette date sortent des compteurs et de la file d'attente Préparations Scan.
+const DATE_DEBUT_PROCESS=null;
+const afterCutoff=d=>{if(!DATE_DEBUT_PROCESS)return true;if(!d)return true;return new Date(d)>=new Date(DATE_DEBUT_PROCESS+'T00:00:00');};
+let prepShowRetardOnly=false;
+function togglePrepRetard(){prepShowRetardOnly=!prepShowRetardOnly;renderPreparations();}
 const fmtMoney=v=>{if(!v&&v!==0)return '—';return Number(v).toLocaleString('fr-FR',{minimumFractionDigits:2,maximumFractionDigits:2})+' €';};
 const urgFromDays=days=>{
   if(days>10)return{cls:'cr',lbl:'🚨 Critique +10j',row:'rc'};
@@ -2650,8 +2662,90 @@ function renderPreparations(){
     vendeurs.forEach(v=>{const o=document.createElement('option');o.value=v;o.textContent=v;selV.appendChild(o);});
   }
 
-  // File d'attente réelle : tout BL/session pas encore pris en charge, tous types confondus
-  let pending=all.filter(s=>f(s,'Statut')==='BL Émis');
+  // ── Classification des statuts scan ──
+  const isPending=s=>f(s,'Statut')==='BL Émis';
+  const isFinal=s=>{const st=(f(s,'Statut')||'').toLowerCase();return st==='terminée'||st==='terminee'||st==='partiellement livrée'||st==='partiellement livree'||st.includes('écart')||st.includes('ecart');};
+  const isEnCours=s=>!isPending(s)&&!isFinal(s); // pris en charge, scan en cours
+
+  const fmtDelai=h=>{
+    if(h===null)return '—';
+    if(h<1)return Math.max(1,Math.round(h*60))+' min';
+    if(h<24)return (h<10?h.toFixed(1):Math.round(h))+' h';
+    return (h/24).toFixed(1)+' j';
+  };
+  // Pastille d'attente graduée : gris <2j, orange 2–4j, rouge >4j
+  const delaiPill=j=>{
+    if(j>4)return '<span class="ctag r">'+j+' j</span>';
+    if(j>=2)return '<span class="ctag o">'+j+' j</span>';
+    return '<span style="color:var(--text-muted);font-size:11px">'+j+' j</span>';
+  };
+
+  // ── Carte résultat recherche comptoir : cherche sur TOUT l'historique scan ──
+  const searchEl=document.getElementById('prep-search-result');
+  if(searchEl){
+    if(q){
+      const matches=all.filter(s=>{
+        const bl=(f(s,'Numero_BL')||'').toLowerCase();
+        const cl=(f(s,'Client')||'').toLowerCase();
+        return bl.includes(q)||cl.includes(q);
+      }).sort((a,b)=>new Date(f(b,'Date_Emission'))-new Date(f(a,'Date_Emission'))).slice(0,6);
+      if(matches.length){
+        searchEl.style.display='';
+        searchEl.innerHTML='<div style="font-size:11px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px">Résultat — où en est ce BL ?</div>'+matches.map(s=>{
+          const st=f(s,'Statut')||'—';const low=st.toLowerCase();
+          const cls=low==='bl émis'?'o':low.includes('partiellement')?'a':(low.includes('écart')||low.includes('ecart'))?'r':(low==='terminée'||low==='terminee')?'g':'b';
+          const jours=daysSince(f(s,'Date_Emission'));
+          const mag=f(s,'Magasinier');
+          const ligne2=isPending(s)
+            ? ('⏳ Pas encore pris en charge · en attente depuis '+jours+' j')
+            : (isFinal(s)
+                ? ('✅ Livré le '+fmtDate(f(s,'Date_Scan')||f(s,'Date_Emission'))+(mag?' · par '+mag:''))
+                : ('🔧 En préparation'+(mag?' par '+mag:'')));
+          return '<div onclick="openSessionPanel('+s.ID+')" style="cursor:pointer;background:var(--surface);border:1px solid var(--border);border-left:4px solid var(--blue);border-radius:var(--radius);padding:12px 16px;margin-bottom:8px;display:flex;justify-content:space-between;align-items:center;gap:12px">'
+            +'<div><div style="font-size:16px;font-weight:800;color:var(--blue)">'+(f(s,'Numero_BL')||'—')+' <span style="font-weight:600;color:var(--text-secondary);font-size:13px">· '+(f(s,'Client')||'—')+'</span></div>'
+            +'<div style="font-size:12px;color:var(--text-secondary);margin-top:3px">'+ligne2+'</div></div>'
+            +'<span class="ctag '+cls+'">'+st+'</span></div>';
+        }).join('');
+      }else{
+        searchEl.style.display='';
+        searchEl.innerHTML='<div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:14px 16px;font-size:13px;color:var(--text-muted)">Aucun BL trouvé pour « '+q+' »</div>';
+      }
+    }else{
+      searchEl.style.display='none';searchEl.innerHTML='';
+    }
+  }
+
+  // ── KPI (respectent la bascule DATE_DEBUT_PROCESS) ──
+  const totalAttente=all.filter(s=>isPending(s)&&afterCutoff(f(s,'Date_Emission')));
+  const enCours=all.filter(s=>isEnCours(s)&&afterCutoff(f(s,'Date_Emission')));
+  const retard=totalAttente.filter(s=>daysSince(f(s,'Date_Emission'))>2);
+
+  // Délai moyen de prise en charge — sessions traitées, hors legacy pré-process
+  const traitees=all.filter(s=>!isPending(s)&&f(s,'Date_Scan')&&afterCutoff(f(s,'Date_Emission')));
+  let delaiMoyenH=null;
+  if(traitees.length){
+    const totalH=traitees.reduce((sum,s)=>{
+      const d1=new Date(f(s,'Date_Emission')),d2=new Date(f(s,'Date_Scan'));
+      return sum+Math.max(0,(d2-d1)/3600000);
+    },0);
+    delaiMoyenH=totalH/traitees.length;
+  }
+
+  const setTxt=(id,v)=>{const el=document.getElementById(id);if(el)el.textContent=v;};
+  setTxt('kpi-prep-attente',totalAttente.length);
+  setTxt('kpi-prep-encours',enCours.length);
+  setTxt('kpi-prep-retard',retard.length);
+  setTxt('kpi-prep-delai',fmtDelai(delaiMoyenH));
+
+  // État visuel du KPI retard cliquable
+  const rc=document.getElementById('kc-prep-retard');
+  if(rc)rc.style.outline=prepShowRetardOnly?'2px solid var(--red)':'none';
+  const rks=document.getElementById('ks-prep-retard');
+  if(rks)rks.textContent=prepShowRetardOnly?'✕ Filtre actif — cliquer pour tout revoir':'Cliquer pour filtrer la liste';
+
+  // ── File d'attente (tableau opérationnel) ──
+  let pending=all.filter(s=>isPending(s)&&afterCutoff(f(s,'Date_Emission')));
+  if(prepShowRetardOnly)pending=pending.filter(s=>daysSince(f(s,'Date_Emission'))>2);
   if(fV!=='all')pending=pending.filter(s=>f(s,'Vendeur_Emetteur')===fV);
   if(fT!=='all')pending=pending.filter(s=>(f(s,'Type_Operation')||'').toLowerCase()===fT.toLowerCase());
   if(q)pending=pending.filter(s=>{
@@ -2661,51 +2755,24 @@ function renderPreparations(){
   });
   pending.sort((a,b)=>new Date(f(a,'Date_Emission'))-new Date(f(b,'Date_Emission')));
 
-  const totalAttente=all.filter(s=>f(s,'Statut')==='BL Émis');
-  const aPreparer=totalAttente.filter(isPrep);
-  const retard=totalAttente.filter(s=>daysSince(f(s,'Date_Emission'))>2);
-
-  // Délai moyen de prise en charge — sur l'ensemble des sessions déjà traitées, tous types/statuts confondus
-  const traitees=all.filter(s=>f(s,'Statut')!=='BL Émis'&&f(s,'Date_Scan'));
-  let delaiMoyenH=null;
-  if(traitees.length){
-    const totalH=traitees.reduce((sum,s)=>{
-      const d1=new Date(f(s,'Date_Emission')),d2=new Date(f(s,'Date_Scan'));
-      return sum+Math.max(0,(d2-d1)/3600000);
-    },0);
-    delaiMoyenH=totalH/traitees.length;
-  }
-  const fmtDelai=h=>{
-    if(h===null)return '—';
-    if(h<1)return Math.max(1,Math.round(h*60))+' min';
-    if(h<24)return (h<10?h.toFixed(1):Math.round(h))+' h';
-    return (h/24).toFixed(1)+' j';
-  };
-
-  const setTxt=(id,v)=>{const el=document.getElementById(id);if(el)el.textContent=v;};
-  setTxt('kpi-prep-attente',totalAttente.length);
-  setTxt('kpi-prep-aprep',aPreparer.length);
-  setTxt('kpi-prep-retard',retard.length);
-  setTxt('kpi-prep-delai',fmtDelai(delaiMoyenH));
-
   const body=document.getElementById('prep-attente-body');
   if(body){
     body.innerHTML=pending.length?pending.map(s=>{
       const jours=daysSince(f(s,'Date_Emission'));
-      const urgent=jours>2;
+      const rowBg=jours>4?'background:rgba(198,40,40,.06);':(jours>=2?'background:rgba(191,54,12,.05);':'');
       const type=f(s,'Type_Operation')||'—';
       const isLiv=type.toLowerCase()==='livraison client';
       const prep=isPrep(s);
-      return`<tr${urgent?' style="background:rgba(220,38,38,.06);cursor:pointer"':' style="cursor:pointer"'} onclick="openSessionPanel(${s.ID})">
+      return`<tr style="${rowBg}cursor:pointer" onclick="openSessionPanel(${s.ID})">
         <td class="ref" style="color:var(--blue)">${f(s,'Numero_BL')||'—'}</td>
         <td class="cname">${isLiv?(f(s,'Client')||'—'):'—'}</td>
         <td><span class="ctag ${isLiv?'o':'a'}">${type}</span></td>
         <td>${f(s,'Vendeur_Emetteur')||'—'}</td>
         <td class="mono" style="font-size:11px">${fmtDate(f(s,'Date_Emission'))}</td>
-        <td>${urgent?'<span class="ctag r">'+jours+' j</span>':jours+' j'}</td>
+        <td>${delaiPill(jours)}</td>
         <td>${prep?'<span class="ctag o">À préparer</span>':'<span style="color:var(--text-muted);font-size:11px">Standard</span>'}</td>
       </tr>`;
-    }).join(''):'<tr class="empty-row"><td colspan="7">✅ Aucun BL en attente</td></tr>';
+    }).join(''):('<tr class="empty-row"><td colspan="7">'+(prepShowRetardOnly?'✅ Aucun BL en retard':'✅ Aucun BL en attente')+'</td></tr>');
   }
 
   // Par vendeur — volume confié (tous types, tous statuts)
@@ -3041,7 +3108,7 @@ function updateBadges(){
   document.getElementById('badge-devis').textContent=dc>0?dc+' actifs':'';
   const badgeRal=document.getElementById('badge-ral');
   if(badgeRal)badgeRal.textContent=ralCount>0?ralCount:'';
-  const prepCount=(DATA.sessionsScan||[]).filter(s=>f(s,'Statut')==='BL Émis').length;
+  const prepCount=(DATA.sessionsScan||[]).filter(s=>f(s,'Statut')==='BL Émis'&&afterCutoff(f(s,'Date_Emission'))).length;
   const badgePrep=document.getElementById('badge-prepscan');
   if(badgePrep)badgePrep.textContent=prepCount>0?prepCount+' en attente':'';
 }
