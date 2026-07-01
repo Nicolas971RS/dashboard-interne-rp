@@ -1205,7 +1205,7 @@ async function loadAll(){
       // Chantiers — pour vérification doublon à la création
       spFetch('sites/RseauxPlus','Chantiers','$select=ID,Title&$top=500'),
       // Cathalogue_Produits — pour autocomplete ajout ligne article
-      spFetch('sites/BondeCommande','Cathalogue_Produits','$select=ID,Title,field_1,field_3,field_4,field_7&$top=2000'),
+      spFetch('sites/BondeCommande','Cathalogue_Produits','$select=ID,Title,field_1,field_3,field_4,field_7'),
       // Sessions_Scan — portail scan BL (préparations, livraisons, inventaires)
       spFetch('sites/BondeCommande','Sessions_Scan',
         '$select=ID,Title,Numero_BL,Client,Type_Operation,Vendeur_Emetteur,Magasinier,Date_Emission,Date_Scan,Statut,Nb_Articles_Scannes,Nb_Ecarts,Preparation_Avance,BL_Racine&$orderby=ID desc&$top=2000'),
