@@ -1104,6 +1104,33 @@ async function spFetch(site,list,qs){
   return items;
 }
 
+// ── Chargement catalogue avec pagination robuste par ID ──
+// SharePoint plafonne à 2000 et n'émet pas de @odata.nextLink dès qu'un $top explicite
+// est posé. On pagine donc manuellement : tranche de 2000 filtrée sur ID > dernier ID reçu,
+// trié par ID croissant, jusqu'à ce qu'une tranche revienne avec moins de 2000 items.
+// ID est la colonne indexée native → pas de risque de seuil de vue (5000).
+async function chargerCatalogue(){
+  let all=[];
+  let lastId=0;
+  let guard=0;
+  while(guard<50){ // garde-fou : 50 tranches = 100 000 items max
+    const qs=`$select=ID,Title,field_1,field_3,field_4,field_7&$filter=ID gt ${lastId}&$orderby=ID asc&$top=2000`;
+    const url=`${C.spRoot}/sites/BondeCommande/_api/web/lists/getbytitle('Cathalogue_Produits')/items?${qs}`;
+    const r=await fetch(url,{headers:{'Authorization':`Bearer ${getToken()}`,'Accept':'application/json;odata=nometadata'}});
+    if(r.status===401){sessionStorage.clear();location.reload();throw new Error('401');}
+    if(!r.ok){const t=await r.text().catch(()=>'');throw new Error(`Catalogue: ${r.status} — ${t.substring(0,200)}`);}
+    const d=await r.json();
+    const batch=d.value||[];
+    if(!batch.length)break;
+    all=all.concat(batch);
+    lastId=batch[batch.length-1].ID;
+    if(batch.length<2000)break; // dernière tranche
+    guard++;
+  }
+  if(guard>=50)console.warn('[chargerCatalogue] garde-fou atteint (50 tranches) — catalogue potentiellement incomplet.');
+  return all;
+}
+
 // ═══ FIELD HELPERS ═══
 // Dynamic scan — finds first key containing keyword (case-insensitive)
 function scanField(item, keyword) {
@@ -1204,8 +1231,8 @@ async function loadAll(){
       spFetch('sites/RseauxPlus','Base_Clients','$select=ID,Title'),
       // Chantiers — pour vérification doublon à la création
       spFetch('sites/RseauxPlus','Chantiers','$select=ID,Title&$top=500'),
-      // Cathalogue_Produits — pour autocomplete ajout ligne article
-      spFetch('sites/BondeCommande','Cathalogue_Produits','$select=ID,Title,field_1,field_3,field_4,field_7'),
+      // Cathalogue_Produits — pour autocomplete ajout ligne article (pagination par ID)
+      chargerCatalogue(),
       // Sessions_Scan — portail scan BL (préparations, livraisons, inventaires)
       spFetch('sites/BondeCommande','Sessions_Scan',
         '$select=ID,Title,Numero_BL,Client,Type_Operation,Vendeur_Emetteur,Magasinier,Date_Emission,Date_Scan,Statut,Nb_Articles_Scannes,Nb_Ecarts,Preparation_Avance,BL_Racine&$orderby=ID desc&$top=2000'),
