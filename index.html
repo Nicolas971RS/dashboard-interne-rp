@@ -2054,6 +2054,28 @@ function showRappelFacturation(){
   setTimeout(()=>document.getElementById('rf-'+ordre[0].ID)?.focus(),150);
 }
 
+// Supprimer une pièce jointe individuelle (logo, garbage) sans toucher au BC
+async function supprimerPJ(itemId,fileName,rowIdx){
+  const ok=await showConfirm('Supprimer cette pièce jointe ?',
+    `<strong>${fileName}</strong> sera retiré du BC.<br>Le bon de commande lui-même n'est pas affecté.`,
+    'Supprimer la pièce jointe','delete');
+  if(!ok)return;
+  const row=document.getElementById('c-pj-row-'+rowIdx);
+  if(row){row.style.opacity='.4';row.style.pointerEvents='none';}
+  try{
+    await spDeleteAttachment('sites/RseauxPlus','Suivi_BC',itemId,fileName);
+    if(row){row.style.transition='all .2s';row.style.height='0';row.style.overflow='hidden';setTimeout(()=>row.remove(),200);}
+    toast(`🗑 Pièce jointe supprimée : ${fileName}`);
+    // Mettre à jour le drapeau PJ localement pour le rendu du bloc
+    const it=DATA.suivi.find(x=>x.ID===itemId);
+    const reste=document.querySelectorAll('[id^="c-pj-row-"]').length-1;
+    if(it&&reste<=0){it['A_des_Pi_x00e8_ces_Jointes']=false;it['Attachments']=false;}
+  }catch(e){
+    if(row){row.style.opacity='1';row.style.pointerEvents='auto';}
+    toast('❌ Suppression impossible : '+e.message,'ko');
+  }
+}
+
 // ── Micro-action « Compléter le BC » — 3 champs, 15 secondes ──
 async function openCompleterBC(id){
   const i=DATA.suivi.find(x=>x.ID===id);
@@ -2145,7 +2167,7 @@ async function openCompleterBC(id){
         </div>`;
       return;
     }
-    document.getElementById('c-pj').innerHTML=pjs.map(a=>{
+    document.getElementById('c-pj').innerHTML=pjs.map((a,idx)=>{
       const url=C.spRoot+(a.ServerRelativeUrl||'');
       const nom=a.FileName||'';
       const ext=nom.split('.').pop().toLowerCase();
@@ -2155,13 +2177,14 @@ async function openCompleterBC(id){
       const logo=img&&(/^image\d{3,}\./i.test(nom)||/logo|signature|banniere|banner/i.test(nom));
       const icon=ext==='pdf'?'📄':img?'🖼️':'📎';
       const c=logo?{bg:'#f6f7fa',bd:'var(--border)',fg:'var(--text-muted)'}:{bg:'var(--violet-light,#f0efff)',bd:'var(--violet)',fg:'var(--violet)'};
-      return`<div onclick="openAttachment('${url}')" style="display:flex;align-items:center;gap:10px;background:${c.bg};border:1px solid ${c.bd};border-radius:var(--radius-sm);padding:9px 12px;cursor:pointer;margin-bottom:5px">
-        <span style="font-size:19px">${icon}</span>
-        <div style="flex:1;overflow:hidden">
+      return`<div id="c-pj-row-${idx}" style="display:flex;align-items:center;gap:10px;background:${c.bg};border:1px solid ${c.bd};border-radius:var(--radius-sm);padding:9px 12px;margin-bottom:5px">
+        <span style="font-size:19px;cursor:pointer" onclick="openAttachment('${url}')">${icon}</span>
+        <div style="flex:1;overflow:hidden;cursor:pointer" onclick="openAttachment('${url}')">
           <div style="font-size:12.5px;font-weight:600;color:${c.fg};white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${nom}</div>
-          <div style="font-size:11px;color:var(--text-muted)">${logo?'Probablement un logo de signature, pas un BC':'Cliquer pour ouvrir et recopier les informations'}</div>
+          <div style="font-size:11px;color:var(--text-muted)">${logo?'Probablement un logo de signature — à supprimer':'Cliquer pour ouvrir et recopier les informations'}</div>
         </div>
-        <span style="font-size:15px;color:${c.fg}">→</span>
+        <button type="button" class="btn btn-supprimer" style="height:26px;padding:0 8px" title="Supprimer cette pièce jointe" onclick="supprimerPJ(${id},${JSON.stringify(nom).replace(/"/g,'&quot;')},${idx})">🗑</button>
+        <span style="font-size:15px;color:${c.fg};cursor:pointer" onclick="openAttachment('${url}')">→</span>
       </div>`;}).join('')
       +`<div style="display:flex;gap:6px;margin-top:8px">
          <button type="button" class="btn btn-supprimer" style="height:28px" onclick="closeModal();supprimerBCParasite(${id})">🗑 Ce n'est pas un BC — supprimer</button>
