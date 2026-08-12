@@ -1028,26 +1028,26 @@
 </div>
 
 <!-- ══ MODAL OVERLAY ══ -->
-<div class="modal-ov" id="modal-ov" onclick="closeModal()">
+<div class="modal-ov" id="modal-ov">
   <div class="modal-box" onclick="event.stopPropagation()">
     <div class="modal-hd">
       <span class="modal-hd-t" id="modal-title">—</span>
-      <button class="modal-x" onclick="closeModal()">✕</button>
+      <button class="modal-x" onclick="tryCloseModal()">✕</button>
     </div>
     <div class="modal-bd" id="modal-body"></div>
     <div class="modal-ft">
-      <button class="mbtn cancel" onclick="closeModal()">Annuler</button>
+      <button class="mbtn cancel" onclick="tryCloseModal()">Annuler</button>
       <button class="mbtn submit" id="modal-submit" onclick="submitModal()">Valider</button>
     </div>
   </div>
 </div>
 
 <!-- ══ PANNEAU LATÉRAL ══ -->
-<div class="panel-ov" id="panel-ov" onclick="closePanel()">
+<div class="panel-ov" id="panel-ov">
   <div class="panel-box" onclick="event.stopPropagation()">
     <div class="panel-hd">
       <span class="panel-hd-t" id="panel-title">Détail</span>
-      <button class="panel-x" onclick="closePanel()">✕ Fermer</button>
+      <button class="panel-x" onclick="tryClosePanel()">✕ Fermer</button>
     </div>
     <div class="panel-bd" id="panel-body"><div class="pspin">⏳ Chargement...</div></div>
   </div>
@@ -1077,9 +1077,28 @@ async function exchangeCode(code){
   const b=new URLSearchParams({client_id:C.clientId,grant_type:'authorization_code',code,redirect_uri:C.redirectUri,code_verifier:v,scope:C.scope});
   const r=await fetch(`https://login.microsoftonline.com/${C.tenantId}/oauth2/v2.0/token`,{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:b});
   if(!r.ok)throw new Error('Token exchange failed: '+r.status);
+  sessionStorage.setItem('token_ts',String(Date.now()));
   return r.json();
 }
 const getToken=()=>sessionStorage.getItem('access_token');
+// Âge de la session en minutes — sert à prévenir AVANT l'expiration
+function tokenAgeMin(){
+  const ts=parseInt(sessionStorage.getItem('token_ts')||'0',10);
+  if(!ts)return 0;
+  return Math.floor((Date.now()-ts)/60000);
+}
+// Bandeau d'alerte inséré en haut d'un modal / panneau si la session vieillit
+function showSessionWarning(containerId){
+  const age=tokenAgeMin();
+  if(age<50)return;
+  const c=document.getElementById(containerId);
+  if(!c)return;
+  const d=document.createElement('div');
+  d.style.cssText='background:#fff3e0;border:1px solid #e65100;border-radius:6px;padding:10px 12px;margin-bottom:12px;font-size:12.5px;color:#8a3200;line-height:1.5';
+  d.innerHTML=`⚠️ <strong>Session ouverte depuis ${age} min.</strong> Elle peut expirer pendant ta saisie et te faire tout perdre.<br>
+    <button onclick="logout()" style="margin-top:7px;background:#e65100;color:#fff;border:none;border-radius:5px;padding:6px 14px;font-size:12px;font-weight:600;cursor:pointer;font-family:inherit">🔄 Me reconnecter maintenant</button>`;
+  c.insertBefore(d,c.firstChild);
+}
 function logout(){sessionStorage.clear();window.location.href=`https://login.microsoftonline.com/${C.tenantId}/oauth2/v2.0/logout?post_logout_redirect_uri=${encodeURIComponent(C.redirectUri)}`;}
 
 // ═══ SHAREPOINT FETCH ═══
@@ -1226,7 +1245,11 @@ async function fetchProjetTitles(){
 async function loadAll(){
   setLoading(true);hideError();
   try{
-    const [suivi,projTitles,lignes,dbc,devis,clients,chantiers,catalogue,sessionsScan,lignesScan]=await Promise.all([
+    const _sources=[
+      'Suivi_BC','Chantiers (lookup)','Lignes_BC','Demandes_BC','Demandes_Devis',
+      'Base_Clients','Chantiers','Cathalogue_Produits','Sessions_Scan','Lignes_Scan'
+    ];
+    const _settled=await Promise.allSettled([
       // Suivi_BC: $select=*
       spFetch('sites/RseauxPlus','Suivi_BC','$select=*,Editor/Title&$expand=Editor&$orderby=ID desc'),
       // Projet lookup titles — appel séparé compatible expand
@@ -1252,6 +1275,19 @@ async function loadAll(){
       spFetch('sites/BondeCommande','Lignes_Scan',
         '$select=ID,Title,Session_ScanId,Session_Scan/Id,Reference_Article,Designation,Quantite_Attendue,Quantite_Scannee&$expand=Session_Scan&$orderby=ID asc&$top=5000')
     ]);
+
+    // Dégradation par bloc : une liste en échec n'invalide plus tout le dashboard.
+    // Seule Suivi_BC est critique — sans elle, on bascule sur le cache.
+    const _failed=[];
+    const _val=_settled.map((r,i)=>{
+      if(r.status==='fulfilled')return r.value;
+      _failed.push(_sources[i]);
+      console.warn(`[loadAll] ${_sources[i]} en échec :`,r.reason);
+      return [];
+    });
+    const [suivi,projTitles,lignes,dbc,devis,clients,chantiers,catalogue,sessionsScan,lignesScan]=_val;
+    if(_settled[0].status==='rejected')throw _settled[0].reason;
+    if(_failed.length)showError(`Données partielles — ${_failed.length} source(s) indisponible(s) : ${_failed.join(', ')}. Le reste du tableau de bord est à jour.`);
 
     // Injecter ProjetTitle dans chaque item suivi
     const projMap={}; // {ID → Title}
@@ -1400,7 +1436,6 @@ function renderDocuware(){
     const fc=f(i,nFCKey())||'—';
     const chantier=getChantier(i);
     const dateRec=fmtDate(f(i,'Dateder_x00e9_ception'));
-    const cE=client.replace(/'/g,"\\'"),nE=numBC.replace(/'/g,"\\'");
     return`<tr class="rr"><td class="ref">${numBC}</td><td class="cname">${client}</td><td style="font-size:12px;color:var(--text-secondary)">${chantier}</td><td class="mono">${bl}</td><td class="mono">${fc}</td><td class="mono">${dateRec}</td><td>${vendeur}</td><td>
       <div class="btn-grp">
         <button class="btn" onclick="openBCPanel(${i.ID})">Voir BC</button>
@@ -1462,7 +1497,6 @@ function renderTousRecu(){
     const montantFmt=montantRaw?new Intl.NumberFormat('fr-FR',{style:'currency',currency:'EUR',minimumFractionDigits:2,maximumFractionDigits:2}).format(montantRaw):'—';
     const dateRec=f(i,'Dateder_x00e9_ception');
     const ef=getEtatFact(i);
-    const cE=client.replace(/'/g,"\'"),nE=numBC.replace(/'/g,"\'");
     return`<tr class="rr" data-bc-id="${i.ID}">
       <td class="ref">${numBC}</td><td class="cname">${client}</td>
       <td style="font-size:12px;color:var(--text-secondary)">${chantier}</td>
@@ -1670,12 +1704,11 @@ function bcRow(i,showAction=true){
   const numDev=f(i,'N_x00b0_Devis','Num_ro_Devis','NumeroDevis')||'—';
   const montant=f(i,'MontantHT');
   const montantFmt=montant?new Intl.NumberFormat('fr-FR',{style:'currency',currency:'EUR',minimumFractionDigits:2,maximumFractionDigits:2}).format(montant):'—';
-  const cE=client.replace(/'/g,"\\'"),nE=numBC.replace(/'/g,"\\'");
   const act=showAction?`<td><div class="btn-grp">
     <button class="btn green" onclick="openFacturerModal(${i.ID})">💰 Facturer</button>
     <button class="btn" onclick="openBCPanel(${i.ID})">Voir BC</button>
         <button class="btn navy" onclick="openTraiterModal(${i.ID})">🔧 Traiter</button>
-    <button class="btn orange" onclick="livraisonPartielleFlow(${i.ID},'${nE}','${cE}')">🔀 Livraison Partielle</button>
+    <button class="btn orange" onclick="openLivraisonPartielle(${i.ID})">🔀 Livraison Partielle</button>
   </div></td>`:'';
   return`<tr class="rr" data-bc-id="${i.ID}"><td class="ref">${numBC}</td><td class="cname">${client}</td><td style="font-size:12px;color:var(--text-secondary)">${chantier}</td><td class="mono" style="color:var(--blue-mid);font-size:11px">${numDev}</td><td class="mono">${dateLiv}</td><td class="mono">${numBL}</td><td class="mono">${numFC!=='—'?`<span style="color:var(--teal)">${numFC}</span>`:numFC}</td><td class="amt" style="font-size:11.5px">${montantFmt}</td><td>${vendeur}</td><td>${bStatut(s)}</td><td>${bFact(ef)}</td>${act}</tr>`;
 }
@@ -1707,7 +1740,6 @@ function renderAFacturer(){
     const montantRaw=f(i,'MontantHT','Montant_HT','MontantHTTotal');
     const montantFmt=montantRaw?new Intl.NumberFormat('fr-FR',{style:'currency',currency:'EUR',minimumFractionDigits:2,maximumFractionDigits:2}).format(montantRaw):'—';
     const dateRec=f(i,'Dateder_x00e9_ception');
-    const cE=client.replace(/'/g,"\'"),nE=numBC.replace(/'/g,"\'");
     return`<tr class="rr" data-bc-id="${i.ID}">
       <td>${agePillHtml(dateRec)}</td>
       <td class="ref">${numBC}</td><td class="cname">${client}</td>
@@ -1753,7 +1785,6 @@ function renderBLManquant(){
     const montantRaw=f(i,'MontantHT','Montant_HT','MontantHTTotal');
     const montantFmt=montantRaw?new Intl.NumberFormat('fr-FR',{style:'currency',currency:'EUR',minimumFractionDigits:2,maximumFractionDigits:2}).format(montantRaw):'—';
     const dateRec=f(i,'Dateder_x00e9_ception');
-    const cE=client.replace(/'/g,"\'"),nE=numBC.replace(/'/g,"\'");
     return`<tr class="rr" data-bc-id="${i.ID}">
       <td>${agePillHtml(dateRec)}</td>
       <td class="ref">${numBC}</td><td class="cname">${client}</td>
@@ -1806,8 +1837,8 @@ function renderHistorique(){
       <td>${vendeur}</td><td>${bStatut(s)}</td>
       <td>${ralBlock(lignes)}</td>
       <td><div class="btn-grp">
-        <button class="btn green" onclick="openFacturerModal(${i.ID},'${numBC.replace(/'/g,"\'")}','${client.replace(/'/g,"\'")}')">💰 Facturer</button>
-        <button class="btn navy" onclick="openTraiterModal(${i.ID},'${numBC.replace(/'/g,"\'")}','${client.replace(/'/g,"\'")}')">🔧 Traiter</button>
+        <button class="btn green" onclick="openFacturerModal(${i.ID})">💰 Facturer</button>
+        <button class="btn navy" onclick="openTraiterModal(${i.ID})">🔧 Traiter</button>
         <button class="btn" onclick="openBCPanel(${i.ID})">Voir BC</button>
       </div></td>
     </tr>`;
@@ -2195,7 +2226,6 @@ function renderAll(){
     const montantRaw=f(i,'MontantHT','Montant_HT','MontantHTTotal');
     const montantFmt=montantRaw?new Intl.NumberFormat('fr-FR',{style:'currency',currency:'EUR',minimumFractionDigits:2,maximumFractionDigits:2}).format(montantRaw):'—';
     const ef=getEtatFact(i);
-    const cE=client.replace(/'/g,"\'"),nE=numBC.replace(/'/g,"\'");
     return`<tr class="rr" data-bc-id="${i.ID}">
       <td class="ref">${numBC}</td><td class="cname">${client}</td>
       <td style="font-size:12px;color:var(--text-secondary)">${chantier}</td>
@@ -2209,7 +2239,7 @@ function renderAll(){
         <button class="btn" onclick="openBCPanel(${i.ID})">Voir BC</button>
         <button class="btn navy" onclick="openTraiterModal(${i.ID})">🔧 Traiter</button>
         <button class="btn green" onclick="openFacturerModal(${i.ID})">💰 Facturer</button>
-        <button class="btn orange" onclick="livraisonPartielleFlow(${i.ID},'${nE}','${cE}')">🔀 Livraison Partielle</button>
+        <button class="btn orange" onclick="openLivraisonPartielle(${i.ID})">🔀 Livraison Partielle</button>
       </div></td>
     </tr>`;
   }).join(''):'<tr class="empty-row"><td colspan="9">✅ Aucun BC réceptionné aujourd\'hui</td></tr>';
@@ -2226,7 +2256,6 @@ function renderAll(){
     const bl=f(i,'N_x00b0_BL')||'—',dateRec=fmtDate(f(i,'Dateder_x00e9_ception'));
     const vendeur=f(i,'Vendeurencharge')||'—';
     const chantier=getChantier(i);
-    const cE=client.replace(/'/g,"\\'"),nE=numBC.replace(/'/g,"\\'");
     return`<tr class="rr"><td class="ref">${numBC}</td><td class="cname">${client}</td><td style="font-size:12px;color:var(--text-secondary)">${chantier}</td><td class="mono">${bl}</td><td class="mono">${dateRec}</td><td>${vendeur}</td><td>${bStatut(getStatut(i))}</td><td>${bFact(getEtatFact(i))}</td><td><div class="btn-grp">
       <button class="btn green" onclick="openFacturerModal(${i.ID})">💰 Facturer</button>
       <button class="btn" onclick="openBCPanel(${i.ID})">Voir BC</button>
@@ -2243,7 +2272,6 @@ function renderAll(){
     const vendeur=f(i,'Vendeurencharge')||'—';
     const chantier=getChantier(i);
     const lignes=getStatut(i)==='Partiellement livré'?getLignesForBC(i.ID):[];
-    const cE=client.replace(/'/g,"\\'"),nE=numBC.replace(/'/g,"\\'");
     return`<tr class="${urg.row}"><td><span class="urg ${urg.cls}">${urg.lbl}</span></td><td class="ref">${numBC}</td><td class="cname">${client}</td><td style="font-size:12px;color:var(--text-secondary)">${chantier}</td><td class="mono" style="color:var(--red)">${fmtDate(dateLiv)}</td><td>${vendeur}</td><td>${bStatut(getStatut(i))}</td><td>${ralBlock(lignes)}</td><td><div class="btn-grp">
       <button class="btn" onclick="openBCPanel(${i.ID})">Voir BC</button>
       <button class="btn navy" onclick="openTraiterModal(${i.ID})">🔧 Traiter</button>
@@ -2299,7 +2327,6 @@ function renderSuiviEnCours(){renderHistorique();renderBLManquant();
     const urg=urgFromDays(late>0?late:0);
     const etaColor=late>0?'color:var(--red)':'';
     const lignes=s==='Partiellement livré'?getLignesForBC(i.ID):[];
-    const cE=client.replace(/'/g,"\\'"),nE=numBC.replace(/'/g,"\\'");
     return`<tr class="${urg.row}">
       <td><span class="urg ${urg.cls}">${urg.lbl}</span></td>
       <td class="ref">${numBC}</td><td class="cname">${client}</td>
@@ -2314,7 +2341,7 @@ function renderSuiviEnCours(){renderHistorique();renderBLManquant();
         <button class="btn green" onclick="openFacturerModal(${i.ID})">💰 Facturer</button>
         <button class="btn" onclick="openBCPanel(${i.ID})">Voir BC</button>
         <button class="btn navy" onclick="openTraiterModal(${i.ID})">🔧 Traiter</button>
-        <button class="btn orange" onclick="livraisonPartielleFlow(${i.ID},'${nE}','${cE}')">🔀 Livraison Partielle</button>
+        <button class="btn orange" onclick="openLivraisonPartielle(${i.ID})">🔀 Livraison Partielle</button>
       </div></td>
     </tr>`;
   }).join('');
@@ -3478,6 +3505,35 @@ async function openAttachment(rawUrl){
 // ────────────────────────────────────────────────────────────
 let _onSubmit=null;
 
+// ── Notification persistante (6 s) — reste visible après fermeture du modal ──
+function toast(msg,type='ok'){
+  let host=document.getElementById('rp-toasts');
+  if(!host){
+    host=document.createElement('div');
+    host.id='rp-toasts';
+    host.style.cssText='position:fixed;top:66px;right:18px;z-index:12000;display:flex;flex-direction:column;gap:8px;max-width:380px';
+    document.body.appendChild(host);
+  }
+  const t=document.createElement('div');
+  const c=type==='ko'?{bg:'#ffebee',bd:'#c62828',fg:'#8e1b1b'}:{bg:'#e8f5e9',bd:'#2e7d32',fg:'#1b5e20'};
+  t.style.cssText=`background:${c.bg};border:1px solid ${c.bd};border-left:4px solid ${c.bd};color:${c.fg};border-radius:7px;padding:12px 15px;font-size:13px;font-weight:500;line-height:1.45;box-shadow:0 4px 16px rgba(10,31,61,.16);cursor:pointer;transition:opacity .25s`;
+  t.textContent=msg;
+  t.onclick=()=>t.remove();
+  host.appendChild(t);
+  setTimeout(()=>{t.style.opacity='0';setTimeout(()=>t.remove(),300);},6000);
+}
+
+// ── Protection anti-perte de saisie ──
+// Empreinte de tous les champs d'un conteneur : sert à détecter si l'utilisateur
+// a commencé à saisir avant de fermer la fenêtre.
+function snapFields(root){
+  if(!root)return'';
+  return Array.from(root.querySelectorAll('input,select,textarea'))
+    .map(el=>(el.type==='checkbox'||el.type==='radio')?(el.checked?'1':'0'):(el.value||''))
+    .join('\u0001');
+}
+let _modalSnap='',_panelSnap='';
+
 function openModal(title,html,onSubmit){
   document.getElementById('modal-title').textContent=title;
   document.getElementById('modal-body').innerHTML=html+'<div class="modal-msg" id="modal-msg"></div>';
@@ -3485,11 +3541,41 @@ function openModal(title,html,onSubmit){
   btn.disabled=false;btn.textContent='Valider';
   document.getElementById('modal-ov').classList.add('open');
   _onSubmit=onSubmit;
+  _modalSnap=snapFields(document.getElementById('modal-body'));
+  // Les autocomplétions se chargent en asynchrone — on réaligne l'empreinte
+  // une fois le rendu stabilisé, sauf si l'utilisateur a déjà tapé.
+  setTimeout(()=>{
+    const cur=snapFields(document.getElementById('modal-body'));
+    if(document.getElementById('modal-ov').classList.contains('open')&&!document.activeElement?.closest?.('#modal-body'))_modalSnap=cur;
+  },600);
+  // Alerte si la session Microsoft approche de son expiration
+  showSessionWarning('modal-body');
 }
 
 function closeModal(){
   document.getElementById('modal-ov').classList.remove('open');
-  _onSubmit=null;
+  _onSubmit=null;_modalSnap='';
+}
+
+// Fermeture protégée — demande confirmation si des champs ont été modifiés
+async function tryCloseModal(){
+  if(snapFields(document.getElementById('modal-body'))!==_modalSnap){
+    const ok=await showConfirm('⚠️ Abandonner la saisie ?',
+      'Des informations ont été modifiées mais <strong>pas encore enregistrées</strong>.<br>Si tu fermes maintenant, elles seront perdues.',
+      'Abandonner la saisie','delete');
+    if(!ok)return;
+  }
+  closeModal();
+}
+
+async function tryClosePanel(){
+  if(snapFields(document.getElementById('panel-body'))!==_panelSnap){
+    const ok=await showConfirm('⚠️ Abandonner la saisie ?',
+      'Des informations ont été modifiées mais <strong>pas encore enregistrées</strong>.<br>Si tu fermes maintenant, elles seront perdues.',
+      'Abandonner la saisie','delete');
+    if(!ok)return;
+  }
+  closePanel();
 }
 
 async function submitModal(){
@@ -3499,10 +3585,13 @@ async function submitModal(){
   btn.disabled=true;btn.textContent='⏳ Envoi...';
   msgEl.className='modal-msg';msgEl.textContent='';
   try{
-    await _onSubmit();
-    msgEl.className='modal-msg ok';msgEl.textContent='✅ Mis à jour — rechargement en cours...';
-    // Fermer rapidement, recharger après délai SharePoint
-    setTimeout(()=>closeModal(),800);
+    const detail=await _onSubmit();
+    const txt=(typeof detail==='string'&&detail)?detail:'Modification enregistrée';
+    msgEl.className='modal-msg ok';msgEl.textContent='✅ '+txt;
+    _modalSnap=snapFields(document.getElementById('modal-body')); // plus rien à perdre
+    toast('✅ '+txt);
+    // 1800 ms : en dessous, le message n'est pas lisible avant la fermeture
+    setTimeout(()=>closeModal(),1800);
     setTimeout(()=>loadAll(),2500); // 2.5s pour laisser SP propager
   }catch(e){
     msgEl.className='modal-msg ko';msgEl.textContent='❌ '+e.message;
@@ -3534,6 +3623,7 @@ function openFacturerModal(id,numBC,client){
     const idx=DATA.suivi.findIndex(i=>i.ID===id);
     if(idx!==-1)Object.assign(DATA.suivi[idx],body);
     renderAll();updateBadges();
+    return `${numBC} — facture ${fc} enregistrée (entièrement facturé)`;
   });
 }
 
@@ -3660,6 +3750,13 @@ async function openTraiterModal(id,numBC,client){
       if(chSearch&&chantierId&&chantierId!=='__clear__')DATA.suivi[idx]._ProjetTitle=chSearch.value;
     }
     renderAll();updateBadges();
+    // Libellés lisibles des champs modifiés — affichés dans la confirmation
+    const LBL={Title:'N° BC','N_x00b0_Devis':'N° Devis',ClientId:'Client',ProjetId:'Chantier',
+      'N_x00b0_BL':'N° BL',DateBL:'Date BL',Datepriseencharge:'Date prise en charge',
+      'DateLivraisonpr_x00e9_vue':'Date livraison prévue',MontantHT:'Montant HT',
+      Remarques:'Remarque',Vendeurencharge:'Vendeur',Statut:'Statut'};
+    const champs=Object.keys(body).map(k=>LBL[k]||(k.toLowerCase().includes('montant')?'Montant HT':k));
+    return `${titre||numBC} — ${champs.join(', ')} enregistré${champs.length>1?'s':''}`;
   });
 
   // Setup autocompletes après rendu
@@ -3706,16 +3803,18 @@ document.addEventListener('keydown',e=>{
   if(e.key!=='Escape')return;
   // Panel d'abord
   const panel=document.querySelector('.panel-ov.open');
-  if(panel){closePanel();return;}
+  if(panel){tryClosePanel();return;}
   // Modal confirm
   const mc=document.getElementById('modal-confirm');
   if(mc?.classList.contains('open')){confirmResolve(false);return;}
   // Modal ajout devis
   const mad=document.getElementById('modal-ajout-devis');
   if(mad?.classList.contains('open')){closeAjoutDevisModal();return;}
-  // Autres modals génériques
-  const mo=document.querySelector('.modal-ov.open');
-  if(mo){mo.classList.remove('open');}
+  // Modal générique — fermeture protégée
+  const mo=document.getElementById('modal-ov');
+  if(mo?.classList.contains('open')){tryCloseModal();return;}
+  const other=document.querySelector('.modal-ov.open');
+  if(other){other.classList.remove('open');}
 });
 // ═══════════════════════════════════════════════════════════
 // ═══ RECHERCHE GLOBALE BC ═══
@@ -3869,7 +3968,6 @@ function rechercheGlobalBC(){
       const montantRaw=f(i,'MontantHT','Montant_HT','MontantHTTotal');
       const montantFmt=montantRaw?new Intl.NumberFormat('fr-FR',{style:'currency',currency:'EUR',minimumFractionDigits:2,maximumFractionDigits:2}).format(montantRaw):'—';
       const dateRec=fmtDate(f(i,'Dateder_x00e9_ception'));
-      const cE=client.replace(/'/g,"\\'"),nE=numBC.replace(/'/g,"\\'");
       const docBadge=bDocuware(i);
       return`<tr style="cursor:pointer" onclick="openBCPanel(${i.ID})">
         <td class="ref">${hl(numBC)}</td>
@@ -3907,8 +4005,22 @@ let _lastRechercheItems=[];
 // ═══════════════════════════════════════════════════════════
 const CACHE_KEY='rp_dashboard_cache';
 function saveCache(){
-  try{sessionStorage.setItem(CACHE_KEY,JSON.stringify({ts:Date.now(),data:DATA}));}
-  catch(e){console.warn('[Cache] Impossible de sauvegarder',e);}
+  try{
+    // Contenu_Email stocke le HTML Outlook brut : ~5 Mo sur 7 Mo de DATA.
+    // Il n'est utilisé qu'à l'ouverture d'un BC et se relit à la demande →
+    // on l'exclut du cache, sinon le quota sessionStorage (5 Mo) explose
+    // et le mode hors-ligne ne fonctionne jamais.
+    const slim={...DATA,suivi:(DATA.suivi||[]).map(i=>{
+      if(!i||i.Contenu_Email===undefined)return i;
+      const {Contenu_Email,...rest}=i;
+      return rest;
+    })};
+    sessionStorage.setItem(CACHE_KEY,JSON.stringify({ts:Date.now(),data:slim}));
+  }
+  catch(e){
+    console.warn('[Cache] Impossible de sauvegarder',e);
+    try{sessionStorage.removeItem(CACHE_KEY);}catch(_){}
+  }
 }
 function loadCache(){
   try{
@@ -4110,105 +4222,6 @@ function trouverBCDepuisDevis(numDevis,devisRS){
   }
 }
 
-// ═══════════════════════════════════════════════════════════
-// ═══ CHECKLIST BCs ═══
-// ═══════════════════════════════════════════════════════════
-function getChecklistItems(){
-  const cutoff='2026-04-01';
-  let items=(DATA.suivi||[]).filter(i=>{
-    const statut=getStatut(i);
-    if(statut==='Annulé')return false;
-    // Uniquement les BCs avec une vraie date de réception >= 01/04/2026
-    // PAS de fallback sur Created — un BC sans date de réception n'est pas encore reçu
-    const dateRec=(f(i,'Dateder_x00e9_ception')||'').slice(0,10);
-    if(!dateRec||dateRec<cutoff)return false;
-    if(!['Reçu','Entièrement livré','Terminé','Partiellement livré'].includes(statut))return false;
-    const hasBL=!!(f(i,'N_x00b0_BL')||'').trim();
-    const hasFC=!!(f(i,nFCKey())||'').trim();
-    const hasPJ=!!(i['A_des_Pi_x00e8_ces_Jointes']===true||i['A_des_Pi_x00e8_ces_Jointes']==='true'||i['Attachments']===true);
-    const facture=getEtatFact(i)==='Entièrement facturé';
-    const termine=statut==='Terminé';
-    const docuware=f(i,'Envoyer_Docuware')===true||f(i,'Envoyer_Docuware')==='Oui'||f(i,'Envoyer_Docuware')==='1';
-    const hasVendeur=!!(f(i,'Vendeurencharge')||'').trim();
-    // Si Terminé + Docuware envoyé → ne plus apparaître même si PJ manquante (déjà clôturé)
-    if(termine&&docuware&&facture)return false;
-    return !hasBL||!hasFC||!hasPJ||!facture||!termine||!docuware||!hasVendeur;
-  });
-  const dir=typeof _checklistSortDir!=='undefined'?_checklistSortDir:'desc';
-  items.sort((a,b)=>{
-    const da=(f(a,'Dateder_x00e9_ception')||'').slice(0,10);
-    const db=(f(b,'Dateder_x00e9_ception')||'').slice(0,10);
-    return dir==='desc'?db.localeCompare(da):da.localeCompare(db);
-  });
-  return items;
-}
-let _checklistSortDir='desc';
-function sortChecklist(){
-  _checklistSortDir=_checklistSortDir==='desc'?'asc':'desc';
-  const th=document.querySelector('#acc-checklist thead th:first-child');
-  if(th)th.textContent=`📅 Date réc. ${_checklistSortDir==='desc'?'↓':'↑'}`;
-  renderChecklist();
-}
-
-
-
-function chk(ok){
-  return ok
-    ?`<span style="color:var(--green);font-size:15px;display:block;text-align:center" title="✅ OK">✅</span>`
-    :`<span style="color:var(--red);font-size:15px;display:block;text-align:center" title="❌ Manquant">❌</span>`;
-}
-
-function renderChecklist(){
-  const items=getChecklistItems();
-  const b=document.getElementById('checklist-body');
-  const cnt=document.getElementById('checklist-count');
-  if(cnt){
-    const sansVendeur=items.filter(i=>!(f(i,'Vendeurencharge')||'').trim()).length;
-    const sansBL=items.filter(i=>!(f(i,'N_x00b0_BL')||'').trim()).length;
-    cnt.textContent=items.length;
-    const subEl=document.getElementById('checklist-sub');
-    if(subEl)subEl.textContent=`${sansBL} sans BL · ${sansVendeur} sans vendeur — du ${fmtDate(items[items.length-1]?.(f(items[items.length-1],'Dateder_x00e9_ception')||f(items[items.length-1],'Created'))||'')} au ${fmtDate(items[0]?.(f(items[0],'Dateder_x00e9_ception')||f(items[0],'Created'))||'')}`;
-  }
-  if(!items.length){
-    b.innerHTML='<tr class="empty-row"><td colspan="11" style="color:var(--green);font-weight:600">🎉 Tous les BCs sont complets !</td></tr>';
-    return;
-  }
-  b.innerHTML=items.map(i=>{
-    const numBC=f(i,'Title')||`BC-${i.ID}`;
-    const client=getClient(i);
-    const chantier=getChantier(i);
-    const vendeur=f(i,'Vendeurencharge')||'—';
-    const hasBL=!!(f(i,'N_x00b0_BL')||'').trim();
-    const hasFC=!!(f(i,nFCKey())||'').trim();
-    const hasPJ=!!(i['A_des_Pi_x00e8_ces_Jointes']===true||i['A_des_Pi_x00e8_ces_Jointes']==='true'||i['Attachments']===true);
-    const facture=getEtatFact(i)==='Entièrement facturé';
-    const termine=getStatut(i)==='Terminé';
-    const docuware=!!(f(i,'Envoyer_Docuware')===true||f(i,'Envoyer_Docuware')==='Oui'||f(i,'Envoyer_Docuware')==='1');
-    const hasVendeur=!!(f(i,'Vendeurencharge')||'').trim();
-    const dateRec=fmtDate(f(i,'Dateder_x00e9_ception'));
-    const cE=client.replace(/'/g,"\'"),nE=numBC.replace(/'/g,"\'");
-    return`<tr style="cursor:pointer" onclick="openBCPanel(${i.ID})">
-      <td class="mono" style="font-size:11px;color:var(--text-muted)">${dateRec}</td>
-      <td class="ref">${numBC}</td>
-      <td class="cname">${client}</td>
-      <td style="font-size:12px;color:var(--text-secondary)">${chantier}</td>
-      <td>${chk(hasBL)}</td>
-      <td>${chk(hasFC)}</td>
-      <td>${!hasPJ?`<span style="color:var(--amber);font-size:13px;display:block;text-align:center" title="⚠️ Aucune PJ">⚠️</span>`:chk(true)}</td>
-      <td>${chk(facture)}</td>
-      <td>${chk(termine)}</td>
-      <td>${chk(docuware)}</td>
-      <td>${!hasVendeur?`<span style="color:var(--red);font-size:11px;font-weight:700;display:block;text-align:center">❌ Non assigné</span>`:`<span style="font-size:11px;display:block;text-align:center">${f(i,'Vendeurencharge')}</span>`}</td>
-      <td onclick="event.stopPropagation()"><div class="btn-grp">
-        <button class="btn" onclick="openBCPanel(${i.ID})">Voir BC</button>
-        <button class="btn navy" onclick="openTraiterModal(${i.ID})">🔧 Traiter</button>
-        ${!facture?`<button class="btn green" onclick="openFacturerModal(${i.ID})">💰</button>`:''}
-
-        ${!hasPJ?`<button class="btn" onclick="openBCPanel(${i.ID})" style="color:var(--amber);border-color:var(--amber);font-size:10.5px">📎 Joindre</button>`:''}
-      </div></td>
-    </tr>`;
-  }).join('');
-}
 
 
 // ═══ KPI FOCUS SUIVI BC ═══
@@ -4355,21 +4368,6 @@ function openNouveauProjet(){
   },150);
 }
 
-function exportChecklistCSV(){
-  const items=getChecklistItems();
-  exportCSV(items,[
-    {label:'N° BC',       fn:i=>f(i,'Title')||`BC-${i.ID}`},
-    {label:'Client',      fn:i=>getClient(i)},
-    {label:'Chantier',    fn:i=>getChantier(i)},
-    {label:'Vendeur',     fn:i=>f(i,'Vendeurencharge')||''},
-    {label:'BL',          fn:i=>(f(i,'N_x00b0_BL')||'').trim()?'✅':'❌'},
-    {label:'N° FC',       fn:i=>(f(i,nFCKey())||'').trim()?'✅':'❌'},
-    {label:'PJ jointe',   fn:i=>(i['A_des_Pi_x00e8_ces_Jointes']===true||i['Attachments']===true)?'✅':'⚠️ MANQUANTE'},
-    {label:'Facturé',     fn:i=>getEtatFact(i)==='Entièrement facturé'?'✅':'❌'},
-    {label:'Terminé',     fn:i=>getStatut(i)==='Terminé'?'✅':'❌'},
-    {label:'Docuware',    fn:i=>f(i,'Envoyer_Docuware')===true||f(i,'Envoyer_Docuware')==='Oui'||f(i,'Envoyer_Docuware')==='1'?'✅':'❌'},
-  ],'checklist_BC.csv');
-}
 
 // ── Anti-doublon N° BC dans modal Traiter ──
 function checkDoublonBC(val,currentId){
@@ -4569,10 +4567,16 @@ function openPanel(title,html){
   document.getElementById('panel-title').textContent=title;
   document.getElementById('panel-body').innerHTML=html;
   document.getElementById('panel-ov').classList.add('open');
+  _panelSnap=snapFields(document.getElementById('panel-body'));
+  setTimeout(()=>{
+    const cur=snapFields(document.getElementById('panel-body'));
+    if(document.getElementById('panel-ov').classList.contains('open')&&!document.activeElement?.closest?.('#panel-body'))_panelSnap=cur;
+  },600);
 }
 
 function closePanel(){
   document.getElementById('panel-ov').classList.remove('open');
+  _panelSnap='';
 }
 
 // ── Panneau DBC ──
@@ -4822,7 +4826,6 @@ async function openBCPanel(id){
 
     // Lignes déjà en cache
     const lignes=(DATA.lignes||[]).filter(l=>l.BCId===id||parseInt(l.BCId)===id);
-    const cE=client.replace(/'/g,"\\'"),nE=numBC.replace(/'/g,"\\'");
 
     let html=`
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:0">
@@ -4866,7 +4869,7 @@ async function openBCPanel(id){
       const ral=totalCmd-totalLiv;
       html+=`<div class="pf"><div class="pf-lbl" style="display:flex;align-items:center;justify-content:space-between">
         <span>📦 Articles (${lignes.length} ligne${lignes.length>1?'s':''}) · RAL total : <span style="color:${ral>0?'var(--red)':'var(--green)'};font-weight:700">${ral}</span></span>
-        <button class="btn navy" style="height:24px;font-size:10.5px" onclick="openAjouterLigneArticle(${id},'${nE}')">➕ Ligne article</button>
+        <button class="btn navy" style="height:24px;font-size:10.5px" onclick="openAjouterLigneArticle(${id})">➕ Ligne article</button>
       </div>
         <table class="ltable"><thead><tr><th>Ligne</th><th>Référence</th><th>Désignation</th><th>Cmd</th><th>Livré</th><th>RAL</th><th>BL</th><th></th></tr></thead><tbody>`;
       lignes.forEach(l=>{
@@ -4889,7 +4892,7 @@ async function openBCPanel(id){
     }else{
       html+=`<div class="pf"><div class="pf-lbl" style="display:flex;align-items:center;justify-content:space-between">
         <span>Articles</span>
-        <button class="btn navy" style="height:24px;font-size:10.5px" onclick="openAjouterLigneArticle(${id},'${nE}')">➕ Ligne article</button>
+        <button class="btn navy" style="height:24px;font-size:10.5px" onclick="openAjouterLigneArticle(${id})">➕ Ligne article</button>
       </div>
       <div class="pf-val" style="color:var(--grey);font-style:italic">Aucune ligne Lignes_BC trouvée</div></div>`;
     }
@@ -4923,8 +4926,8 @@ async function openBCPanel(id){
 
     // ── Actions ──
     html+=`<div class="pactions">
-      <button class="pbtn green" onclick="closePanel();openFacturerModal(${id},'${nE}','${cE}')">💰 Facturer</button>
-      <button class="pbtn blue" onclick="closePanel();openTraiterModal(${id},'${nE}','${cE}')">🔧 Traiter</button>
+      <button class="pbtn green" onclick="closePanel();openFacturerModal(${id})">💰 Facturer</button>
+      <button class="pbtn blue" onclick="closePanel();openTraiterModal(${id})">🔧 Traiter</button>
       <button class="pbtn grey" onclick="closePanel()">Fermer</button>
     </div>
     <hr style="border:none;border-top:1px solid var(--border);margin:12px 0 8px">
@@ -5213,6 +5216,7 @@ async function uploadDevisPDF(id){
 function openAjouterLigneArticle(bcId,numBC){
   const bcPreselected=!!bcId;
   const bc=bcPreselected?DATA.suivi.find(i=>i.ID===bcId):null;
+  if(!numBC&&bc)numBC=f(bc,'Title')||('BC-'+bcId);
   const chantierAuto=bc?getChantier(bc):'';
 
   openModal(`➕ Ajouter une ligne article${bcPreselected?` — ${numBC}`:''}`,`
