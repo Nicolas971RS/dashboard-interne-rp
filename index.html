@@ -342,8 +342,8 @@
     </div>
   </div>
   <div class="tabs">
-    <button class="tab active" onclick="showTab('matin',this)">📊 Vue Matin</button>
-    <button class="tab" onclick="showTab('suivi',this)">📦 Suivi BC <span class="tab-badge g" id="badge-recu">0</span><span class="tab-badge r" id="badge-retard">0</span></button>
+    <button class="tab" onclick="showTab('matin',this)">📊 Vue Matin</button>
+    <button class="tab active" onclick="showTab('suivi',this)">📦 Suivi BC <span class="tab-badge g" id="badge-recu">0</span><span class="tab-badge r" id="badge-retard">0</span><span class="tab-badge r" id="badge-facture-eur" style="display:none"></span></button>
     <button class="tab" onclick="showTab('ral',this);renderRALTable()">🔀 Livraisons Partielles <span class="tab-badge a" id="badge-ral">0</span></button>
     <button class="tab" onclick="showTab('prepscan',this);renderPreparations()">📦 Préparations Scan <span class="tab-badge a" id="badge-prepscan">0</span></button>
     <button class="tab" onclick="showTab('dbc',this)">🧾 Demandes BC <span class="tab-badge r" id="badge-dbc">0</span></button>
@@ -355,7 +355,7 @@
     <div class="error-box" id="errorBox"></div>
 
     <!-- VUE MATIN -->
-    <div id="tab-matin" class="section-bloc active">
+    <div id="tab-matin" class="section-bloc">
       <div class="page-header">
         <div><h1>Vue Matin — Actions du jour</h1><div class="sub" id="lastRefresh">Chargement...</div></div>
         <button class="btn-refresh" onclick="loadAll()">🔄 Actualiser</button>
@@ -397,7 +397,7 @@
     </div>
 
     <!-- SUIVI BC -->
-    <div id="tab-suivi" class="section-bloc">
+    <div id="tab-suivi" class="section-bloc active">
       <div class="page-header">
         <div><h1>Suivi Bons de Commande</h1><div class="sub">/sites/RseauxPlus · Suivi_BC + Lignes_BC</div></div>
         <div style="display:flex;gap:8px;align-items:center;">
@@ -405,6 +405,9 @@
           <button class="btn-refresh" onclick="loadAll()">🔄 Actualiser</button>
         </div>
       </div>
+
+      <!-- BANDEAU PRIORITAIRE — actions du jour, avant tout le reste -->
+      <div id="bandeau-priorite" style="margin-bottom:14px"></div>
 
       <!-- RECHERCHE GLOBALE -->
       <div style="background:var(--navy);border-radius:var(--radius);padding:14px 18px;margin-bottom:14px">
@@ -967,6 +970,16 @@
           </select>
           <button class="btn-refresh" onclick="renderAnalytics()">🔄 Recalculer</button>
         </div>
+      </div>
+
+      <!-- FACTURATION PAR VENDEUR — suivi du non-facturé -->
+      <div class="tc" style="padding:16px 18px;margin-bottom:14px">
+        <div class="sd" style="margin-bottom:12px">
+          <h2>💰 Facturation — suivi par vendeur</h2>
+          <div class="sd-line"></div>
+          <span id="an-fact-total" style="font-size:11.5px;color:var(--text-muted)"></span>
+        </div>
+        <div id="an-facturation"></div>
       </div>
 
       <!-- KPI Synthèse -->
@@ -1660,6 +1673,290 @@ const getSuiviAFacturer=()=>DATA.suivi.filter(i=>{
   const ef=getEtatFact(i);
   return bl&&bl.trim()!==''&&ef!=='Entièrement facturé';
 });
+// ═══════════════════════════════════════════════════════════
+// ═══ SPRINT 2 — BANDEAU PRIORITAIRE SUIVI BC ═══
+// ═══════════════════════════════════════════════════════════
+
+// Date d'arrivée du BC dans la boîte BDC. Date_Email est renseignée par le flux
+// à la réception du mail ; Created sert de secours pour les BC anciens/manuels.
+function dateArrivee(i){return f(i,'Date_Email')||f(i,'Created')||null;}
+function ageBC(i){return daysSince(dateArrivee(i));}
+
+// 🔴 BLOC 1 — BL posé, pas de facture, au-delà du seuil (2 jours)
+const SEUIL_FACTURATION=2;
+function getBLAFacturer(){
+  return DATA.suivi.filter(i=>{
+    const bl=f(i,'N_x00b0_BL');
+    if(!bl||!String(bl).trim())return false;
+    if(getEtatFact(i)==='Entièrement facturé')return false;
+    if(getStatut(i)==='Annulé')return false;
+    const ref=f(i,'DateBL')||f(i,'Dateder_x00e9_ception');
+    return daysSince(ref)>=SEUIL_FACTURATION;
+  }).sort((a,b)=>daysSince(f(b,'DateBL')||f(b,'Dateder_x00e9_ception'))-daysSince(f(a,'DateBL')||f(a,'Dateder_x00e9_ception')));
+}
+
+// 🟠 BLOC 2 — BC incomplet : il manque le n°, le client ou le montant
+function bcManques(i){
+  const m=[];
+  const t=f(i,'Title');
+  if(!t||!String(t).trim()||/^BC-\d+$/.test(String(t).trim()))m.push('N° BC');
+  if(!i.ClientId&&!f(i,'Client'))m.push('Client');
+  const mt=f(i,'MontantHT','Montant_HT','MontantHTTotal');
+  if(mt===null||mt===''||Number(mt)===0)m.push('Montant');
+  return m;
+}
+function getBCACompleter(){
+  return DATA.suivi.filter(i=>{
+    if(getStatut(i)==='Annulé')return false;
+    if(getEtatFact(i)==='Entièrement facturé')return false;
+    return bcManques(i).length>0;
+  }).sort((a,b)=>ageBC(b)-ageBC(a));
+}
+
+// 🟡 BLOC 3 — ETA dépassée, toujours aucun BL
+function getBCSansBL(){
+  return DATA.suivi.filter(i=>{
+    const bl=f(i,'N_x00b0_BL');
+    if(bl&&String(bl).trim())return false;
+    const s=getStatut(i);
+    if(s==='Annulé'||s==='Terminé')return false;
+    const eta=f(i,'DateLivraisonpr_x00e9_vue');
+    return eta&&daysLate(eta)>0;
+  }).sort((a,b)=>daysLate(f(b,'DateLivraisonpr_x00e9_vue'))-daysLate(f(a,'DateLivraisonpr_x00e9_vue')));
+}
+
+const montantBC=i=>parseFloat(f(i,'MontantHT','Montant_HT','MontantHTTotal'))||0;
+const totalMontant=arr=>arr.reduce((s,i)=>s+montantBC(i),0);
+
+// ── Auto-détection du client d'après l'e-mail expéditeur ──
+// Construite à chaque chargement depuis l'historique : chaque BC déjà complété
+// enrichit la table. Aucune colonne SharePoint supplémentaire.
+let _mapEmailClient={}; // { email → { clientId, nom, vus } }
+function buildMapEmailClient(){
+  const tmp={};
+  (DATA.suivi||[]).forEach(i=>{
+    const em=(f(i,'Email_Client')||'').trim().toLowerCase();
+    if(!em||!i.ClientId)return;
+    tmp[em]=tmp[em]||{};
+    tmp[em][i.ClientId]=(tmp[em][i.ClientId]||0)+1;
+  });
+  _mapEmailClient={};
+  Object.entries(tmp).forEach(([em,counts])=>{
+    const entries=Object.entries(counts).sort((a,b)=>b[1]-a[1]);
+    // Ambiguïté réelle : deux clients à égalité → on ne propose rien
+    if(entries.length>1&&entries[0][1]===entries[1][1])return;
+    const cid=parseInt(entries[0][0],10);
+    _mapEmailClient[em]={clientId:cid,nom:DATA.clients?.[cid]||'',vus:entries[0][1]};
+  });
+}
+function suggereClient(item){
+  const em=(f(item,'Email_Client')||'').trim().toLowerCase();
+  if(!em)return null;
+  const s=_mapEmailClient[em];
+  return s&&s.nom?s:null;
+}
+
+function renderBandeauPriorite(){
+  const aFact=getBLAFacturer(),aComp=getBCACompleter(),sansBL=getBCSansBL();
+  const host=document.getElementById('bandeau-priorite');
+  if(!host)return;
+
+  const bloc=(id,couleur,fond,bordure,titre,sous,n,montant,contenu)=>{
+    if(!n)return'';
+    const ouvert=localStorage.getItem('rp_bp_'+id)!=='0';
+    return`<div style="background:${fond};border:1px solid ${bordure};border-left:4px solid ${couleur};border-radius:var(--radius-sm);margin-bottom:8px;overflow:hidden">
+      <div onclick="toggleBloc('${id}')" style="display:flex;align-items:center;gap:10px;padding:10px 14px;cursor:pointer;user-select:none">
+        <span id="bp-chev-${id}" style="font-size:11px;color:${couleur};width:12px">${ouvert?'▼':'▶'}</span>
+        <span style="font-weight:700;font-size:13.5px;color:${couleur}">${titre}</span>
+        <span style="background:${couleur};color:#fff;border-radius:11px;padding:2px 10px;font-size:12px;font-weight:700">${n}</span>
+        ${montant!==null?`<span style="font-family:var(--font-mono);font-size:13px;font-weight:700;color:${couleur}">${fmtMoney(montant)}</span>`:''}
+        <span style="font-size:11.5px;color:var(--text-muted);margin-left:auto">${sous}</span>
+      </div>
+      <div id="bp-body-${id}" style="display:${ouvert?'block':'none'};padding:0 14px 12px">${contenu}</div>
+    </div>`;
+  };
+
+  // ── Bloc 1 : à facturer, saisie du N° FC directement dans la ligne ──
+  const parVendeur={};
+  aFact.forEach(i=>{const v=f(i,'Vendeurencharge')||'Non assigné';parVendeur[v]=parVendeur[v]||{n:0,m:0};parVendeur[v].n++;parVendeur[v].m+=montantBC(i);});
+  const resumeV=Object.entries(parVendeur).sort((a,b)=>b[1].m-a[1].m)
+    .map(([v,d])=>`<span style="background:#fff;border:1px solid var(--red);border-radius:11px;padding:3px 10px;font-size:11.5px;color:var(--red);font-weight:600">${v} : ${d.n} · ${fmtMoney(d.m)}</span>`).join(' ');
+  const htmlFact=`
+    <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:9px">${resumeV}</div>
+    <div class="tc" style="max-height:290px;overflow-y:auto"><table><thead><tr>
+      <th>Âge BL</th><th>N° BC</th><th>Client</th><th>N° BL</th><th>Montant HT</th><th>Vendeur</th><th style="min-width:230px">Saisir le N° de facture</th>
+    </tr></thead><tbody>${aFact.slice(0,40).map(i=>{
+      const ref=f(i,'DateBL')||f(i,'Dateder_x00e9_ception');
+      return`<tr>
+        <td>${agePillHtml(ref)}</td>
+        <td style="font-family:var(--font-mono);font-weight:600">${f(i,'Title')||('BC-'+i.ID)}</td>
+        <td>${getClient(i)}</td>
+        <td style="font-family:var(--font-mono);font-size:11.5px">${f(i,'N_x00b0_BL')||'—'}</td>
+        <td style="font-family:var(--font-mono);font-weight:600">${fmtMoney(montantBC(i))}</td>
+        <td style="font-size:11.5px">${f(i,'Vendeurencharge')||'—'}</td>
+        <td><div style="display:flex;gap:5px;align-items:center">
+          <input id="fc-inline-${i.ID}" placeholder="N° facture puis Entrée" onkeydown="if(event.key==='Enter')facturerInline(${i.ID})"
+            style="flex:1;height:27px;border:1px solid var(--border);border-radius:5px;padding:0 8px;font-size:12px;font-family:var(--font-mono);outline:none">
+          <button class="btn green" style="height:27px;font-size:11px" onclick="facturerInline(${i.ID})">✓</button>
+        </div></td>
+      </tr>`;}).join('')}</tbody></table></div>
+    ${aFact.length>40?`<div style="font-size:11px;color:var(--text-muted);margin-top:6px">Les 40 plus anciens sur ${aFact.length}.</div>`:''}`;
+
+  // ── Bloc 2 : BC à compléter ──
+  const htmlComp=`<div class="tc" style="max-height:250px;overflow-y:auto"><table><thead><tr>
+      <th>Arrivé</th><th>N° BC</th><th>Client</th><th>Montant HT</th><th>Il manque</th><th>Doc.</th><th></th>
+    </tr></thead><tbody>${aComp.slice(0,40).map(i=>{
+      const sug=suggereClient(i),manques=bcManques(i);
+      const clientAff=(!i.ClientId&&sug)
+        ? `<span style="color:var(--violet);font-style:italic">🔎 ${sug.nom}</span>`
+        : (i.ClientId?getClient(i):'<span style="color:var(--red)">—</span>');
+      return`<tr>
+        <td>${agePillHtml(dateArrivee(i))}</td>
+        <td style="font-family:var(--font-mono);font-weight:600">${f(i,'Title')||'<span style="color:var(--red)">—</span>'}</td>
+        <td>${clientAff}</td>
+        <td style="font-family:var(--font-mono)">${montantBC(i)?fmtMoney(montantBC(i)):'<span style="color:var(--red)">—</span>'}</td>
+        <td>${manques.map(m=>`<span style="background:#fff;border:1px solid var(--amber);color:#8a5a00;border-radius:9px;padding:1px 7px;font-size:10.5px;margin-right:3px">${m}</span>`).join('')}</td>
+        <td>${(i['A_des_Pi_x00e8_ces_Jointes']===true||i['Attachments']===true)?'📎':'<span style="color:var(--red)" title="Aucune pièce jointe">⚠️</span>'}</td>
+        <td><button class="btn navy" style="height:26px;font-size:11px" onclick="openCompleterBC(${i.ID})">✏️ Compléter</button></td>
+      </tr>`;}).join('')}</tbody></table></div>
+    ${aComp.length>40?`<div style="font-size:11px;color:var(--text-muted);margin-top:6px">Les 40 plus anciens sur ${aComp.length}.</div>`:''}`;
+
+  // ── Bloc 3 : ETA dépassée sans BL ──
+  const htmlSansBL=`<div class="tc" style="max-height:230px;overflow-y:auto"><table><thead><tr>
+      <th>Retard</th><th>N° BC</th><th>Client</th><th>ETA</th><th>Montant HT</th><th>Vendeur</th><th></th>
+    </tr></thead><tbody>${sansBL.slice(0,40).map(i=>{
+      const r=daysLate(f(i,'DateLivraisonpr_x00e9_vue'));
+      return`<tr>
+        <td><span style="font-family:var(--font-mono);font-size:11px;padding:2px 7px;border-radius:8px;color:var(--amber);background:var(--amber-light);font-weight:600">+${r}j</span></td>
+        <td style="font-family:var(--font-mono);font-weight:600">${f(i,'Title')||('BC-'+i.ID)}</td>
+        <td>${getClient(i)}</td>
+        <td style="font-size:11.5px">${fmtDate(f(i,'DateLivraisonpr_x00e9_vue'))}</td>
+        <td style="font-family:var(--font-mono)">${fmtMoney(montantBC(i))}</td>
+        <td style="font-size:11.5px">${f(i,'Vendeurencharge')||'—'}</td>
+        <td><button class="btn navy" style="height:26px;font-size:11px" onclick="openTraiterModal(${i.ID})">🔧 Traiter</button></td>
+      </tr>`;}).join('')}</tbody></table></div>
+    ${sansBL.length>40?`<div style="font-size:11px;color:var(--text-muted);margin-top:6px">Les 40 plus en retard sur ${sansBL.length}.</div>`:''}`;
+
+  const contenu=
+    bloc('fact','var(--red)','#ffebee','#ffcdd2','💰 BL livrés à facturer',`Depuis plus de ${SEUIL_FACTURATION} jours`,aFact.length,totalMontant(aFact),htmlFact)+
+    bloc('comp','var(--amber)','var(--amber-light)','#ffe0a3','✏️ BC à compléter','N° BC, client ou montant manquant',aComp.length,null,htmlComp)+
+    bloc('nobl','#8a6d00','#fffbe6','#ffe9a8','📦 Livraison en retard','ETA dépassée, aucun BL',sansBL.length,totalMontant(sansBL),htmlSansBL);
+
+  host.innerHTML=contenu||
+    `<div style="background:var(--green-light);border:1px solid var(--green);border-left:4px solid var(--green);border-radius:var(--radius-sm);padding:12px 16px;margin-bottom:8px;font-size:13.5px;color:var(--green);font-weight:600">✅ Rien d'urgent — tout est à jour</div>`;
+}
+
+function toggleBloc(id){
+  const b=document.getElementById('bp-body-'+id),c=document.getElementById('bp-chev-'+id);
+  if(!b)return;
+  const ouvert=b.style.display!=='none';
+  b.style.display=ouvert?'none':'block';
+  if(c)c.textContent=ouvert?'▶':'▼';
+  try{localStorage.setItem('rp_bp_'+id,ouvert?'0':'1');}catch(e){}
+}
+
+// Facturation en une saisie, sans modal ni rechargement complet
+async function facturerInline(id){
+  const inp=document.getElementById('fc-inline-'+id);
+  if(!inp)return;
+  const fc=inp.value.trim();
+  if(!fc){inp.style.borderColor='var(--red)';inp.focus();return;}
+  inp.disabled=true;inp.style.borderColor='var(--green)';
+  try{
+    const body={};
+    body[nFCKey()]=fc;
+    body[etatFactKey()]='Entièrement facturé';
+    await spPatch('sites/RseauxPlus','Suivi_BC',id,body);
+    const idx=DATA.suivi.findIndex(i=>i.ID===id);
+    const num=idx!==-1?(f(DATA.suivi[idx],'Title')||('BC-'+id)):('BC-'+id);
+    if(idx!==-1)Object.assign(DATA.suivi[idx],body);
+    toast(`✅ ${num} — facture ${fc} enregistrée`);
+    renderBandeauPriorite();renderAll();updateBadges();
+  }catch(e){
+    inp.disabled=false;inp.style.borderColor='var(--red)';
+    toast('❌ Échec : '+e.message,'ko');
+  }
+}
+
+// ── Micro-action « Compléter le BC » — 3 champs, 15 secondes ──
+function openCompleterBC(id){
+  const i=DATA.suivi.find(x=>x.ID===id);
+  if(!i)return;
+  const sug=suggereClient(i);
+  const numAct=f(i,'Title')||'';
+  const mtAct=montantBC(i)||'';
+  const clientAct=i.ClientId?getClient(i):'';
+  const email=f(i,'Email_Client')||'';
+  const lien=f(i,'Liendossier')||'';
+
+  openModal('✏️ Compléter le BC',`
+    <div style="font-size:12px;color:var(--text-muted);margin-bottom:12px">
+      Arrivé le ${fmtDate(dateArrivee(i))}${email?` · <span style="font-family:var(--font-mono);font-size:11px">${email}</span>`:''}
+    </div>
+    <div class="mf"><label>N° BC *</label>
+      <input id="c-num" value="${(numAct||'').replace(/"/g,'&quot;')}" placeholder="Ex : TRA26-383" style="font-size:14px;font-weight:600;font-family:var(--font-mono)"></div>
+    <div class="mf"><label>Client *</label>
+      <input id="c-client" value="${(clientAct||(sug&&!i.ClientId?sug.nom:'')).replace(/"/g,'&quot;')}" placeholder="Tape les premières lettres..." autocomplete="off">
+      <input type="hidden" id="c-clientid" value="${i.ClientId||(sug&&!i.ClientId?sug.clientId:'')}">
+      <div id="c-client-drop"></div>
+      ${(sug&&!i.ClientId)?`<div id="c-sug" style="margin-top:5px;font-size:11.5px;color:var(--violet)">🔎 Proposé d'après l'expéditeur (vu ${sug.vus}×) — modifie si ce n'est pas le bon</div>`:''}
+    </div>
+    <div class="mf"><label>Montant HT *</label>
+      <input id="c-montant" type="number" step="0.01" value="${mtAct}" placeholder="0.00" style="font-size:14px;font-weight:600;font-family:var(--font-mono)"></div>
+    ${lien?`<a href="${lien}" target="_blank" style="display:inline-block;margin-top:4px;font-size:12px;color:var(--violet);font-weight:600">📎 Ouvrir le BC reçu dans un onglet</a>`:
+      `<div style="font-size:11.5px;color:var(--text-muted);margin-top:4px">Aucun lien vers le document — ouvre le BC depuis le panneau détail si besoin.</div>`}
+  `,async()=>{
+    const num=document.getElementById('c-num').value.trim();
+    const cid=document.getElementById('c-clientid').value;
+    const mt=document.getElementById('c-montant').value;
+    if(!num)throw new Error('Le N° de BC est obligatoire.');
+    if(!cid)throw new Error('Sélectionne un client dans la liste proposée.');
+    if(mt===''||isNaN(parseFloat(mt)))throw new Error('Le montant HT est obligatoire.');
+
+    const body={Title:num,ClientId:parseInt(cid,10),MontantHT:parseFloat(mt)};
+    // Montant_BC_Initial : figé à la toute première saisie, jamais réécrit ensuite.
+    // Si la colonne n'existe pas encore côté SharePoint, on réessaie sans elle.
+    const dejaInit=f(i,'Montant_BC_Initial');
+    const withInit=(dejaInit===null&&_colMontantInitial!==false)?{...body,Montant_BC_Initial:parseFloat(mt)}:body;
+    try{
+      await spPatch('sites/RseauxPlus','Suivi_BC',id,withInit);
+      if(withInit!==body)_colMontantInitial=true;
+    }catch(e){
+      if(withInit===body)throw e;
+      _colMontantInitial=false; // colonne absente → on n'essaiera plus de la session
+      console.warn('[Montant_BC_Initial] colonne absente, écriture sans elle');
+      await spPatch('sites/RseauxPlus','Suivi_BC',id,body);
+    }
+    const idx=DATA.suivi.findIndex(x=>x.ID===id);
+    if(idx!==-1)Object.assign(DATA.suivi[idx],withInit);
+    renderBandeauPriorite();renderAll();updateBadges();
+    return `${num} — N° BC, client et montant enregistrés`;
+  });
+  setupClientAutocompleteSimple('c-client','c-clientid','c-client-drop');
+}
+let _colMontantInitial=null; // null = inconnu, true = existe, false = absente
+
+// Autocomplete client minimal pour la micro-action
+function setupClientAutocompleteSimple(inputId,hiddenId,dropId){
+  setTimeout(()=>{
+    const inp=document.getElementById(inputId),hid=document.getElementById(hiddenId),drop=document.getElementById(dropId);
+    if(!inp||!hid||!drop)return;
+    drop.style.cssText='position:relative';
+    const norm=s=>(s||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase();
+    inp.oninput=()=>{
+      hid.value='';
+      document.getElementById('c-sug')?.remove();
+      const q=norm(inp.value);
+      if(q.length<2){drop.innerHTML='';return;}
+      const res=Object.entries(DATA.clients||{}).filter(([,n])=>norm(n).includes(q)).slice(0,8);
+      drop.innerHTML=res.length?`<div style="position:absolute;top:2px;left:0;right:0;background:#fff;border:1px solid var(--border);border-radius:6px;box-shadow:0 4px 14px rgba(10,31,61,.14);z-index:50;max-height:190px;overflow-y:auto">
+        ${res.map(([cid,n])=>`<div onclick="document.getElementById('${inputId}').value=this.textContent;document.getElementById('${hiddenId}').value='${cid}';document.getElementById('${dropId}').innerHTML='';"
+          style="padding:8px 12px;font-size:12.5px;cursor:pointer;border-bottom:1px solid var(--border)" onmouseover="this.style.background='var(--bg)'" onmouseout="this.style.background='#fff'">${n}</div>`).join('')}
+      </div>`:'';
+    };
+  },100);
+}
+
 const getSuiviHistorique=()=>DATA.suivi.filter(i=>{
   const s=getStatut(i);
   const ef=getEtatFact(i);
@@ -1850,7 +2147,84 @@ function renderHistorique(){
 // ═══════════════════════════════════════════════════════════
 // ═══ ANALYTICS ═══
 // ═══════════════════════════════════════════════════════════
+// ── Analytics : facturation par vendeur ──
+function renderFacturationVendeurs(){
+  const host=document.getElementById('an-facturation');
+  if(!host)return;
+  const bf=getBLAFacturer();
+  const tot=totalMontant(bf);
+  const totEl=document.getElementById('an-fact-total');
+  if(totEl)totEl.textContent=`Seuil : ${SEUIL_FACTURATION} jours après la date BL`;
+
+  if(!bf.length){
+    host.innerHTML=`<div style="background:var(--green-light);border:1px solid var(--green);border-radius:var(--radius-sm);padding:14px 18px;font-size:13.5px;color:var(--green);font-weight:600">✅ Aucun BL livré en attente de facturation</div>`;
+    return;
+  }
+
+  const parV={};
+  bf.forEach(i=>{
+    const v=f(i,'Vendeurencharge')||'Non assigné';
+    const age=daysSince(f(i,'DateBL')||f(i,'Dateder_x00e9_ception'));
+    parV[v]=parV[v]||{n:0,m:0,max:0};
+    parV[v].n++;parV[v].m+=montantBC(i);
+    if(age>parV[v].max)parV[v].max=age;
+  });
+  const lignes=Object.entries(parV).sort((a,b)=>b[1].m-a[1].m);
+  const maxM=Math.max(...lignes.map(([,d])=>d.m),1);
+
+  // Répartition par ancienneté — dit si le retard s'accumule ou se résorbe
+  const tranches=[
+    {lbl:'2 à 7 jours',   min:2,  max:7,   c:'var(--amber)'},
+    {lbl:'8 à 15 jours',  min:8,  max:15,  c:'#e07a00'},
+    {lbl:'16 à 30 jours', min:16, max:30,  c:'var(--red)'},
+    {lbl:'Plus de 30 j',  min:31, max:9e9, c:'#7a0000'}
+  ].map(t=>{
+    const sel=bf.filter(i=>{const a=daysSince(f(i,'DateBL')||f(i,'Dateder_x00e9_ception'));return a>=t.min&&a<=t.max;});
+    return{...t,n:sel.length,m:totalMontant(sel)};
+  });
+
+  host.innerHTML=`
+    <div style="display:flex;align-items:baseline;gap:14px;margin-bottom:16px;padding-bottom:14px;border-bottom:1px solid var(--border)">
+      <span style="font-size:32px;font-weight:800;color:var(--red);font-family:var(--font-mono)">${fmtMoney(tot)}</span>
+      <span style="font-size:13px;color:var(--text-muted)">non facturés · ${bf.length} BL livré${bf.length>1?'s':''}</span>
+    </div>
+
+    <table style="width:100%;border-collapse:collapse;margin-bottom:20px">
+      <thead><tr>
+        <th style="text-align:left;font-size:11px;color:var(--text-muted);font-weight:600;padding:0 0 7px">Vendeur</th>
+        <th style="text-align:right;font-size:11px;color:var(--text-muted);font-weight:600;padding:0 0 7px">BL</th>
+        <th style="text-align:right;font-size:11px;color:var(--text-muted);font-weight:600;padding:0 14px 7px">Montant HT</th>
+        <th style="width:38%;padding:0 0 7px"></th>
+        <th style="text-align:right;font-size:11px;color:var(--text-muted);font-weight:600;padding:0 0 7px">Plus ancien</th>
+      </tr></thead>
+      <tbody>${lignes.map(([v,d])=>`<tr style="border-top:1px solid var(--border)">
+        <td style="padding:9px 0;font-size:13px;font-weight:600">${v}</td>
+        <td style="text-align:right;font-family:var(--font-mono);font-size:13px">${d.n}</td>
+        <td style="text-align:right;padding:0 14px;font-family:var(--font-mono);font-size:13.5px;font-weight:700;color:var(--red)">${fmtMoney(d.m)}</td>
+        <td><div style="background:var(--bg);border-radius:4px;height:15px;overflow:hidden">
+          <div style="width:${Math.max(2,Math.round(d.m/maxM*100))}%;height:100%;background:var(--red);border-radius:4px"></div>
+        </div></td>
+        <td style="text-align:right;font-family:var(--font-mono);font-size:12px;color:${d.max>=15?'var(--red)':'var(--text-muted)'};font-weight:${d.max>=15?'700':'400'}">${d.max}j</td>
+      </tr>`).join('')}</tbody>
+    </table>
+
+    <div style="font-size:12px;font-weight:700;color:var(--text-muted);margin-bottom:9px">RÉPARTITION PAR ANCIENNETÉ</div>
+    <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px">
+      ${tranches.map(t=>`<div style="background:var(--bg);border-radius:var(--radius-sm);padding:11px 13px;border-left:3px solid ${t.c}">
+        <div style="font-size:11px;color:var(--text-muted);margin-bottom:4px">${t.lbl}</div>
+        <div style="font-size:19px;font-weight:800;color:${t.c};font-family:var(--font-mono)">${t.n}</div>
+        <div style="font-size:11.5px;color:var(--text-muted);font-family:var(--font-mono)">${fmtMoney(t.m)}</div>
+      </div>`).join('')}
+    </div>
+
+    <div style="margin-top:14px;font-size:11.5px;color:var(--text-muted);line-height:1.55;background:var(--bg);border-radius:var(--radius-sm);padding:10px 13px">
+      ℹ️ Photo de l'instant, pas un historique. Pour savoir si le retard se résorbe,
+      compare les tranches d'ancienneté d'une semaine sur l'autre : si « Plus de 30 j » grossit, le stock vieillit.
+    </div>`;
+}
+
 function renderAnalytics(){
+  renderFacturationVendeurs();
   const suivi=DATA.suivi||[];
   const devis=DATA.devis||[];
   const now=new Date();
@@ -2179,6 +2553,8 @@ function getMatinDevisNouvelle(){
 }
 
 function renderAll(){
+  buildMapEmailClient();
+  renderBandeauPriorite();
   const fV=getFilterVendeur(),fC=getFilterClient();
   const filterBC=i=>(fV==='all'||f(i,'Vendeurencharge')===fV)&&(fC==='all'||getClient(i)===fC);
   const recu=getSuiviRecu().filter(filterBC);
@@ -3119,6 +3495,17 @@ function exportRALCSV(){
 
 // ═══ BADGES ═══
 function updateBadges(){
+  // Montant non facturé visible en permanence sur l'onglet : un € ne se lit pas
+  // comme un nombre d'unités.
+  const bf=getBLAFacturer(),tot=totalMontant(bf);
+  const bEur=document.getElementById('badge-facture-eur');
+  if(bEur){
+    if(bf.length&&tot>0){
+      bEur.style.display='';
+      bEur.textContent=Math.round(tot).toLocaleString('fr-FR')+' €';
+      bEur.title=`${bf.length} BL livré(s) non facturé(s) depuis plus de ${SEUIL_FACTURATION} jours`;
+    }else bEur.style.display='none';
+  }
   const traiter=getMatinTraiter().length;
   const retard=getMatinRelancer().length;
   const dbcActifs=DATA.dbc.filter(i=>f(i,'Statut')!=='BC Reçu');
