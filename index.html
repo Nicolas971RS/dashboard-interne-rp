@@ -190,7 +190,7 @@
   .ral-qty.bad{color:var(--red);}
 
   /* ══ BUTTONS ══ */
-  .btn{background:none;border:1px solid var(--border);color:var(--grey);border-radius:var(--radius-sm);padding:4px 9px;font-size:11px;font-family:var(--font-body);cursor:pointer;font-weight:500;transition:all .12s;height:28px;}
+  .btn{background:none;border:1px solid var(--border);color:var(--grey);border-radius:var(--radius-sm);padding:0 10px;font-size:11px;font-family:var(--font-body);cursor:pointer;font-weight:500;transition:all .12s;height:28px;display:inline-flex;align-items:center;justify-content:center;gap:4px;white-space:nowrap;line-height:1;}
   .btn:hover{border-color:var(--teal-mid);color:var(--teal);background:var(--teal-light);}
   .btn.w:hover{border-color:var(--red);color:var(--red);background:var(--red-light);}
   .btn.gr{border-color:var(--green);color:var(--green);background:var(--green-light);font-weight:700;}
@@ -1770,7 +1770,13 @@ function renderBandeauPriorite(){
 
   const bloc=(id,couleur,fond,bordure,titre,sous,n,montant,contenu)=>{
     if(!n)return'';
-    const ouvert=localStorage.getItem('rp_bp_'+id)!=='0';
+    // Le bloc rouge ne peut pas être masqué définitivement : s'il contient plus
+    // d'éléments qu'au moment où il a été replié, il se rouvre tout seul.
+    let ouvert=localStorage.getItem('rp_bp_'+id)!=='0';
+    if(!ouvert&&id==='fact'){
+      const nRepli=parseInt(localStorage.getItem('rp_bp_fact_n')||'0',10);
+      if(n>nRepli){ouvert=true;try{localStorage.setItem('rp_bp_fact','1');}catch(e){}}
+    }
     return`<div style="background:${fond};border:1px solid ${bordure};border-left:4px solid ${couleur};border-radius:var(--radius-sm);margin-bottom:8px;overflow:hidden">
       <div onclick="toggleBloc('${id}')" style="display:flex;align-items:center;gap:10px;padding:10px 14px;cursor:pointer;user-select:none">
         <span id="bp-chev-${id}" style="font-size:11px;color:${couleur};width:12px">${ouvert?'▼':'▶'}</span>
@@ -1811,7 +1817,7 @@ function renderBandeauPriorite(){
 
   // ── Bloc 2 : BC à compléter ──
   const htmlComp=`<div class="tc" style="max-height:250px;overflow-y:auto"><table><thead><tr>
-      <th>Arrivé</th><th>N° BC</th><th>Client</th><th>Montant HT</th><th>Il manque</th><th>Document</th><th></th>
+      <th style="width:62px">Arrivé</th><th style="width:120px">N° BC</th><th>Client</th><th style="width:100px">Montant HT</th><th style="width:150px">Il manque</th><th style="width:96px;text-align:center">Document</th><th style="width:112px"></th>
     </tr></thead><tbody>${aComp.slice(0,40).map(i=>{
       const sug=suggereClient(i),manques=bcManques(i);
       const clientAff=(!i.ClientId&&sug)
@@ -1823,10 +1829,10 @@ function renderBandeauPriorite(){
         <td>${clientAff}</td>
         <td style="font-family:var(--font-mono)">${montantBC(i)?fmtMoney(montantBC(i)):'<span style="color:var(--red)">—</span>'}</td>
         <td>${manques.map(m=>`<span style="background:#fff;border:1px solid var(--amber);color:#8a5a00;border-radius:9px;padding:1px 7px;font-size:10.5px;margin-right:3px">${m}</span>`).join('')}</td>
-        <td>${(i['A_des_Pi_x00e8_ces_Jointes']===true||i['Attachments']===true)
-          ?`<button class="btn" style="height:26px;font-size:11px;border-color:var(--violet);color:var(--violet)" onclick="openBCPanel(${i.ID})">👁 Voir BC</button>`
+        <td style="text-align:center">${(i['A_des_Pi_x00e8_ces_Jointes']===true||i['Attachments']===true)
+          ?`<button class="btn" style="height:26px;border-color:var(--violet);color:var(--violet)" onclick="openBCPanel(${i.ID})">👁 Voir BC</button>`
           :`<span style="font-size:11px;color:var(--text-muted)" title="Aucune pièce jointe — probablement un courriel à supprimer">📭 sans PJ</span>`}</td>
-        <td><button class="btn navy" style="height:26px;font-size:11px" onclick="openCompleterBC(${i.ID})">✏️ Compléter</button></td>
+        <td style="text-align:center"><button class="btn navy" style="height:26px" onclick="openCompleterBC(${i.ID})">✏️ Compléter</button></td>
       </tr>`;}).join('')}</tbody></table></div>
     ${aComp.length>40?`<div style="font-size:11px;color:var(--text-muted);margin-top:6px">Les 40 plus anciens sur ${aComp.length}.</div>`:''}`;
 
@@ -1861,7 +1867,11 @@ function toggleBloc(id){
   const ouvert=b.style.display!=='none';
   b.style.display=ouvert?'none':'block';
   if(c)c.textContent=ouvert?'▶':'▼';
-  try{localStorage.setItem('rp_bp_'+id,ouvert?'0':'1');}catch(e){}
+  try{
+    localStorage.setItem('rp_bp_'+id,ouvert?'0':'1');
+    // On note le nombre au moment du repli : le bloc rouge se rouvrira dès qu'il grossit
+    if(id==='fact'&&ouvert)localStorage.setItem('rp_bp_fact_n',String(getBLAFacturer().length));
+  }catch(e){}
 }
 
 // Facturation en une saisie, sans modal ni rechargement complet
@@ -1880,10 +1890,13 @@ async function facturerInline(id,prefix='fc-inline-'){
     const num=idx!==-1?(f(DATA.suivi[idx],'Title')||('BC-'+id)):('BC-'+id);
     if(idx!==-1)Object.assign(DATA.suivi[idx],body);
     toast(`✅ ${num} — facture ${fc} enregistrée`);
-    // Ligne du rappel : on la barre au lieu de tout re-rendre
+    // Enchaînement clavier : on saute directement au BL suivant.
+    // Repéré AVANT le re-rendu, qui détruit les lignes du bandeau.
     const tr=inp.closest('tr');
+    const suivant=tr?.nextElementSibling?.querySelector(`input[id^="${prefix}"]`)?.id||null;
     if(tr&&prefix!=='fc-inline-'){tr.style.opacity='.4';tr.style.textDecoration='line-through';majCompteurRappel();}
     renderBandeauPriorite();renderAll();updateBadges();
+    if(suivant)setTimeout(()=>document.getElementById(suivant)?.focus(),60);
   }catch(e){
     inp.disabled=false;inp.style.borderColor='var(--red)';
     toast('❌ Échec : '+e.message,'ko');
