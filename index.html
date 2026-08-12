@@ -207,6 +207,11 @@
   .btn.teal:hover{background:var(--teal);}
   .btn-grp{display:flex;gap:4px;flex-wrap:nowrap;align-items:center;}
   .btn-grp .btn{white-space:nowrap;font-size:11px;padding:5px 8px;}
+  /* Actions de nettoyage — contraste franc pour être distinguées au premier coup d'oeil */
+  .btn-archiver{background:#eef0f5;border-color:#aab3c4;color:#3d4a63;font-weight:600;}
+  .btn-archiver:hover{background:#3d4a63;border-color:#3d4a63;color:#fff;}
+  .btn-supprimer{background:#ffe9e9;border-color:#e03131;color:#c92a2a;font-weight:600;}
+  .btn-supprimer:hover{background:#c92a2a;border-color:#c92a2a;color:#fff;}
   td:last-child{min-width:340px;}
 
   /* ══ BANNER ══ */
@@ -1874,7 +1879,7 @@ function renderBandeauPriorite(){
   // ── Bloc 2 : BC à compléter ──
   const LIMITE_COMP=20;
   const htmlComp=`<div class="tc" style="max-height:290px;overflow-y:auto"><table><thead><tr>
-      <th style="width:62px">Arrivé</th><th style="width:130px">N° BC</th><th>Client</th><th style="width:100px">Montant HT</th><th style="width:160px">Il manque</th><th style="width:96px;text-align:center">Document</th><th style="width:190px;text-align:center">Actions</th>
+      <th style="width:62px">Arrivé</th><th style="width:130px">N° BC</th><th>Client</th><th style="width:100px">Montant HT</th><th style="width:160px">Il manque</th><th style="width:96px;text-align:center">Document</th><th style="width:290px;text-align:center">Actions</th>
     </tr></thead><tbody>${aComp.slice(0,LIMITE_COMP).map(i=>{
       const sug=suggereClient(i),manques=bcManques(i);
       const aPJ=(i['A_des_Pi_x00e8_ces_Jointes']===true||i['Attachments']===true);
@@ -1892,9 +1897,8 @@ function renderBandeauPriorite(){
           :`<span style="font-size:11px;color:var(--text-muted)" title="Aucune pièce jointe">📭 sans PJ</span>`}</td>
         <td style="text-align:center;white-space:nowrap">
           <button class="btn navy" style="height:26px" onclick="openCompleterBC(${i.ID})">✏️ Compléter</button>
-          ${aPJ
-            ?`<button class="btn" style="height:26px;margin-left:4px" title="Retirer de cette liste sans supprimer le BC" onclick="ignorerBC(${i.ID})">🗄</button>`
-            :`<button class="btn" style="height:26px;margin-left:4px;border-color:var(--red);color:var(--red)" title="Supprimer définitivement ce courriel parasite" onclick="supprimerBCParasite(${i.ID})">🗑</button>`}
+          <button class="btn btn-archiver" style="height:26px;margin-left:4px" title="Retirer de cette liste — le BC reste dans SharePoint" onclick="ignorerBC(${i.ID})">🗄 Retirer</button>
+          <button class="btn btn-supprimer" style="height:26px;margin-left:4px" title="Supprimer définitivement de SharePoint" onclick="supprimerBCParasite(${i.ID})">🗑 Supprimer</button>
         </td>
       </tr>`;}).join('')}</tbody></table></div>
     ${aComp.length>LIMITE_COMP?`<div style="font-size:11.5px;color:var(--text-muted);margin-top:7px">Les <strong>${LIMITE_COMP} plus anciens</strong> sur ${aComp.length}. Traite-les ou retire-les (🗄 / 🗑) pour faire descendre la liste.</div>`:''}`;
@@ -2064,7 +2068,25 @@ async function openCompleterBC(id){
     <div style="font-size:12px;color:var(--text-muted);margin-bottom:12px">
       Arrivé le ${fmtDate(dateArrivee(i))}${email?` · <span style="font-family:var(--font-mono);font-size:11px">${email}</span>`:''}
     </div>
-    <div id="c-pj" style="margin-bottom:14px;font-size:12px;color:var(--text-muted)">📎 Recherche du BC reçu...</div>
+    <div id="c-pj" style="margin-bottom:10px;font-size:12px;color:var(--text-muted)">📎 Recherche du document joint...</div>
+    ${(()=>{
+      // Le corps du courriel est souvent le seul moyen de savoir s'il s'agit d'un
+      // vrai BC : un logo de signature arrive aussi en pièce jointe.
+      const raw=f(i,'Contenu_Email')||'';
+      if(!raw)return`<div style="background:var(--bg);border:1px dashed var(--border);border-radius:var(--radius-sm);padding:9px 12px;font-size:11.5px;color:var(--text-muted);margin-bottom:14px">📧 Contenu du courriel non disponible (chargé depuis le cache hors-ligne).</div>`;
+      const clean=raw.replace(/<style[^>]*>[\s\S]*?<\/style>/gi,'').replace(/<script[^>]*>[\s\S]*?<\/script>/gi,'')
+        .replace(/<[^>]*>/g,' ').replace(/&nbsp;/g,' ').replace(/&lt;/g,'<').replace(/&gt;/g,'>').replace(/&amp;/g,'&')
+        .replace(/&#39;|&apos;/g,"'").replace(/&quot;/g,'"').replace(/\s{3,}/g,' ').trim();
+      const esc=t=>t.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+      return`<div style="margin-bottom:14px">
+        <div onclick="var d=document.getElementById('c-mail-body');var c=document.getElementById('c-mail-chev');var o=d.style.display!=='none';d.style.display=o?'none':'block';c.textContent=o?'▶':'▼';"
+          style="display:flex;align-items:center;gap:8px;cursor:pointer;user-select:none;font-size:12px;font-weight:600;color:var(--navy);margin-bottom:5px">
+          <span id="c-mail-chev" style="font-size:10px">▼</span>📧 Contenu du courriel reçu
+          <span style="font-weight:400;color:var(--text-muted);font-size:11px">— vérifie s'il s'agit bien d'un BC</span>
+        </div>
+        <div id="c-mail-body" style="background:var(--grey-xlight,#f6f7fa);border:1px solid var(--border);border-radius:var(--radius-sm);padding:10px 12px;font-size:11.5px;line-height:1.65;max-height:150px;overflow-y:auto;white-space:pre-wrap;word-break:break-word">${esc(clean)||'<em style="color:var(--text-muted)">Courriel vide</em>'}</div>
+      </div>`;
+    })()}
     <div class="mf"><label>N° BC *</label>
       <input id="c-num" value="${(numAct||'').replace(/"/g,'&quot;')}" placeholder="Ex : TRA26-383" style="font-size:14px;font-weight:600;font-family:var(--font-mono)">
       <div id="c-num-hint" style="margin-top:5px;font-size:11.5px;display:none"></div></div>
@@ -2114,23 +2136,37 @@ async function openCompleterBC(id){
     if(!document.getElementById('c-pj'))return; // modal déjà refermé
     if(!pjs.length){
       document.getElementById('c-pj').innerHTML=
-        `<div style="background:var(--bg);border:1px dashed var(--border);border-radius:var(--radius-sm);padding:9px 12px;font-size:12px;color:var(--text-muted)">
-          📭 Aucun document joint à ce BC — probablement un courriel sans pièce jointe, à supprimer.
+        `<div style="background:var(--bg);border:1px dashed var(--border);border-radius:var(--radius-sm);padding:9px 12px;font-size:12px;color:var(--text-muted);margin-bottom:8px">
+          📭 Aucun document joint — lis le courriel ci-dessous pour décider.
+        </div>
+        <div style="display:flex;gap:6px">
+          <button type="button" class="btn btn-supprimer" style="height:28px" onclick="closeModal();supprimerBCParasite(${id})">🗑 Ce n'est pas un BC — supprimer</button>
+          <button type="button" class="btn btn-archiver" style="height:28px" onclick="closeModal();ignorerBC(${id})">🗄 Retirer de la liste</button>
         </div>`;
       return;
     }
     document.getElementById('c-pj').innerHTML=pjs.map(a=>{
       const url=C.spRoot+(a.ServerRelativeUrl||'');
-      const ext=(a.FileName||'').split('.').pop().toLowerCase();
-      const icon=ext==='pdf'?'📄':['jpg','jpeg','png','gif'].includes(ext)?'🖼️':'📎';
-      return`<div onclick="openAttachment('${url}')" style="display:flex;align-items:center;gap:10px;background:var(--violet-light,#f0efff);border:1px solid var(--violet);border-radius:var(--radius-sm);padding:10px 13px;cursor:pointer;margin-bottom:6px">
-        <span style="font-size:20px">${icon}</span>
+      const nom=a.FileName||'';
+      const ext=nom.split('.').pop().toLowerCase();
+      const img=['jpg','jpeg','png','gif','bmp','svg'].includes(ext);
+      // Les logos de signature arrivent en PJ comme le reste : petites images ou
+      // noms typiques (image001.png, logo.jpg). On les signale sans les cacher.
+      const logo=img&&(/^image\d{3,}\./i.test(nom)||/logo|signature|banniere|banner/i.test(nom));
+      const icon=ext==='pdf'?'📄':img?'🖼️':'📎';
+      const c=logo?{bg:'#f6f7fa',bd:'var(--border)',fg:'var(--text-muted)'}:{bg:'var(--violet-light,#f0efff)',bd:'var(--violet)',fg:'var(--violet)'};
+      return`<div onclick="openAttachment('${url}')" style="display:flex;align-items:center;gap:10px;background:${c.bg};border:1px solid ${c.bd};border-radius:var(--radius-sm);padding:9px 12px;cursor:pointer;margin-bottom:5px">
+        <span style="font-size:19px">${icon}</span>
         <div style="flex:1;overflow:hidden">
-          <div style="font-size:12.5px;font-weight:600;color:var(--violet);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${a.FileName}</div>
-          <div style="font-size:11px;color:var(--text-muted)">Cliquer pour ouvrir le BC et recopier les informations</div>
+          <div style="font-size:12.5px;font-weight:600;color:${c.fg};white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${nom}</div>
+          <div style="font-size:11px;color:var(--text-muted)">${logo?'Probablement un logo de signature, pas un BC':'Cliquer pour ouvrir et recopier les informations'}</div>
         </div>
-        <span style="font-size:15px;color:var(--violet)">→</span>
-      </div>`;}).join('');
+        <span style="font-size:15px;color:${c.fg}">→</span>
+      </div>`;}).join('')
+      +`<div style="display:flex;gap:6px;margin-top:8px">
+         <button type="button" class="btn btn-supprimer" style="height:28px" onclick="closeModal();supprimerBCParasite(${id})">🗑 Ce n'est pas un BC — supprimer</button>
+         <button type="button" class="btn btn-archiver" style="height:28px" onclick="closeModal();ignorerBC(${id})">🗄 Retirer de la liste</button>
+       </div>`;
   }catch(e){
     if(document.getElementById('c-pj'))
       document.getElementById('c-pj').innerHTML=`<div style="font-size:12px;color:var(--red)">⚠️ Impossible de charger le document joint.</div>`;
@@ -2293,6 +2329,7 @@ function renderBLManquant(){
     if(bl&&bl.trim())return false; // BL présent → pas manquant
     const dateRec=f(i,'Dateder_x00e9_ception');
     if(!dateRec||new Date(dateRec)<cutoff)return false;
+    if(estIgnore(i))return false;
     const fV=getFilterVendeur(),fC=getFilterClient();
     if(fV!=='all'&&f(i,'Vendeurencharge')!==fV)return false;
     if(fC!=='all'&&getClient(i)!==fC)return false;
@@ -2322,6 +2359,8 @@ function renderBLManquant(){
       <td><div class="btn-grp">
         <button class="btn" onclick="openBCPanel(${i.ID})">Voir BC</button>
         <button class="btn navy" onclick="openTraiterModal(${i.ID})">🔧 Traiter</button>
+        <button class="btn btn-archiver" title="Retirer des listes de suivi — le BC reste dans SharePoint" onclick="ignorerBC(${i.ID})">🗄 Retirer</button>
+        <button class="btn btn-supprimer" title="Supprimer définitivement de SharePoint" onclick="supprimerBCParasite(${i.ID})">🗑 Supprimer</button>
       </div></td>
     </tr>`;
   }).join('');
