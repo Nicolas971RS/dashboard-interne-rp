@@ -1696,11 +1696,25 @@ function getBLAFacturer(){
   }).sort((a,b)=>daysSince(f(b,'DateBL')||f(b,'Dateder_x00e9_ception'))-daysSince(f(a,'DateBL')||f(a,'Dateder_x00e9_ception')));
 }
 
+// Les BC finissant par -A, -B, -C… sont des copies en attente de la prochaine
+// livraison : le vendeur ira les chercher le moment venu, ils n'ont rien à faire
+// dans la liste des BC à compléter.
+const estCopiePartielle=i=>/-[A-Za-z]$/.test(String(f(i,'Title')||'').trim());
+
+// BC volontairement écartés de la liste (bouton « Ignorer »).
+// SharePoint si la colonne Exclure_Suivi existe, sinon repli local sur ce poste.
+let _colExclureSuivi=null;
+const _ignoresLocaux=()=>{try{return JSON.parse(localStorage.getItem('rp_bc_ignores')||'[]');}catch(e){return[];}};
+const estIgnore=i=>f(i,'Exclure_Suivi')===true||f(i,'Exclure_Suivi')==='Oui'||f(i,'Exclure_Suivi')==='1'||_ignoresLocaux().includes(i.ID);
+
 // 🟠 BLOC 2 — BC incomplet : il manque le n°, le client ou le montant
 function bcManques(i){
   const m=[];
-  const t=f(i,'Title');
-  if(!t||!String(t).trim()||/^BC-\d+$/.test(String(t).trim()))m.push('N° BC');
+  const t=String(f(i,'Title')||'').trim();
+  if(!t||/^BC-\d+$/.test(t))m.push('N° BC');
+  // Carnet de bons : un numéro seul (24, 28…) crée des doublons entre clients.
+  // Convention retenue : « CLIENT - NUMÉRO ».
+  else if(/^\d{1,5}$/.test(t))m.push('N° à préfixer');
   if(!i.ClientId&&!f(i,'Client'))m.push('Client');
   const mt=f(i,'MontantHT','Montant_HT','MontantHTTotal');
   if(mt===null||mt===''||Number(mt)===0)m.push('Montant');
@@ -1710,6 +1724,8 @@ function getBCACompleter(){
   return DATA.suivi.filter(i=>{
     if(getStatut(i)==='Annulé')return false;
     if(getEtatFact(i)==='Entièrement facturé')return false;
+    if(estCopiePartielle(i))return false;
+    if(estIgnore(i))return false;
     return bcManques(i).length>0;
   }).sort((a,b)=>{
     // Ceux qui ont une pièce jointe d'abord : ce sont les seuls réellement
@@ -1718,6 +1734,44 @@ function getBCACompleter(){
     if(pj(a)!==pj(b))return pj(b)-pj(a);
     return ageBC(b)-ageBC(a);
   });
+}
+
+// ── Ignorer un BC (le sortir de la liste sans le supprimer) ──
+async function ignorerBC(id){
+  const i=DATA.suivi.find(x=>x.ID===id);
+  const num=i?(f(i,'Title')||('BC-'+id)):('BC-'+id);
+  const ok=await showConfirm('Retirer de la liste ?',
+    `<strong>${num}</strong> ne s'affichera plus dans « BC à compléter ».<br>Le BC reste intact dans SharePoint et dans les autres tableaux.`,
+    'Retirer de la liste');
+  if(!ok)return;
+  let viaSP=false;
+  if(_colExclureSuivi!==false){
+    try{await spPatch('sites/RseauxPlus','Suivi_BC',id,{Exclure_Suivi:true});_colExclureSuivi=true;viaSP=true;
+      const idx=DATA.suivi.findIndex(x=>x.ID===id);if(idx!==-1)DATA.suivi[idx].Exclure_Suivi=true;
+    }catch(e){_colExclureSuivi=false;console.warn('[Exclure_Suivi] colonne absente → repli local');}
+  }
+  if(!viaSP){
+    try{const l=_ignoresLocaux();l.push(id);localStorage.setItem('rp_bc_ignores',JSON.stringify(l));}catch(e){}
+  }
+  toast(`${num} retiré de la liste${viaSP?'':' (sur ce poste uniquement)'}`);
+  renderBandeauPriorite();renderAll();updateBadges();
+}
+
+// ── Supprimer un courriel parasite (aucune pièce jointe) ──
+async function supprimerBCParasite(id){
+  const i=DATA.suivi.find(x=>x.ID===id);
+  const num=i?(f(i,'Title')||('BC-'+id)):('BC-'+id);
+  const ok=await showConfirm('⚠️ Supprimer définitivement ?',
+    `<strong>${num}</strong> sera <strong>supprimé de SharePoint</strong>.<br>Cette action est irréversible.<br><br>
+     <span style="color:var(--text-muted);font-size:12px">Client : ${i?getClient(i):'—'} · Arrivé le ${i?fmtDate(dateArrivee(i)):'—'}</span>`,
+    'Supprimer définitivement','delete');
+  if(!ok)return;
+  try{
+    await spDelete('sites/RseauxPlus','Suivi_BC',id);
+    DATA.suivi=DATA.suivi.filter(x=>x.ID!==id);
+    toast(`🗑 ${num} supprimé`);
+    renderBandeauPriorite();renderAll();updateBadges();
+  }catch(e){toast('❌ Suppression impossible : '+e.message,'ko');}
 }
 
 // 🟡 BLOC 3 — ETA dépassée, toujours aucun BL
@@ -1772,7 +1826,9 @@ function renderBandeauPriorite(){
     if(!n)return'';
     // Le bloc rouge ne peut pas être masqué définitivement : s'il contient plus
     // d'éléments qu'au moment où il a été replié, il se rouvre tout seul.
-    let ouvert=localStorage.getItem('rp_bp_'+id)!=='0';
+    // Le bloc jaune est informatif (rien à faire dans l'immédiat) : replié par défaut.
+    const parDefaut=(id==='nobl')?'0':'1';
+    let ouvert=(localStorage.getItem('rp_bp_'+id)??parDefaut)!=='0';
     if(!ouvert&&id==='fact'){
       const nRepli=parseInt(localStorage.getItem('rp_bp_fact_n')||'0',10);
       if(n>nRepli){ouvert=true;try{localStorage.setItem('rp_bp_fact','1');}catch(e){}}
@@ -1816,10 +1872,12 @@ function renderBandeauPriorite(){
     ${aFact.length>40?`<div style="font-size:11px;color:var(--text-muted);margin-top:6px">Les 40 plus anciens sur ${aFact.length}.</div>`:''}`;
 
   // ── Bloc 2 : BC à compléter ──
-  const htmlComp=`<div class="tc" style="max-height:250px;overflow-y:auto"><table><thead><tr>
-      <th style="width:62px">Arrivé</th><th style="width:120px">N° BC</th><th>Client</th><th style="width:100px">Montant HT</th><th style="width:150px">Il manque</th><th style="width:96px;text-align:center">Document</th><th style="width:112px"></th>
-    </tr></thead><tbody>${aComp.slice(0,40).map(i=>{
+  const LIMITE_COMP=20;
+  const htmlComp=`<div class="tc" style="max-height:290px;overflow-y:auto"><table><thead><tr>
+      <th style="width:62px">Arrivé</th><th style="width:130px">N° BC</th><th>Client</th><th style="width:100px">Montant HT</th><th style="width:160px">Il manque</th><th style="width:96px;text-align:center">Document</th><th style="width:190px;text-align:center">Actions</th>
+    </tr></thead><tbody>${aComp.slice(0,LIMITE_COMP).map(i=>{
       const sug=suggereClient(i),manques=bcManques(i);
+      const aPJ=(i['A_des_Pi_x00e8_ces_Jointes']===true||i['Attachments']===true);
       const clientAff=(!i.ClientId&&sug)
         ? `<span style="color:var(--violet);font-style:italic">🔎 ${sug.nom}</span>`
         : (i.ClientId?getClient(i):'<span style="color:var(--red)">—</span>');
@@ -1828,13 +1886,18 @@ function renderBandeauPriorite(){
         <td style="font-family:var(--font-mono);font-weight:600">${f(i,'Title')||'<span style="color:var(--red)">—</span>'}</td>
         <td>${clientAff}</td>
         <td style="font-family:var(--font-mono)">${montantBC(i)?fmtMoney(montantBC(i)):'<span style="color:var(--red)">—</span>'}</td>
-        <td>${manques.map(m=>`<span style="background:#fff;border:1px solid var(--amber);color:#8a5a00;border-radius:9px;padding:1px 7px;font-size:10.5px;margin-right:3px">${m}</span>`).join('')}</td>
-        <td style="text-align:center">${(i['A_des_Pi_x00e8_ces_Jointes']===true||i['Attachments']===true)
+        <td>${manques.map(m=>`<span style="background:#fff;border:1px solid var(--amber);color:#8a5a00;border-radius:9px;padding:1px 7px;font-size:10.5px;margin-right:3px;display:inline-block;margin-bottom:2px">${m}</span>`).join('')}</td>
+        <td style="text-align:center">${aPJ
           ?`<button class="btn" style="height:26px;border-color:var(--violet);color:var(--violet)" onclick="openBCPanel(${i.ID})">👁 Voir BC</button>`
-          :`<span style="font-size:11px;color:var(--text-muted)" title="Aucune pièce jointe — probablement un courriel à supprimer">📭 sans PJ</span>`}</td>
-        <td style="text-align:center"><button class="btn navy" style="height:26px" onclick="openCompleterBC(${i.ID})">✏️ Compléter</button></td>
+          :`<span style="font-size:11px;color:var(--text-muted)" title="Aucune pièce jointe">📭 sans PJ</span>`}</td>
+        <td style="text-align:center;white-space:nowrap">
+          <button class="btn navy" style="height:26px" onclick="openCompleterBC(${i.ID})">✏️ Compléter</button>
+          ${aPJ
+            ?`<button class="btn" style="height:26px;margin-left:4px" title="Retirer de cette liste sans supprimer le BC" onclick="ignorerBC(${i.ID})">🗄</button>`
+            :`<button class="btn" style="height:26px;margin-left:4px;border-color:var(--red);color:var(--red)" title="Supprimer définitivement ce courriel parasite" onclick="supprimerBCParasite(${i.ID})">🗑</button>`}
+        </td>
       </tr>`;}).join('')}</tbody></table></div>
-    ${aComp.length>40?`<div style="font-size:11px;color:var(--text-muted);margin-top:6px">Les 40 plus anciens sur ${aComp.length}.</div>`:''}`;
+    ${aComp.length>LIMITE_COMP?`<div style="font-size:11.5px;color:var(--text-muted);margin-top:7px">Les <strong>${LIMITE_COMP} plus anciens</strong> sur ${aComp.length}. Traite-les ou retire-les (🗄 / 🗑) pour faire descendre la liste.</div>`:''}`;
 
   // ── Bloc 3 : ETA dépassée sans BL ──
   const htmlSansBL=`<div class="tc" style="max-height:230px;overflow-y:auto"><table><thead><tr>
@@ -2003,7 +2066,8 @@ async function openCompleterBC(id){
     </div>
     <div id="c-pj" style="margin-bottom:14px;font-size:12px;color:var(--text-muted)">📎 Recherche du BC reçu...</div>
     <div class="mf"><label>N° BC *</label>
-      <input id="c-num" value="${(numAct||'').replace(/"/g,'&quot;')}" placeholder="Ex : TRA26-383" style="font-size:14px;font-weight:600;font-family:var(--font-mono)"></div>
+      <input id="c-num" value="${(numAct||'').replace(/"/g,'&quot;')}" placeholder="Ex : TRA26-383" style="font-size:14px;font-weight:600;font-family:var(--font-mono)">
+      <div id="c-num-hint" style="margin-top:5px;font-size:11.5px;display:none"></div></div>
     <div class="mf"><label>Client *</label>
       <input id="c-client" value="${(clientAct||(sug&&!i.ClientId?sug.nom:'')).replace(/"/g,'&quot;')}" placeholder="Tape les premières lettres..." autocomplete="off">
       <input type="hidden" id="c-clientid" value="${i.ClientId||(sug&&!i.ClientId?sug.clientId:'')}">
@@ -2040,6 +2104,7 @@ async function openCompleterBC(id){
     return `${num} — N° BC, client et montant enregistrés`;
   });
   setupClientAutocompleteSimple('c-client','c-clientid','c-client-drop');
+  setupPrefixeCarnet();
 
   // Le BC reçu est une pièce jointe SharePoint, pas un lien : on la charge
   // en asynchrone pour ne pas retarder l'ouverture du formulaire.
@@ -2073,7 +2138,34 @@ async function openCompleterBC(id){
 }
 let _colMontantInitial=null; // null = inconnu, true = existe, false = absente
 
-// Autocomplete client minimal pour la micro-action
+// ── Carnet de bons : proposer « CLIENT - NUMÉRO » ──
+// Un numéro seul (24, 28…) provient d'un carnet et se répète d'un client à
+// l'autre : deux BC « 24 » de deux clients différents sont indiscernables.
+function setupPrefixeCarnet(){
+  setTimeout(()=>{
+    const num=document.getElementById('c-num'),cli=document.getElementById('c-client'),hint=document.getElementById('c-num-hint');
+    if(!num||!cli||!hint)return;
+    const maj=()=>{
+      const t=num.value.trim(),c=cli.value.trim();
+      if(/^\d{1,5}$/.test(t)&&c){
+        const propose=`${c} - ${t}`;
+        hint.style.display='';
+        hint.innerHTML=`<span style="color:var(--amber);font-weight:600">⚠️ Numéro de carnet</span>
+          <span style="color:var(--text-muted)"> — risque de doublon entre clients.</span>
+          <button type="button" onclick="document.getElementById('c-num').value=${JSON.stringify(propose)};document.getElementById('c-num-hint').style.display='none'"
+            style="margin-left:6px;background:var(--navy);color:#fff;border:none;border-radius:5px;padding:4px 11px;font-size:11.5px;font-weight:600;cursor:pointer;font-family:inherit">
+            Utiliser « ${propose} »</button>`;
+      }else hint.style.display='none';
+    };
+    window._majPrefixe=maj; // appelé aussi à la sélection d'un client dans la liste
+    num.addEventListener('input',maj);
+    cli.addEventListener('input',()=>setTimeout(maj,60));
+    // Le client peut être pré-rempli par la suggestion e-mail : on évalue tout de suite
+    maj();
+  },160);
+}
+
+// ── Autocomplete client minimal pour la micro-action ──
 function setupClientAutocompleteSimple(inputId,hiddenId,dropId){
   setTimeout(()=>{
     const inp=document.getElementById(inputId),hid=document.getElementById(hiddenId),drop=document.getElementById(dropId);
@@ -2087,7 +2179,7 @@ function setupClientAutocompleteSimple(inputId,hiddenId,dropId){
       if(q.length<2){drop.innerHTML='';return;}
       const res=Object.entries(DATA.clients||{}).filter(([,n])=>norm(n).includes(q)).slice(0,8);
       drop.innerHTML=res.length?`<div style="position:absolute;top:2px;left:0;right:0;background:#fff;border:1px solid var(--border);border-radius:6px;box-shadow:0 4px 14px rgba(10,31,61,.14);z-index:50;max-height:190px;overflow-y:auto">
-        ${res.map(([cid,n])=>`<div onclick="document.getElementById('${inputId}').value=this.textContent;document.getElementById('${hiddenId}').value='${cid}';document.getElementById('${dropId}').innerHTML='';"
+        ${res.map(([cid,n])=>`<div onclick="document.getElementById('${inputId}').value=this.textContent;document.getElementById('${hiddenId}').value='${cid}';document.getElementById('${dropId}').innerHTML='';window._majPrefixe&&window._majPrefixe();"
           style="padding:8px 12px;font-size:12.5px;cursor:pointer;border-bottom:1px solid var(--border)" onmouseover="this.style.background='var(--bg)'" onmouseout="this.style.background='#fff'">${n}</div>`).join('')}
       </div>`:'';
     };
