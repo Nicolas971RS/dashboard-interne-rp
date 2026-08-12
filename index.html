@@ -1319,6 +1319,7 @@ async function loadAll(){
     _lastLoad=Date.now();updateTimer();
     buildFilters();renderAll();updateBadges();buildSGVendeurs();
     saveCache();hideOfflineBanner();
+    showRappelFacturation(); // une seule fois par session
     initSortableHeaders();
     document.getElementById('lastRefresh').textContent=
       `${suivi.length} BCs · ${lignes.length} lignes · ${dbc.length} DBC · ${devis.length} devis · Actualisé ${new Date().toLocaleTimeString('fr-FR')}`;
@@ -1710,7 +1711,13 @@ function getBCACompleter(){
     if(getStatut(i)==='Annulé')return false;
     if(getEtatFact(i)==='Entièrement facturé')return false;
     return bcManques(i).length>0;
-  }).sort((a,b)=>ageBC(b)-ageBC(a));
+  }).sort((a,b)=>{
+    // Ceux qui ont une pièce jointe d'abord : ce sont les seuls réellement
+    // complétables. Les courriels sans PJ (à supprimer) descendent en bas.
+    const pj=x=>(x['A_des_Pi_x00e8_ces_Jointes']===true||x['Attachments']===true)?1:0;
+    if(pj(a)!==pj(b))return pj(b)-pj(a);
+    return ageBC(b)-ageBC(a);
+  });
 }
 
 // 🟡 BLOC 3 — ETA dépassée, toujours aucun BL
@@ -1804,7 +1811,7 @@ function renderBandeauPriorite(){
 
   // ── Bloc 2 : BC à compléter ──
   const htmlComp=`<div class="tc" style="max-height:250px;overflow-y:auto"><table><thead><tr>
-      <th>Arrivé</th><th>N° BC</th><th>Client</th><th>Montant HT</th><th>Il manque</th><th>Doc.</th><th></th>
+      <th>Arrivé</th><th>N° BC</th><th>Client</th><th>Montant HT</th><th>Il manque</th><th>Document</th><th></th>
     </tr></thead><tbody>${aComp.slice(0,40).map(i=>{
       const sug=suggereClient(i),manques=bcManques(i);
       const clientAff=(!i.ClientId&&sug)
@@ -1816,7 +1823,9 @@ function renderBandeauPriorite(){
         <td>${clientAff}</td>
         <td style="font-family:var(--font-mono)">${montantBC(i)?fmtMoney(montantBC(i)):'<span style="color:var(--red)">—</span>'}</td>
         <td>${manques.map(m=>`<span style="background:#fff;border:1px solid var(--amber);color:#8a5a00;border-radius:9px;padding:1px 7px;font-size:10.5px;margin-right:3px">${m}</span>`).join('')}</td>
-        <td>${(i['A_des_Pi_x00e8_ces_Jointes']===true||i['Attachments']===true)?'📎':'<span style="color:var(--red)" title="Aucune pièce jointe">⚠️</span>'}</td>
+        <td>${(i['A_des_Pi_x00e8_ces_Jointes']===true||i['Attachments']===true)
+          ?`<button class="btn" style="height:26px;font-size:11px;border-color:var(--violet);color:var(--violet)" onclick="openBCPanel(${i.ID})">👁 Voir BC</button>`
+          :`<span style="font-size:11px;color:var(--text-muted)" title="Aucune pièce jointe — probablement un courriel à supprimer">📭 sans PJ</span>`}</td>
         <td><button class="btn navy" style="height:26px;font-size:11px" onclick="openCompleterBC(${i.ID})">✏️ Compléter</button></td>
       </tr>`;}).join('')}</tbody></table></div>
     ${aComp.length>40?`<div style="font-size:11px;color:var(--text-muted);margin-top:6px">Les 40 plus anciens sur ${aComp.length}.</div>`:''}`;
@@ -1856,8 +1865,8 @@ function toggleBloc(id){
 }
 
 // Facturation en une saisie, sans modal ni rechargement complet
-async function facturerInline(id){
-  const inp=document.getElementById('fc-inline-'+id);
+async function facturerInline(id,prefix='fc-inline-'){
+  const inp=document.getElementById(prefix+id);
   if(!inp)return;
   const fc=inp.value.trim();
   if(!fc){inp.style.borderColor='var(--red)';inp.focus();return;}
@@ -1871,6 +1880,9 @@ async function facturerInline(id){
     const num=idx!==-1?(f(DATA.suivi[idx],'Title')||('BC-'+id)):('BC-'+id);
     if(idx!==-1)Object.assign(DATA.suivi[idx],body);
     toast(`✅ ${num} — facture ${fc} enregistrée`);
+    // Ligne du rappel : on la barre au lieu de tout re-rendre
+    const tr=inp.closest('tr');
+    if(tr&&prefix!=='fc-inline-'){tr.style.opacity='.4';tr.style.textDecoration='line-through';majCompteurRappel();}
     renderBandeauPriorite();renderAll();updateBadges();
   }catch(e){
     inp.disabled=false;inp.style.borderColor='var(--red)';
@@ -1878,8 +1890,92 @@ async function facturerInline(id){
   }
 }
 
+// ── Rappel de facturation à la connexion ──
+// Le token Azure AD donne le nom de la personne connectée : on met ses BL en tête.
+const normNom=s=>(s||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().replace(/\s+/g,' ').trim();
+function vendeurConnecte(){
+  const me=normNom(sessionStorage.getItem('user_name')||'');
+  if(!me)return null;
+  const vendeurs=[...new Set(DATA.suivi.map(i=>f(i,'Vendeurencharge')).filter(Boolean))];
+  // Correspondance exacte d'abord, puis nom + prénom dans n'importe quel ordre
+  let m=vendeurs.find(v=>normNom(v)===me);
+  if(!m){
+    const mots=me.split(' ').filter(w=>w.length>2);
+    m=vendeurs.find(v=>{const vm=normNom(v).split(' ');return mots.length>1&&mots.every(w=>vm.includes(w));});
+  }
+  return m||null;
+}
+
+function majCompteurRappel(){
+  const el=document.getElementById('rappel-restant');
+  if(!el)return;
+  const n=document.querySelectorAll('#rappel-tbody tr:not([style*="line-through"])').length;
+  el.textContent=n?`${n} restant${n>1?'s':''}`:'✅ Tout est facturé';
+}
+
+function fermerRappel(){document.getElementById('rappel-fact-ov')?.remove();}
+
+function showRappelFacturation(){
+  if(sessionStorage.getItem('rappel_fact_vu')==='1')return;
+  const bf=getBLAFacturer();
+  if(!bf.length)return;
+  sessionStorage.setItem('rappel_fact_vu','1');
+
+  const moi=vendeurConnecte();
+  const miens=moi?bf.filter(i=>f(i,'Vendeurencharge')===moi):[];
+  const autres=moi?bf.filter(i=>f(i,'Vendeurencharge')!==moi):bf;
+  const ordre=[...miens,...autres];
+  const totMiens=totalMontant(miens);
+
+  const ligne=(i,perso)=>{
+    const ref=f(i,'DateBL')||f(i,'Dateder_x00e9_ception');
+    return`<tr style="${perso?'background:#fff8f8':''}">
+      <td>${agePillHtml(ref)}</td>
+      <td style="font-family:var(--font-mono);font-weight:600">${f(i,'Title')||('BC-'+i.ID)}</td>
+      <td>${getClient(i)}</td>
+      <td style="font-family:var(--font-mono);font-weight:600">${fmtMoney(montantBC(i))}</td>
+      <td style="font-size:11.5px">${perso?'<strong>Toi</strong>':(f(i,'Vendeurencharge')||'—')}</td>
+      <td><div style="display:flex;gap:5px;align-items:center">
+        <input id="rf-${i.ID}" placeholder="N° facture puis Entrée" onkeydown="if(event.key==='Enter')facturerInline(${i.ID},'rf-')"
+          style="flex:1;height:28px;border:1px solid var(--border);border-radius:5px;padding:0 8px;font-size:12px;font-family:var(--font-mono);outline:none">
+        <button class="btn green" style="height:28px;font-size:11px" onclick="facturerInline(${i.ID},'rf-')">✓</button>
+      </div></td>
+    </tr>`;};
+
+  const ov=document.createElement('div');
+  ov.id='rappel-fact-ov';
+  ov.style.cssText='position:fixed;inset:0;background:rgba(10,31,61,.55);z-index:11000;display:flex;align-items:center;justify-content:center;padding:24px';
+  ov.innerHTML=`
+    <div style="background:#fff;border-radius:12px;width:940px;max-width:96vw;max-height:88vh;display:flex;flex-direction:column;box-shadow:0 18px 60px rgba(10,31,61,.35);overflow:hidden">
+      <div style="background:var(--red);color:#fff;padding:16px 22px">
+        <div style="font-size:17px;font-weight:800;margin-bottom:3px">💰 ${bf.length} bon${bf.length>1?'s':''} de livraison à facturer</div>
+        <div style="font-size:12.5px;opacity:.92">
+          ${fmtMoney(totalMontant(bf))} livrés et non facturés depuis plus de ${SEUIL_FACTURATION} jours
+          ${miens.length?` · <strong>${miens.length} pour toi (${fmtMoney(totMiens)})</strong>`:''}
+        </div>
+      </div>
+      <div style="padding:14px 22px 4px;display:flex;align-items:center;gap:10px">
+        <span style="font-size:12.5px;color:var(--text-muted)">Tu peux facturer directement ici — tape le n° puis <strong>Entrée</strong>.</span>
+        <span id="rappel-restant" style="margin-left:auto;font-size:12.5px;font-weight:700;color:var(--red)">${bf.length} restant${bf.length>1?'s':''}</span>
+      </div>
+      <div class="tc" style="margin:8px 22px;overflow-y:auto;flex:1"><table><thead><tr>
+        <th>Âge BL</th><th>N° BC</th><th>Client</th><th>Montant HT</th><th>Vendeur</th><th style="min-width:250px">N° de facture</th>
+      </tr></thead><tbody id="rappel-tbody">
+        ${miens.map(i=>ligne(i,true)).join('')}
+        ${autres.slice(0,30).map(i=>ligne(i,false)).join('')}
+      </tbody></table></div>
+      ${autres.length>30?`<div style="padding:0 22px;font-size:11.5px;color:var(--text-muted)">30 premiers sur ${autres.length} pour les autres vendeurs.</div>`:''}
+      <div style="padding:14px 22px;border-top:1px solid var(--border);display:flex;gap:9px;justify-content:flex-end;background:var(--bg)">
+        <button class="btn" onclick="fermerRappel()" style="height:34px">Plus tard</button>
+        <button class="btn navy" onclick="fermerRappel();document.getElementById('bandeau-priorite')?.scrollIntoView({behavior:'smooth'})" style="height:34px;font-weight:600">Voir la liste complète</button>
+      </div>
+    </div>`;
+  document.body.appendChild(ov);
+  setTimeout(()=>document.getElementById('rf-'+ordre[0].ID)?.focus(),150);
+}
+
 // ── Micro-action « Compléter le BC » — 3 champs, 15 secondes ──
-function openCompleterBC(id){
+async function openCompleterBC(id){
   const i=DATA.suivi.find(x=>x.ID===id);
   if(!i)return;
   const sug=suggereClient(i);
@@ -1887,12 +1983,12 @@ function openCompleterBC(id){
   const mtAct=montantBC(i)||'';
   const clientAct=i.ClientId?getClient(i):'';
   const email=f(i,'Email_Client')||'';
-  const lien=f(i,'Liendossier')||'';
 
   openModal('✏️ Compléter le BC',`
     <div style="font-size:12px;color:var(--text-muted);margin-bottom:12px">
       Arrivé le ${fmtDate(dateArrivee(i))}${email?` · <span style="font-family:var(--font-mono);font-size:11px">${email}</span>`:''}
     </div>
+    <div id="c-pj" style="margin-bottom:14px;font-size:12px;color:var(--text-muted)">📎 Recherche du BC reçu...</div>
     <div class="mf"><label>N° BC *</label>
       <input id="c-num" value="${(numAct||'').replace(/"/g,'&quot;')}" placeholder="Ex : TRA26-383" style="font-size:14px;font-weight:600;font-family:var(--font-mono)"></div>
     <div class="mf"><label>Client *</label>
@@ -1903,8 +1999,6 @@ function openCompleterBC(id){
     </div>
     <div class="mf"><label>Montant HT *</label>
       <input id="c-montant" type="number" step="0.01" value="${mtAct}" placeholder="0.00" style="font-size:14px;font-weight:600;font-family:var(--font-mono)"></div>
-    ${lien?`<a href="${lien}" target="_blank" style="display:inline-block;margin-top:4px;font-size:12px;color:var(--violet);font-weight:600">📎 Ouvrir le BC reçu dans un onglet</a>`:
-      `<div style="font-size:11.5px;color:var(--text-muted);margin-top:4px">Aucun lien vers le document — ouvre le BC depuis le panneau détail si besoin.</div>`}
   `,async()=>{
     const num=document.getElementById('c-num').value.trim();
     const cid=document.getElementById('c-clientid').value;
@@ -1933,6 +2027,36 @@ function openCompleterBC(id){
     return `${num} — N° BC, client et montant enregistrés`;
   });
   setupClientAutocompleteSimple('c-client','c-clientid','c-client-drop');
+
+  // Le BC reçu est une pièce jointe SharePoint, pas un lien : on la charge
+  // en asynchrone pour ne pas retarder l'ouverture du formulaire.
+  const zone=document.getElementById('c-pj');
+  try{
+    const pjs=await getAttachments('sites/RseauxPlus','Suivi_BC',id);
+    if(!document.getElementById('c-pj'))return; // modal déjà refermé
+    if(!pjs.length){
+      document.getElementById('c-pj').innerHTML=
+        `<div style="background:var(--bg);border:1px dashed var(--border);border-radius:var(--radius-sm);padding:9px 12px;font-size:12px;color:var(--text-muted)">
+          📭 Aucun document joint à ce BC — probablement un courriel sans pièce jointe, à supprimer.
+        </div>`;
+      return;
+    }
+    document.getElementById('c-pj').innerHTML=pjs.map(a=>{
+      const url=C.spRoot+(a.ServerRelativeUrl||'');
+      const ext=(a.FileName||'').split('.').pop().toLowerCase();
+      const icon=ext==='pdf'?'📄':['jpg','jpeg','png','gif'].includes(ext)?'🖼️':'📎';
+      return`<div onclick="openAttachment('${url}')" style="display:flex;align-items:center;gap:10px;background:var(--violet-light,#f0efff);border:1px solid var(--violet);border-radius:var(--radius-sm);padding:10px 13px;cursor:pointer;margin-bottom:6px">
+        <span style="font-size:20px">${icon}</span>
+        <div style="flex:1;overflow:hidden">
+          <div style="font-size:12.5px;font-weight:600;color:var(--violet);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${a.FileName}</div>
+          <div style="font-size:11px;color:var(--text-muted)">Cliquer pour ouvrir le BC et recopier les informations</div>
+        </div>
+        <span style="font-size:15px;color:var(--violet)">→</span>
+      </div>`;}).join('');
+  }catch(e){
+    if(document.getElementById('c-pj'))
+      document.getElementById('c-pj').innerHTML=`<div style="font-size:12px;color:var(--red)">⚠️ Impossible de charger le document joint.</div>`;
+  }
 }
 let _colMontantInitial=null; // null = inconnu, true = existe, false = absente
 
