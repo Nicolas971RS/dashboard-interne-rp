@@ -1713,6 +1713,7 @@ const _ignoresLocaux=()=>{try{return JSON.parse(localStorage.getItem('rp_bc_igno
 const estIgnore=i=>f(i,'Exclure_Suivi')===true||f(i,'Exclure_Suivi')==='Oui'||f(i,'Exclure_Suivi')==='1'||_ignoresLocaux().includes(i.ID);
 
 // 🟠 BLOC 2 — BC incomplet : il manque le n°, le client ou le montant
+let _colBCComplete=null; // colonne BC_Complete_Sans_Montant : null=inconnu
 function bcManques(i){
   const m=[];
   const t=String(f(i,'Title')||'').trim();
@@ -1721,8 +1722,11 @@ function bcManques(i){
   // Convention retenue : « CLIENT - NUMÉRO ».
   else if(/^\d{1,5}$/.test(t))m.push('N° à préfixer');
   if(!i.ClientId&&!f(i,'Client'))m.push('Client');
+  // Le montant n'est un manque que s'il n'a pas été volontairement laissé vide
+  // (carnet de bons — le montant viendra à la livraison).
+  const sansMontantAssume=f(i,'BC_Complete_Sans_Montant')===true;
   const mt=f(i,'MontantHT','Montant_HT','MontantHTTotal');
-  if(mt===null||mt===''||Number(mt)===0)m.push('Montant');
+  if(!sansMontantAssume&&(mt===null||mt===''||Number(mt)===0))m.push('Montant');
   return m;
 }
 function getBCACompleter(){
@@ -2118,7 +2122,7 @@ async function openCompleterBC(id){
       <div id="c-client-drop"></div>
       ${(sug&&!i.ClientId)?`<div id="c-sug" style="margin-top:5px;font-size:11.5px;color:var(--violet)">🔎 Proposé d'après l'expéditeur (vu ${sug.vus}×) — modifie si ce n'est pas le bon</div>`:''}
     </div>
-    <div class="mf"><label>Montant HT *</label>
+    <div class="mf"><label>Montant HT <span style="color:var(--text-muted);font-weight:400">(laisser vide pour un carnet de bons)</span></label>
       <input id="c-montant" type="number" step="0.01" value="${mtAct}" placeholder="0.00" style="font-size:14px;font-weight:600;font-family:var(--font-mono)"></div>
   `,async()=>{
     const num=document.getElementById('c-num').value.trim();
@@ -2126,26 +2130,41 @@ async function openCompleterBC(id){
     const mt=document.getElementById('c-montant').value;
     if(!num)throw new Error('Le N° de BC est obligatoire.');
     if(!cid)throw new Error('Sélectionne un client dans la liste proposée.');
-    if(mt===''||isNaN(parseFloat(mt)))throw new Error('Le montant HT est obligatoire.');
+    const aMontant=mt!==''&&!isNaN(parseFloat(mt))&&parseFloat(mt)>0;
 
-    const body={Title:num,ClientId:parseInt(cid,10),MontantHT:parseFloat(mt)};
+    const body={Title:num,ClientId:parseInt(cid,10)};
+    if(aMontant)body.MontantHT=parseFloat(mt);
+    // Sans montant (carnet de bons), on marque le BC comme traité pour qu'il
+    // sorte du bloc « à compléter » — sinon il y réapparaît en boucle.
+    // Le montant sera renseigné plus tard, à la livraison, via « Traiter ».
+    if(!aMontant&&_colBCComplete!==false)body.BC_Complete_Sans_Montant=true;
+
     // Montant_BC_Initial : figé à la toute première saisie, jamais réécrit ensuite.
-    // Si la colonne n'existe pas encore côté SharePoint, on réessaie sans elle.
     const dejaInit=f(i,'Montant_BC_Initial');
-    const withInit=(dejaInit===null&&_colMontantInitial!==false)?{...body,Montant_BC_Initial:parseFloat(mt)}:body;
+    const withInit=(aMontant&&dejaInit===null&&_colMontantInitial!==false)?{...body,Montant_BC_Initial:parseFloat(mt)}:body;
     try{
       await spPatch('sites/RseauxPlus','Suivi_BC',id,withInit);
-      if(withInit!==body)_colMontantInitial=true;
+      if(withInit.Montant_BC_Initial!==undefined)_colMontantInitial=true;
+      if(withInit.BC_Complete_Sans_Montant!==undefined)_colBCComplete=true;
     }catch(e){
-      if(withInit===body)throw e;
-      _colMontantInitial=false; // colonne absente → on n'essaiera plus de la session
-      console.warn('[Montant_BC_Initial] colonne absente, écriture sans elle');
-      await spPatch('sites/RseauxPlus','Suivi_BC',id,body);
+      // Une colonne optionnelle est peut-être absente : on retente sans les extras
+      const base={Title:num,ClientId:parseInt(cid,10)};
+      if(aMontant)base.MontantHT=parseFloat(mt);
+      if(JSON.stringify(base)===JSON.stringify(withInit))throw e;
+      if(withInit.Montant_BC_Initial!==undefined)_colMontantInitial=false;
+      if(withInit.BC_Complete_Sans_Montant!==undefined){_colBCComplete=false;
+        // Repli : sans la colonne, on écarte le BC en local pour qu'il sorte du bloc
+        try{const l=_ignoresLocaux();if(!l.includes(id)){l.push(id);localStorage.setItem('rp_bc_ignores',JSON.stringify(l));}}catch(_){}
+      }
+      console.warn('[Compléter] colonne optionnelle absente, écriture réduite');
+      await spPatch('sites/RseauxPlus','Suivi_BC',id,base);
     }
     const idx=DATA.suivi.findIndex(x=>x.ID===id);
     if(idx!==-1)Object.assign(DATA.suivi[idx],withInit);
     renderBandeauPriorite();renderAll();updateBadges();
-    return `${num} — N° BC, client et montant enregistrés`;
+    return aMontant
+      ? `${num} — N° BC, client et montant enregistrés`
+      : `${num} — enregistré sans montant (carnet de bons)`;
   });
   setupClientAutocompleteSimple('c-client','c-clientid','c-client-drop');
   setupPrefixeCarnet();
