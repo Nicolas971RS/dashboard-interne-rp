@@ -1784,15 +1784,27 @@ async function supprimerBCParasite(id){
 }
 
 // 🟡 BLOC 3 — ETA dépassée, toujours aucun BL
+// 🟡 BLOC 3 — BC reçu depuis plus de 5 jours, toujours pas de BL.
+// DateLivraisonpr_x00e9_vue n'est PAS une date d'échéance : elle n'est
+// renseignée qu'au moment où le client vient retirer sa commande. On ne
+// peut donc pas s'en servir pour détecter un retard — le vrai signal est
+// l'ancienneté depuis la réception du BC.
+const SEUIL_RETRAIT=5;
 function getBCSansBL(){
   return DATA.suivi.filter(i=>{
     const bl=f(i,'N_x00b0_BL');
     if(bl&&String(bl).trim())return false;
     const s=getStatut(i);
     if(s==='Annulé'||s==='Terminé')return false;
-    const eta=f(i,'DateLivraisonpr_x00e9_vue');
-    return eta&&daysLate(eta)>0;
-  }).sort((a,b)=>daysLate(f(b,'DateLivraisonpr_x00e9_vue'))-daysLate(f(a,'DateLivraisonpr_x00e9_vue')));
+    if(estIgnore(i))return false;
+    // Article en commande, arrivage pas encore dû : on n'attend rien du vendeur,
+    // pas la peine de le déranger. Si la date est dépassée, le BC redevient
+    // visible — c'est le fournisseur qui traîne, pas le client.
+    const arrivage=f(i,'Date_Arrivage_Attendu');
+    if(arrivage&&daysSince(arrivage)<0)return false;
+    const dateRec=f(i,'Dateder_x00e9_ception')||dateArrivee(i);
+    return dateRec&&daysSince(dateRec)>=SEUIL_RETRAIT;
+  }).sort((a,b)=>daysSince(f(a,'Dateder_x00e9_ception')||dateArrivee(a))<daysSince(f(b,'Dateder_x00e9_ception')||dateArrivee(b))?1:-1);
 }
 
 const montantBC=i=>parseFloat(f(i,'MontantHT','Montant_HT','MontantHTTotal'))||0;
@@ -1907,26 +1919,42 @@ function renderBandeauPriorite(){
       </tr>`;}).join('')}</tbody></table></div>
     ${aComp.length>LIMITE_COMP?`<div style="font-size:11.5px;color:var(--text-muted);margin-top:7px">Les <strong>${LIMITE_COMP} plus anciens</strong> sur ${aComp.length}. Traite-les ou retire-les (🗄 / 🗑) pour faire descendre la liste.</div>`:''}`;
 
-  // ── Bloc 3 : ETA dépassée sans BL ──
-  const htmlSansBL=`<div class="tc" style="max-height:230px;overflow-y:auto"><table><thead><tr>
-      <th>Retard</th><th>N° BC</th><th>Client</th><th>ETA</th><th>Montant HT</th><th>Vendeur</th><th></th>
+  // 🟡 Bloc 3 : BC reçu depuis plus de 5 jours, client pas encore venu retirer
+  const htmlSansBL=`<div style="font-size:11.5px;color:var(--text-muted);margin-bottom:8px">
+      📞 Vérifie d'abord si l'article est arrivé en stock, puis relance le client.
+    </div>
+    <div class="tc" style="max-height:250px;overflow-y:auto"><table><thead><tr>
+      <th>Depuis</th><th>N° BC</th><th>Client</th><th>Chantier</th><th>Montant HT</th><th>Vendeur</th><th></th>
     </tr></thead><tbody>${sansBL.slice(0,40).map(i=>{
-      const r=daysLate(f(i,'DateLivraisonpr_x00e9_vue'));
+      const dateRec=f(i,'Dateder_x00e9_ception')||dateArrivee(i);
+      const j=daysSince(dateRec);
+      const arrivage=f(i,'Date_Arrivage_Attendu');
+      const arrivageDepasse=arrivage&&daysSince(arrivage)>=0;
+      const urgent=!arrivageDepasse&&j>=15;
+      let badge,c,bg;
+      if(arrivageDepasse){
+        badge=`🚚 Commande +${daysSince(arrivage)}j`;c='#7a3c00';bg='#ffe9cc';
+      }else{
+        badge=`${j}j${urgent?' ⚠️':''}`;c=urgent?'var(--red)':'#8a6d00';bg=urgent?'#ffebee':'var(--amber-light)';
+      }
       return`<tr>
-        <td><span style="font-family:var(--font-mono);font-size:11px;padding:2px 7px;border-radius:8px;color:var(--amber);background:var(--amber-light);font-weight:600">+${r}j</span></td>
+        <td><span style="font-family:var(--font-mono);font-size:11px;padding:2px 7px;border-radius:8px;color:${c};background:${bg};font-weight:600;white-space:nowrap">${badge}</span></td>
         <td style="font-family:var(--font-mono);font-weight:600">${f(i,'Title')||('BC-'+i.ID)}</td>
         <td>${getClient(i)}</td>
-        <td style="font-size:11.5px">${fmtDate(f(i,'DateLivraisonpr_x00e9_vue'))}</td>
+        <td style="font-size:11.5px">${f(i,'_ProjetTitle')||'—'}</td>
         <td style="font-family:var(--font-mono)">${fmtMoney(montantBC(i))}</td>
         <td style="font-size:11.5px">${f(i,'Vendeurencharge')||'—'}</td>
-        <td><button class="btn navy" style="height:26px;font-size:11px" onclick="openTraiterModal(${i.ID})">🔧 Traiter</button></td>
+        <td><div style="display:flex;gap:4px">
+          <button class="btn navy" style="height:26px;font-size:11px" onclick="openTraiterModal(${i.ID})">🔧 Traiter</button>
+          <button class="btn btn-archiver" style="height:26px;font-size:11px" title="Retirer de cette liste" onclick="ignorerBC(${i.ID})">🗄</button>
+        </div></td>
       </tr>`;}).join('')}</tbody></table></div>
-    ${sansBL.length>40?`<div style="font-size:11px;color:var(--text-muted);margin-top:6px">Les 40 plus en retard sur ${sansBL.length}.</div>`:''}`;
+    ${sansBL.length>40?`<div style="font-size:11px;color:var(--text-muted);margin-top:6px">Les 40 plus anciens sur ${sansBL.length}.</div>`:''}`;
 
   const contenu=
     bloc('fact','var(--red)','#ffebee','#ffcdd2','💰 BL livrés à facturer',`Depuis plus de ${SEUIL_FACTURATION} jours`,aFact.length,totalMontant(aFact),htmlFact)+
     bloc('comp','var(--amber)','var(--amber-light)','#ffe0a3','✏️ BC à compléter','N° BC, client ou montant manquant',aComp.length,null,htmlComp)+
-    bloc('nobl','#8a6d00','#fffbe6','#ffe9a8','📦 Livraison en retard','ETA dépassée, aucun BL',sansBL.length,totalMontant(sansBL),htmlSansBL);
+    bloc('nobl','#8a6d00','#fffbe6','#ffe9a8','📦 BC reçus, non retirés',`Depuis plus de ${SEUIL_RETRAIT} jours`,sansBL.length,totalMontant(sansBL),htmlSansBL);
 
   host.innerHTML=contenu||
     `<div style="background:var(--green-light);border:1px solid var(--green);border-left:4px solid var(--green);border-radius:var(--radius-sm);padding:12px 16px;margin-bottom:8px;font-size:13.5px;color:var(--green);font-weight:600">✅ Rien d'urgent — tout est à jour</div>`;
@@ -2215,6 +2243,7 @@ async function openCompleterBC(id){
   }
 }
 let _colMontantInitial=null; // null = inconnu, true = existe, false = absente
+let _colArrivage=null; // idem pour Date_Arrivage_Attendu
 
 // ── Carnet de bons : proposer « CLIENT - NUMÉRO » ──
 let _prefixePropose='';
@@ -4358,6 +4387,7 @@ async function openTraiterModal(id,numBC,client){
   const curDateBL=f(currentItem,'DateBL')||'';
   const curDatePEC=f(currentItem,'Datepriseencharge')||today;
   const curETA=f(currentItem,'DateLivraisonpr_x00e9_vue')||'';
+  const curArrivage=f(currentItem,'Date_Arrivage_Attendu')||'';
   // Nettoyer HTML Outlook du Contenu_Email et extraire lien portail
   const rawEmail=f(currentItem,'Contenu_Email')||'';
   const portailMatch=rawEmail.match(/href=["']([^"']*portail[^"']*)["']/i)||rawEmail.match(/href=["']([^"']{20,})["']/i);
@@ -4403,8 +4433,12 @@ async function openTraiterModal(id,numBC,client){
       <div class="mf"><label>Date prise en charge</label><input id="m-datepec" type="date" value="${curDatePEC?curDatePEC.slice(0,10):today}"></div>
     </div>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
-      <div class="mf"><label>Date livraison prévue</label><input id="m-eta" type="date" value="${curETA?curETA.slice(0,10):''}"></div>
+      <div class="mf"><label>Date livraison prévue <span style="font-weight:400;color:var(--text-muted)">(retrait client)</span></label><input id="m-eta" type="date" value="${curETA?curETA.slice(0,10):''}"></div>
       <div class="mf"><label>Montant HT (€)</label><input id="m-montant" type="number" step="0.01" value="${curMontant}" placeholder="0.00"></div>
+    </div>
+    <div class="mf"><label>📦 Article en commande — arrivage attendu le <span style="font-weight:400;color:var(--text-muted)">(optionnel)</span></label>
+      <input id="m-arrivage" type="date" value="${curArrivage?curArrivage.slice(0,10):''}">
+      <div style="font-size:10.5px;color:var(--text-muted);margin-top:3px">Si rempli, ce BC sort du bloc jaune tant que la date n'est pas dépassée.</div>
     </div>
     <div class="mf"><label>📝 Remarque livraison</label>
       <textarea id="m-rem" rows="3" placeholder="Notes de suivi, anomalies, manquants, casse...">${curRem}</textarea>
@@ -4435,6 +4469,12 @@ async function openTraiterModal(id,numBC,client){
     if(datebl)body['DateBL']=datebl+'T00:00:00Z';
     if(datepec)body['Datepriseencharge']=datepec+'T00:00:00Z';
     if(eta)body['DateLivraisonpr_x00e9_vue']=eta+'T00:00:00Z';
+    const arrivage=document.getElementById('m-arrivage')?.value;
+    // Colonne optionnelle : on écrit dessus si elle existe, sinon on l'ignore
+    // silencieusement (auto-détectée à la première tentative réussie/échouée).
+    if(arrivage!==undefined&&arrivage!==(curArrivage?curArrivage.slice(0,10):'')&&_colArrivage!==false){
+      body['Date_Arrivage_Attendu']=arrivage?arrivage+'T00:00:00Z':null;
+    }
     const montant=document.getElementById('m-montant').value;
     if(montant!==''&&!isNaN(parseFloat(String(montant).replace(',','.')))){
       const montantVal=parseFloat(String(montant).replace(',','.'));
@@ -4449,7 +4489,19 @@ async function openTraiterModal(id,numBC,client){
     const statut=document.getElementById('m-statut').value;
     if(statut&&statut!==currentStat)body['Statut']=statut;
     if(!Object.keys(body).length)throw new Error('Aucune modification détectée.');
-    await spPatch('sites/RseauxPlus','Suivi_BC',id,body);
+    try{
+      await spPatch('sites/RseauxPlus','Suivi_BC',id,body);
+      if('Date_Arrivage_Attendu' in body)_colArrivage=true;
+    }catch(e){
+      if(!('Date_Arrivage_Attendu' in body))throw e;
+      _colArrivage=false; // colonne absente → on retire et on réessaie sans elle
+      const {Date_Arrivage_Attendu,...bodySansArrivage}=body;
+      if(!Object.keys(bodySansArrivage).length)throw new Error('Le champ « arrivage attendu » n\'est pas encore disponible côté SharePoint (colonne non créée).');
+      console.warn('[Date_Arrivage_Attendu] colonne absente, écriture réduite');
+      await spPatch('sites/RseauxPlus','Suivi_BC',id,bodySansArrivage);
+      Object.assign(body,bodySansArrivage);
+      delete body.Date_Arrivage_Attendu;
+    }
     const idx=DATA.suivi.findIndex(i=>i.ID===id);
     if(idx!==-1){
       Object.assign(DATA.suivi[idx],body);
@@ -4461,6 +4513,7 @@ async function openTraiterModal(id,numBC,client){
     const LBL={Title:'N° BC','N_x00b0_Devis':'N° Devis',ClientId:'Client',ProjetId:'Chantier',
       'N_x00b0_BL':'N° BL',DateBL:'Date BL',Datepriseencharge:'Date prise en charge',
       'DateLivraisonpr_x00e9_vue':'Date livraison prévue',MontantHT:'Montant HT',
+      Date_Arrivage_Attendu:'Arrivage attendu',
       Remarques:'Remarque',Vendeurencharge:'Vendeur',Statut:'Statut'};
     const champs=Object.keys(body).map(k=>LBL[k]||(k.toLowerCase().includes('montant')?'Montant HT':k));
     return `${titre||numBC} — ${champs.join(', ')} enregistré${champs.length>1?'s':''}`;
