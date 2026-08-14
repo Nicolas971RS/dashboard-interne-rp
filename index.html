@@ -381,9 +381,9 @@
       </table></div>
 
       <!-- SECTION 2 : À relancer fournisseur -->
-      <div class="sd"><h2>🚨 À relancer fournisseur</h2><span class="site-tag rp">Date livraison prévue dépassée · Non soldés</span><div class="sd-line"></div><button class="btn" onclick="exportMatinRelancer()">⬇ CSV</button></div>
+      <div class="sd"><h2>🚨 À relancer fournisseur</h2><span class="site-tag rp">Date de livraison dépassée · Non soldés</span><div class="sd-line"></div><button class="btn" onclick="exportMatinRelancer()">⬇ CSV</button></div>
       <div class="tc"><table>
-        <thead><tr><th>Retard</th><th>N° BC</th><th>Client</th><th>Chantier</th><th>ETA prévue</th><th>Vendeur</th><th>Statut</th><th>RAL</th><th>Action</th></tr></thead>
+        <thead><tr><th>Retard</th><th>N° BC</th><th>Client</th><th>Chantier</th><th>Date livraison</th><th>Vendeur</th><th>Statut</th><th>RAL</th><th>Action</th></tr></thead>
         <tbody id="matin-retard-body"><tr class="empty-row"><td colspan="9">Chargement...</td></tr></tbody>
       </table></div>
 
@@ -610,7 +610,7 @@
       <div class="acc-body" id="acc-encours">
         <div class="note">ℹ️ RAL visible uniquement pour les BCs en livraison partielle.</div>
         <div class="tc"><table>
-          <thead><tr><th>Urgence</th><th>N° BC</th><th>Client</th><th>Chantier</th><th>N° Devis</th><th>N° FC</th><th>Montant HT</th><th>ETA</th><th>Vendeur</th><th>Statut</th><th>RAL / Lignes</th><th>Actions</th></tr></thead>
+          <thead><tr><th>Urgence</th><th>N° BC</th><th>Client</th><th>Chantier</th><th>N° Devis</th><th>N° FC</th><th>Montant HT</th><th>Date livraison</th><th>Vendeur</th><th>Statut</th><th>RAL / Lignes</th><th>Actions</th></tr></thead>
           <tbody id="suivi-encours-body"><tr class="empty-row"><td colspan="12">Chargement...</td></tr></tbody>
         </table></div>
       </div>
@@ -1859,8 +1859,29 @@ function suggereClient(item){
   return s&&s.nom?s:null;
 }
 
+// 📅 BLOC — Date de retrait client dépassée, toujours pas de BL.
+// L'article est déjà arrivé (pas d'attente fournisseur en cours) et le
+// client s'était engagé sur une date de retrait qui est passée sans qu'il
+// ne vienne — c'est un contact client à ne pas manquer, pas de la paperasse.
+function getRetraitDepasse(){
+  return DATA.suivi.filter(i=>{
+    const bl=f(i,'N_x00b0_BL');
+    if(bl&&String(bl).trim())return false;
+    const s=getStatut(i);
+    if(s==='Annulé'||s==='Terminé')return false;
+    if(estIgnore(i))return false;
+    const eta=f(i,'DateLivraisonpr_x00e9_vue');
+    if(!eta||daysLate(eta)<=0)return false;
+    // Si un arrivage fournisseur est encore attendu (futur), le client ne
+    // peut de toute façon pas venir récupérer — pas la peine de le relancer.
+    const arrivage=f(i,'Date_Arrivage_Attendu');
+    if(arrivage&&daysSince(arrivage)<0)return false;
+    return true;
+  }).sort((a,b)=>daysLate(f(b,'DateLivraisonpr_x00e9_vue'))-daysLate(f(a,'DateLivraisonpr_x00e9_vue')));
+}
+
 function renderBandeauPriorite(){
-  const aFact=getBLAFacturer(),aComp=getBCACompleter(),sansBL=getBCSansBL();
+  const aFact=getBLAFacturer(),aComp=getBCACompleter(),sansBL=getBCSansBL(),retrait=getRetraitDepasse();
   const host=document.getElementById('bandeau-priorite');
   if(!host)return;
 
@@ -1972,8 +1993,33 @@ function renderBandeauPriorite(){
       </tr>`;}).join('')}</tbody></table></div>
     ${sansBL.length>40?`<div style="font-size:11px;color:var(--text-muted);margin-top:6px">Les 40 plus anciens sur ${sansBL.length}.</div>`:''}`;
 
+  // ── Retrait client dépassé : relance téléphonique ──
+  const htmlRetrait=`<div style="font-size:11.5px;color:var(--text-muted);margin-bottom:8px">
+      📞 Le client s'était engagé sur cette date — un appel de relance s'impose.
+    </div>
+    <div class="tc" style="max-height:250px;overflow-y:auto"><table><thead><tr>
+      <th>Retard</th><th>N° BC</th><th>Client</th><th>Chantier</th><th>Date de livraison</th><th>Montant HT</th><th>Vendeur</th><th></th>
+    </tr></thead><tbody>${retrait.slice(0,40).map(i=>{
+      const eta=f(i,'DateLivraisonpr_x00e9_vue');
+      const r=daysLate(eta);
+      return`<tr>
+        <td><span style="font-family:var(--font-mono);font-size:11px;padding:2px 7px;border-radius:8px;color:#8a1f00;background:#ffe4d6;font-weight:600">+${r}j</span></td>
+        <td style="font-family:var(--font-mono);font-weight:600">${f(i,'Title')||('BC-'+i.ID)}</td>
+        <td>${getClient(i)}</td>
+        <td style="font-size:11.5px">${f(i,'_ProjetTitle')||'—'}</td>
+        <td style="font-size:11.5px">${fmtDate(eta)}</td>
+        <td style="font-family:var(--font-mono)">${fmtMoney(montantBC(i))}</td>
+        <td style="font-size:11.5px">${f(i,'Vendeurencharge')||'—'}</td>
+        <td><div style="display:flex;gap:4px">
+          <button class="btn navy" style="height:26px;font-size:11px" onclick="openTraiterModal(${i.ID})">🔧 Traiter</button>
+          <button class="btn btn-archiver" style="height:26px;font-size:11px" title="Retirer de cette liste" onclick="ignorerBC(${i.ID})">🗄</button>
+        </div></td>
+      </tr>`;}).join('')}</tbody></table></div>
+    ${retrait.length>40?`<div style="font-size:11px;color:var(--text-muted);margin-top:6px">Les 40 plus en retard sur ${retrait.length}.</div>`:''}`;
+
   const contenu=
     bloc('fact','var(--red)','#ffebee','#ffcdd2','💰 BL livrés à facturer',`Depuis plus de ${SEUIL_FACTURATION} jours`,aFact.length,totalMontant(aFact),htmlFact)+
+    bloc('retrait','#c2410c','#fff1e6','#fdba8c','📞 Retrait client en retard','Date de livraison dépassée, à relancer',retrait.length,totalMontant(retrait),htmlRetrait)+
     bloc('comp','var(--amber)','var(--amber-light)','#ffe0a3','✏️ BC à compléter','N° BC, client ou montant manquant',aComp.length,null,htmlComp)+
     bloc('nobl','#8a6d00','#fffbe6','#ffe9a8','📦 BC reçus, non retirés',`Depuis plus de ${SEUIL_RETRAIT} jours`,sansBL.length,totalMontant(sansBL),htmlSansBL);
 
@@ -2939,7 +2985,7 @@ function exportMatinRelancer(){
   exportCSV(getMatinRelancer(),[
     {label:'N° BC', fn:i=>f(i,'Title')||`BC-${i.ID}`},
     {label:'Client', fn:i=>getClient(i)},
-    {label:'ETA prévue', fn:i=>fmtDate(f(i,'DateLivraisonpr_x00e9_vue'))},
+    {label:'Date livraison', fn:i=>fmtDate(f(i,'DateLivraisonpr_x00e9_vue'))},
     {label:'Jours retard', fn:i=>daysLate(f(i,'DateLivraisonpr_x00e9_vue'))},
     {label:'Vendeur', fn:i=>f(i,'Vendeurencharge')||''},
     {label:'Statut', fn:i=>getStatut(i)},
@@ -4518,7 +4564,7 @@ async function openTraiterModal(id,numBC,client){
       <div class="mf"><label>Date prise en charge</label><input id="m-datepec" type="date" value="${curDatePEC?curDatePEC.slice(0,10):today}"></div>
     </div>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
-      <div class="mf"><label>Date livraison prévue <span style="font-weight:400;color:var(--text-muted)">(retrait client)</span></label><input id="m-eta" type="date" value="${curETA?curETA.slice(0,10):''}"></div>
+      <div class="mf"><label>Date de livraison <span style="font-weight:400;color:var(--text-muted)">(retrait client)</span></label><input id="m-eta" type="date" value="${curETA?curETA.slice(0,10):''}"></div>
       <div class="mf"><label>Montant HT (€)</label><input id="m-montant" type="number" step="0.01" value="${curMontant}" placeholder="0.00"></div>
     </div>
     <div class="mf"><label>📦 Article en commande — arrivage attendu le <span style="font-weight:400;color:var(--text-muted)">(optionnel)</span></label>
@@ -4597,7 +4643,7 @@ async function openTraiterModal(id,numBC,client){
     // Libellés lisibles des champs modifiés — affichés dans la confirmation
     const LBL={Title:'N° BC','N_x00b0_Devis':'N° Devis',ClientId:'Client',ProjetId:'Chantier',
       'N_x00b0_BL':'N° BL',DateBL:'Date BL',Datepriseencharge:'Date prise en charge',
-      'DateLivraisonpr_x00e9_vue':'Date livraison prévue',MontantHT:'Montant HT',
+      'DateLivraisonpr_x00e9_vue':'Date de livraison',MontantHT:'Montant HT',
       Date_Arrivage_Attendu:'Arrivage attendu',
       Remarques:'Remarque',Vendeurencharge:'Vendeur',Statut:'Statut'};
     const champs=Object.keys(body).map(k=>LBL[k]||(k.toLowerCase().includes('montant')?'Montant HT':k));
@@ -5708,7 +5754,7 @@ async function openBCPanel(id){
       <div class="pf"><div class="pf-lbl">📦 Archivage Docuware</div><div class="pf-val" style="display:flex;align-items:center;gap:8px">${bDocuware(item)}${f(item,'Lien_dossier','Liendossier')&&f(item,'Lien_dossier','Liendossier')!=='—'?`<a href="${f(item,'Lien_dossier','Liendossier')}" target="_blank" style="font-size:11.5px;color:var(--teal)">Ouvrir dans Docuware →</a>`:'<span style="font-size:11.5px;color:var(--text-muted)">Non archivé</span>'}</div></div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:0">
         <div class="pf"><div class="pf-lbl">📅 Date réception</div><div class="pf-val mono">${dateRec}</div></div>
-        <div class="pf"><div class="pf-lbl">📅 ETA prévue (retrait client)</div><div class="pf-val mono">${dateLiv}</div></div>
+        <div class="pf"><div class="pf-lbl">📅 Date de livraison (retrait client)</div><div class="pf-val mono">${dateLiv}</div></div>
       </div>
       ${(()=>{
         const arr=f(item,'Date_Arrivage_Attendu');
