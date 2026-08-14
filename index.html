@@ -548,6 +548,23 @@
         </table></div>
       </div>
 
+      <!-- EN COMMANDE FOURNISSEUR — masqué automatiquement si vide -->
+      <div id="bloc-commande-wrap" style="display:none">
+        <div class="acc-hd" onclick="toggleAcc('acc-commande',this)" style="margin-bottom:4px">
+          <div class="acc-hd-left">
+            <span class="acc-arrow">▼</span>
+            <div class="acc-hd-title">📦 En commande — Arrivage attendu</div>
+            <div class="acc-hd-meta"><span class="ctag t" id="sd-commande-count">0</span><span class="site-tag rp">Date_Arrivage_Attendu renseignée</span></div>
+          </div>
+        </div>
+        <div class="acc-body" id="acc-commande" style="margin-bottom:4px">
+          <div class="tc"><table>
+            <thead><tr><th>Statut</th><th>N° BC</th><th>Client</th><th>Chantier</th><th>Arrivage attendu</th><th>Montant HT</th><th>Vendeur</th><th>Actions</th></tr></thead>
+            <tbody id="suivi-commande-body"><tr class="empty-row"><td colspan="8">Chargement...</td></tr></tbody>
+          </table></div>
+        </div>
+      </div>
+
       <!-- ══ SECTION ACTIONS REQUISES ══ -->
       <div class="sd" style="margin-top:18px"><h2>🔥 Actions requises</h2><span class="site-tag rp">BCs post 01/04/2026</span><div class="sd-line"></div></div>
 
@@ -578,21 +595,6 @@
         <div class="tc"><table>
           <thead><tr><th>Ancienneté</th><th>N° BC</th><th>Client</th><th>Chantier</th><th>N° FC</th><th>Montant HT</th><th>Date réception</th><th>Vendeur</th><th>Actions</th></tr></thead>
           <tbody id="suivi-bl-manquant-body"><tr class="empty-row"><td colspan="9">Chargement...</td></tr></tbody>
-        </table></div>
-      </div>
-
-      <!-- EN COMMANDE FOURNISSEUR -->
-      <div class="acc-hd" onclick="toggleAcc('acc-commande',this)" style="margin-bottom:4px">
-        <div class="acc-hd-left">
-          <span class="acc-arrow">▼</span>
-          <div class="acc-hd-title">📦 En commande — Arrivage attendu</div>
-          <div class="acc-hd-meta"><span class="ctag t" id="sd-commande-count">0</span><span class="site-tag rp">Date_Arrivage_Attendu renseignée</span></div>
-        </div>
-      </div>
-      <div class="acc-body" id="acc-commande" style="margin-bottom:4px">
-        <div class="tc"><table>
-          <thead><tr><th>Statut</th><th>N° BC</th><th>Client</th><th>Chantier</th><th>Arrivage attendu</th><th>Montant HT</th><th>Vendeur</th><th>Actions</th></tr></thead>
-          <tbody id="suivi-commande-body"><tr class="empty-row"><td colspan="8">Chargement...</td></tr></tbody>
         </table></div>
       </div>
 
@@ -2429,11 +2431,13 @@ function renderCommandeFournisseur(){
     if(estIgnore(i))return false;
     return true;
   }).sort((a,b)=>new Date(f(a,'Date_Arrivage_Attendu'))-new Date(f(b,'Date_Arrivage_Attendu')));
+  const wrap=document.getElementById('bloc-commande-wrap');
+  if(wrap)wrap.style.display=items.length?'':'none';
   const el=document.getElementById('sd-commande-count');
   if(el)el.textContent=items.length+' BC'+(items.length!==1?'s':'');
   const b=document.getElementById('suivi-commande-body');
   if(!b)return;
-  if(!items.length){b.innerHTML='<tr class="empty-row"><td colspan="8">✅ Aucun BC en commande fournisseur</td></tr>';return;}
+  if(!items.length)return; // rien à peindre, le bloc entier est masqué
   b.innerHTML=items.map(i=>{
     const client=getClient(i),vendeur=f(i,'Vendeurencharge')||'—';
     const numBC=f(i,'Title')||`BC-${i.ID}`;
