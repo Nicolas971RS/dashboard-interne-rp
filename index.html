@@ -103,6 +103,7 @@
   .kpi-row.c3{grid-template-columns:repeat(3,1fr);}
   .kpi-row.c2{grid-template-columns:repeat(2,1fr);}
   .kpi-row.c5{grid-template-columns:repeat(5,1fr);}
+  .kpi-row.c6{grid-template-columns:repeat(6,1fr);}
   .kc{background:var(--surface);border-radius:var(--radius);padding:15px 18px;box-shadow:var(--shadow-xs);border:1px solid var(--border-light);position:relative;overflow:hidden;transition:box-shadow .2s;}
   .kc:hover{box-shadow:var(--shadow-sm);}
   .kc::before{content:"";position:absolute;top:0;left:0;bottom:0;width:3px;border-radius:3px 0 0 3px;}
@@ -121,7 +122,7 @@
   .kc.o .kv{color:var(--orange);}
   .kc.t .kv{color:var(--teal-mid);}
   .ks{font-size:10.5px;color:var(--text-muted);padding-left:8px;}
-  @media(max-width:1100px){.kpi-row.c4,.kpi-row.c5,.kpi-row.c3{grid-template-columns:repeat(2,1fr);}}
+  @media(max-width:1100px){.kpi-row.c4,.kpi-row.c5,.kpi-row.c6,.kpi-row.c3{grid-template-columns:repeat(2,1fr);}}
 
   /* ══ FILTER BAR ══ */
   .sh{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;flex-wrap:wrap;gap:8px;}
@@ -479,7 +480,7 @@
       <div class="banner"><div class="pulse"></div><div class="banner-num" id="banner-num">0</div><div><div class="banner-lbl">BCs réceptionnés aujourd'hui — vérifier BL · mettre à jour facturation</div><div class="banner-sub">Créer la facture si livraison complète · Facturer partiellement si livraison partielle</div></div></div>
 
       <!-- KPIs CLIQUABLES -->
-      <div class="kpi-row c5" style="margin-bottom:14px">
+      <div class="kpi-row c6" style="margin-bottom:14px">
         <div class="kc g" id="kpi-card-afacturer" onclick="focusKpiSuivi('afacturer')" style="cursor:pointer" title="Voir les BCs à facturer">
           <div class="kl">💰 BL reçu non facturé</div><div class="kv" id="kpi-afacturer">—</div><div class="ks">À facturer maintenant</div>
         </div>
@@ -494,6 +495,9 @@
         </div>
         <div class="kc r" id="kpi-card-eta" onclick="focusKpiSuivi('retard')" style="cursor:pointer" title="Voir les BCs en retard">
           <div class="kl">🚨 Date dépassée</div><div class="kv" id="kpi-eta">—</div><div class="ks">Relancer fournisseur</div>
+        </div>
+        <div class="kc t" id="kpi-card-commande" onclick="focusKpiSuivi('commande')" style="cursor:pointer" title="Voir les BCs en commande fournisseur">
+          <div class="kl">📦 En commande</div><div class="kv" id="kpi-commande">—</div><div class="ks">Arrivage attendu</div>
         </div>
       </div>
 
@@ -574,6 +578,21 @@
         <div class="tc"><table>
           <thead><tr><th>Ancienneté</th><th>N° BC</th><th>Client</th><th>Chantier</th><th>N° FC</th><th>Montant HT</th><th>Date réception</th><th>Vendeur</th><th>Actions</th></tr></thead>
           <tbody id="suivi-bl-manquant-body"><tr class="empty-row"><td colspan="9">Chargement...</td></tr></tbody>
+        </table></div>
+      </div>
+
+      <!-- EN COMMANDE FOURNISSEUR -->
+      <div class="acc-hd" onclick="toggleAcc('acc-commande',this)" style="margin-bottom:4px">
+        <div class="acc-hd-left">
+          <span class="acc-arrow">▼</span>
+          <div class="acc-hd-title">📦 En commande — Arrivage attendu</div>
+          <div class="acc-hd-meta"><span class="ctag t" id="sd-commande-count">0</span><span class="site-tag rp">Date_Arrivage_Attendu renseignée</span></div>
+        </div>
+      </div>
+      <div class="acc-body" id="acc-commande" style="margin-bottom:4px">
+        <div class="tc"><table>
+          <thead><tr><th>Statut</th><th>N° BC</th><th>Client</th><th>Chantier</th><th>Arrivage attendu</th><th>Montant HT</th><th>Vendeur</th><th>Actions</th></tr></thead>
+          <tbody id="suivi-commande-body"><tr class="empty-row"><td colspan="8">Chargement...</td></tr></tbody>
         </table></div>
       </div>
 
@@ -2401,6 +2420,47 @@ function renderAFacturer(){
   }).join('');
 }
 
+function renderCommandeFournisseur(){
+  const items=DATA.suivi.filter(i=>{
+    const arr=f(i,'Date_Arrivage_Attendu');
+    if(!arr)return false;
+    const s=getStatut(i);
+    if(s==='Annulé'||s==='Terminé')return false;
+    if(estIgnore(i))return false;
+    return true;
+  }).sort((a,b)=>new Date(f(a,'Date_Arrivage_Attendu'))-new Date(f(b,'Date_Arrivage_Attendu')));
+  const el=document.getElementById('sd-commande-count');
+  if(el)el.textContent=items.length+' BC'+(items.length!==1?'s':'');
+  const b=document.getElementById('suivi-commande-body');
+  if(!b)return;
+  if(!items.length){b.innerHTML='<tr class="empty-row"><td colspan="8">✅ Aucun BC en commande fournisseur</td></tr>';return;}
+  b.innerHTML=items.map(i=>{
+    const client=getClient(i),vendeur=f(i,'Vendeurencharge')||'—';
+    const numBC=f(i,'Title')||`BC-${i.ID}`;
+    const chantier=getChantier(i);
+    const montantRaw=f(i,'MontantHT','Montant_HT','MontantHTTotal');
+    const montantFmt=montantRaw?new Intl.NumberFormat('fr-FR',{style:'currency',currency:'EUR',minimumFractionDigits:2,maximumFractionDigits:2}).format(montantRaw):'—';
+    const arr=f(i,'Date_Arrivage_Attendu');
+    const jrs=daysSince(arr);
+    const depasse=jrs>=0;
+    const badge=depasse
+      ?`<span style="font-size:11px;padding:2px 8px;border-radius:9px;background:#ffe9cc;color:#7a3c00;font-weight:600">🚚 +${jrs}j</span>`
+      :`<span style="font-size:11px;padding:2px 8px;border-radius:9px;background:var(--violet-light,#f0efff);color:var(--violet);font-weight:600">📦 J-${Math.abs(jrs)}</span>`;
+    return`<tr class="rr" data-bc-id="${i.ID}">
+      <td>${badge}</td>
+      <td class="ref">${numBC}</td><td class="cname">${client}</td>
+      <td style="font-size:12px;color:var(--text-secondary)">${chantier}</td>
+      <td class="mono">${fmtDate(arr)}</td>
+      <td class="amt" style="font-size:11.5px">${montantFmt}</td>
+      <td>${vendeur}</td>
+      <td><div class="btn-grp">
+        <button class="btn" onclick="openBCPanel(${i.ID})">Voir BC</button>
+        <button class="btn navy" onclick="openTraiterModal(${i.ID})">🔧 Traiter</button>
+      </div></td>
+    </tr>`;
+  }).join('');
+}
+
 function renderBLManquant(){
   const cutoff=new Date('2026-04-01');
   const items=DATA.suivi.filter(i=>{
@@ -2431,7 +2491,14 @@ function renderBLManquant(){
     const dateRec=f(i,'Dateder_x00e9_ception');
     return`<tr class="rr" data-bc-id="${i.ID}">
       <td>${agePillHtml(dateRec)}</td>
-      <td class="ref">${numBC}</td><td class="cname">${client}</td>
+      <td class="ref">${numBC}${(()=>{
+        const arr=f(i,'Date_Arrivage_Attendu');
+        if(!arr)return'';
+        const jrs=daysSince(arr);
+        return jrs>=0
+          ?` <span title="Commande en retard fournisseur depuis ${jrs}j" style="font-size:11px">🚚</span>`
+          :` <span title="Article en commande — arrivage attendu le ${fmtDate(arr)}" style="font-size:11px">📦</span>`;
+      })()}</td><td class="cname">${client}</td>
       <td style="font-size:12px;color:var(--text-secondary)">${chantier}</td>
       <td>${fcPillHtml(fcVal)}</td>
       <td class="amt" style="font-size:11.5px">${montantFmt}</td>
@@ -2925,6 +2992,13 @@ function renderAll(){
   document.getElementById('kpi-partiel').textContent=ec.filter(i=>getStatut(i)==='Partiellement livré').length;
   const retard=ec.filter(i=>daysLate(f(i,'DateLivraisonpr_x00e9_vue'))>0).length;
   document.getElementById('kpi-eta').textContent=retard;
+  const kCmd=document.getElementById('kpi-commande');
+  if(kCmd)kCmd.textContent=DATA.suivi.filter(i=>{
+    const arr=f(i,'Date_Arrivage_Attendu');
+    if(!arr)return false;
+    const s=getStatut(i);
+    return s!=='Annulé'&&s!=='Terminé'&&!estIgnore(i);
+  }).length;
   // KPIs DBC
   const dbcActifs=DATA.dbc.filter(i=>f(i,'Statut')!=='BC Reçu');
   const risqueDBC=dbcActifs.reduce((s,i)=>s+Number(f(i,'Montant_HT')||0),0);
@@ -3025,7 +3099,7 @@ function renderAll(){
   const banner=document.getElementById('matin-ok-banner');
   if(banner)banner.style.display=allOk?'flex':'none';
 
-  renderDBCTable();renderDevisTable();renderBLManquant();renderRALTable();renderPreparations();
+  renderDBCTable();renderDevisTable();renderBLManquant();renderCommandeFournisseur();renderRALTable();renderPreparations();
 }
 
 function renderSuiviEnCours(){renderHistorique();renderBLManquant();
@@ -5002,6 +5076,7 @@ const KPI_SUIVI_MAP={
   pret:     {icon:'📦',text:'Filtre actif : Prêt à livrer',section:'acc-encours',cardId:'kpi-card-pret'},
   partiel:  {icon:'🔀',text:'Filtre actif : Partiellement livré',section:'acc-encours',cardId:'kpi-card-partiel'},
   retard:   {icon:'🚨',text:'Filtre actif : Date dépassée',section:'acc-encours',cardId:'kpi-card-eta'},
+  commande: {icon:'📦',text:'Filtre actif : En commande fournisseur',section:'acc-commande',cardId:'kpi-card-commande'},
 };
 let _activeKpiSuivi=null;
 function focusKpiSuivi(key){
