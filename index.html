@@ -1008,6 +1008,15 @@
         <div id="an-facturation"></div>
       </div>
 
+      <!-- DÉLAI MOYEN RÉCEPTION → FACTURATION -->
+      <div class="tc" style="padding:16px 18px;margin-bottom:14px">
+        <div class="sd" style="margin-bottom:12px">
+          <h2>⏱️ Délai moyen — Réception → Facturation</h2>
+          <div class="sd-line"></div>
+        </div>
+        <div id="an-delai-fact"></div>
+      </div>
+
       <!-- KPI Synthèse -->
       <div class="kpi-row c4" id="kpi-analytics-row" style="margin-bottom:18px">
         <div class="kc t"><div class="kl">📦 BCs total (12 mois)</div><div class="kv" id="an-total-bc">—</div><div class="ks">Bons de commande</div></div>
@@ -2621,6 +2630,84 @@ function renderHistorique(){
 // ═══ ANALYTICS ═══
 // ═══════════════════════════════════════════════════════════
 // ── Analytics : facturation par vendeur ──
+// ── Analytics : délai moyen réception → facturation ──
+// Aucune date de facturation n'est stockée explicitement. On utilise
+// « Modified » comme date approximative de facturation pour les BC
+// entièrement facturés — fiable tant que le BC n'est pas modifié après
+// coup (ex. correction d'une remarque), ce qui reste rare en pratique.
+function renderDelaiFacturation(){
+  const host=document.getElementById('an-delai-fact');
+  if(!host)return;
+
+  const factures=(DATA.suivi||[]).filter(i=>getEtatFact(i)==='Entièrement facturé');
+  const withDates=factures.map(i=>{
+    const rec=f(i,'Dateder_x00e9_ception'),mod=f(i,'Modified');
+    if(!rec||!mod)return null;
+    const d1=new Date(rec),d2=new Date(mod);
+    const days=Math.round((d2-d1)/86400000);
+    // Filtre de cohérence : écarte les valeurs négatives (Modified < réception,
+    // signe d'une donnée aberrante) et les délais > 1 an (probablement des BC
+    // historiques mal renseignés plutôt qu'un vrai délai de facturation).
+    return(days>=0&&days<=365)?{days,mod:d2}:null;
+  }).filter(Boolean);
+
+  if(!withDates.length){
+    host.innerHTML=`<div style="font-size:12.5px;color:var(--text-muted)">Pas assez de données pour calculer un délai (aucun BC entièrement facturé avec dates exploitables).</div>`;
+    return;
+  }
+
+  const avg=arr=>arr.reduce((s,x)=>s+x.days,0)/arr.length;
+  const fmt1=n=>n.toLocaleString('fr-FR',{minimumFractionDigits:1,maximumFractionDigits:1});
+
+  const avgAll=avg(withDates);
+  const now=new Date();now.setHours(0,0,0,0);
+  const ageJ=x=>(now-x.mod)/86400000;
+  const cetteSemaine=withDates.filter(x=>ageJ(x)<7);
+  const semaineDern=withDates.filter(x=>{const a=ageJ(x);return a>=7&&a<14;});
+  const avgCS=cetteSemaine.length?avg(cetteSemaine):null;
+  const avgSD=semaineDern.length?avg(semaineDern):null;
+
+  let trendHtml='';
+  if(avgCS!==null&&avgSD!==null){
+    const delta=avgCS-avgSD;
+    const mieux=delta<0; // délai plus court = mieux
+    const c=mieux?'var(--green)':'var(--red)';
+    const fleche=mieux?'↓':'↑';
+    trendHtml=`<span style="color:${c};font-weight:700">${fleche} ${fmt1(Math.abs(delta))}j</span> <span style="color:var(--text-muted)">vs semaine dernière</span>`;
+  }else if(avgCS!==null){
+    trendHtml=`<span style="color:var(--text-muted)">Pas de comparaison possible (aucun BC facturé la semaine dernière)</span>`;
+  }else{
+    trendHtml=`<span style="color:var(--text-muted)">Aucun BC facturé cette semaine</span>`;
+  }
+
+  host.innerHTML=`
+    <div style="display:flex;gap:24px;align-items:baseline;margin-bottom:16px;padding-bottom:14px;border-bottom:1px solid var(--border);flex-wrap:wrap">
+      <div>
+        <span style="font-size:32px;font-weight:800;color:var(--navy);font-family:var(--font-mono)">${fmt1(avgAll)}</span>
+        <span style="font-size:13px;color:var(--text-muted);margin-left:4px">jours en moyenne</span>
+      </div>
+      <div style="font-size:12px;color:var(--text-muted)">Sur ${withDates.length} BC facturé${withDates.length>1?'s':''}</div>
+    </div>
+
+    <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:12px">
+      <div style="background:var(--bg);border-radius:var(--radius-sm);padding:12px 14px">
+        <div style="font-size:11px;color:var(--text-muted);margin-bottom:4px">CETTE SEMAINE</div>
+        <div style="font-size:20px;font-weight:800;color:var(--navy);font-family:var(--font-mono)">${avgCS!==null?fmt1(avgCS)+'j':'—'}</div>
+        <div style="font-size:11px;margin-top:3px">${cetteSemaine.length} BC · ${trendHtml}</div>
+      </div>
+      <div style="background:var(--bg);border-radius:var(--radius-sm);padding:12px 14px">
+        <div style="font-size:11px;color:var(--text-muted);margin-bottom:4px">SEMAINE DERNIÈRE</div>
+        <div style="font-size:20px;font-weight:800;color:var(--text-secondary);font-family:var(--font-mono)">${avgSD!==null?fmt1(avgSD)+'j':'—'}</div>
+        <div style="font-size:11px;color:var(--text-muted);margin-top:3px">${semaineDern.length} BC facturé${semaineDern.length>1?'s':''}</div>
+      </div>
+    </div>
+
+    <div style="margin-top:14px;font-size:11.5px;color:var(--text-muted);line-height:1.55;background:var(--bg);border-radius:var(--radius-sm);padding:10px 13px">
+      ℹ️ Calculé à partir de la date de dernière modification du BC, faute de date de facturation dédiée.
+      Un BC modifié après sa facturation (ex. correction d'une remarque) peut légèrement fausser son délai individuel — l'effet reste marginal sur une moyenne.
+    </div>`;
+}
+
 function renderFacturationVendeurs(){
   const host=document.getElementById('an-facturation');
   if(!host)return;
@@ -2698,6 +2785,7 @@ function renderFacturationVendeurs(){
 
 function renderAnalytics(){
   renderFacturationVendeurs();
+  renderDelaiFacturation();
   const suivi=DATA.suivi||[];
   const devis=DATA.devis||[];
   const now=new Date();
@@ -4790,7 +4878,7 @@ function rechercheGlobalBC(){
   if(res)res.style.display='block';
 
   const all=DATA.suivi||[];
-  const items=all.filter(i=>{
+  let items=all.filter(i=>{
     try{
       const getVendeurStr=(i)=>String(f(i,'Vendeurencharge')||'');
       if(q.length>=2){
