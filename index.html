@@ -4831,6 +4831,10 @@ function rechercheGlobalBC(){
   if(title)title.textContent=`${items.length} résultat${items.length!==1?'s':''} — ${activeFilters.join(' · ')}`;
   if(countEl)countEl.textContent=`${items.length} BC${items.length!==1?'s':''}`;
 
+  // Le tri par clic sur en-tête (makeSortable) modifie _sortState mais ne
+  // réordonne rien tout seul — c'est cet appel qui applique réellement le tri.
+  items=applySort(items,'bc-search-body',SORT_COLS_SEARCH);
+
   // Stocker pour export CSV + afficher/masquer bouton
   _lastRechercheItems=items;
   const csvBtn=document.getElementById('bc-search-csv-btn');
@@ -4871,8 +4875,8 @@ function rechercheGlobalBC(){
         <td class="mono" style="color:var(--blue-mid);font-size:11px">${hl(numDev)}</td>
         <td class="mono">${hl(numBL)}</td>
         <td class="mono">${numFC!=='—'?`<span style="color:var(--teal)">${hl(numFC)}</span>`:numFC}</td>
-        <td class="mono">${dateRec}</td>
         <td class="amt" style="font-size:11.5px">${montantFmt}</td>
+        <td class="mono">${dateRec}</td>
         <td>${hl(vendeurV)}</td>
         <td>${bStatut(s)}</td>
         <td>${bFact(ef)}</td>
@@ -5039,8 +5043,10 @@ const SORT_COLS_SEARCH=[
   {fn:i=>f(i,'Title')},
   {fn:i=>getClient(i)},
   {fn:i=>getChantier(i)},
+  {fn:i=>f(i,'N_x00b0_Devis','Num_ro_Devis','NumeroDevis')},
   {fn:i=>f(i,'N_x00b0_BL')},
   {fn:i=>f(i,nFCKey())},
+  {fn:i=>f(i,'MontantHT','Montant_HT','MontantHTTotal')},
   {fn:i=>f(i,'Dateder_x00e9_ception')},
   {fn:i=>f(i,'Vendeurencharge')},
   {fn:i=>getStatut(i)},
