@@ -6481,31 +6481,78 @@ function openNouveauDBCModal(){
       Un client récupère de la marchandise sans BC. Ce formulaire crée la demande dans SharePoint.
     </div>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
-      <div class="mf"><label>Client (entreprise) *</label><input id="d-client" placeholder="Nom de l'entreprise"></div>
-      <div class="mf"><label>Nom employé *</label><input id="d-employe" placeholder="Prénom Nom"></div>
+      <div class="mf"><label>Client (entreprise) *</label><input id="d-client" placeholder="Nom de l'entreprise" oninput="dbcLivePreview()"></div>
+      <div class="mf"><label>Nom employé *</label><input id="d-employe" placeholder="Prénom Nom" oninput="dbcLivePreview()"></div>
     </div>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
       <div class="mf"><label>Email client *</label><input id="d-email" type="email" placeholder="contact@entreprise.com"></div>
-      <div class="mf"><label>Montant HT estimé (€) *</label><input id="d-montant" type="number" step="0.01" placeholder="0.00"></div>
+      <div class="mf"><label>Montant HT estimé (€) *</label><input id="d-montant" type="number" step="0.01" placeholder="0.00" oninput="dbcLivePreview()"></div>
     </div>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
-      <div class="mf"><label>Date enlèvement</label><input id="d-dateenlev" type="date" value="${today}"></div>
+      <div class="mf"><label>Date enlèvement</label><input id="d-dateenlev" type="date" value="${today}" oninput="dbcLivePreview()"></div>
       <div class="mf"><label>N° BL signé</label><input id="d-numbl" placeholder="ex: 820454"></div>
     </div>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
-      <div class="mf"><label>Chef de chantier</label><input id="d-chef" placeholder="Nom du chef de chantier"></div>
-      <div class="mf"><label>N° Devis lié (optionnel)</label><input id="d-numdevis" placeholder="ex: 716521"></div>
+      <div class="mf"><label>Chef de chantier</label><input id="d-chef" placeholder="Nom du chef de chantier" oninput="dbcLivePreview()"></div>
+      <div class="mf"><label>N° Devis lié (optionnel)</label><input id="d-numdevis" placeholder="ex: 716521" oninput="dbcLivePreview()"></div>
     </div>
     <div class="mf"><label>Vendeur *</label>
-      <select id="d-vendeur" style="border:1px solid var(--border);border-radius:var(--radius-sm);padding:8px 10px;font-size:13px;font-family:var(--font-body);outline:none;">
+      <select id="d-vendeur" onchange="dbcLivePreview()" style="border:1px solid var(--border);border-radius:var(--radius-sm);padding:8px 10px;font-size:13px;font-family:var(--font-body);outline:none;">
         <option value="">— Sélectionner un vendeur —</option>
         ${VENDEURS_FIXES.map(v=>`<option value="${v}">${v}</option>`).join('')}
       </select>
     </div>
     <div class="mf"><label>Articles / Marchandise remise *</label><textarea id="d-articles" rows="2" placeholder="Description des articles, références, quantités..."></textarea></div>
-    <div class="mf"><label>📎 BL signé — fichier (optionnel)</label>
-      <input id="d-blfile" type="file" accept=".pdf,.jpg,.jpeg,.png" style="font-size:12px;padding:4px 0">
-      <span class="hint">PDF, JPG, PNG</span>
+
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:2px">
+      <div class="mf"><label>📄 BL signé — fichier *</label>
+        <input id="d-blfile" type="file" accept=".pdf,.jpg,.jpeg,.png" style="font-size:11.5px;padding:4px 0;width:100%" onchange="this.classList.remove('err')">
+        <span class="hint">PDF, JPG, PNG — obligatoire (preuve d'enlèvement)</span>
+      </div>
+      <div class="mf"><label>📋 Devis joint — fichier (optionnel)</label>
+        <input id="d-devisfile" type="file" accept=".pdf,.jpg,.jpeg,.png" style="font-size:11.5px;padding:4px 0;width:100%">
+        <span class="hint">PDF, JPG, PNG</span>
+      </div>
+    </div>
+
+    <div style="margin-top:14px">
+      <div onclick="var d=document.getElementById('dbc-preview-body');var c=document.getElementById('dbc-preview-chev');var o=d.style.display!=='none';d.style.display=o?'none':'block';c.textContent=o?'▶':'▼';"
+        style="display:flex;align-items:center;gap:8px;cursor:pointer;user-select:none;font-size:12px;font-weight:700;color:var(--navy);margin-bottom:6px">
+        <span id="dbc-preview-chev" style="font-size:10px">▼</span>📧 Aperçu email envoyé au client
+      </div>
+      <div id="dbc-preview-body" style="border:1px solid var(--border);border-radius:var(--radius-sm);overflow:hidden">
+        <div style="background:var(--navy);color:#fff;padding:11px 14px">
+          <div style="font-weight:700;font-size:13px">Réseaux Plus Guadeloupe</div>
+          <div style="font-size:10.5px;opacity:.85;margin-top:1px">Distribution de matériel plomberie, sanitaire &amp; industrie</div>
+        </div>
+        <div style="padding:13px 14px;font-size:11.5px;line-height:1.65;color:#333;background:#fff">
+          <p style="margin:0 0 8px">Madame, Monsieur,</p>
+          <p style="margin:0 0 8px">
+            Nous vous informons que votre employé(e)
+            <strong id="dbc-ep-employe" style="color:#999">—</strong>
+            (sous la responsabilité de <strong id="dbc-ep-chef" style="color:#999">—</strong>)
+            a récupéré de la marchandise dans nos locaux le
+            <strong id="dbc-ep-date" style="color:#999">—</strong>
+            pour un montant de <strong id="dbc-ep-montant" style="color:#999">—</strong> € HT.
+          </p>
+          <p style="margin:0 0 8px">
+            Afin de régulariser cet enlèvement, merci de nous faire parvenir votre
+            <strong>bon de commande</strong> par email à :
+            <span style="color:var(--violet);font-weight:600">bdc@reseauxplus.com</span>.
+          </p>
+          <div style="background:var(--amber-light);border-radius:6px;padding:8px 10px;margin:0 0 8px">
+            <div style="font-size:10px;font-weight:700;color:#7a4000">⚠️ RÉFÉRENCE À RAPPELER</div>
+            <div style="font-size:10px;color:#555;margin-top:3px">Merci d'indiquer la référence suivante dans l'objet de votre email :</div>
+            <div id="dbc-ep-devis" style="font-weight:700;color:#7a4000;margin-top:3px">—</div>
+          </div>
+          <p style="color:#666;font-size:10px;margin:0 0 8px">Le bon de livraison signé est joint à ce message pour votre suivi.</p>
+          <p style="margin-top:10px">
+            Cordialement,<br>
+            <strong id="dbc-ep-vendeur">L'équipe Réseaux Plus</strong><br>
+            <span style="color:#aaa;font-size:10px">Baie-Mahault, Guadeloupe</span>
+          </p>
+        </div>
+      </div>
     </div>`,
   async()=>{
     const client=document.getElementById('d-client').value.trim();
@@ -6520,6 +6567,11 @@ function openNouveauDBCModal(){
     if(!montant||parseFloat(montant.replace(',','.'))<0){document.getElementById('d-montant').classList.add('err');throw new Error('Le montant HT est obligatoire.');}
     if(!articles){document.getElementById('d-articles').classList.add('err');throw new Error('La description des articles est obligatoire.');}
     if(!vendeurVal){document.getElementById('d-vendeur').classList.add('err');throw new Error('Le vendeur est obligatoire.');}
+    const blInputCheck=document.getElementById('d-blfile');
+    if(!blInputCheck?.files?.[0]){
+      blInputCheck?.classList.add('err');
+      throw new Error('Le BL signé est obligatoire — il sert de preuve d\'enlèvement, même quand le devis suffit au client pour établir son BC.');
+    }
 
     const dateEnlev=document.getElementById('d-dateenlev').value;
     const numbl=document.getElementById('d-numbl').value.trim();
@@ -6549,14 +6601,50 @@ function openNouveauDBCModal(){
     const created=await spPost('sites/BondeCommande','Demandes_BC',body);
     const newId=created.ID||created.id;
 
-    const fileInput=document.getElementById('d-blfile');
-    if(fileInput&&fileInput.files&&fileInput.files[0]&&newId){
-      const file=fileInput.files[0];
+    const blInput=document.getElementById('d-blfile');
+    if(blInput?.files?.[0]&&newId){
+      const file=blInput.files[0];
       const ab=await file.arrayBuffer();
       try{await spAddAttachment('sites/BondeCommande','Demandes_BC',newId,file.name,ab);}
       catch(e){console.warn('Upload BL non bloquant:',e.message);}
     }
+    const devisInput=document.getElementById('d-devisfile');
+    if(devisInput?.files?.[0]&&newId){
+      const file=devisInput.files[0];
+      const ab=await file.arrayBuffer();
+      try{await spAddAttachment('sites/BondeCommande','Demandes_BC',newId,file.name,ab);}
+      catch(e){console.warn('Upload devis non bloquant:',e.message);}
+    }
   });
+  setTimeout(dbcLivePreview,50);
+}
+
+// Aperçu email en direct — reflète exactement le texte envoyé au client par
+// le portail de demandes BC autonome, pour éviter toute divergence entre les
+// deux outils.
+function dbcLivePreview(){
+  const val=id=>document.getElementById(id)?.value?.trim()||'';
+  const employe=val('d-employe')||'—';
+  const chef=val('d-chef')||'—';
+  const dateVal=val('d-dateenlev');
+  const date=dateVal?new Date(dateVal+'T00:00:00').toLocaleDateString('fr-FR'):'—';
+  const montant=val('d-montant');
+  const mntFmt=montant?parseFloat(montant).toLocaleString('fr-FR',{minimumFractionDigits:2}):'—';
+  const numDevis=val('d-numdevis');
+  const vendeur=document.getElementById('d-vendeur')?.value||"L'équipe Réseaux Plus";
+
+  const set=(id,txt,dim)=>{
+    const el=document.getElementById(id);
+    if(!el)return;
+    el.textContent=txt;
+    el.style.color=dim?'#999':'#1a2744';
+  };
+  set('dbc-ep-employe',employe,employe==='—');
+  set('dbc-ep-chef',chef,chef==='—');
+  set('dbc-ep-date',date,date==='—');
+  set('dbc-ep-montant',mntFmt,mntFmt==='—');
+  set('dbc-ep-devis',numDevis?`Réf. Devis : ${numDevis}`:'—',!numDevis);
+  set('dbc-ep-vendeur',vendeur,false);
 }
 
 // ── URLs HTTP trigger des flows Power Automate (déclenchement direct via sig) ──
