@@ -740,7 +740,7 @@
       <div class="page-header">
         <div><h1>BL en attente & Préparations Scan</h1><div class="sub">/sites/BondeCommande · Sessions_Scan · Portail terrain</div></div>
         <div style="display:flex;gap:8px">
-          <button class="btn-refresh" data-label="1" style="background:var(--blue);color:white;border-color:var(--blue)" onclick="openEmissionBL()">➕ Nouveau BL à livrer</button>
+          <button class="btn-refresh" data-label="1" style="background:var(--blue);color:white;border-color:var(--blue)" onclick="openEmissionBL()">➕ Nouveau BL ou FC</button>
           <button class="btn-refresh" onclick="loadAll()">🔄 Actualiser</button>
         </div>
       </div>
@@ -5481,7 +5481,7 @@ function openEmissionBL(){
     </div>`;
 
   _emissionType='Livraison client';
-  openModal('➕ Nouveau BL à livrer',html,emettreBL);
+  openModal('➕ Nouveau BL ou FC',html,emettreBL);
 
   // Autocomplete client avec saisie libre (setupAC laisse le texte tapé si rien n'est choisi)
   setTimeout(()=>{
