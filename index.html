@@ -1215,6 +1215,14 @@ function scanField(item, keyword) {
 }
 function f(item,...keys){for(const k of keys){if(item[k]!==undefined&&item[k]!==null&&item[k]!=='')return item[k];}return null;}
 
+// Icône devant le N° pour distinguer un BL (préfixe 8) d'une facture directe (préfixe 1)
+function docIcon(numero){
+  const n=String(numero||'').trim();
+  if(/^8/.test(n))return '<span title="Bon de livraison" style="margin-right:4px">📦</span>';
+  if(/^1/.test(n))return '<span title="Facture directe — client divers, sans BC" style="margin-right:4px">🧾</span>';
+  return '';
+}
+
 // Get État facturation — tries all possible internal name forms
 function getEtatFact(item){
   return f(item,
@@ -3738,7 +3746,7 @@ function renderPreparations(){
       const isLiv=type.toLowerCase()==='livraison client';
       const prep=isPrep(s);
       return`<tr style="${rowBg}cursor:pointer" onclick="openSessionPanel(${s.ID})">
-        <td class="ref" style="color:var(--blue)">${f(s,'Numero_BL')||'—'}</td>
+        <td class="ref" style="color:var(--blue)">${docIcon(f(s,'Numero_BL'))}${f(s,'Numero_BL')||'—'}</td>
         <td class="cname">${isLiv?(f(s,'Client')||'—'):'—'}</td>
         <td><span class="ctag ${isLiv?'o':'a'}">${type}</span></td>
         <td>${f(s,'Vendeur_Emetteur')||'—'}</td>
@@ -3965,7 +3973,7 @@ function renderLivres(){
     const isLiv=type.toLowerCase()==='livraison client';
     const nbArt=f(s,'Nb_Articles_Scannes')??'—';
     return`<tr style="cursor:pointer" onclick="openSessionPanel(${s.ID})">
-      <td class="ref" style="color:var(--blue)">${f(s,'Numero_BL')||'—'}</td>
+      <td class="ref" style="color:var(--blue)">${docIcon(f(s,'Numero_BL'))}${f(s,'Numero_BL')||'—'}</td>
       <td class="cname">${isLiv?(f(s,'Client')||'—'):'—'}</td>
       <td><span class="ctag ${isLiv?'o':'a'}">${type}</span></td>
       <td>${f(s,'Vendeur_Emetteur')||'—'}</td>
