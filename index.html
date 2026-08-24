@@ -3972,16 +3972,22 @@ function renderLivres(){
     const type=f(s,'Type_Operation')||'—';
     const isLiv=type.toLowerCase()==='livraison client';
     const nbArt=f(s,'Nb_Articles_Scannes')??'—';
-    return`<tr style="cursor:pointer" onclick="openSessionPanel(${s.ID})">
+    const nonCat=hasNonCataloguee(s.ID);
+    return`<tr style="cursor:pointer${nonCat?';background:rgba(191,54,12,.06)':''}" onclick="openSessionPanel(${s.ID})">
       <td class="ref" style="color:var(--blue)">${docIcon(f(s,'Numero_BL'))}${f(s,'Numero_BL')||'—'}</td>
       <td class="cname">${isLiv?(f(s,'Client')||'—'):'—'}</td>
       <td><span class="ctag ${isLiv?'o':'a'}">${type}</span></td>
       <td>${f(s,'Vendeur_Emetteur')||'—'}</td>
       <td class="mono" style="font-size:11px">${fmtDate(f(s,'Date_Scan')||f(s,'Date_Emission'))}</td>
-      <td>${tag(f(s,'Statut'))}</td>
+      <td>${tag(f(s,'Statut'))}${nonCat?' <span class="ctag o" title="Au moins une référence scannée manuellement, sans code-barre catalogué">⚠️ Non catalogué</span>':''}</td>
       <td style="text-align:center">${nbArt}</td>
     </tr>`;
   }).join(''):'<tr class="empty-row"><td colspan="7">Aucun BL livré pour le moment</td></tr>';
+}
+
+// Une ligne de Lignes_Scan sans Désignation = référence scannée manuellement, absente du catalogue
+function hasNonCataloguee(sessionId){
+  return (DATA.lignesScan||[]).some(l => String(lineSessionId(l))===String(sessionId) && !f(l,'Designation'));
 }
 
 function openSessionPanel(id){
@@ -4008,13 +4014,15 @@ function openSessionPanel(id){
       const att=Number(f(l,'Quantite_Attendue')||0);
       const scan=Number(f(l,'Quantite_Scannee')||0);
       const ecart=scan-att;
+      const desig=f(l,'Designation');
+      const nonCat=!desig;
       let ecartTxt;
       if(ecart===0)ecartTxt='<span class="ctag g">Complet</span>';
       else if(ecart<0)ecartTxt='<span class="ctag r">manque '+Math.abs(ecart)+'</span>';
       else ecartTxt='<span class="ctag o">surplus '+ecart+'</span>';
-      return`<tr>
-        <td class="ref">${f(l,'Reference_Article')||'—'}</td>
-        <td style="font-size:12px">${f(l,'Designation')||'—'}</td>
+      return`<tr${nonCat?' style="background:rgba(191,54,12,.06)"':''}>
+        <td class="ref">${f(l,'Reference_Article')||'—'}${nonCat?' ⚠️':''}</td>
+        <td style="font-size:12px${nonCat?';color:var(--orange);font-style:italic':''}">${nonCat?'Référence non cataloguée — saisie manuelle':desig}</td>
         <td style="text-align:center">${scan} / ${att}</td>
         <td style="text-align:center">${ecartTxt}</td>
       </tr>`;
