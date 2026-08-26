@@ -455,8 +455,8 @@
             </div>
             <span style="font-size:9px;color:rgba(255,255,255,.35);font-style:italic">jj/mm/aa</span>
           </div>
-          <span id="sg-count" style="font-size:11px;color:rgba(255,255,255,.5)"></span>
-          <span id="sg-total-montant" style="font-size:11px;color:rgba(255,255,255,.7);margin-left:10px;font-weight:600;display:none"></span>
+          <span id="sg-count" style="font-size:12px;font-weight:700;color:#fff;background:rgba(255,255,255,.18);border-radius:10px;padding:2px 9px;margin-left:6px"></span>
+          <span id="sg-total-montant" style="font-size:12px;font-weight:800;color:#ffcc00;background:rgba(255,204,0,.15);border:1px solid rgba(255,204,0,.4);border-radius:10px;padding:2px 10px;margin-left:8px;display:none"></span>
         </div>
       </div>
 
@@ -5072,7 +5072,7 @@ function rechercheGlobalBC(){
       const dateRec=fmtDate(f(i,'Dateder_x00e9_ception'));
       const docBadge=bDocuware(i);
       return`<tr style="cursor:pointer" onclick="openBCPanel(${i.ID})">
-        <td class="ref" style="color:${couleurRef}!important;font-weight:${poids}">${hl(numBC)}${icone}${iconeTermine}</td>
+        <td class="ref"><span style="color:${couleurRef};font-weight:${poids}">${hl(numBC)}${icone}${iconeTermine}</span></td>
         <td class="cname">${hl(client)}</td>
         <td style="font-size:12px;color:var(--text-secondary)">${hl(chantier)}</td>
         <td class="mono" style="color:var(--blue-mid);font-size:11px">${hl(numDev)}</td>
