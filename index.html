@@ -456,6 +456,7 @@
             <span style="font-size:9px;color:rgba(255,255,255,.35);font-style:italic">jj/mm/aa</span>
           </div>
           <span id="sg-count" style="font-size:11px;color:rgba(255,255,255,.5)"></span>
+          <span id="sg-total-montant" style="font-size:11px;color:rgba(255,255,255,.7);margin-left:10px;font-weight:600;display:none"></span>
         </div>
       </div>
 
@@ -1727,7 +1728,7 @@ function getBLAFacturer(){
   return DATA.suivi.filter(i=>{
     const bl=f(i,'N_x00b0_BL');
     if(!bl||!String(bl).trim())return false;
-    if(getEtatFact(i)==='Entièrement facturé')return false;
+    if(getEtatFact(i)==='Entièrement facturé'||estSolde(i))return false;
     if(getStatut(i)==='Annulé')return false;
     const ref=f(i,'DateBL')||f(i,'Dateder_x00e9_ception');
     return daysSince(ref)>=SEUIL_FACTURATION;
@@ -1738,6 +1739,14 @@ function getBLAFacturer(){
 // livraison : le vendeur ira les chercher le moment venu, ils n'ont rien à faire
 // dans la liste des BC à compléter.
 const estCopiePartielle=i=>/-[A-Za-z]$/.test(String(f(i,'Title')||'').trim());
+
+// ── Champ "Statut BC Livré et FC" (Oui/Non) ──
+// Ce champ est coché manuellement quand le BC est entièrement livré ET facturé.
+// Source de vérité métier, plus fiable qu'une déduction algorithmique.
+const estSolde=i=>{
+  const v=f(i,'StatutBCLivr_x00e9_etFC');
+  return v===true||v==='Oui'||v==='1'||v===1;
+};
 
 // ── Parseur BL historique ──
 // Format riche : "821170 (20) · 821248 (19)" — BL + quantité entre parenthèses
@@ -1788,7 +1797,7 @@ function bcManques(i){
 function getBCACompleter(){
   return DATA.suivi.filter(i=>{
     if(getStatut(i)==='Annulé')return false;
-    if(getEtatFact(i)==='Entièrement facturé')return false;
+    if(getEtatFact(i)==='Entièrement facturé'||estSolde(i))return false;
     if(estCopiePartielle(i))return false;
     if(estIgnore(i))return false;
     return bcManques(i).length>0;
@@ -5000,9 +5009,20 @@ function rechercheGlobalBC(){
   const titresAvecCopies=new Set(
     (DATA.suivi||[]).filter(i=>estCopiePartielle(i)).map(i=>{
       const t=String(f(i,'Title')||'').trim();
-      return t.replace(/-[A-Za-z](-[A-Za-z])*$/,'');
+      return bcRacine(t);
     })
   );
+
+  // Total des montants filtrés — affiché sous le compteur
+  const totalFiltre=items.reduce((s,i)=>{
+    const m=parseFloat(f(i,'MontantHT','Montant_HT','MontantHTTotal')||0);
+    return s+(isNaN(m)?0:m);
+  },0);
+  const totalEl=document.getElementById('sg-total-montant');
+  if(totalEl){
+    totalEl.style.display=items.length?'':'none';
+    totalEl.textContent=`Total : ${new Intl.NumberFormat('fr-FR',{style:'currency',currency:'EUR',minimumFractionDigits:2}).format(totalFiltre)}`;
+  }
 
   const rows=items.slice(0,150).map(i=>{
     try{
@@ -5012,16 +5032,21 @@ function rechercheGlobalBC(){
       const numBC=String(f(i,'Title')||`BC-${i.ID}`);
       const estCopie=estCopiePartielle(i);
       const estRacineAvecCopies=!estCopie&&titresAvecCopies.has(numBC);
-      const termine=getEtatFact(i)==='Entièrement facturé'&&(getStatut(i)==='Terminé');
-      // Couleur du N° BC : doré si BC racine livré en plusieurs fois, gris-bleu pour les copies
-      const couleurRef=estRacineAvecCopies?'#b8860b':estCopie?'var(--text-muted)':'var(--navy)';
+      // Coche verte : champ métier 'Statut BC Livré et FC' coché manuellement par l'équipe
+      // Beaucoup plus fiable qu'une déduction algorithmique.
+      const termine=estSolde(i);
+      // Couleur : doré pour le BC racine d'une série multi-livraisons
+      //           gris-bleu pour les copies dans la série
+      //           navy normal pour un BC standard
+      const couleurRef=estRacineAvecCopies?'#b8860b':estCopie?'#6b7a8d':'var(--navy)';
+      const poids=estRacineAvecCopies?'800':'700';
       const icone=estCopie
         ?`<span title="Suite d'une livraison partielle" style="font-size:11px;margin-left:4px;cursor:default">🔀</span>`
         :estRacineAvecCopies
         ?`<span title="BC livré en plusieurs fois — cliquez pour voir le détail" style="font-size:11px;margin-left:4px;cursor:default">📦🔀</span>`
         :'';
-      const iconeTermine=termine&&(estRacineAvecCopies||estCopie)
-        ?`<span title="Toutes les livraisons terminées et facturées" style="font-size:11px;margin-left:3px;cursor:default">✅</span>`
+      const iconeTermine=termine
+        ?`<span title="BC soldé — livré et facturé en totalité" style="font-size:11px;margin-left:3px;cursor:default">✅</span>`
         :'';      const chantier=String(getChantier(i)||'—');
       const numBL=String(f(i,'N_x00b0_BL')||'—');
       const numFC=String(f(i,nFCKey())||'—');
@@ -5031,7 +5056,7 @@ function rechercheGlobalBC(){
       const dateRec=fmtDate(f(i,'Dateder_x00e9_ception'));
       const docBadge=bDocuware(i);
       return`<tr style="cursor:pointer" onclick="openBCPanel(${i.ID})">
-        <td class="ref" style="color:${couleurRef};font-weight:700">${hl(numBC)}${icone}${iconeTermine}</td>
+        <td class="ref" style="color:${couleurRef}!important;font-weight:${poids}">${hl(numBC)}${icone}${iconeTermine}</td>
         <td class="cname">${hl(client)}</td>
         <td style="font-size:12px;color:var(--text-secondary)">${hl(chantier)}</td>
         <td class="mono" style="color:var(--blue-mid);font-size:11px">${hl(numDev)}</td>
@@ -5917,7 +5942,7 @@ async function openBCPanel(id){
       <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:0">
         <div class="pf"><div class="pf-lbl">N° BL</div><div class="pf-val mono">${numBL}</div></div>
         <div class="pf"><div class="pf-lbl">N° FC</div><div class="pf-val mono" style="${numFC!=='—'?'color:var(--teal);font-weight:700':''}">${numFC}</div></div>
-        <div class="pf"><div class="pf-lbl">État fact.</div><div class="pf-val">${bFact(ef)}</div></div>
+        <div class="pf"><div class="pf-lbl">État fact.</div><div class="pf-val">${bFact(ef)}${estSolde(item)?` <span style="background:#e8f5e9;color:#1b5e20;border-radius:10px;padding:2px 8px;font-size:10.5px;font-weight:700;margin-left:4px">✅ Soldé</span>`:''}</div></div>
       </div>
       <div class="pf"><div class="pf-lbl">📋 N° Devis lié</div><div class="pf-val mono" style="color:var(--blue-mid)">${f(item,'N_x00b0_Devis','Num_ro_Devis','NumeroDevis')||'—'}</div></div>
       <div class="pf"><div class="pf-lbl">📦 Archivage Docuware</div><div class="pf-val" style="display:flex;align-items:center;gap:8px">${bDocuware(item)}${f(item,'Lien_dossier','Liendossier')&&f(item,'Lien_dossier','Liendossier')!=='—'?`<a href="${f(item,'Lien_dossier','Liendossier')}" target="_blank" style="font-size:11.5px;color:var(--teal)">Ouvrir dans Docuware →</a>`:'<span style="font-size:11.5px;color:var(--text-muted)">Non archivé</span>'}</div></div>
