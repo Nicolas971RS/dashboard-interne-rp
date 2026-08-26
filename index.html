@@ -4713,6 +4713,15 @@ async function openTraiterModal(id,numBC,client){
       <textarea id="m-rem" rows="3" placeholder="Notes de suivi, anomalies, manquants, casse...">${curRem}</textarea>
       <div style="font-size:10px;color:var(--text-muted);margin-top:3px">Champ Remarque_Livraison · Suivi_BC SharePoint</div>
     </div>
+    <div style="border-top:2px solid var(--green);border-radius:var(--radius-sm);padding:12px 14px;margin-top:6px;background:#f0faf0">
+      <label style="display:flex;align-items:flex-start;gap:10px;cursor:pointer">
+        <input type="checkbox" id="m-solde" ${estSolde(currentItem)?'checked':''} style="width:18px;height:18px;margin-top:2px;accent-color:var(--green);flex-shrink:0">
+        <div>
+          <div style="font-weight:700;font-size:13px;color:var(--green)">✅ BC soldé — livraison et facturation complètes</div>
+          <div style="font-size:11px;color:var(--text-muted);margin-top:2px">Coche cette case lors du traitement du BL final pour clôturer définitivement ce BC. Il disparaîtra des listes d'action et affichera ✅ dans toute l'application.</div>
+        </div>
+      </label>
+    </div>
     ${cleanEmail?`<div class="mf"><label>📧 Contenu Email Client</label>
       <div style="background:#f8fafd;border:1px solid var(--border);border-radius:var(--radius-sm);padding:14px 16px;">
         <div style="font-size:12px;color:var(--text-secondary);line-height:1.7;white-space:pre-wrap;margin-bottom:12px">${cleanEmail.replace(/`/g,"'")}</div>
@@ -4753,6 +4762,12 @@ async function openTraiterModal(id,numBC,client){
     }
     const rem=document.getElementById('m-rem').value.trim();
     if(rem!==curRem)body['Remarques']=rem;
+    // Case « BC soldé » — écrite uniquement si l'état change pour éviter
+    // d'écraser une valeur déjà correcte avec un PATCH inutile.
+    const soldeCheck=document.getElementById('m-solde');
+    const soldeVal=soldeCheck?.checked||false;
+    const soldeActuel=estSolde(currentItem);
+    if(soldeVal!==soldeActuel)body['StatutBCLivr_x00e9_etFC']=soldeVal;
     const vendeur=document.getElementById('m-vendeur').value;
     if(vendeur)body['Vendeurencharge']=vendeur;
     const statut=document.getElementById('m-statut').value;
@@ -4796,6 +4811,7 @@ async function openTraiterModal(id,numBC,client){
       'N_x00b0_BL':'N° BL',DateBL:'Date BL',Datepriseencharge:'Date prise en charge',
       'DateLivraisonpr_x00e9_vue':'Date de livraison',MontantHT:'Montant HT',
       Date_Arrivage_Attendu:'Arrivage attendu',
+      StatutBCLivr_x00e9_etFC:'Statut soldé',
       Remarques:'Remarque',Vendeurencharge:'Vendeur',Statut:'Statut'};
     const champs=Object.keys(body).map(k=>LBL[k]||(k.toLowerCase().includes('montant')?'Montant HT':k));
     if('Date_Arrivage_Attendu' in body&&body.Date_Arrivage_Attendu){
