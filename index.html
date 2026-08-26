@@ -4959,12 +4959,27 @@ function rechercheGlobalBC(){
     }catch(e){return t;}
   };
 
+  // Calcul une seule fois : quels BC racines ont des copies partielles ?
+  const titresAvecCopies=new Set(
+    (DATA.suivi||[]).filter(i=>estCopiePartielle(i)).map(i=>{
+      const t=String(f(i,'Title')||'').trim();
+      return t.replace(/-[A-Za-z](-[A-Za-z])*$/,'');
+    })
+  );
+
   const rows=items.slice(0,150).map(i=>{
     try{
       const s=getStatut(i),ef=getEtatFact(i);
       const client=String(getClient(i)||'—');
       const vendeurV=String(f(i,'Vendeurencharge')||'—');
       const numBC=String(f(i,'Title')||`BC-${i.ID}`);
+      const estCopie=estCopiePartielle(i);
+      const estRacineAvecCopies=!estCopie&&titresAvecCopies.has(numBC);
+      const icone=estCopie
+        ?`<span title="Suite d'une livraison partielle" style="font-size:11px;margin-left:4px;cursor:default">🔀</span>`
+        :estRacineAvecCopies
+        ?`<span title="BC livré en plusieurs fois" style="font-size:11px;margin-left:4px;cursor:default">📦🔀</span>`
+        :'';
       const chantier=String(getChantier(i)||'—');
       const numBL=String(f(i,'N_x00b0_BL')||'—');
       const numFC=String(f(i,nFCKey())||'—');
@@ -4974,7 +4989,7 @@ function rechercheGlobalBC(){
       const dateRec=fmtDate(f(i,'Dateder_x00e9_ception'));
       const docBadge=bDocuware(i);
       return`<tr style="cursor:pointer" onclick="openBCPanel(${i.ID})">
-        <td class="ref">${hl(numBC)}</td>
+        <td class="ref">${hl(numBC)}${icone}</td>
         <td class="cname">${hl(client)}</td>
         <td style="font-size:12px;color:var(--text-secondary)">${hl(chantier)}</td>
         <td class="mono" style="color:var(--blue-mid);font-size:11px">${hl(numDev)}</td>
@@ -6277,6 +6292,10 @@ function openAjouterLigneArticle(bcId,numBC){
     </div>
     <div class="mf"><label>Chantier</label>
       <input id="lba-chantier" value="${chantierAuto}" placeholder="Repris automatiquement du BC">
+    </div>
+    <div class="mf"><label>N° BL de cette livraison <span style="font-weight:400;color:var(--text-muted)">(optionnel — trace la première livraison dans le RAL)</span></label>
+      <input id="lba-bl" placeholder="ex : 821307" style="font-family:var(--font-mono)">
+      <div style="font-size:10.5px;color:var(--text-muted);margin-top:3px">Si une partie a déjà été livrée avec un BL, renseigne-le ici pour qu'il soit visible dans l'onglet Livraisons Partielles.</div>
     </div>`,
   async()=>{
     const finalBcId=bcPreselected?bcId:parseInt(document.getElementById('lba-bc-id')?.value||'0');
@@ -6315,6 +6334,8 @@ function openAjouterLigneArticle(bcId,numBC){
       Unit_x00e9_:unite||'',
       Chantier:chantierFinal
     };
+    const blCreation=document.getElementById('lba-bl')?.value.trim();
+    if(blCreation)body['BLSign_x00e9_']=blCreation;
 
     await spPost('sites/RseauxPlus','Lignes_BC',body);
     setTimeout(()=>loadAll(),1500);
