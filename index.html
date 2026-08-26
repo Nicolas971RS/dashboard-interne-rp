@@ -1739,6 +1739,29 @@ function getBLAFacturer(){
 // dans la liste des BC à compléter.
 const estCopiePartielle=i=>/-[A-Za-z]$/.test(String(f(i,'Title')||'').trim());
 
+// ── Parseur BL historique ──
+// Format riche : "821170 (20) · 821248 (19)" — BL + quantité entre parenthèses
+// Repli ancien format : "821170-821248-821273" — BL séparés par tirets/virgules, sans quantité
+function parseBLHistorique(raw){
+  if(!raw||raw==='—')return[];
+  const res=[];
+  const re=/(\d{5,7})\s*\((\d+(?:[.,]\d+)?)\)/g;
+  let m;
+  while((m=re.exec(raw))!==null){
+    res.push({bl:m[1],qte:parseFloat(m[2].replace(',','.'))});
+  }
+  if(res.length>0)return res;
+  // Repli : pas de quantités connues
+  return raw.split(/[-·,;\s\/]+/)
+    .map(s=>s.trim())
+    .filter(s=>/^\d{5,7}$/.test(s))
+    .map(bl=>({bl,qte:null}));
+}
+
+// Titre de BC racine à partir d'un titre avec suffixes (-A, -A-A…)
+function bcRacine(titre){return String(titre||'').trim().replace(/-[A-Za-z](-[A-Za-z])*$/,'');}
+
+
 // BC volontairement écartés de la liste (bouton « Ignorer »).
 // SharePoint si la colonne Exclure_Suivi existe, sinon repli local sur ce poste.
 let _colExclureSuivi=null;
@@ -3571,7 +3594,14 @@ function renderRALTable(){
         <td style="text-align:right;color:var(--green)">${x.ql}</td>
         <td style="text-align:right;font-weight:700;color:var(--red)">${x.ral}</td>
         <td style="text-align:center;font-size:11px">${unite||'—'}</td>
-        <td class="mono" style="font-size:10.5px">${bl}</td>
+        <td style="font-size:10.5px;font-family:var(--font-mono)">${bl==='—'?'—':(()=>{
+          const items=parseBLHistorique(bl);
+          if(!items.length)return bl;
+          const total=items.reduce((s,x)=>s+(x.qte||0),0);
+          const lines=items.map(e=>e.qte!==null?`${e.bl} <span style="color:var(--text-muted)">(${e.qte})</span>`:`${e.bl}`).join('<br>');
+          const badge=total>0?`<span style="color:var(--green);font-weight:600"> = ${total}</span>`:'';
+          return`<span title="Détail des livraisons">${lines}${badge}</span>`;
+        })()}</td>
         <td><button class="btn orange" style="height:24px;font-size:10.5px" onclick="openReceptionnerLigne(${l.ID},${x.info.bcId})">🔄 Mettre à jour RAL</button></td>
       </tr>`;
     }).join(''):'<tr class="empty-row"><td colspan="13">Aucune ligne avec reste à livrer 🎉</td></tr>';
@@ -3613,7 +3643,14 @@ function renderRALTable(){
         <td style="text-align:right;font-weight:600">${x.qc}</td>
         <td style="text-align:right;color:var(--green);font-weight:700">${x.ql}</td>
         <td style="text-align:center;font-size:11px">${unite||'—'}</td>
-        <td class="mono" style="font-size:10.5px">${bl}</td>
+        <td style="font-size:10.5px;font-family:var(--font-mono)">${bl==='—'?'—':(()=>{
+          const items=parseBLHistorique(bl);
+          if(!items.length)return bl;
+          const total=items.reduce((s,x)=>s+(x.qte||0),0);
+          const lines=items.map(e=>e.qte!==null?`${e.bl} <span style="color:var(--text-muted)">(${e.qte})</span>`:`${e.bl}`).join('<br>');
+          const badge=total>0?`<span style="color:var(--green);font-weight:600"> = ${total}</span>`:'';
+          return`<span title="Détail des livraisons">${lines}${badge}</span>`;
+        })()}</td>
       </tr>`;
     }).join(''):'<tr class="empty-row"><td colspan="11">Aucune ligne entièrement livrée</td></tr>';
   }
@@ -4975,12 +5012,17 @@ function rechercheGlobalBC(){
       const numBC=String(f(i,'Title')||`BC-${i.ID}`);
       const estCopie=estCopiePartielle(i);
       const estRacineAvecCopies=!estCopie&&titresAvecCopies.has(numBC);
+      const termine=getEtatFact(i)==='Entièrement facturé'&&(getStatut(i)==='Terminé');
+      // Couleur du N° BC : doré si BC racine livré en plusieurs fois, gris-bleu pour les copies
+      const couleurRef=estRacineAvecCopies?'#b8860b':estCopie?'var(--text-muted)':'var(--navy)';
       const icone=estCopie
         ?`<span title="Suite d'une livraison partielle" style="font-size:11px;margin-left:4px;cursor:default">🔀</span>`
         :estRacineAvecCopies
-        ?`<span title="BC livré en plusieurs fois" style="font-size:11px;margin-left:4px;cursor:default">📦🔀</span>`
+        ?`<span title="BC livré en plusieurs fois — cliquez pour voir le détail" style="font-size:11px;margin-left:4px;cursor:default">📦🔀</span>`
         :'';
-      const chantier=String(getChantier(i)||'—');
+      const iconeTermine=termine&&(estRacineAvecCopies||estCopie)
+        ?`<span title="Toutes les livraisons terminées et facturées" style="font-size:11px;margin-left:3px;cursor:default">✅</span>`
+        :'';      const chantier=String(getChantier(i)||'—');
       const numBL=String(f(i,'N_x00b0_BL')||'—');
       const numFC=String(f(i,nFCKey())||'—');
       const numDev=String(f(i,'N_x00b0_Devis','Num_ro_Devis','NumeroDevis')||'—');
@@ -4989,7 +5031,7 @@ function rechercheGlobalBC(){
       const dateRec=fmtDate(f(i,'Dateder_x00e9_ception'));
       const docBadge=bDocuware(i);
       return`<tr style="cursor:pointer" onclick="openBCPanel(${i.ID})">
-        <td class="ref">${hl(numBC)}${icone}</td>
+        <td class="ref" style="color:${couleurRef};font-weight:700">${hl(numBC)}${icone}${iconeTermine}</td>
         <td class="cname">${hl(client)}</td>
         <td style="font-size:12px;color:var(--text-secondary)">${hl(chantier)}</td>
         <td class="mono" style="color:var(--blue-mid);font-size:11px">${hl(numDev)}</td>
@@ -6422,6 +6464,20 @@ function openAjouterLigneArticle(bcId,numBC){
 }
 
 // ── Réceptionner une ligne article (livraison partielle ou totale de la ligne) ──
+// Aperçu en direct dans "Mettre à jour RAL" — montre la nouvelle entrée avant validation
+function ralMajApercu(){
+  const blNew=(document.getElementById('rl-bl-new')?.value||'').trim();
+  const qte=document.getElementById('rl-qte')?.value;
+  const ap=document.getElementById('rl-apercu');
+  if(!ap)return;
+  if(blNew&&qte){
+    ap.style.display='';
+    ap.textContent=`✅ Sera enregistré : ${blNew} (${qte})`;
+  }else{
+    ap.style.display='none';
+  }
+}
+
 function openReceptionnerLigne(ligneId,bcId){
   const ligne=(DATA.lignes||[]).find(l=>l.ID===ligneId);
   if(!ligne){alert('Ligne non trouvée en cache.');return;}
@@ -6436,24 +6492,36 @@ function openReceptionnerLigne(ligneId,bcId){
       Commandé : <strong>${qc}</strong> · Déjà livré : <strong>${ql}</strong> · Reste à livrer : <strong style="color:var(--red)">${ral}</strong>
     </div>
     <div class="mf"><label>Quantité reçue aujourd'hui *</label>
-      <input id="rl-qte" type="number" min="0" max="${ral}" step="1" placeholder="Max ${ral}" autofocus>
+      <input id="rl-qte" type="number" min="0" max="${ral}" step="1" placeholder="Max ${ral}" autofocus oninput="ralMajApercu()">
     </div>
-    <div class="mf"><label>N° BL Signé</label>
-      <input id="rl-bl" value="${blActuel}" placeholder="Ex : 820094">
+    <div class="mf"><label>N° BL Signé *</label>
+      <input id="rl-bl-new" placeholder="Ex : 820094" oninput="ralMajApercu()">
+      <div style="font-size:10.5px;color:var(--text-muted);margin-top:3px">Nouveau BL pour cette livraison uniquement.</div>
     </div>
+    ${blActuel?`<div style="font-size:11px;background:var(--bg);border-radius:var(--radius-sm);padding:8px 10px;margin-bottom:8px;line-height:1.6">
+      📋 <strong>Historique actuel :</strong> <span style="font-family:var(--font-mono);font-size:10.5px">${blActuel}</span>
+    </div>`:''}
+    <div id="rl-apercu" style="display:none;font-size:11px;background:#eef8ef;border:1px solid var(--green);border-radius:var(--radius-sm);padding:8px 10px;margin-bottom:8px;font-family:var(--font-mono)"></div>
     <div class="mf"><label>Scan / Photo BL (optionnel)</label>
       <input type="file" id="rl-file" accept=".pdf,.jpg,.jpeg,.png" style="font-size:12px;padding:4px 0">
     </div>`,
   async()=>{
     const qteRecue=parseFloat(document.getElementById('rl-qte').value);
-    const bl=document.getElementById('rl-bl').value.trim();
+    const blNew=document.getElementById('rl-bl-new').value.trim();
     const file=document.getElementById('rl-file').files[0];
     if(!qteRecue||qteRecue<=0){document.getElementById('rl-qte').style.borderColor='var(--red)';throw new Error('La quantité reçue doit être supérieure à 0.');}
     if(qteRecue>ral){document.getElementById('rl-qte').style.borderColor='var(--red)';throw new Error(`La quantité reçue ne peut pas dépasser le RAL (${ral}).`);}
 
+    // Construire le nouveau champ BL : ajouter "BL (qté)" à l'historique existant
+    let blMaj=blActuel;
+    if(blNew){
+      const entree=`${blNew} (${qteRecue})`;
+      blMaj=blActuel?`${blActuel} · ${entree}`:entree;
+    }
+
     const nouvelleQteLivree=ql+qteRecue;
     const body={Quantit_x00e9_livr_x00e9_e:nouvelleQteLivree};
-    if(bl)body['BLSign_x00e9_']=bl;
+    if(blMaj)body['BLSign_x00e9_']=blMaj;
 
     await spPatch('sites/RseauxPlus','Lignes_BC',ligneId,body);
 
