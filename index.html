@@ -740,7 +740,7 @@
       <div class="page-header">
         <div><h1>BL en attente & Préparations Scan</h1><div class="sub">/sites/BondeCommande · Sessions_Scan · Portail terrain</div></div>
         <div style="display:flex;gap:8px">
-          <button class="btn-refresh" data-label="1" style="background:var(--blue);color:white;border-color:var(--blue)" onclick="openEmissionBL()">➕ Nouveau BL ou FC</button>
+          <button class="btn-refresh" data-label="1" style="background:var(--blue);color:white;border-color:var(--blue)" onclick="openEmissionBL()">➕ Nouveau BL à livrer</button>
           <button class="btn-refresh" onclick="loadAll()">🔄 Actualiser</button>
         </div>
       </div>
@@ -1214,14 +1214,6 @@ function scanField(item, keyword) {
   return entry ? entry[1] : null;
 }
 function f(item,...keys){for(const k of keys){if(item[k]!==undefined&&item[k]!==null&&item[k]!=='')return item[k];}return null;}
-
-// Icône devant le N° pour distinguer un BL (préfixe 8) d'une facture directe (préfixe 1)
-function docIcon(numero){
-  const n=String(numero||'').trim();
-  if(/^8/.test(n))return '<span title="Bon de livraison" style="margin-right:4px">📦</span>';
-  if(/^1/.test(n))return '<span title="Facture directe — client divers, sans BC" style="margin-right:4px">🧾</span>';
-  return '';
-}
 
 // Get État facturation — tries all possible internal name forms
 function getEtatFact(item){
@@ -2131,6 +2123,7 @@ function showRappelFacturation(){
     return`<tr style="${perso?'background:#fff8f8':''}">
       <td>${agePillHtml(ref)}</td>
       <td style="font-family:var(--font-mono);font-weight:600">${f(i,'Title')||('BC-'+i.ID)}</td>
+      <td style="font-family:var(--font-mono);font-size:11.5px;color:var(--navy)">${f(i,'N_x00b0_BL')||'—'}</td>
       <td>${getClient(i)}</td>
       <td style="font-family:var(--font-mono);font-weight:600">${fmtMoney(montantBC(i))}</td>
       <td style="font-size:11.5px">${perso?'<strong>Toi</strong>':(f(i,'Vendeurencharge')||'—')}</td>
@@ -2158,7 +2151,7 @@ function showRappelFacturation(){
         <span id="rappel-restant" style="margin-left:auto;font-size:12.5px;font-weight:700;color:var(--red)">${bf.length} restant${bf.length>1?'s':''}</span>
       </div>
       <div class="tc" style="margin:8px 22px;overflow-y:auto;flex:1"><table><thead><tr>
-        <th>Âge BL</th><th>N° BC</th><th>Client</th><th>Montant HT</th><th>Vendeur</th><th style="min-width:250px">N° de facture</th>
+        <th>Âge BL</th><th>N° BC</th><th>N° BL</th><th>Client</th><th>Montant HT</th><th>Vendeur</th><th style="min-width:250px">N° de facture</th>
       </tr></thead><tbody id="rappel-tbody">
         ${miens.map(i=>ligne(i,true)).join('')}
         ${autres.slice(0,30).map(i=>ligne(i,false)).join('')}
@@ -3746,7 +3739,7 @@ function renderPreparations(){
       const isLiv=type.toLowerCase()==='livraison client';
       const prep=isPrep(s);
       return`<tr style="${rowBg}cursor:pointer" onclick="openSessionPanel(${s.ID})">
-        <td class="ref" style="color:var(--blue)">${docIcon(f(s,'Numero_BL'))}${f(s,'Numero_BL')||'—'}</td>
+        <td class="ref" style="color:var(--blue)">${f(s,'Numero_BL')||'—'}</td>
         <td class="cname">${isLiv?(f(s,'Client')||'—'):'—'}</td>
         <td><span class="ctag ${isLiv?'o':'a'}">${type}</span></td>
         <td>${f(s,'Vendeur_Emetteur')||'—'}</td>
@@ -3972,22 +3965,16 @@ function renderLivres(){
     const type=f(s,'Type_Operation')||'—';
     const isLiv=type.toLowerCase()==='livraison client';
     const nbArt=f(s,'Nb_Articles_Scannes')??'—';
-    const nonCat=hasNonCataloguee(s.ID);
-    return`<tr style="cursor:pointer${nonCat?';background:rgba(191,54,12,.06)':''}" onclick="openSessionPanel(${s.ID})">
-      <td class="ref" style="color:var(--blue)">${docIcon(f(s,'Numero_BL'))}${f(s,'Numero_BL')||'—'}</td>
+    return`<tr style="cursor:pointer" onclick="openSessionPanel(${s.ID})">
+      <td class="ref" style="color:var(--blue)">${f(s,'Numero_BL')||'—'}</td>
       <td class="cname">${isLiv?(f(s,'Client')||'—'):'—'}</td>
       <td><span class="ctag ${isLiv?'o':'a'}">${type}</span></td>
       <td>${f(s,'Vendeur_Emetteur')||'—'}</td>
       <td class="mono" style="font-size:11px">${fmtDate(f(s,'Date_Scan')||f(s,'Date_Emission'))}</td>
-      <td>${tag(f(s,'Statut'))}${nonCat?' <span class="ctag o" title="Au moins une référence scannée manuellement, sans code-barre catalogué">⚠️ Non catalogué</span>':''}</td>
+      <td>${tag(f(s,'Statut'))}</td>
       <td style="text-align:center">${nbArt}</td>
     </tr>`;
   }).join(''):'<tr class="empty-row"><td colspan="7">Aucun BL livré pour le moment</td></tr>';
-}
-
-// Une ligne de Lignes_Scan sans Désignation = référence scannée manuellement, absente du catalogue
-function hasNonCataloguee(sessionId){
-  return (DATA.lignesScan||[]).some(l => String(lineSessionId(l))===String(sessionId) && !f(l,'Designation'));
 }
 
 function openSessionPanel(id){
@@ -4014,15 +4001,13 @@ function openSessionPanel(id){
       const att=Number(f(l,'Quantite_Attendue')||0);
       const scan=Number(f(l,'Quantite_Scannee')||0);
       const ecart=scan-att;
-      const desig=f(l,'Designation');
-      const nonCat=!desig;
       let ecartTxt;
       if(ecart===0)ecartTxt='<span class="ctag g">Complet</span>';
       else if(ecart<0)ecartTxt='<span class="ctag r">manque '+Math.abs(ecart)+'</span>';
       else ecartTxt='<span class="ctag o">surplus '+ecart+'</span>';
-      return`<tr${nonCat?' style="background:rgba(191,54,12,.06)"':''}>
-        <td class="ref">${f(l,'Reference_Article')||'—'}${nonCat?' ⚠️':''}</td>
-        <td style="font-size:12px${nonCat?';color:var(--orange);font-style:italic':''}">${nonCat?'Référence non cataloguée — saisie manuelle':desig}</td>
+      return`<tr>
+        <td class="ref">${f(l,'Reference_Article')||'—'}</td>
+        <td style="font-size:12px">${f(l,'Designation')||'—'}</td>
         <td style="text-align:center">${scan} / ${att}</td>
         <td style="text-align:center">${ecartTxt}</td>
       </tr>`;
@@ -4663,7 +4648,7 @@ async function openTraiterModal(id,numBC,client){
     </div>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
       <div class="mf"><label>N° BL</label><input id="m-bl" value="${curBL}" placeholder="ex: BL-2025-0123"></div>
-      <div class="mf"><label>Vendeur en charge</label><select id="m-vendeur"><option value="">— Inchangé —</option>${vendOpts}</select></div>
+      <div class="mf"><label>Vendeur en charge</label><select id="m-vendeur" onchange="this.classList.remove('err')"><option value="">— Inchangé —</option>${vendOpts}</select></div>
     </div>
     <div class="mf"><label>Statut BC</label><select id="m-statut">${stOpts}</select></div>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
@@ -4726,6 +4711,19 @@ async function openTraiterModal(id,numBC,client){
     if(vendeur)body['Vendeurencharge']=vendeur;
     const statut=document.getElementById('m-statut').value;
     if(statut&&statut!==currentStat)body['Statut']=statut;
+
+    // Un BL signifie que le BC a été pris en charge : client et vendeur
+    // doivent être renseignés, sinon le BC reste orphelin dans le suivi.
+    const blEffectif=bl||f(currentItem,'N_x00b0_BL');
+    if(blEffectif){
+      const clientEffectif=clientId||currentItem.ClientId;
+      const vendeurEffectif=vendeur||f(currentItem,'Vendeurencharge');
+      const errs=[];
+      if(!clientEffectif){document.getElementById('m-client-search')?.classList.add('err');errs.push('client');}
+      if(!vendeurEffectif){document.getElementById('m-vendeur')?.classList.add('err');errs.push('vendeur');}
+      if(errs.length)throw new Error(`Un N° BL est renseigné — le ${errs.join(' et le ')} doi${errs.length>1?'vent':'t'} être précisé${errs.length>1?'s':''} avant d'enregistrer.`);
+    }
+
     if(!Object.keys(body).length)throw new Error('Aucune modification détectée.');
     try{
       await spPatch('sites/RseauxPlus','Suivi_BC',id,body);
@@ -5428,6 +5426,7 @@ function setupAC(inputId,hiddenId,dropId,data){
   const drop=document.getElementById(dropId);
   if(!input||!drop)return;
   input.oninput=()=>{
+    input.classList.remove('err');
     const q=input.value.trim().toLowerCase();
     drop.innerHTML='';
     if(q.length<3){drop.style.display='none';return;}
@@ -5466,10 +5465,9 @@ function openEmissionBL(){
         </div>
       </div>
       <div>
-        <label style="font-size:12px;font-weight:700;color:var(--text-muted);display:block;margin-bottom:6px">N° de BL ou FC <span style="color:var(--red)">*</span></label>
-        <input type="text" id="em-numero" placeholder="Ex: 820950 (BL) ou 156413 (FC)" oninput="checkEmissionDoublon()"
+        <label style="font-size:12px;font-weight:700;color:var(--text-muted);display:block;margin-bottom:6px">N° de BL <span style="color:var(--red)">*</span></label>
+        <input type="text" id="em-numero" placeholder="Ex: 820950" oninput="checkEmissionDoublon()"
           style="width:100%;padding:9px 12px;border:1px solid var(--border);border-radius:var(--radius-sm);font-size:13.5px;font-family:var(--font-body);box-sizing:border-box">
-        <div id="em-type-doc" style="font-size:11.5px;color:var(--text-muted);margin-top:5px;display:none"></div>
         <div id="em-doublon-warn" style="font-size:11.5px;color:var(--red);margin-top:5px;display:none"></div>
       </div>
       <div id="em-field-client">
@@ -5497,7 +5495,7 @@ function openEmissionBL(){
     </div>`;
 
   _emissionType='Livraison client';
-  openModal('➕ Nouveau BL ou FC',html,emettreBL);
+  openModal('➕ Nouveau BL à livrer',html,emettreBL);
 
   // Autocomplete client avec saisie libre (setupAC laisse le texte tapé si rien n'est choisi)
   setTimeout(()=>{
@@ -5519,29 +5517,10 @@ function setEmissionType(type){
 function checkEmissionDoublon(){
   const num=document.getElementById('em-numero').value.trim();
   const warn=document.getElementById('em-doublon-warn');
-  const typeEl=document.getElementById('em-type-doc');
-
-  // Détection du type de document : BL commence par 8, Facture directe commence par 1
-  if(typeEl){
-    if(!num){
-      typeEl.style.display='none';
-    }else if(/^8/.test(num)){
-      typeEl.textContent='📦 Bon de livraison détecté';
-      typeEl.style.color='var(--text-muted)';
-      typeEl.style.display='block';
-    }else if(/^1/.test(num)){
-      typeEl.textContent='🧾 Facture directe détectée (client divers, sans BC)';
-      typeEl.style.color='var(--blue)';
-      typeEl.style.display='block';
-    }else{
-      typeEl.style.display='none';
-    }
-  }
-
   if(!num){warn.style.display='none';return;}
   const existe=(DATA.sessionsScan||[]).find(s=>String(f(s,'Numero_BL')||'').trim().toLowerCase()===num.toLowerCase());
   if(existe){
-    warn.textContent='⚠️ Ce N° de BL/FC existe déjà (session « '+(f(existe,'Statut')||'?')+' »). Vérifiez avant d\'émettre.';
+    warn.textContent='⚠️ Ce N° de BL existe déjà (session « '+(f(existe,'Statut')||'?')+' »). Vérifiez avant d\'émettre.';
     warn.style.display='block';
   }else{
     warn.style.display='none';
@@ -5557,14 +5536,14 @@ async function emettreBL(){
   const prep=isInv?false:document.getElementById('em-prep').checked;
 
   // Validation
-  if(!numero){throw new Error('Le N° de BL ou FC est obligatoire.');}
+  if(!numero){throw new Error('Le N° de BL est obligatoire.');}
   if(!vendeur){throw new Error('Le vendeur émetteur est obligatoire.');}
   if(!isInv&&!client){throw new Error('Le client est obligatoire pour une livraison.');}
 
   // Garde-fou anti-doublon — bloquant
   const existe=(DATA.sessionsScan||[]).find(s=>String(f(s,'Numero_BL')||'').trim().toLowerCase()===numero.toLowerCase());
   if(existe){
-    throw new Error('Le N° « '+numero+' » existe déjà (session « '+(f(existe,'Statut')||'?')+' »). Choisissez un autre numéro.');
+    throw new Error('Le N° de BL « '+numero+' » existe déjà (session « '+(f(existe,'Statut')||'?')+' »). Choisissez un autre numéro.');
   }
 
   const titre=isInv?`${numero} - Inventaire`:`${numero} - ${client}`;
