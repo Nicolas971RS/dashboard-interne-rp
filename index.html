@@ -4692,12 +4692,30 @@ function mAddLigneRow(){
 }
 
 async function mDeleteLigneRow(lineId){
-  const ok=await showConfirm('🗑️ Supprimer cette ligne ?','Cette ligne article sera définitivement supprimée du suivi RAL.','Supprimer','delete');
+  const ok=await showConfirm('🗑️ Supprimer cette ligne ?','Cette ligne article sera définitivement supprimée du suivi RAL (et du côté Préparation Scan si elle y était synchronisée).','Supprimer','delete');
   if(!ok)return;
+  const row=document.querySelector(`.m-ligne-existing[data-line-id="${lineId}"]`);
+  const ref=row?.querySelector('.m-l-ref')?.value.trim()||'';
+  const design=row?.querySelector('.m-l-design')?.value.trim()||'';
   try{
     await spDelete('sites/RseauxPlus','Lignes_BC',lineId);
-    document.querySelector(`.m-ligne-existing[data-line-id="${lineId}"]`)?.remove();
+    row?.remove();
     DATA.lignes=(DATA.lignes||[]).filter(l=>l.ID!==lineId);
+    // Supprime aussi la ligne miroir côté Lignes_Scan si une session existe pour ce BL
+    const session=findSessionByBL(_traiterCurBL);
+    if(session){
+      const match=(DATA.lignesScan||[]).find(l=>
+        String(lineSessionId(l))===String(session.ID)&&
+        ((ref&&(f(l,'Reference_Article')||'').trim().toLowerCase()===ref.toLowerCase())||
+         (!ref&&(f(l,'Designation')||'').trim().toLowerCase()===design.toLowerCase()))
+      );
+      if(match){
+        try{
+          await spDelete('sites/BondeCommande','Lignes_Scan',match.ID);
+          DATA.lignesScan=(DATA.lignesScan||[]).filter(l=>l.ID!==match.ID);
+        }catch(e){console.warn('[Lignes_Scan delete miroir]',e.message);}
+      }
+    }
     toast('✅ Ligne supprimée');
   }catch(e){toast('❌ '+e.message);}
 }
@@ -4737,6 +4755,7 @@ async function openTraiterModal(id,numBC,client){
   const acDrop=`position:absolute;top:100%;left:0;right:0;z-index:9999;background:white;border:1px solid var(--teal-mid);border-radius:0 0 var(--radius-sm) var(--radius-sm);max-height:200px;overflow-y:auto;box-shadow:var(--shadow-md);display:none;`;
 
   const lignesExistantes=(DATA.lignes||[]).filter(l=>l.BCId===id||parseInt(l.BCId)===id);
+  _traiterCurBL=curBL;
   const mLigneRowHtml=l=>{
     const lid=l.ID;
     const ref=(f(l,'R_x00e9_f_x00e9_rence')||'').replace(/"/g,'&quot;');
@@ -4910,6 +4929,7 @@ async function openTraiterModal(id,numBC,client){
 
     // ── Sauvegarde des lignes articles (existantes modifiées + nouvelles ajoutées) ──
     let lignesTouchees=0;
+    const sessionLiee=findSessionByBL(blEffectif);
     const rowsExist=document.querySelectorAll('#m-lignes-list .m-ligne-existing');
     for(const row of rowsExist){
       const lid=parseInt(row.dataset.lineId);
@@ -4925,6 +4945,7 @@ async function openTraiterModal(id,numBC,client){
           Quantit_x00e9_livr_x00e9_e:ql
         });
         lignesTouchees++;
+        if(sessionLiee)await syncLigneToScan(sessionLiee,ref,design,qc,ql);
       }catch(e){console.warn('[Lignes_BC patch]',lid,e.message);}
     }
     const rowsNew=document.querySelectorAll('#m-lignes-new .m-ligne-new');
@@ -4949,6 +4970,7 @@ async function openTraiterModal(id,numBC,client){
             Chantier:currentChantier||''
           });
           lignesTouchees++;
+          if(sessionLiee)await syncLigneToScan(sessionLiee,ref,design,qc,ql);
         }catch(e){console.warn('[Lignes_BC post]',e.message);}
       }
     }
@@ -4965,7 +4987,7 @@ async function openTraiterModal(id,numBC,client){
       const dArr=fmtDate(body.Date_Arrivage_Attendu);
       return `${titre||numBC} — 📦 marqué en commande, sort du bloc jaune jusqu'au ${dArr}`;
     }
-    const suffixeLignes=lignesTouchees?` · ${lignesTouchees} article(s) enregistré(s)`:'';
+    const suffixeLignes=lignesTouchees?` · ${lignesTouchees} article(s) enregistré(s)${sessionLiee?' (+ synchronisé côté Préparation Scan)':(blEffectif?' (pas encore de session scan pour ce BL — rien à synchroniser)':'')}`:'';
     if(!champs.length)return `${titre||numBC} —${suffixeLignes||' aucune modification BC'}`;
     return `${titre||numBC} — ${champs.join(', ')} enregistré${champs.length>1?'s':''}${suffixeLignes}`;
   });
@@ -5698,6 +5720,39 @@ function setupAC(inputId,hiddenId,dropId,data){
 }
 
 // ── Émission d'un nouveau BL à livrer (depuis le dashboard) ──
+// ── Pont Lignes_BC → Lignes_Scan : quand une session Sessions_Scan existe déjà
+// pour le N° BL du BC traité, on répercute les lignes articles dans Lignes_Scan
+// pour qu'elles apparaissent côté Préparations Scan / panneau magasinier.
+let _traiterCurBL='';
+function findSessionByBL(numBL){
+  if(!numBL)return null;
+  const q=String(numBL).trim().toLowerCase();
+  return (DATA.sessionsScan||[]).find(s=>String(f(s,'Numero_BL')||'').trim().toLowerCase()===q)||null;
+}
+async function syncLigneToScan(session,ref,design,qc,ql){
+  if(!session||!design)return;
+  const sessId=session.ID;
+  const existing=(DATA.lignesScan||[]).find(l=>
+    String(lineSessionId(l))===String(sessId)&&
+    (f(l,'Reference_Article')||'').trim().toLowerCase()===(ref||'').trim().toLowerCase()&&
+    (ref||'').trim()!==''
+  )||(DATA.lignesScan||[]).find(l=>
+    String(lineSessionId(l))===String(sessId)&&
+    (f(l,'Designation')||'').trim().toLowerCase()===(design||'').trim().toLowerCase()
+  );
+  const body={Reference_Article:ref||'',Designation:design,Quantite_Attendue:qc,Quantite_Scannee:ql};
+  try{
+    if(existing){
+      await spPatch('sites/BondeCommande','Lignes_Scan',existing.ID,body);
+      Object.assign(existing,body);
+    }else{
+      body.Session_ScanId=sessId;
+      const created=await spPost('sites/BondeCommande','Lignes_Scan',body);
+      if(created)DATA.lignesScan=[...(DATA.lignesScan||[]),created];
+    }
+  }catch(e){console.warn('[syncLigneToScan]',e.message);}
+}
+
 let _emissionType='Livraison client';
 
 function openEmissionBL(){
