@@ -4639,13 +4639,67 @@ function openFacturerModal(id,numBC,client){
   });
 }
 
-// Ouvre la modale « Ajouter une ligne article » depuis Traiter — passe par
-// tryCloseModal() pour ne pas écraser silencieusement une saisie en cours.
-async function traiterOuvrirLignes(bcId,numBC){
-  await tryCloseModal();
-  if(!document.getElementById('modal-ov').classList.contains('open')){
-    openAjouterLigneArticle(bcId,numBC);
-  }
+// ── Lignes d'articles éditées inline dans la modale Traiter ──
+let _mLigneNewCount=0;
+function mAddLigneRow(){
+  const idx=_mLigneNewCount++;
+  const container=document.getElementById('m-lignes-new');
+  if(!container)return;
+  const row=document.createElement('div');
+  row.className='m-ligne-new';
+  row.id='m-ligne-new-'+idx;
+  row.style.cssText='display:grid;grid-template-columns:1fr 1.4fr 55px 55px 26px;gap:6px;margin-bottom:6px;align-items:center;position:relative';
+  row.innerHTML=`
+    <div style="position:relative">
+      <input class="m-l-ref-new" id="m-l-search-new-${idx}" autocomplete="off" placeholder="Réf." style="width:100%;padding:5px 7px;border:1px solid var(--border);border-radius:5px;font-size:12px;font-family:var(--font-mono);box-sizing:border-box">
+      <div id="m-l-drop-new-${idx}" style="position:absolute;top:100%;left:0;right:0;background:white;border:1px solid var(--border);border-radius:6px;box-shadow:0 4px 12px rgba(0,0,0,.12);z-index:9999;max-height:180px;overflow-y:auto;display:none"></div>
+    </div>
+    <input class="m-l-design-new" placeholder="Désignation" style="padding:5px 7px;border:1px solid var(--border);border-radius:5px;font-size:12px;box-sizing:border-box">
+    <input class="m-l-qc-new" type="number" min="0" step="1" placeholder="0" title="Qté commandée" style="padding:5px 4px;border:1px solid var(--border);border-radius:5px;font-size:12px;box-sizing:border-box;text-align:center">
+    <input class="m-l-ql-new" type="number" min="0" step="1" placeholder="0" title="Qté livrée" style="padding:5px 4px;border:1px solid var(--border);border-radius:5px;font-size:12px;box-sizing:border-box;text-align:center">
+    <button type="button" onclick="document.getElementById('m-ligne-new-${idx}').remove()" title="Retirer" style="background:none;border:none;color:var(--red);font-size:14px;cursor:pointer;padding:4px">✕</button>`;
+  container.appendChild(row);
+
+  const inp=document.getElementById('m-l-search-new-'+idx);
+  const drop=document.getElementById('m-l-drop-new-'+idx);
+  const designField=row.querySelector('.m-l-design-new');
+  inp.addEventListener('input',()=>{
+    const q=inp.value.trim().toLowerCase();
+    drop.innerHTML='';
+    if(q.length<3){drop.style.display='none';return;}
+    const matches=(DATA.catalogue||[]).filter(p=>{
+      const ref=(f(p,'Title')||'').toLowerCase();
+      const des=(f(p,'field_1')||'').toLowerCase();
+      return ref.includes(q)||des.includes(q);
+    }).slice(0,12);
+    if(!matches.length){
+      drop.innerHTML='<div style="padding:6px 10px;font-size:12px;color:var(--text-muted)">Aucun résultat — saisie libre possible</div>';
+      drop.style.display='block';return;
+    }
+    matches.forEach(p=>{
+      const ref=f(p,'Title')||'';const des=f(p,'field_1')||'';
+      const li=document.createElement('div');
+      li.innerHTML=`<span class="mono" style="font-weight:700">${ref}</span> <span style="color:var(--text-muted);font-size:11px">${des}</span>`;
+      li.style.cssText='padding:6px 10px;cursor:pointer;font-size:12.5px;border-bottom:1px solid #f0f3f8';
+      li.onmouseenter=()=>li.style.background='var(--grey-light)';
+      li.onmouseleave=()=>li.style.background='';
+      li.onmousedown=(e)=>{e.preventDefault();inp.value=ref;if(designField)designField.value=des;drop.style.display='none';};
+      drop.appendChild(li);
+    });
+    drop.style.display='block';
+  });
+  inp.addEventListener('blur',()=>setTimeout(()=>{drop.style.display='none';},200));
+}
+
+async function mDeleteLigneRow(lineId){
+  const ok=await showConfirm('🗑️ Supprimer cette ligne ?','Cette ligne article sera définitivement supprimée du suivi RAL.','Supprimer','delete');
+  if(!ok)return;
+  try{
+    await spDelete('sites/RseauxPlus','Lignes_BC',lineId);
+    document.querySelector(`.m-ligne-existing[data-line-id="${lineId}"]`)?.remove();
+    DATA.lignes=(DATA.lignes||[]).filter(l=>l.ID!==lineId);
+    toast('✅ Ligne supprimée');
+  }catch(e){toast('❌ '+e.message);}
 }
 
 // ── Modal Traiter (BL + dates + montant + vendeur) ──
@@ -4681,6 +4735,22 @@ async function openTraiterModal(id,numBC,client){
 
   const acInput=`width:100%;border:1px solid var(--border);border-radius:var(--radius-sm);padding:8px 10px;font-size:13px;font-family:var(--font-body);outline:none;box-sizing:border-box;`;
   const acDrop=`position:absolute;top:100%;left:0;right:0;z-index:9999;background:white;border:1px solid var(--teal-mid);border-radius:0 0 var(--radius-sm) var(--radius-sm);max-height:200px;overflow-y:auto;box-shadow:var(--shadow-md);display:none;`;
+
+  const lignesExistantes=(DATA.lignes||[]).filter(l=>l.BCId===id||parseInt(l.BCId)===id);
+  const mLigneRowHtml=l=>{
+    const lid=l.ID;
+    const ref=(f(l,'R_x00e9_f_x00e9_rence')||'').replace(/"/g,'&quot;');
+    const design=(f(l,'Produit_x002f_D_x00e9_signation')||'').replace(/"/g,'&quot;');
+    const qc=f(l,'Quantit_x00e9_command_x00e9_e')||0;
+    const ql=f(l,'Quantit_x00e9_livr_x00e9_e')||0;
+    return`<div class="m-ligne-row m-ligne-existing" data-line-id="${lid}" style="display:grid;grid-template-columns:1fr 1.4fr 55px 55px 26px;gap:6px;margin-bottom:6px;align-items:center">
+      <input class="m-l-ref" value="${ref}" placeholder="Réf." style="padding:5px 7px;border:1px solid var(--border);border-radius:5px;font-size:12px;font-family:var(--font-mono);box-sizing:border-box">
+      <input class="m-l-design" value="${design}" placeholder="Désignation" style="padding:5px 7px;border:1px solid var(--border);border-radius:5px;font-size:12px;box-sizing:border-box">
+      <input class="m-l-qc" type="number" min="0" step="1" value="${qc}" title="Qté commandée" style="padding:5px 4px;border:1px solid var(--border);border-radius:5px;font-size:12px;box-sizing:border-box;text-align:center">
+      <input class="m-l-ql" type="number" min="0" step="1" value="${ql}" title="Qté livrée" style="padding:5px 4px;border:1px solid var(--border);border-radius:5px;font-size:12px;box-sizing:border-box;text-align:center">
+      <button type="button" onclick="mDeleteLigneRow(${lid})" title="Supprimer" style="background:none;border:none;color:var(--red);font-size:14px;cursor:pointer;padding:4px">🗑</button>
+    </div>`;
+  };
 
   openModal(`🔧 Traiter — ${numBC} · ${client}`,`
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
@@ -4739,13 +4809,17 @@ async function openTraiterModal(id,numBC,client){
       </label>
     </div>
     <div style="border:1px solid var(--border);border-radius:var(--radius-sm);padding:12px 14px;margin-top:6px;background:var(--grey-xlight)">
-      <div style="display:flex;justify-content:space-between;align-items:center;gap:10px">
-        <div>
-          <div style="font-weight:700;font-size:12.5px">📦 Articles de ce BC</div>
-          <div style="font-size:11px;color:var(--text-muted);margin-top:2px">${(DATA.lignes||[]).filter(l=>l.BCId===id||parseInt(l.BCId)===id).length} ligne(s) déjà saisie(s) — référence, désignation, quantité</div>
-        </div>
-        <button type="button" class="btn navy" style="height:30px;font-size:11.5px;white-space:nowrap" onclick="traiterOuvrirLignes(${id},'${(curTitre||numBC).replace(/'/g,"\\'")}')">➕ Ajouter un article</button>
+      <div style="font-weight:700;font-size:12.5px;margin-bottom:8px">📦 Articles de ce BC <span style="font-weight:400;color:var(--text-muted);text-transform:none">(référence, désignation, quantité — sert au suivi RAL)</span></div>
+      <div style="display:grid;grid-template-columns:1fr 1.4fr 55px 55px 26px;gap:6px;margin-bottom:4px">
+        <div style="font-size:9.5px;font-weight:700;color:var(--text-muted);text-transform:uppercase">Réf.</div>
+        <div style="font-size:9.5px;font-weight:700;color:var(--text-muted);text-transform:uppercase">Désignation</div>
+        <div style="font-size:9.5px;font-weight:700;color:var(--text-muted);text-transform:uppercase;text-align:center">Cmdé</div>
+        <div style="font-size:9.5px;font-weight:700;color:var(--text-muted);text-transform:uppercase;text-align:center">Livré</div>
+        <div></div>
       </div>
+      <div id="m-lignes-list">${lignesExistantes.map(mLigneRowHtml).join('')}</div>
+      <div id="m-lignes-new"></div>
+      <button type="button" class="btn navy" style="height:28px;font-size:11.5px;margin-top:4px" onclick="mAddLigneRow()">➕ Ajouter un article</button>
     </div>
     ${cleanEmail?`<div class="mf"><label>📧 Contenu Email Client</label>
       <div style="background:#f8fafd;border:1px solid var(--border);border-radius:var(--radius-sm);padding:14px 16px;">
@@ -4810,7 +4884,9 @@ async function openTraiterModal(id,numBC,client){
       if(errs.length)throw new Error(`Un N° BL est renseigné — le ${errs.join(' et le ')} doi${errs.length>1?'vent':'t'} être précisé${errs.length>1?'s':''} avant d'enregistrer.`);
     }
 
-    if(!Object.keys(body).length)throw new Error('Aucune modification détectée.');
+    const hasLigneRows=document.querySelectorAll('#m-lignes-list .m-ligne-existing, #m-lignes-new .m-ligne-new').length>0;
+    if(!Object.keys(body).length&&!hasLigneRows)throw new Error('Aucune modification détectée.');
+    if(Object.keys(body).length)
     try{
       await spPatch('sites/RseauxPlus','Suivi_BC',id,body);
       if('Date_Arrivage_Attendu' in body)_colArrivage=true;
@@ -4831,6 +4907,52 @@ async function openTraiterModal(id,numBC,client){
       if(chSearch&&chantierId&&chantierId!=='__clear__')DATA.suivi[idx]._ProjetTitle=chSearch.value;
     }
     renderAll();updateBadges();
+
+    // ── Sauvegarde des lignes articles (existantes modifiées + nouvelles ajoutées) ──
+    let lignesTouchees=0;
+    const rowsExist=document.querySelectorAll('#m-lignes-list .m-ligne-existing');
+    for(const row of rowsExist){
+      const lid=parseInt(row.dataset.lineId);
+      const ref=row.querySelector('.m-l-ref')?.value.trim()||'';
+      const design=row.querySelector('.m-l-design')?.value.trim()||'';
+      const qc=parseFloat(row.querySelector('.m-l-qc')?.value)||0;
+      const ql=parseFloat(row.querySelector('.m-l-ql')?.value)||0;
+      try{
+        await spPatch('sites/RseauxPlus','Lignes_BC',lid,{
+          R_x00e9_f_x00e9_rence:ref,
+          Produit_x002f_D_x00e9_signation:design,
+          Quantit_x00e9_command_x00e9_e:qc,
+          Quantit_x00e9_livr_x00e9_e:ql
+        });
+        lignesTouchees++;
+      }catch(e){console.warn('[Lignes_BC patch]',lid,e.message);}
+    }
+    const rowsNew=document.querySelectorAll('#m-lignes-new .m-ligne-new');
+    if(rowsNew.length){
+      const lignesExistantesRef=(DATA.lignes||[]).filter(l=>l.BCId===id||parseInt(l.BCId)===id);
+      let maxLigne=lignesExistantesRef.reduce((max,l)=>{const n=parseInt(f(l,'Title'))||0;return n>max?n:max;},0);
+      for(const row of rowsNew){
+        const ref=row.querySelector('.m-l-ref-new')?.value.trim()||'';
+        const design=row.querySelector('.m-l-design-new')?.value.trim()||'';
+        const qc=parseFloat(row.querySelector('.m-l-qc-new')?.value)||0;
+        const ql=parseFloat(row.querySelector('.m-l-ql-new')?.value)||0;
+        if(!design||qc<=0)continue;
+        maxLigne++;
+        try{
+          await spPost('sites/RseauxPlus','Lignes_BC',{
+            Title:String(maxLigne),
+            BCId:id,
+            R_x00e9_f_x00e9_rence:ref,
+            Produit_x002f_D_x00e9_signation:design,
+            Quantit_x00e9_command_x00e9_e:qc,
+            Quantit_x00e9_livr_x00e9_e:ql,
+            Chantier:currentChantier||''
+          });
+          lignesTouchees++;
+        }catch(e){console.warn('[Lignes_BC post]',e.message);}
+      }
+    }
+
     // Libellés lisibles des champs modifiés — affichés dans la confirmation
     const LBL={Title:'N° BC','N_x00b0_Devis':'N° Devis',ClientId:'Client',ProjetId:'Chantier',
       'N_x00b0_BL':'N° BL',DateBL:'Date BL',Datepriseencharge:'Date prise en charge',
@@ -4843,7 +4965,9 @@ async function openTraiterModal(id,numBC,client){
       const dArr=fmtDate(body.Date_Arrivage_Attendu);
       return `${titre||numBC} — 📦 marqué en commande, sort du bloc jaune jusqu'au ${dArr}`;
     }
-    return `${titre||numBC} — ${champs.join(', ')} enregistré${champs.length>1?'s':''}`;
+    const suffixeLignes=lignesTouchees?` · ${lignesTouchees} article(s) enregistré(s)`:'';
+    if(!champs.length)return `${titre||numBC} —${suffixeLignes||' aucune modification BC'}`;
+    return `${titre||numBC} — ${champs.join(', ')} enregistré${champs.length>1?'s':''}${suffixeLignes}`;
   });
 
   // Setup autocompletes après rendu
