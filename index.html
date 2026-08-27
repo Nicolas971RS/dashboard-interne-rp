@@ -773,7 +773,7 @@
       <div id="prep-search-result" style="display:none;margin-bottom:14px"></div>
 
       <div class="tc"><table>
-        <thead><tr><th>N° BL</th><th>Client</th><th>Type</th><th>Vendeur</th><th>Émis le</th><th>En attente depuis</th><th>Préparation</th></tr></thead>
+        <thead><tr><th>N° BL ou FC</th><th>Client</th><th>Type</th><th>Vendeur</th><th>Émis le</th><th>En attente depuis</th><th>Préparation</th></tr></thead>
         <tbody id="prep-attente-body"><tr class="empty-row"><td colspan="7">Chargement...</td></tr></tbody>
       </table></div>
 
@@ -2474,6 +2474,13 @@ function fcPillHtml(fcVal){
     return`<span style="display:inline-flex;align-items:center;gap:4px;font-size:10.5px;font-weight:600;padding:2px 8px;border-radius:10px;background:var(--green-light);color:var(--green)">✅ ${fcVal}</span>`;
   return`<span style="display:inline-flex;align-items:center;gap:4px;font-size:10.5px;font-weight:600;padding:2px 8px;border-radius:10px;background:var(--red-light);color:var(--red)">❌ FC manquant</span>`;
 }
+// Icône BL vs FC — convention numérotation : BL commence par 8 (820xxx/821xxx...), FC par 1 (156xxx...)
+function iconBLFC(numero){
+  const n=String(numero||'').trim();
+  if(/^8/.test(n))return '📦';
+  if(/^1/.test(n))return '🧾';
+  return '📦';
+}
 function agePillHtml(dateStr){
   if(!dateStr)return'—';
   const age=daysSince(dateStr);
@@ -3723,7 +3730,7 @@ function renderPreparations(){
                 ? ('✅ Livré le '+fmtDate(f(s,'Date_Scan')||f(s,'Date_Emission'))+(mag?' · par '+mag:''))
                 : ('🔧 En préparation'+(mag?' par '+mag:'')));
           return '<div onclick="openSessionPanel('+s.ID+')" style="cursor:pointer;background:var(--surface);border:1px solid var(--border);border-left:4px solid var(--blue);border-radius:var(--radius);padding:12px 16px;margin-bottom:8px;display:flex;justify-content:space-between;align-items:center;gap:12px">'
-            +'<div><div style="font-size:16px;font-weight:800;color:var(--blue)">'+(f(s,'Numero_BL')||'—')+' <span style="font-weight:600;color:var(--text-secondary);font-size:13px">· '+(f(s,'Client')||'—')+'</span></div>'
+            +'<div><div style="font-size:16px;font-weight:800;color:var(--blue)">'+iconBLFC(f(s,'Numero_BL'))+' '+(f(s,'Numero_BL')||'—')+' <span style="font-weight:600;color:var(--text-secondary);font-size:13px">· '+(f(s,'Client')||'—')+'</span></div>'
             +'<div style="font-size:12px;color:var(--text-secondary);margin-top:3px">'+ligne2+'</div></div>'
             +'<span class="ctag '+cls+'">'+st+'</span></div>';
         }).join('');
@@ -3785,7 +3792,7 @@ function renderPreparations(){
       const isLiv=type.toLowerCase()==='livraison client';
       const prep=isPrep(s);
       return`<tr style="${rowBg}cursor:pointer" onclick="openSessionPanel(${s.ID})">
-        <td class="ref" style="color:var(--blue)">${f(s,'Numero_BL')||'—'}</td>
+        <td class="ref" style="color:var(--blue)">${iconBLFC(f(s,'Numero_BL'))} ${f(s,'Numero_BL')||'—'}</td>
         <td class="cname">${isLiv?(f(s,'Client')||'—'):'—'}</td>
         <td><span class="ctag ${isLiv?'o':'a'}">${type}</span></td>
         <td>${f(s,'Vendeur_Emetteur')||'—'}</td>
@@ -4062,7 +4069,7 @@ function openSessionPanel(id){
 
   const html=`
     <div style="margin-bottom:16px">
-      ${infoLine('N° BL',f(s,'Numero_BL')||'—')}
+      ${infoLine('N° BL ou FC',iconBLFC(f(s,'Numero_BL'))+' '+(f(s,'Numero_BL')||'—'))}
       ${isLiv?infoLine('Client',f(s,'Client')||'—'):''}
       ${infoLine('Type',type)}
       ${infoLine('Vendeur',f(s,'Vendeur_Emetteur')||'—')}
@@ -4078,7 +4085,7 @@ function openSessionPanel(id){
       <tbody>${rows}</tbody>
     </table></div>`;
 
-  openPanel('📦 '+(f(s,'Numero_BL')||'BL'),html);
+  openPanel(iconBLFC(f(s,'Numero_BL'))+' '+(f(s,'Numero_BL')||'BL'),html);
 }
 
 function exportRALCSV(){
@@ -4632,6 +4639,15 @@ function openFacturerModal(id,numBC,client){
   });
 }
 
+// Ouvre la modale « Ajouter une ligne article » depuis Traiter — passe par
+// tryCloseModal() pour ne pas écraser silencieusement une saisie en cours.
+async function traiterOuvrirLignes(bcId,numBC){
+  await tryCloseModal();
+  if(!document.getElementById('modal-ov').classList.contains('open')){
+    openAjouterLigneArticle(bcId,numBC);
+  }
+}
+
 // ── Modal Traiter (BL + dates + montant + vendeur) ──
 async function openTraiterModal(id,numBC,client){
   if(!numBC||!client){
@@ -4693,7 +4709,7 @@ async function openTraiterModal(id,numBC,client){
       <div style="font-size:10px;color:var(--text-muted);margin-top:2px">Tapez 3 caractères · <span id="m-chantier-clear" style="color:var(--red);cursor:pointer;text-decoration:underline">✕ Effacer</span></div>
     </div>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
-      <div class="mf"><label>N° BL</label><input id="m-bl" value="${curBL}" placeholder="ex: BL-2025-0123"></div>
+      <div class="mf"><label>N° BL ou FC</label><input id="m-bl" value="${curBL}" placeholder="Ex: 820950 (BL) ou 156413 (FC)"></div>
       <div class="mf"><label>Vendeur en charge</label><select id="m-vendeur" onchange="this.classList.remove('err')"><option value="">— Inchangé —</option>${vendOpts}</select></div>
     </div>
     <div class="mf"><label>Statut BC</label><select id="m-statut">${stOpts}</select></div>
@@ -4721,6 +4737,15 @@ async function openTraiterModal(id,numBC,client){
           <div style="font-size:11px;color:var(--text-muted);margin-top:2px">Coche cette case lors du traitement du BL final pour clôturer définitivement ce BC. Il disparaîtra des listes d'action et affichera ✅ dans toute l'application.</div>
         </div>
       </label>
+    </div>
+    <div style="border:1px solid var(--border);border-radius:var(--radius-sm);padding:12px 14px;margin-top:6px;background:var(--grey-xlight)">
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:10px">
+        <div>
+          <div style="font-weight:700;font-size:12.5px">📦 Articles de ce BC</div>
+          <div style="font-size:11px;color:var(--text-muted);margin-top:2px">${(DATA.lignes||[]).filter(l=>l.BCId===id||parseInt(l.BCId)===id).length} ligne(s) déjà saisie(s) — référence, désignation, quantité</div>
+        </div>
+        <button type="button" class="btn navy" style="height:30px;font-size:11.5px;white-space:nowrap" onclick="traiterOuvrirLignes(${id},'${(curTitre||numBC).replace(/'/g,"\\'")}')">➕ Ajouter un article</button>
+      </div>
     </div>
     ${cleanEmail?`<div class="mf"><label>📧 Contenu Email Client</label>
       <div style="background:#f8fafd;border:1px solid var(--border);border-radius:var(--radius-sm);padding:14px 16px;">
@@ -5563,8 +5588,8 @@ function openEmissionBL(){
         </div>
       </div>
       <div>
-        <label style="font-size:12px;font-weight:700;color:var(--text-muted);display:block;margin-bottom:6px">N° de BL <span style="color:var(--red)">*</span></label>
-        <input type="text" id="em-numero" placeholder="Ex: 820950" oninput="checkEmissionDoublon()"
+        <label style="font-size:12px;font-weight:700;color:var(--text-muted);display:block;margin-bottom:6px">Numéro de BL ou FC <span style="color:var(--red)">*</span></label>
+        <input type="text" id="em-numero" placeholder="Ex: 820950 (BL) ou 156413 (FC)" oninput="checkEmissionDoublon()"
           style="width:100%;padding:9px 12px;border:1px solid var(--border);border-radius:var(--radius-sm);font-size:13.5px;font-family:var(--font-body);box-sizing:border-box">
         <div id="em-doublon-warn" style="font-size:11.5px;color:var(--red);margin-top:5px;display:none"></div>
       </div>
@@ -5590,6 +5615,13 @@ function openEmissionBL(){
           Préparation à l'avance (le magasinier prépare avant l'arrivée du client)
         </label>
       </div>
+      <div id="em-field-lignes" style="border-top:1px solid var(--border);padding-top:12px">
+        <label style="font-size:12px;font-weight:700;color:var(--text-muted);display:block;margin-bottom:6px">
+          📦 Articles à préparer <span style="font-weight:400;color:var(--text-muted);text-transform:none">(optionnel — aide le magasinier à scanner plus vite)</span>
+        </label>
+        <div id="em-lignes-list"></div>
+        <button type="button" class="btn" style="height:30px;font-size:12px;margin-top:4px" onclick="emAddLigneRow()">➕ Ajouter un article</button>
+      </div>
     </div>`;
 
   _emissionType='Livraison client';
@@ -5610,6 +5642,76 @@ function setEmissionType(type){
   const isInv=type==='Inventaire physique';
   document.getElementById('em-field-client').style.display=isInv?'none':'block';
   document.getElementById('em-field-prep').style.display=isInv?'none':'block';
+  const lg=document.getElementById('em-field-lignes');
+  if(lg)lg.style.display=isInv?'none':'block';
+}
+
+// ── Lignes d'articles optionnelles sur le formulaire d'émission BL ──
+let _emLigneCount=0;
+function emAddLigneRow(){
+  const idx=_emLigneCount++;
+  const list=document.getElementById('em-lignes-list');
+  if(!list)return;
+  const row=document.createElement('div');
+  row.id='em-ligne-'+idx;
+  row.style.cssText='display:grid;grid-template-columns:1.6fr 1.6fr 70px 26px;gap:6px;margin-bottom:6px;align-items:start';
+  row.innerHTML=`
+    <div style="position:relative">
+      <input type="text" id="em-l-search-${idx}" autocomplete="off" placeholder="Réf. ou nom produit..." style="width:100%;padding:6px 8px;border:1px solid var(--border);border-radius:6px;font-size:12.5px;box-sizing:border-box">
+      <input type="hidden" id="em-l-ref-${idx}">
+      <div id="em-l-drop-${idx}" style="position:absolute;top:100%;left:0;right:0;background:white;border:1px solid var(--border);border-radius:6px;box-shadow:0 4px 12px rgba(0,0,0,.12);z-index:9999;max-height:180px;overflow-y:auto;display:none"></div>
+    </div>
+    <input type="text" id="em-l-design-${idx}" placeholder="Désignation" style="padding:6px 8px;border:1px solid var(--border);border-radius:6px;font-size:12.5px;box-sizing:border-box">
+    <input type="number" id="em-l-qte-${idx}" min="0" step="1" placeholder="Qté" style="padding:6px 8px;border:1px solid var(--border);border-radius:6px;font-size:12.5px;box-sizing:border-box">
+    <button type="button" onclick="emRemoveLigneRow(${idx})" title="Retirer" style="background:none;border:none;color:var(--red);font-size:15px;cursor:pointer;padding:4px">✕</button>`;
+  list.appendChild(row);
+
+  const inp=document.getElementById('em-l-search-'+idx);
+  const drop=document.getElementById('em-l-drop-'+idx);
+  const hiddenRef=document.getElementById('em-l-ref-'+idx);
+  const designField=document.getElementById('em-l-design-'+idx);
+  inp.addEventListener('input',()=>{
+    const q=inp.value.trim().toLowerCase();
+    drop.innerHTML='';hiddenRef.value='';
+    if(q.length<3){drop.style.display='none';return;}
+    const matches=(DATA.catalogue||[]).filter(p=>{
+      const ref=(f(p,'Title')||'').toLowerCase();
+      const des=(f(p,'field_1')||'').toLowerCase();
+      return ref.includes(q)||des.includes(q);
+    }).slice(0,12);
+    if(!matches.length){
+      drop.innerHTML='<div style="padding:6px 10px;font-size:12px;color:var(--text-muted)">Aucun résultat — saisie libre possible</div>';
+      drop.style.display='block';return;
+    }
+    matches.forEach(p=>{
+      const ref=f(p,'Title')||'';const des=f(p,'field_1')||'';
+      const li=document.createElement('div');
+      li.innerHTML=`<span class="mono" style="font-weight:700">${ref}</span> <span style="color:var(--text-muted);font-size:11px">${des}</span>`;
+      li.style.cssText='padding:6px 10px;cursor:pointer;font-size:12.5px;border-bottom:1px solid #f0f3f8';
+      li.onmouseenter=()=>li.style.background='var(--grey-light)';
+      li.onmouseleave=()=>li.style.background='';
+      li.onmousedown=(e)=>{e.preventDefault();inp.value=ref;hiddenRef.value=ref;if(designField)designField.value=des;drop.style.display='none';};
+      drop.appendChild(li);
+    });
+    drop.style.display='block';
+  });
+  inp.addEventListener('blur',()=>setTimeout(()=>{drop.style.display='none';},200));
+}
+function emRemoveLigneRow(idx){
+  document.getElementById('em-ligne-'+idx)?.remove();
+}
+function emCollectLignes(){
+  const rows=document.querySelectorAll('#em-lignes-list > div[id^="em-ligne-"]');
+  const out=[];
+  rows.forEach(row=>{
+    const idx=row.id.replace('em-ligne-','');
+    const ref=document.getElementById('em-l-ref-'+idx)?.value.trim()||document.getElementById('em-l-search-'+idx)?.value.trim()||'';
+    const design=document.getElementById('em-l-design-'+idx)?.value.trim()||'';
+    const qteRaw=document.getElementById('em-l-qte-'+idx)?.value;
+    const qte=qteRaw?parseFloat(qteRaw):0;
+    if(design&&qte>0)out.push({ref,design,qte});
+  });
+  return out;
 }
 
 function checkEmissionDoublon(){
@@ -5644,6 +5746,8 @@ async function emettreBL(){
     throw new Error('Le N° de BL « '+numero+' » existe déjà (session « '+(f(existe,'Statut')||'?')+' »). Choisissez un autre numéro.');
   }
 
+  const lignes=isInv?[]:emCollectLignes();
+
   const titre=isInv?`${numero} - Inventaire`:`${numero} - ${client}`;
   const payload={
     Titre:titre,
@@ -5656,6 +5760,9 @@ async function emettreBL(){
     Preparation_Avance:prep,
     _token:SCAN_TOKEN
   };
+  // Lignes articles pré-remplies par le vendeur (optionnel) — le flow Scan_EmissionBL
+  // doit être complété pour les répercuter sur Lignes_Scan (voir note technique).
+  if(lignes.length)payload.Lignes_JSON=JSON.stringify(lignes);
 
   // Appel iso-portail : no-cors / text-plain (réponse opaque, on rafraîchit après)
   await fetch(PA_FLOWS.emissionBL,{
