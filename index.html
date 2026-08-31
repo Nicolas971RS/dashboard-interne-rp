@@ -5732,20 +5732,24 @@ function setupAC(inputId,hiddenId,dropId,data){
 // pour qu'elles apparaissent côté Préparations Scan / panneau magasinier.
 // Réessaie de trouver la session (créée avec un peu de retard par l'automatisation
 // SharePoint) et synchronise les lignes une fois qu'elle apparaît.
+// On évite $filter (fragile sur ce champ) : on relit les sessions récentes et on
+// matche côté JS, comme au chargement initial.
 async function ensureSyncAfterDelay(blNum,lignesAEnvoyer){
+  const target=String(blNum).trim().toLowerCase();
   for(const wait of[4000,8000,15000]){
     await new Promise(r=>setTimeout(r,wait));
     try{
-      const q=`$select=ID,Title,Numero_BL,Client,Type_Operation,Vendeur_Emetteur,Magasinier,Date_Emission,Date_Scan,Statut,Nb_Articles_Scannes,Nb_Ecarts,Preparation_Avance,BL_Racine&$filter=Numero_BL eq '${String(blNum).replace(/'/g,"''")}'&$top=1`;
-      const res=await spFetch('sites/BondeCommande','Sessions_Scan',q);
-      if(res&&res.length){
-        const sess=res[0];
+      const res=await spFetch('sites/BondeCommande','Sessions_Scan',
+        '$select=ID,Title,Numero_BL,Client,Type_Operation,Vendeur_Emetteur,Magasinier,Date_Emission,Date_Scan,Statut,Nb_Articles_Scannes,Nb_Ecarts,Preparation_Avance,BL_Racine&$orderby=ID desc&$top=100');
+      console.log('[ensureSyncAfterDelay] réponse',res?.length,'sessions, recherche',target);
+      const sess=(res||[]).find(s=>String(f(s,'Numero_BL')||'').trim().toLowerCase()===target);
+      if(sess){
         DATA.sessionsScan=[...(DATA.sessionsScan||[]).filter(s=>s.ID!==sess.ID),sess];
         for(const l of lignesAEnvoyer)await syncLigneToScan(sess,l.ref,l.design,l.qc,l.ql);
         toast(`✅ Articles synchronisés côté Préparation Scan pour ${blNum}`);
         return;
       }
-    }catch(e){console.warn('[ensureSyncAfterDelay]',e.message);}
+    }catch(e){console.warn('[ensureSyncAfterDelay] fetch',e.message);}
   }
   console.warn('[ensureSyncAfterDelay] session introuvable après plusieurs tentatives pour',blNum);
 }
