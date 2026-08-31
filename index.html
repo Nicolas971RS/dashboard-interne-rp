@@ -2406,7 +2406,7 @@ function setupClientAutocompleteSimple(inputId,hiddenId,dropId){
       document.getElementById('c-sug')?.remove();
       const q=norm(inp.value);
       if(q.length<2){drop.innerHTML='';return;}
-      const res=Object.entries(DATA.clients||{}).filter(([,n])=>norm(n).includes(q)).slice(0,8);
+      const res=rankByRelevance(Object.entries(DATA.clients||{}),q,([,n])=>norm(n)).slice(0,8);
       drop.innerHTML=res.length?`<div style="position:absolute;top:2px;left:0;right:0;background:#fff;border:1px solid var(--border);border-radius:6px;box-shadow:0 4px 14px rgba(10,31,61,.14);z-index:50;max-height:190px;overflow-y:auto">
         ${res.map(([cid,n])=>`<div onclick="document.getElementById('${inputId}').value=this.textContent;document.getElementById('${hiddenId}').value='${cid}';document.getElementById('${dropId}').innerHTML='';window._majPrefixe&&window._majPrefixe();"
           style="padding:8px 12px;font-size:12.5px;cursor:pointer;border-bottom:1px solid var(--border)" onmouseover="this.style.background='var(--bg)'" onmouseout="this.style.background='#fff'">${n}</div>`).join('')}
@@ -4667,11 +4667,16 @@ function mAddLigneRow(){
     const q=inp.value.trim().toLowerCase();
     drop.innerHTML='';
     if(q.length<3){drop.style.display='none';return;}
-    const matches=(DATA.catalogue||[]).filter(p=>{
-      const ref=(f(p,'Title')||'').toLowerCase();
-      const des=(f(p,'field_1')||'').toLowerCase();
-      return ref.includes(q)||des.includes(q);
-    }).slice(0,12);
+    const matches=(DATA.catalogue||[])
+      .map(p=>{
+        const ref=(f(p,'Title')||'').toLowerCase();
+        const des=(f(p,'field_1')||'').toLowerCase();
+        return{p,score:Math.min(scoreMatch(ref,q),scoreMatch(des,q)),ref};
+      })
+      .filter(x=>x.score<3)
+      .sort((a,b)=>a.score-b.score||a.ref.localeCompare(b.ref))
+      .map(x=>x.p)
+      .slice(0,12);
     if(!matches.length){
       drop.innerHTML='<div style="padding:6px 10px;font-size:12px;color:var(--text-muted)">Aucun résultat — saisie libre possible</div>';
       drop.style.display='block';return;
@@ -5634,7 +5639,7 @@ function openNouveauProjet(){
       drop.innerHTML='';
       hiddenId.value='';
       if(q.length<3)return;
-      const matches=allClients.filter(c=>c.name.toLowerCase().includes(q)).slice(0,10);
+      const matches=rankByRelevance(allClients,q,c=>c.name).slice(0,10);
       if(!matches.length){drop.innerHTML='<div style="padding:6px 10px;font-size:12px;color:var(--text-muted)">Aucun résultat</div>';return;}
       const ul=document.createElement('ul');
       Object.assign(ul.style,{listStyle:'none',margin:0,padding:'4px 0',background:'white',border:'1px solid var(--border)',borderRadius:'6px',boxShadow:'0 4px 12px rgba(0,0,0,.12)',position:'absolute',width:'100%',zIndex:'9999',maxHeight:'200px',overflowY:'auto'});
@@ -5697,6 +5702,28 @@ function exportRechercheCSV(){
   ],'recherche_BC.csv');
 }
 
+// Tri par pertinence : correspondance exacte > commence par > position du match > alphabétique.
+// Évite qu'un nom court (ex: "STA") soit noyé sous des noms longs qui le contiennent en sous-chaîne.
+function rankByRelevance(items,query,getText){
+  const q=query.toLowerCase();
+  return items.map(it=>{
+    const t=getText(it).toLowerCase();
+    let score=3;
+    if(t===q)score=0;
+    else if(t.startsWith(q))score=1;
+    else if(t.includes(q))score=2;
+    return{it,score,idx:t.indexOf(q),t};
+  }).filter(x=>x.score<3)
+    .sort((a,b)=>a.score-b.score||a.idx-b.idx||a.t.localeCompare(b.t))
+    .map(x=>x.it);
+}
+// Score de pertinence pour un seul champ texte (0=exact, 1=commence par, 2=contient, 3=non).
+function scoreMatch(text,q){
+  if(text===q)return 0;
+  if(text.startsWith(q))return 1;
+  if(text.includes(q))return 2;
+  return 3;
+}
 function setupAC(inputId,hiddenId,dropId,data){
   const input=document.getElementById(inputId);
   const hidden=document.getElementById(hiddenId);
@@ -5707,7 +5734,7 @@ function setupAC(inputId,hiddenId,dropId,data){
     const q=input.value.trim().toLowerCase();
     drop.innerHTML='';
     if(q.length<3){drop.style.display='none';return;}
-    const matches=data.filter(d=>d.name.toLowerCase().includes(q)).slice(0,20);
+    const matches=rankByRelevance(data,q,d=>d.name).slice(0,20);
     if(!matches.length){
       drop.innerHTML='<div style="padding:8px 12px;font-size:12px;color:var(--text-muted);font-style:italic">Aucun résultat</div>';
       drop.style.display='block';return;
@@ -5907,11 +5934,16 @@ function emAddLigneRow(){
     const q=inp.value.trim().toLowerCase();
     drop.innerHTML='';hiddenRef.value='';
     if(q.length<3){drop.style.display='none';return;}
-    const matches=(DATA.catalogue||[]).filter(p=>{
-      const ref=(f(p,'Title')||'').toLowerCase();
-      const des=(f(p,'field_1')||'').toLowerCase();
-      return ref.includes(q)||des.includes(q);
-    }).slice(0,12);
+    const matches=(DATA.catalogue||[])
+      .map(p=>{
+        const ref=(f(p,'Title')||'').toLowerCase();
+        const des=(f(p,'field_1')||'').toLowerCase();
+        return{p,score:Math.min(scoreMatch(ref,q),scoreMatch(des,q)),ref};
+      })
+      .filter(x=>x.score<3)
+      .sort((a,b)=>a.score-b.score||a.ref.localeCompare(b.ref))
+      .map(x=>x.p)
+      .slice(0,12);
     if(!matches.length){
       drop.innerHTML='<div style="padding:6px 10px;font-size:12px;color:var(--text-muted)">Aucun résultat — saisie libre possible</div>';
       drop.style.display='block';return;
@@ -5993,9 +6025,6 @@ async function emettreBL(){
     Preparation_Avance:prep,
     _token:SCAN_TOKEN
   };
-  // Lignes articles pré-remplies par le vendeur (optionnel) — le flow Scan_EmissionBL
-  // doit être complété pour les répercuter sur Lignes_Scan (voir note technique).
-  if(lignes.length)payload.Lignes_JSON=JSON.stringify(lignes);
 
   // Appel iso-portail : no-cors / text-plain (réponse opaque, on rafraîchit après)
   await fetch(PA_FLOWS.emissionBL,{
@@ -6004,6 +6033,29 @@ async function emettreBL(){
     headers:{'Content-Type':'text/plain'},
     body:JSON.stringify(payload)
   });
+
+  // Le flow Scan_EmissionBL crée la session de façon fiable (confirmé le 31/08/2026)
+  // mais de façon asynchrone — on attend qu'elle apparaisse pour y accrocher les articles.
+  if(lignes.length)syncLignesApresEmission(numero,lignes);
+
+  return isInv
+    ? `${numero} — session inventaire créée`
+    : `${numero} — ${client} — BL créé${lignes.length?' (synchronisation des articles en cours…)':''}`;
+}
+
+// Attend l'apparition de la session créée par Scan_EmissionBL puis y accroche les lignes.
+async function syncLignesApresEmission(numero,lignes){
+  for(const wait of[2000,4000,7000,12000]){
+    await new Promise(r=>setTimeout(r,wait));
+    const sess=await refetchSessionByBL(numero);
+    if(sess){
+      for(const l of lignes)await syncLigneToScan(sess,l.ref,l.design,l.qte,0);
+      toast(`✅ Articles synchronisés pour le BL ${numero}`);
+      return;
+    }
+  }
+  console.warn('[syncLignesApresEmission] session introuvable après plusieurs tentatives pour',numero);
+  toast(`⚠️ BL ${numero} créé mais articles non synchronisés — réessaie depuis Traiter`);
 }
 
 // ────────────────────────────────────────────────────────────
@@ -6812,11 +6864,16 @@ function openAjouterLigneArticle(bcId,numBC){
         const q=pInp.value.trim().toLowerCase();
         pDrop.innerHTML='';
         if(q.length<3)return;
-        const matches=(DATA.catalogue||[]).filter(p=>{
-          const ref=(f(p,'Title')||'').toLowerCase();
-          const des=(f(p,'field_1')||'').toLowerCase();
-          return ref.includes(q)||des.includes(q);
-        }).slice(0,12);
+        const matches=(DATA.catalogue||[])
+          .map(p=>{
+            const ref=(f(p,'Title')||'').toLowerCase();
+            const des=(f(p,'field_1')||'').toLowerCase();
+            return{p,score:Math.min(scoreMatch(ref,q),scoreMatch(des,q)),ref};
+          })
+          .filter(x=>x.score<3)
+          .sort((a,b)=>a.score-b.score||a.ref.localeCompare(b.ref))
+          .map(x=>x.p)
+          .slice(0,12);
         if(!matches.length){pDrop.innerHTML='<div style="padding:6px 10px;font-size:12px;color:var(--text-muted)">Aucun résultat — saisie libre possible</div>';return;}
         const ul=document.createElement('ul');
         Object.assign(ul.style,{listStyle:'none',margin:0,padding:'4px 0',background:'white',border:'1px solid var(--border)',borderRadius:'6px',boxShadow:'0 4px 12px rgba(0,0,0,.12)',position:'absolute',width:'100%',zIndex:'9999',maxHeight:'220px',overflowY:'auto'});
