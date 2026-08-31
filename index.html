@@ -4930,6 +4930,7 @@ async function openTraiterModal(id,numBC,client){
     // ── Sauvegarde des lignes articles (existantes modifiées + nouvelles ajoutées) ──
     let lignesTouchees=0;
     const sessionLiee=findSessionByBL(blEffectif);
+    const lignesEnvoyees=[]; // pour le rattrapage différé si la session n'existe pas encore
     const rowsExist=document.querySelectorAll('#m-lignes-list .m-ligne-existing');
     for(const row of rowsExist){
       const lid=parseInt(row.dataset.lineId);
@@ -4945,7 +4946,7 @@ async function openTraiterModal(id,numBC,client){
           Quantit_x00e9_livr_x00e9_e:ql
         });
         lignesTouchees++;
-        if(sessionLiee)await syncLigneToScan(sessionLiee,ref,design,qc,ql);
+        if(design){lignesEnvoyees.push({ref,design,qc,ql});if(sessionLiee)await syncLigneToScan(sessionLiee,ref,design,qc,ql);}
       }catch(e){console.warn('[Lignes_BC patch]',lid,e.message);}
     }
     const rowsNew=document.querySelectorAll('#m-lignes-new .m-ligne-new');
@@ -4970,9 +4971,15 @@ async function openTraiterModal(id,numBC,client){
             Chantier:currentChantier||''
           });
           lignesTouchees++;
+          lignesEnvoyees.push({ref,design,qc,ql});
           if(sessionLiee)await syncLigneToScan(sessionLiee,ref,design,qc,ql);
         }catch(e){console.warn('[Lignes_BC post]',e.message);}
       }
+    }
+    // Pas de session trouvée tout de suite → l'automatisation SharePoint met parfois
+    // quelques secondes à la créer. On retente en tâche de fond sans bloquer la fermeture.
+    if(!sessionLiee&&blEffectif&&lignesEnvoyees.length){
+      ensureSyncAfterDelay(blEffectif,lignesEnvoyees);
     }
 
     // Libellés lisibles des champs modifiés — affichés dans la confirmation
@@ -4987,7 +4994,7 @@ async function openTraiterModal(id,numBC,client){
       const dArr=fmtDate(body.Date_Arrivage_Attendu);
       return `${titre||numBC} — 📦 marqué en commande, sort du bloc jaune jusqu'au ${dArr}`;
     }
-    const suffixeLignes=lignesTouchees?` · ${lignesTouchees} article(s) enregistré(s)${sessionLiee?' (+ synchronisé côté Préparation Scan)':(blEffectif?' (pas encore de session scan pour ce BL — rien à synchroniser)':'')}`:'';
+    const suffixeLignes=lignesTouchees?` · ${lignesTouchees} article(s) enregistré(s)${sessionLiee?' (+ synchronisé côté Préparation Scan)':(blEffectif?' (session pas encore visible — nouvelle tentative en arrière-plan dans les secondes qui suivent)':'')}`:'';
     if(!champs.length)return `${titre||numBC} —${suffixeLignes||' aucune modification BC'}`;
     return `${titre||numBC} — ${champs.join(', ')} enregistré${champs.length>1?'s':''}${suffixeLignes}`;
   });
@@ -5723,6 +5730,26 @@ function setupAC(inputId,hiddenId,dropId,data){
 // ── Pont Lignes_BC → Lignes_Scan : quand une session Sessions_Scan existe déjà
 // pour le N° BL du BC traité, on répercute les lignes articles dans Lignes_Scan
 // pour qu'elles apparaissent côté Préparations Scan / panneau magasinier.
+// Réessaie de trouver la session (créée avec un peu de retard par l'automatisation
+// SharePoint) et synchronise les lignes une fois qu'elle apparaît.
+async function ensureSyncAfterDelay(blNum,lignesAEnvoyer){
+  for(const wait of[4000,8000,15000]){
+    await new Promise(r=>setTimeout(r,wait));
+    try{
+      const q=`$select=ID,Title,Numero_BL,Client,Type_Operation,Vendeur_Emetteur,Magasinier,Date_Emission,Date_Scan,Statut,Nb_Articles_Scannes,Nb_Ecarts,Preparation_Avance,BL_Racine&$filter=Numero_BL eq '${String(blNum).replace(/'/g,"''")}'&$top=1`;
+      const res=await spFetch('sites/BondeCommande','Sessions_Scan',q);
+      if(res&&res.length){
+        const sess=res[0];
+        DATA.sessionsScan=[...(DATA.sessionsScan||[]).filter(s=>s.ID!==sess.ID),sess];
+        for(const l of lignesAEnvoyer)await syncLigneToScan(sess,l.ref,l.design,l.qc,l.ql);
+        toast(`✅ Articles synchronisés côté Préparation Scan pour ${blNum}`);
+        return;
+      }
+    }catch(e){console.warn('[ensureSyncAfterDelay]',e.message);}
+  }
+  console.warn('[ensureSyncAfterDelay] session introuvable après plusieurs tentatives pour',blNum);
+}
+
 let _traiterCurBL='';
 function findSessionByBL(numBL){
   if(!numBL)return null;
