@@ -4929,8 +4929,13 @@ async function openTraiterModal(id,numBC,client){
 
     // ── Sauvegarde des lignes articles (existantes modifiées + nouvelles ajoutées) ──
     let lignesTouchees=0;
-    const sessionLiee=findSessionByBL(blEffectif);
-    const lignesEnvoyees=[]; // pour le rattrapage différé si la session n'existe pas encore
+    let sessionLiee=null;
+    let sessionCreee=false;
+    if(blEffectif){
+      const clientNom=DATA.clients?.[clientId||currentItem.ClientId]||f(currentItem,'ClientId')||'';
+      const r=await findOrCreateSessionForBL(blEffectif,clientNom,vendeur||f(currentItem,'Vendeurencharge'));
+      sessionLiee=r.sess;sessionCreee=r.created;
+    }
     const rowsExist=document.querySelectorAll('#m-lignes-list .m-ligne-existing');
     for(const row of rowsExist){
       const lid=parseInt(row.dataset.lineId);
@@ -4946,7 +4951,7 @@ async function openTraiterModal(id,numBC,client){
           Quantit_x00e9_livr_x00e9_e:ql
         });
         lignesTouchees++;
-        if(design){lignesEnvoyees.push({ref,design,qc,ql});if(sessionLiee)await syncLigneToScan(sessionLiee,ref,design,qc,ql);}
+        if(design&&sessionLiee)await syncLigneToScan(sessionLiee,ref,design,qc,ql);
       }catch(e){console.warn('[Lignes_BC patch]',lid,e.message);}
     }
     const rowsNew=document.querySelectorAll('#m-lignes-new .m-ligne-new');
@@ -4971,15 +4976,9 @@ async function openTraiterModal(id,numBC,client){
             Chantier:currentChantier||''
           });
           lignesTouchees++;
-          lignesEnvoyees.push({ref,design,qc,ql});
           if(sessionLiee)await syncLigneToScan(sessionLiee,ref,design,qc,ql);
         }catch(e){console.warn('[Lignes_BC post]',e.message);}
       }
-    }
-    // Pas de session trouvée tout de suite → l'automatisation SharePoint met parfois
-    // quelques secondes à la créer. On retente en tâche de fond sans bloquer la fermeture.
-    if(!sessionLiee&&blEffectif&&lignesEnvoyees.length){
-      ensureSyncAfterDelay(blEffectif,lignesEnvoyees);
     }
 
     // Libellés lisibles des champs modifiés — affichés dans la confirmation
@@ -4994,7 +4993,8 @@ async function openTraiterModal(id,numBC,client){
       const dArr=fmtDate(body.Date_Arrivage_Attendu);
       return `${titre||numBC} — 📦 marqué en commande, sort du bloc jaune jusqu'au ${dArr}`;
     }
-    const suffixeLignes=lignesTouchees?` · ${lignesTouchees} article(s) enregistré(s)${sessionLiee?' (+ synchronisé côté Préparation Scan)':(blEffectif?' (session pas encore visible — nouvelle tentative en arrière-plan dans les secondes qui suivent)':'')}`:'';
+    const suffixeLignes=lignesTouchees?` · ${lignesTouchees} article(s) enregistré(s)${sessionLiee?' (+ synchronisé côté Préparation Scan)':' (échec de synchronisation Préparation Scan — voir console)'}`
+      :(sessionCreee?' · BL ajouté à Préparation Scan':'');
     if(!champs.length)return `${titre||numBC} —${suffixeLignes||' aucune modification BC'}`;
     return `${titre||numBC} — ${champs.join(', ')} enregistré${champs.length>1?'s':''}${suffixeLignes}`;
   });
@@ -5734,24 +5734,38 @@ function setupAC(inputId,hiddenId,dropId,data){
 // SharePoint) et synchronise les lignes une fois qu'elle apparaît.
 // On évite $filter (fragile sur ce champ) : on relit les sessions récentes et on
 // matche côté JS, comme au chargement initial.
-async function ensureSyncAfterDelay(blNum,lignesAEnvoyer){
+async function refetchSessionByBL(blNum){
   const target=String(blNum).trim().toLowerCase();
-  for(const wait of[4000,8000,15000]){
-    await new Promise(r=>setTimeout(r,wait));
-    try{
-      const res=await spFetch('sites/BondeCommande','Sessions_Scan',
-        '$select=ID,Title,Numero_BL,Client,Type_Operation,Vendeur_Emetteur,Magasinier,Date_Emission,Date_Scan,Statut,Nb_Articles_Scannes,Nb_Ecarts,Preparation_Avance,BL_Racine&$orderby=ID desc&$top=100');
-      console.log('[ensureSyncAfterDelay] réponse',res?.length,'sessions, recherche',target);
-      const sess=(res||[]).find(s=>String(f(s,'Numero_BL')||'').trim().toLowerCase()===target);
-      if(sess){
-        DATA.sessionsScan=[...(DATA.sessionsScan||[]).filter(s=>s.ID!==sess.ID),sess];
-        for(const l of lignesAEnvoyer)await syncLigneToScan(sess,l.ref,l.design,l.qc,l.ql);
-        toast(`✅ Articles synchronisés côté Préparation Scan pour ${blNum}`);
-        return;
-      }
-    }catch(e){console.warn('[ensureSyncAfterDelay] fetch',e.message);}
-  }
-  console.warn('[ensureSyncAfterDelay] session introuvable après plusieurs tentatives pour',blNum);
+  try{
+    const res=await spFetch('sites/BondeCommande','Sessions_Scan',
+      '$select=ID,Title,Numero_BL,Client,Type_Operation,Vendeur_Emetteur,Magasinier,Date_Emission,Date_Scan,Statut,Nb_Articles_Scannes,Nb_Ecarts,Preparation_Avance,BL_Racine&$orderby=ID desc&$top=150');
+    const sess=(res||[]).find(s=>String(f(s,'Numero_BL')||'').trim().toLowerCase()===target);
+    if(sess)DATA.sessionsScan=[...(DATA.sessionsScan||[]).filter(s2=>s2.ID!==sess.ID),sess];
+    return sess||null;
+  }catch(e){console.warn('[refetchSessionByBL]',e.message);return null;}
+}
+// Trouve la session pour ce N° BL, ou la crée si rien n'existe (confirmé le 31/08/2026 :
+// aucune automatisation SharePoint ne crée Sessions_Scan depuis Suivi_BC).
+async function findOrCreateSessionForBL(blNum,client,vendeur){
+  if(!blNum)return{sess:null,created:false};
+  let sess=findSessionByBL(blNum);
+  if(sess)return{sess,created:false};
+  sess=await refetchSessionByBL(blNum);
+  if(sess)return{sess,created:false};
+  try{
+    const created=await spPost('sites/BondeCommande','Sessions_Scan',{
+      Title:`${blNum} - ${client||''}`.trim(),
+      Type_Operation:'Livraison client',
+      Numero_BL:blNum,
+      Client:client||'',
+      Vendeur_Emetteur:vendeur||'',
+      Date_Emission:new Date().toISOString().slice(0,10)+'T12:00:00Z',
+      Statut:'BL Émis',
+      Preparation_Avance:false
+    });
+    if(created){DATA.sessionsScan=[...(DATA.sessionsScan||[]),created];return{sess:created,created:true};}
+  }catch(e){console.warn('[findOrCreateSessionForBL] création',e.message);}
+  return{sess:null,created:false};
 }
 
 let _traiterCurBL='';
