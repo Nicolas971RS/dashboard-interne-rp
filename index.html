@@ -5606,9 +5606,10 @@ function openNouveauProjet(){
     if(desc)body['Remarques_x0020_projet']=desc;
 
     const res=await spPost('sites/RseauxPlus','Chantiers',body);
-    if(res&&res.ID){
+    const resId=res?.ID??res?.Id;
+    if(resId){
       if(!DATA.chantiers)DATA.chantiers=[];
-      DATA.chantiers.push({ID:res.ID,Title:nom});
+      DATA.chantiers.push({ID:resId,Title:nom});
     }
 
     // Toast de confirmation
@@ -5763,7 +5764,11 @@ async function findOrCreateSessionForBL(blNum,client,vendeur){
       Statut:'BL Émis',
       Preparation_Avance:false
     });
-    if(created){DATA.sessionsScan=[...(DATA.sessionsScan||[]),created];return{sess:created,created:true};}
+    if(created){
+      const sessNorm={...created,ID:created.ID??created.Id};
+      DATA.sessionsScan=[...(DATA.sessionsScan||[]),sessNorm];
+      return{sess:sessNorm,created:true};
+    }
   }catch(e){console.warn('[findOrCreateSessionForBL] création',e.message);}
   return{sess:null,created:false};
 }
@@ -5776,7 +5781,7 @@ function findSessionByBL(numBL){
 }
 async function syncLigneToScan(session,ref,design,qc,ql){
   if(!session||!design)return;
-  const sessId=session.ID;
+  const sessId=session.ID??session.Id;
   const existing=(DATA.lignesScan||[]).find(l=>
     String(lineSessionId(l))===String(sessId)&&
     (f(l,'Reference_Article')||'').trim().toLowerCase()===(ref||'').trim().toLowerCase()&&
@@ -5793,7 +5798,11 @@ async function syncLigneToScan(session,ref,design,qc,ql){
     }else{
       body.Session_ScanId=sessId;
       const created=await spPost('sites/BondeCommande','Lignes_Scan',body);
-      if(created)DATA.lignesScan=[...(DATA.lignesScan||[]),created];
+      if(created){
+        const createdNorm={...created,ID:created.ID??created.Id};
+        console.log('[syncLigneToScan] ligne créée',createdNorm.ID,'liée à session',sessId,createdNorm);
+        DATA.lignesScan=[...(DATA.lignesScan||[]),createdNorm];
+      }
     }
   }catch(e){console.warn('[syncLigneToScan]',e.message);}
 }
