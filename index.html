@@ -1336,7 +1336,7 @@ async function loadAll(){
       // Base_Clients
       spFetch('sites/RseauxPlus','Base_Clients','$select=ID,Title'),
       // Chantiers — pour vérification doublon à la création
-      spFetch('sites/RseauxPlus','Chantiers','$select=ID,Title,ClientId,Remarques_x0020_projet&$top=500'),
+      spFetch('sites/RseauxPlus','Chantiers','$select=ID,Title,ClientId&$top=500'),
       // Cathalogue_Produits — pour autocomplete ajout ligne article (pagination par ID)
       chargerCatalogue(),
       // Sessions_Scan — portail scan BL (préparations, livraisons, inventaires)
@@ -4762,7 +4762,7 @@ async function openPanneauChantiers(){
   openPanel('🏗️ Projets / Chantiers',html);
   try{
     const chantiers=await spFetch('sites/RseauxPlus','Chantiers',
-      '$select=ID,Title,ClientId,Remarques_x0020_projet&$orderby=Title asc&$top=500');
+      '$select=ID,Title,ClientId&$orderby=Title asc&$top=500');
     DATA.chantiers=chantiers||[];
   }catch(e){console.warn('[Chantiers reload]',e.message);}
   renderChantiersList();
@@ -5177,7 +5177,7 @@ async function openTraiterModal(id,numBC,client){
     const chInput=document.getElementById('m-chantier-search');
     if(!chInput)return;
     try{
-      const chantiers=await spFetch('sites/RseauxPlus','Chantiers','$select=ID,Title,ClientId,Remarques_x0020_projet&$orderby=Title asc&$top=500');
+      const chantiers=await spFetch('sites/RseauxPlus','Chantiers','$select=ID,Title,ClientId&$orderby=Title asc&$top=500');
       chInput.disabled=false;
       chInput.placeholder='Tapez 3 caractères...';
       const chData=chantiers.map(c=>({id:String(c.ID),name:c.Title}));
