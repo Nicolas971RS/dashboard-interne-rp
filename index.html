@@ -7475,6 +7475,32 @@ async function mergerPiecesJointes(files){
 }
 
 // ── Portail création Demande BC ──
+// ── Autocomplete client pour Demande BC et Devis manuel ──
+function _clientACSetup(inputId, dropId, onSelect){
+  const inp=document.getElementById(inputId);
+  const drop=document.getElementById(dropId);
+  if(!inp||!drop)return;
+  const q=inp.value.trim().toLowerCase();
+  drop.innerHTML='';
+  if(q.length<2){drop.style.display='none';return;}
+  const allClients=Object.entries(DATA.clients||{}).map(([id,name])=>({id,name}));
+  const matches=rankByRelevance(allClients,q,c=>c.name).slice(0,12);
+  if(!matches.length){drop.style.display='none';return;}
+  matches.forEach(cl=>{
+    const li=document.createElement('div');
+    li.textContent=cl.name;
+    li.style.cssText='padding:7px 12px;cursor:pointer;font-size:13px;border-bottom:1px solid #f0f3f8';
+    li.onmouseenter=()=>li.style.background='var(--grey-light)';
+    li.onmouseleave=()=>li.style.background='';
+    li.onmousedown=(e)=>{e.preventDefault();inp.value=cl.name;drop.style.display='none';if(onSelect)onSelect(cl);};
+    drop.appendChild(li);
+  });
+  drop.style.display='block';
+  inp.onblur=()=>setTimeout(()=>{drop.style.display='none';},200);
+}
+function dbcClientAC(){_clientACSetup('d-client','d-client-drop',null);dbcLivePreview();}
+function devisClientAC(){_clientACSetup('ad-client','ad-client-drop',null);}
+
 function openNouveauDBCModal(){
   const today=new Date().toISOString().slice(0,10);
   openModal('🆕 Nouvelle Demande BC — Enlèvement sans BC',`
@@ -7482,7 +7508,13 @@ function openNouveauDBCModal(){
       Un client récupère de la marchandise sans BC. Ce formulaire crée la demande dans SharePoint.
     </div>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
-      <div class="mf"><label>Client (entreprise) *</label><input id="d-client" placeholder="Nom de l'entreprise" oninput="dbcLivePreview()"></div>
+      <div class="mf"><label>Client (entreprise) *</label>
+        <div style="position:relative">
+          <input id="d-client" autocomplete="off" placeholder="Tapez 3 caractères ou saisissez librement..." oninput="dbcLivePreview();dbcClientAC()"
+            style="width:100%;padding:8px 10px;border:1px solid var(--border);border-radius:var(--radius-sm);font-size:13px;font-family:var(--font-body);box-sizing:border-box">
+          <div id="d-client-drop" style="position:absolute;top:100%;left:0;right:0;background:white;border:1px solid var(--border);border-radius:6px;box-shadow:0 4px 12px rgba(0,0,0,.12);z-index:9999;max-height:180px;overflow-y:auto;display:none"></div>
+        </div>
+      </div>
       <div class="mf"><label>Nom employé *</label><input id="d-employe" placeholder="Prénom Nom" oninput="dbcLivePreview()"></div>
     </div>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
@@ -7782,7 +7814,12 @@ init();
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
         <div class="mf">
           <label>Client *</label>
-          <input type="text" id="ad-client" placeholder="Nom de l'entreprise cliente">
+          <div style="position:relative">
+            <input type="text" id="ad-client" autocomplete="off" placeholder="Tapez pour chercher ou saisissez librement..."
+              style="width:100%;box-sizing:border-box" oninput="devisClientAC()">
+            <div id="ad-client-drop" style="position:absolute;top:100%;left:0;right:0;background:white;border:1px solid var(--border);border-radius:6px;box-shadow:0 4px 12px rgba(0,0,0,.12);z-index:9999;max-height:180px;overflow-y:auto;display:none"></div>
+          </div>
+          <span class="hint">Saisie libre si le client n'est pas encore dans la liste</span>
         </div>
         <div class="mf">
           <label>Chantier</label>
