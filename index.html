@@ -1336,7 +1336,7 @@ async function loadAll(){
       // Base_Clients
       spFetch('sites/RseauxPlus','Base_Clients','$select=ID,Title'),
       // Chantiers — pour vérification doublon à la création
-      spFetch('sites/RseauxPlus','Chantiers','$select=ID,Title&$top=500'),
+      spFetch('sites/RseauxPlus','Chantiers','$select=ID,Title,ClientId,Remarques_x0020_projet&$top=500'),
       // Cathalogue_Produits — pour autocomplete ajout ligne article (pagination par ID)
       chargerCatalogue(),
       // Sessions_Scan — portail scan BL (préparations, livraisons, inventaires)
@@ -4752,28 +4752,21 @@ async function mDeleteLigneRow(lineId){
 
 // ── Panneau Projets / Chantiers ──
 function openPanneauChantiers(){
-  const chantiers=DATA.chantiers||[];
-  const clientMap=DATA.clients||{};
-
   const html=`
     <div style="display:flex;gap:8px;margin-bottom:12px">
-      <input type="text" id="ch-search" autocomplete="off" placeholder="🔍 Rechercher par chantier ou client..."
+      <input type="text" id="ch-search" autocomplete="off" placeholder="🔍 Rechercher par projet ou client..."
         oninput="renderChantiersList()"
         style="flex:1;padding:7px 10px;border:1px solid var(--border);border-radius:var(--radius-sm);font-size:13px;font-family:var(--font-body)">
     </div>
-    <div id="ch-list" style="max-height:420px;overflow-y:auto"></div>`;
-
+    <div id="ch-list" style="max-height:calc(100vh - 160px);overflow-y:auto"></div>`;
   openPanel('🏗️ Projets / Chantiers',html);
-
-  // Rendre la liste initiale après injection dans le DOM
   setTimeout(renderChantiersList,50);
 }
 
 function renderChantiersList(){
-  const inp=document.getElementById('ch-search');
   const list=document.getElementById('ch-list');
   if(!list)return;
-  const q=(inp?.value||'').trim().toLowerCase();
+  const q=(document.getElementById('ch-search')?.value||'').trim().toLowerCase();
   const clientMap=DATA.clients||{};
   const chantiers=DATA.chantiers||[];
 
@@ -4789,23 +4782,105 @@ function renderChantiersList(){
   }
 
   list.innerHTML=filtered.map(c=>{
-    const clientNom=clientMap[c.ClientId]||'—';
+    const clientNom=clientMap[c.ClientId]||'';
     const remarques=c.Remarques_x0020_projet||'';
-    // Compter les BCs liés à ce chantier
-    const nbBC=(DATA.suivi||[]).filter(bc=>{
-      const pid=bc.ProjetId||bc.Projet?.Id;
-      return parseInt(pid)===c.ID;
-    }).length;
-    return`<div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);padding:10px 14px;margin-bottom:6px">
-      <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px">
-        <div>
-          <div style="font-weight:700;font-size:13px">${c.Title||'—'}</div>
-          <div style="font-size:11.5px;color:var(--text-muted);margin-top:2px">Client : <strong>${clientNom}</strong>${remarques?` · ${remarques}`:''}</div>
+    const nbBC=(DATA.suivi||[]).filter(bc=>parseInt(bc.ProjetId||bc.Projet?.Id)===c.ID).length;
+    return`<div id="ch-card-${c.ID}" style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);padding:10px 14px;margin-bottom:6px">
+      <div id="ch-view-${c.ID}" style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px">
+        <div style="min-width:0">
+          <div style="font-weight:700;font-size:13px;margin-bottom:2px">${c.Title||'—'}</div>
+          <div style="font-size:11.5px;color:var(--text-muted)">
+            Client : <strong>${clientNom||'<span style="color:var(--red)">Non renseigné</span>'}</strong>
+            ${remarques?` · ${remarques}`:''}
+          </div>
         </div>
-        <div style="font-size:11px;color:var(--text-muted);white-space:nowrap;margin-top:2px">${nbBC} BC${nbBC>1?'s':''}</div>
+        <div style="display:flex;align-items:center;gap:8px;flex-shrink:0">
+          <span style="font-size:11px;color:var(--text-muted);white-space:nowrap">${nbBC} BC${nbBC>1?'s':''}</span>
+          <button class="btn" style="height:26px;font-size:11px;padding:0 8px" onclick="chEditMode(${c.ID})">✏️ Modifier</button>
+        </div>
+      </div>
+      <div id="ch-edit-${c.ID}" style="display:none;margin-top:8px">
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:6px">
+          <div>
+            <label style="font-size:10px;font-weight:700;color:var(--text-muted);display:block;margin-bottom:3px">NOM DU PROJET</label>
+            <input id="ch-nom-${c.ID}" value="${(c.Title||'').replace(/"/g,'&quot;')}"
+              style="width:100%;padding:5px 8px;border:1px solid var(--border);border-radius:5px;font-size:12.5px;box-sizing:border-box">
+          </div>
+          <div>
+            <label style="font-size:10px;font-weight:700;color:var(--text-muted);display:block;margin-bottom:3px">CLIENT</label>
+            <div style="position:relative">
+              <input id="ch-client-search-${c.ID}" autocomplete="off" value="${clientNom.replace(/"/g,'&quot;')}"
+                placeholder="Rechercher un client..."
+                style="width:100%;padding:5px 8px;border:1px solid var(--border);border-radius:5px;font-size:12.5px;box-sizing:border-box">
+              <input type="hidden" id="ch-client-id-${c.ID}" value="${c.ClientId||''}">
+              <div id="ch-client-drop-${c.ID}" style="position:absolute;top:100%;left:0;right:0;background:white;border:1px solid var(--border);border-radius:6px;box-shadow:0 4px 12px rgba(0,0,0,.12);z-index:9999;max-height:160px;overflow-y:auto;display:none"></div>
+            </div>
+          </div>
+        </div>
+        <div style="margin-bottom:8px">
+          <label style="font-size:10px;font-weight:700;color:var(--text-muted);display:block;margin-bottom:3px">REMARQUES</label>
+          <input id="ch-rem-${c.ID}" value="${(remarques).replace(/"/g,'&quot;')}"
+            placeholder="Description, localisation..."
+            style="width:100%;padding:5px 8px;border:1px solid var(--border);border-radius:5px;font-size:12.5px;box-sizing:border-box">
+        </div>
+        <div style="display:flex;gap:6px">
+          <button class="btn navy" style="height:28px;font-size:11.5px" onclick="chSave(${c.ID})">✅ Enregistrer</button>
+          <button class="btn" style="height:28px;font-size:11.5px" onclick="chCancelEdit(${c.ID})">Annuler</button>
+        </div>
       </div>
     </div>`;
   }).join('');
+
+  // Setup autocomplete client sur chaque champ édition
+  filtered.forEach(c=>{
+    const inp=document.getElementById(`ch-client-search-${c.ID}`);
+    const drop=document.getElementById(`ch-client-drop-${c.ID}`);
+    const hid=document.getElementById(`ch-client-id-${c.ID}`);
+    if(!inp)return;
+    const allClients=Object.entries(DATA.clients||{}).map(([id,name])=>({id,name}));
+    inp.addEventListener('input',()=>{
+      const q=inp.value.trim().toLowerCase();
+      drop.innerHTML='';hid.value='';
+      if(q.length<2){drop.style.display='none';return;}
+      const matches=rankByRelevance(allClients,q,c=>c.name).slice(0,10);
+      if(!matches.length){drop.style.display='none';return;}
+      matches.forEach(cl=>{
+        const li=document.createElement('div');
+        li.textContent=cl.name;
+        li.style.cssText='padding:6px 10px;cursor:pointer;font-size:12.5px;border-bottom:1px solid #f0f3f8';
+        li.onmouseenter=()=>li.style.background='var(--grey-light)';
+        li.onmouseleave=()=>li.style.background='';
+        li.onmousedown=(e)=>{e.preventDefault();inp.value=cl.name;hid.value=cl.id;drop.style.display='none';};
+        drop.appendChild(li);
+      });
+      drop.style.display='block';
+    });
+    inp.addEventListener('blur',()=>setTimeout(()=>{drop.style.display='none';},200));
+  });
+}
+
+function chEditMode(id){
+  document.getElementById(`ch-view-${id}`).style.display='none';
+  document.getElementById(`ch-edit-${id}`).style.display='block';
+}
+function chCancelEdit(id){
+  document.getElementById(`ch-view-${id}`).style.display='flex';
+  document.getElementById(`ch-edit-${id}`).style.display='none';
+}
+async function chSave(id){
+  const nom=(document.getElementById(`ch-nom-${id}`)?.value||'').trim();
+  const clientId=document.getElementById(`ch-client-id-${id}`)?.value||'';
+  const rem=(document.getElementById(`ch-rem-${id}`)?.value||'').trim();
+  if(!nom){toast('❌ Le nom du projet est obligatoire.');return;}
+  const body={Title:nom,Remarques_x0020_projet:rem};
+  if(clientId)body['ClientId']=parseInt(clientId);
+  try{
+    await spPatch('sites/RseauxPlus','Chantiers',id,body);
+    const ch=DATA.chantiers.find(c=>c.ID===id);
+    if(ch){ch.Title=nom;if(clientId)ch.ClientId=parseInt(clientId);ch.Remarques_x0020_projet=rem;}
+    toast('✅ Projet mis à jour');
+    renderChantiersList();
+  }catch(e){toast('❌ '+e.message);}
 }
 
 // ── Modal Traiter (BL + dates + montant + vendeur) ──
@@ -5097,7 +5172,7 @@ async function openTraiterModal(id,numBC,client){
     const chInput=document.getElementById('m-chantier-search');
     if(!chInput)return;
     try{
-      const chantiers=await spFetch('sites/RseauxPlus','Chantiers','$select=ID,Title&$orderby=Title asc&$top=500');
+      const chantiers=await spFetch('sites/RseauxPlus','Chantiers','$select=ID,Title,ClientId,Remarques_x0020_projet&$orderby=Title asc&$top=500');
       chInput.disabled=false;
       chInput.placeholder='Tapez 3 caractères...';
       const chData=chantiers.map(c=>({id:String(c.ID),name:c.Title}));
