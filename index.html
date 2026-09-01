@@ -502,11 +502,14 @@
         </div>
       </div>
 
-      <!-- FILTRES -->
+      <!-- FILTRES + ACTIONS -->
       <div class="sh" style="margin-bottom:10px">
-        <div style="display:flex;align-items:center;justify-content:space-between;width:100%">
-          <div class="st">🔍 Filtres accordéons</div>
-          <button class="btn navy" onclick="openNouveauProjet()" style="height:28px;font-size:11px;font-weight:600;white-space:nowrap;">➕ Nouveau projet</button>
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:8px">
+          <div style="font-size:13px;font-weight:700;color:var(--text-muted)">Suivi des bons de commande</div>
+          <div style="display:flex;gap:8px">
+            <button class="btn" onclick="openPanneauChantiers()" style="height:28px;font-size:11px;font-weight:600;white-space:nowrap">🏗️ Projets / Chantiers</button>
+            <button class="btn navy" onclick="openNouveauProjet()" style="height:28px;font-size:11px;font-weight:600;white-space:nowrap">➕ Nouveau projet</button>
+          </div>
         </div>
         <div class="fb">
           <input class="fs" type="text" id="search-suivi" placeholder="🔍 Filtrer En cours..." oninput="renderSuiviEnCours()" style="min-width:160px">
@@ -777,25 +780,41 @@
         <tbody id="prep-attente-body"><tr class="empty-row"><td colspan="7">Chargement...</td></tr></tbody>
       </table></div>
 
-      <div class="sd" style="margin-top:18px"><h2>✅ BL livrés récemment</h2><span class="site-tag rp">Cliquer une ligne pour voir les articles</span><div class="sd-line"></div></div>
-      <div style="background:var(--navy);border-radius:var(--radius);padding:14px 18px;margin-bottom:14px">
-        <div style="display:flex;align-items:center;gap:12px;margin-bottom:10px">
-          <span style="font-size:20px">🔍</span>
-          <input type="text" id="search-livres" placeholder="Recherche rapide — N° BL, client..."
-            style="flex:1;background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.2);border-radius:var(--radius-sm);padding:9px 14px;font-size:13.5px;color:white;font-family:var(--font-body);outline:none"
-            oninput="renderLivres()">
-          <button class="btn" style="border-color:rgba(255,255,255,.3);color:rgba(255,255,255,.7);background:none;white-space:nowrap" onclick="document.getElementById('search-livres').value='';renderLivres()">✕ Effacer</button>
+      <details id="livres-details" style="margin-top:18px;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius)">
+        <summary onclick="setTimeout(renderLivres,50)" style="cursor:pointer;list-style:none;padding:12px 16px;display:flex;align-items:center;justify-content:space-between">
+          <span style="font-weight:700;font-size:14px">✅ BL livrés récemment <span class="site-tag rp" style="margin-left:6px">Cliquer une ligne pour voir les articles</span></span>
+          <span style="font-size:11px;color:var(--text-muted)">Cliquer pour déplier</span>
+        </summary>
+        <div style="padding:0 14px 14px">
+          <div style="background:var(--navy);border-radius:var(--radius);padding:14px 18px;margin-bottom:14px;margin-top:10px">
+            <div style="display:flex;align-items:center;gap:12px;margin-bottom:10px">
+              <span style="font-size:20px">🔍</span>
+              <input type="text" id="search-livres" placeholder="Recherche rapide — N° BL, client..."
+                style="flex:1;background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.2);border-radius:var(--radius-sm);padding:9px 14px;font-size:13.5px;color:white;font-family:var(--font-body);outline:none"
+                oninput="renderLivres()">
+              <button class="btn" style="border-color:rgba(255,255,255,.3);color:rgba(255,255,255,.7);background:none;white-space:nowrap" onclick="document.getElementById('search-livres').value='';renderLivres()">✕ Effacer</button>
+            </div>
+            <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:2px">
+              <select class="fs" id="filter-vendeur-livres" onchange="renderLivres()"><option value="all">Tous les vendeurs</option></select>
+              <select class="fs" id="filter-statut-livres" onchange="renderLivres()"><option value="all">Tous les statuts</option></select>
+              <label style="font-size:12px;color:rgba(255,255,255,.7);display:flex;align-items:center;gap:6px">
+                Du <input type="date" id="filter-livres-du" onchange="renderLivres()"
+                  style="background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.2);border-radius:4px;padding:4px 6px;font-size:12px;color:white;font-family:var(--font-body)">
+              </label>
+              <label style="font-size:12px;color:rgba(255,255,255,.7);display:flex;align-items:center;gap:6px">
+                Au <input type="date" id="filter-livres-au" onchange="renderLivres()"
+                  style="background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.2);border-radius:4px;padding:4px 6px;font-size:12px;color:white;font-family:var(--font-body)">
+              </label>
+              <button class="btn" style="border-color:rgba(255,255,255,.3);color:rgba(255,255,255,.7);background:none;font-size:11px" onclick="document.getElementById('filter-livres-du').value='';document.getElementById('filter-livres-au').value='';renderLivres()">Réinitialiser dates</button>
+              <span id="livres-count-label" style="font-size:11px;color:rgba(255,255,255,.5)"></span>
+            </div>
+          </div>
+          <div class="tc"><table>
+            <thead><tr><th>N° BL</th><th>Client</th><th>Type</th><th>Vendeur</th><th>Livré le</th><th>Statut</th><th>Articles</th></tr></thead>
+            <tbody id="prep-livres-body"><tr class="empty-row"><td colspan="7">Dépliez pour charger</td></tr></tbody>
+          </table></div>
         </div>
-        <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:2px">
-          <select class="fs" id="filter-vendeur-livres" onchange="renderLivres()"><option value="all">Tous les vendeurs</option></select>
-          <select class="fs" id="filter-statut-livres" onchange="renderLivres()"><option value="all">Tous les statuts</option></select>
-          <span id="livres-count-label" style="font-size:11px;color:rgba(255,255,255,.5)"></span>
-        </div>
-      </div>
-      <div class="tc"><table>
-        <thead><tr><th>N° BL</th><th>Client</th><th>Type</th><th>Vendeur</th><th>Livré le</th><th>Statut</th><th>Articles</th></tr></thead>
-        <tbody id="prep-livres-body"><tr class="empty-row"><td colspan="7">Chargement...</td></tr></tbody>
-      </table></div>
+      </details>
 
       <details style="margin-top:18px;background:var(--surface);border:1px solid var(--border-light);border-radius:var(--radius);padding:4px 14px">
         <summary style="cursor:pointer;font-weight:700;font-size:14px;color:var(--text-secondary);padding:10px 0;list-style:none">📊 Pilotage — volume par vendeur &amp; par magasinier <span style="font-weight:400;font-size:12px;color:var(--text-muted)">(cliquer pour ouvrir)</span></summary>
@@ -3990,6 +4009,8 @@ function lineSessionId(l){
 }
 
 function renderLivres(){
+  const details=document.getElementById('livres-details');
+  if(details&&!details.open)return; // ne pas rendre si replié
   const all=DATA.sessionsScan||[];
   const body=document.getElementById('prep-livres-body');
   if(!body)return;
@@ -3999,9 +4020,13 @@ function renderLivres(){
   const q=(document.getElementById('search-livres')?.value||'').toLowerCase();
   const fV=document.getElementById('filter-vendeur-livres')?.value||'all';
   const fS=document.getElementById('filter-statut-livres')?.value||'all';
+  const du=document.getElementById('filter-livres-du')?.value||'';
+  const au=document.getElementById('filter-livres-au')?.value||'';
   if(fV!=='all')livres=livres.filter(s=>f(s,'Vendeur_Emetteur')===fV);
   if(fS!=='all')livres=livres.filter(s=>f(s,'Statut')===fS);
   if(q)livres=livres.filter(s=>[f(s,'Numero_BL'),f(s,'Client')].some(v=>String(v||'').toLowerCase().includes(q)));
+  if(du)livres=livres.filter(s=>{const d=f(s,'Date_Scan')||f(s,'Date_Emission');return d&&d>=du;});
+  if(au)livres=livres.filter(s=>{const d=f(s,'Date_Scan')||f(s,'Date_Emission');return d&&d<=au+'T23:59:59Z';});
 
   livres.sort((a,b)=>new Date(f(b,'Date_Scan')||f(b,'Date_Emission'))-new Date(f(a,'Date_Scan')||f(a,'Date_Emission')));
 
@@ -4723,6 +4748,64 @@ async function mDeleteLigneRow(lineId){
     }
     toast('✅ Ligne supprimée');
   }catch(e){toast('❌ '+e.message);}
+}
+
+// ── Panneau Projets / Chantiers ──
+function openPanneauChantiers(){
+  const chantiers=DATA.chantiers||[];
+  const clientMap=DATA.clients||{};
+
+  const html=`
+    <div style="display:flex;gap:8px;margin-bottom:12px">
+      <input type="text" id="ch-search" autocomplete="off" placeholder="🔍 Rechercher par chantier ou client..."
+        oninput="renderChantiersList()"
+        style="flex:1;padding:7px 10px;border:1px solid var(--border);border-radius:var(--radius-sm);font-size:13px;font-family:var(--font-body)">
+    </div>
+    <div id="ch-list" style="max-height:420px;overflow-y:auto"></div>`;
+
+  openPanel('🏗️ Projets / Chantiers',html);
+
+  // Rendre la liste initiale après injection dans le DOM
+  setTimeout(renderChantiersList,50);
+}
+
+function renderChantiersList(){
+  const inp=document.getElementById('ch-search');
+  const list=document.getElementById('ch-list');
+  if(!list)return;
+  const q=(inp?.value||'').trim().toLowerCase();
+  const clientMap=DATA.clients||{};
+  const chantiers=DATA.chantiers||[];
+
+  const filtered=chantiers.filter(c=>{
+    const nom=(c.Title||'').toLowerCase();
+    const client=(clientMap[c.ClientId]||'').toLowerCase();
+    return !q||nom.includes(q)||client.includes(q);
+  }).sort((a,b)=>(a.Title||'').localeCompare(b.Title||''));
+
+  if(!filtered.length){
+    list.innerHTML='<div style="padding:20px;text-align:center;color:var(--text-muted);font-size:13px">Aucun chantier trouvé</div>';
+    return;
+  }
+
+  list.innerHTML=filtered.map(c=>{
+    const clientNom=clientMap[c.ClientId]||'—';
+    const remarques=c.Remarques_x0020_projet||'';
+    // Compter les BCs liés à ce chantier
+    const nbBC=(DATA.suivi||[]).filter(bc=>{
+      const pid=bc.ProjetId||bc.Projet?.Id;
+      return parseInt(pid)===c.ID;
+    }).length;
+    return`<div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);padding:10px 14px;margin-bottom:6px">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px">
+        <div>
+          <div style="font-weight:700;font-size:13px">${c.Title||'—'}</div>
+          <div style="font-size:11.5px;color:var(--text-muted);margin-top:2px">Client : <strong>${clientNom}</strong>${remarques?` · ${remarques}`:''}</div>
+        </div>
+        <div style="font-size:11px;color:var(--text-muted);white-space:nowrap;margin-top:2px">${nbBC} BC${nbBC>1?'s':''}</div>
+      </div>
+    </div>`;
+  }).join('');
 }
 
 // ── Modal Traiter (BL + dates + montant + vendeur) ──
