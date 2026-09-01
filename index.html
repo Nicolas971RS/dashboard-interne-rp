@@ -4751,16 +4751,21 @@ async function mDeleteLigneRow(lineId){
 }
 
 // ── Panneau Projets / Chantiers ──
-function openPanneauChantiers(){
+async function openPanneauChantiers(){
   const html=`
     <div style="display:flex;gap:8px;margin-bottom:12px">
       <input type="text" id="ch-search" autocomplete="off" placeholder="🔍 Rechercher par projet ou client..."
         oninput="renderChantiersList()"
         style="flex:1;padding:7px 10px;border:1px solid var(--border);border-radius:var(--radius-sm);font-size:13px;font-family:var(--font-body)">
     </div>
-    <div id="ch-list" style="max-height:calc(100vh - 160px);overflow-y:auto"></div>`;
+    <div id="ch-list" style="max-height:calc(100vh - 160px);overflow-y:auto"><div class="pspin">Chargement…</div></div>`;
   openPanel('🏗️ Projets / Chantiers',html);
-  setTimeout(renderChantiersList,50);
+  try{
+    const chantiers=await spFetch('sites/RseauxPlus','Chantiers',
+      '$select=ID,Title,ClientId,Remarques_x0020_projet&$orderby=Title asc&$top=500');
+    DATA.chantiers=chantiers||[];
+  }catch(e){console.warn('[Chantiers reload]',e.message);}
+  renderChantiersList();
 }
 
 function renderChantiersList(){
