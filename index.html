@@ -4771,7 +4771,9 @@ function renderPlanning7j(){
   const TODAY=new Date();TODAY.setHours(0,0,0,0);
   const sessions=(DATA.sessionsScan||[]).filter(s=>{
     const st=(f(s,'Statut')||'').toLowerCase();
-    return st==='bl émis'||st==='en préparation'||st==='bl emis';
+    // Toutes les sessions non terminées (BL Émis, En cours de scan, Prête à livrer...)
+    return !st.includes('terminée')&&!st.includes('terminee')&&
+           !st.includes('partiellement')&&!st.includes('écart')&&!st.includes('ecart');
   });
   // Jours J à J+7
   const jours=[];
