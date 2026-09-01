@@ -718,8 +718,8 @@
         </div>
       </div>
       <div class="tc"><table>
-        <thead><tr><th>N° BC</th><th>Date BC</th><th>Ligne</th><th>Client</th><th>Chantier</th><th>Référence</th><th>Désignation</th><th>Cmd</th><th>Livré</th><th>RAL</th><th>Unité</th><th>BL</th><th>Action</th></tr></thead>
-        <tbody id="ral-body"><tr class="empty-row"><td colspan="13">Chargement...</td></tr></tbody>
+        <thead><tr><th>N° BC</th><th>Date BC</th><th>Ligne</th><th>Client</th><th>Chantier</th><th>Référence</th><th>Désignation</th><th>Cmd</th><th>Livré</th><th>RAL</th><th>Unité</th><th>BL</th><th>Ancienneté</th><th>Action</th></tr></thead>
+        <tbody id="ral-body"><tr class="empty-row"><td colspan="14">Chargement...</td></tr></tbody>
       </table></div>
 
       <!-- ══ COMPLÈTEMENT LIVRÉ ══ -->
@@ -814,6 +814,14 @@
             <tbody id="prep-livres-body"><tr class="empty-row"><td colspan="7">Dépliez pour charger</td></tr></tbody>
           </table></div>
         </div>
+      </details>
+
+      <details id="planning-details" style="margin-top:12px;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius)">
+        <summary onclick="setTimeout(renderPlanning7j,50)" style="cursor:pointer;list-style:none;padding:12px 16px;display:flex;align-items:center;justify-content:space-between">
+          <span style="font-weight:700;font-size:14px">📅 Planning — 7 prochains jours</span>
+          <span style="font-size:11px;color:var(--text-muted)">Cliquer pour déplier</span>
+        </summary>
+        <div id="planning-7j-body" style="padding:0 14px 14px"></div>
       </details>
 
       <details style="margin-top:18px;background:var(--surface);border:1px solid var(--border-light);border-radius:var(--radius);padding:4px 14px">
@@ -1341,7 +1349,7 @@ async function loadAll(){
       chargerCatalogue(),
       // Sessions_Scan — portail scan BL (préparations, livraisons, inventaires)
       spFetch('sites/BondeCommande','Sessions_Scan',
-        '$select=ID,Title,Numero_BL,Client,Type_Operation,Vendeur_Emetteur,Magasinier,Date_Emission,Date_Scan,Statut,Nb_Articles_Scannes,Nb_Ecarts,Preparation_Avance,BL_Racine&$orderby=ID desc&$top=2000'),
+        '$select=ID,Title,Numero_BL,Client,Type_Operation,Vendeur_Emetteur,Magasinier,Date_Emission,Date_Scan,Statut,Nb_Articles_Scannes,Nb_Ecarts,Preparation_Avance,BL_Racine,Date_Livraison_Prevue&$orderby=ID desc&$top=2000'),
       // Lignes_Scan — détail des articles scannés par session
       spFetch('sites/BondeCommande','Lignes_Scan',
         '$select=ID,Title,Session_ScanId,Session_Scan/Id,Reference_Article,Designation,Quantite_Attendue,Quantite_Scannee&$expand=Session_Scan&$orderby=ID asc&$top=5000')
@@ -3583,6 +3591,34 @@ function ralBcInfo(ligne){
   };
 }
 
+// Ancienneté d'un BC partiel : jours depuis la réception (Dateder_x00e9_ception)
+function ralAnciennete(x){
+  const dateRef=x.info.dateBC;
+  if(!dateRef)return null;
+  return Math.floor((Date.now()-new Date(dateRef))/86400000);
+}
+function ralAgePill(jours){
+  if(jours===null||jours===undefined)return'';
+  if(jours<15)return`<span style="background:#dcfce7;color:#166534;border-radius:12px;padding:2px 7px;font-size:10.5px;font-weight:700">${jours}j</span>`;
+  if(jours<30)return`<span style="background:#fff7ed;color:#c2410c;border-radius:12px;padding:2px 7px;font-size:10.5px;font-weight:700">${jours}j ⚠️</span>`;
+  return`<span style="background:#fee2e2;color:#991b1b;border-radius:12px;padding:2px 7px;font-size:10.5px;font-weight:700">${jours}j 🔴</span>`;
+}
+async function cloturerBC(bcId,numBC){
+  const ok=await showConfirm(
+    `Clôturer le BC ${numBC} ?`,
+    `Les lignes en reste à livrer seront conservées pour historique. Le statut passera à "Terminé".`,
+    'Clôturer','delete'
+  );
+  if(!ok)return;
+  try{
+    await spPatch('sites/RseauxPlus','Suivi_BC',bcId,{Statut:'Terminé'});
+    const bc=(DATA.suivi||[]).find(i=>i.ID===bcId);
+    if(bc)bc.Statut='Terminé';
+    renderAll();updateBadges();
+    toast(`✅ BC ${numBC} clôturé`);
+  }catch(e){toast('❌ '+e.message);}
+}
+
 function renderRALTable(){
   const ralData=getRALLignes();
   const fV=document.getElementById('filter-vendeur-ral')?.value||'all';
@@ -3617,7 +3653,9 @@ function renderRALTable(){
       const l=x.ligne;
       const bl=f(l,'BLSign_x00e9_')||'—';
       const unite=f(l,'Unit_x00e9_')||'';
-      return`<tr>
+      const jours=ralAnciennete(x);
+      const rowBg=jours===null?'':jours>=30?'background:rgba(254,226,226,.25);':jours>=15?'background:rgba(255,247,237,.35);':'';
+      return`<tr style="${rowBg}">
         <td class="ref" style="cursor:pointer;color:var(--blue)" onclick="closePanel();openBCPanel(${x.info.bcId})">${x.info.numBC}</td>
         <td class="mono" style="font-size:11px">${fmtDate(x.info.dateBC)}</td>
         <td class="mono" style="text-align:center;font-weight:600">${f(l,'Title')||'—'}</td>
@@ -3637,9 +3675,13 @@ function renderRALTable(){
           const badge=total>0?`<span style="color:var(--green);font-weight:600"> = ${total}</span>`:'';
           return`<span title="Détail des livraisons">${lines}${badge}</span>`;
         })()}</td>
-        <td><button class="btn orange" style="height:24px;font-size:10.5px" onclick="openReceptionnerLigne(${l.ID},${x.info.bcId})">🔄 Mettre à jour RAL</button></td>
+        <td style="text-align:center">${ralAgePill(jours)}</td>
+        <td style="white-space:nowrap">
+          <button class="btn orange" style="height:24px;font-size:10.5px" onclick="openReceptionnerLigne(${l.ID},${x.info.bcId})">🔄 Mettre à jour</button>
+          ${jours>=15?`<button class="btn" style="height:24px;font-size:10px;margin-top:3px;color:var(--red);border-color:var(--red)" onclick="cloturerBC(${x.info.bcId},'${String(x.info.numBC).replace(/'/g,"\\'")}')">⛔ Clôturer</button>`:''}
+        </td>
       </tr>`;
-    }).join(''):'<tr class="empty-row"><td colspan="13">Aucune ligne avec reste à livrer 🎉</td></tr>';
+    }).join(''):'<tr class="empty-row"><td colspan="14">Aucune ligne avec reste à livrer 🎉</td></tr>';
   }
 
   // KPIs
@@ -4662,6 +4704,96 @@ function openFacturerModal(id,numBC,client){
     renderAll();updateBadges();
     return `${numBC} — facture ${fc} enregistrée (entièrement facturé)`;
   });
+}
+
+// ── Planning 7 prochains jours (Préparations Scan) ──
+const VENDEUR_COLORS={
+  'Nicolas':'#1a2744','Fred':'#0891b2','Fritz':'#16a34a','Fabrice':'#d97706'
+};
+function renderPlanning7j(){
+  const body=document.getElementById('planning-7j-body');
+  if(!body)return;
+  const TODAY=new Date();TODAY.setHours(0,0,0,0);
+  const sessions=(DATA.sessionsScan||[]).filter(s=>{
+    const st=(f(s,'Statut')||'').toLowerCase();
+    return st==='bl émis'||st==='en préparation'||st==='bl emis';
+  });
+  // Jours J à J+7
+  const jours=[];
+  for(let i=0;i<8;i++){
+    const d=new Date(TODAY);d.setDate(d.getDate()+i);
+    jours.push(d);
+  }
+  // Pour chaque session : date de référence = Date_Livraison_Prevue (Sessions_Scan) en priorité,
+  // sinon DateLivraisonprevue du BC correspondant
+  const getBcDateLiv=s=>{
+    const numBL=String(f(s,'Numero_BL')||'').trim();
+    const bc=(DATA.suivi||[]).find(bc=>String(f(bc,'N_x00b0_BL')||'').trim()===numBL);
+    return bc?f(bc,'DateLivraisonpr_x00e9_vue'):null;
+  };
+  const getDatePrev=s=>{
+    const dp=f(s,'Date_Livraison_Prevue');
+    if(dp)return dp;
+    return getBcDateLiv(s);
+  };
+  // Grouper par jour
+  const byDay=new Map();
+  const sansDate=[];
+  sessions.forEach(s=>{
+    const dp=getDatePrev(s);
+    if(!dp){sansDate.push(s);return;}
+    const d=new Date(dp);d.setHours(0,0,0,0);
+    const key=d.toISOString().slice(0,10);
+    const inRange=d>=TODAY&&d<=jours[7];
+    if(!inRange)return;
+    if(!byDay.has(key))byDay.set(key,{date:d,sessions:[]});
+    byDay.get(key).sessions.push(s);
+  });
+  const JOURS_FR=['Dim','Lun','Mar','Mer','Jeu','Ven','Sam'];
+  const MOIS_FR=['jan','fév','mar','avr','mai','juin','juil','août','sep','oct','nov','déc'];
+  const fmtJour=d=>{
+    const dj=JOURS_FR[d.getDay()];
+    const diff=Math.round((d-TODAY)/86400000);
+    if(diff===0)return`<strong>Aujourd'hui</strong>`;
+    if(diff===1)return`<strong>Demain</strong>`;
+    return`${dj} ${d.getDate()} ${MOIS_FR[d.getMonth()]}`;
+  };
+  const sessCard=s=>{
+    const vendeur=f(s,'Vendeur_Emetteur')||'—';
+    const cl=f(s,'Client')||'—';
+    const bl=f(s,'Numero_BL')||'—';
+    const prep=s.Preparation_Avance===true||s.Preparation_Avance==='Yes'||s.Preparation_Avance==='1';
+    const vColor=VENDEUR_COLORS[vendeur]||'#6b7a8d';
+    return`<div onclick="openSessionPanel(${s.ID})" style="cursor:pointer;border-left:4px solid ${vColor};background:var(--grey-xlight);border-radius:0 6px 6px 0;padding:7px 10px;margin-bottom:5px;display:flex;justify-content:space-between;align-items:center;gap:8px">
+      <div>
+        <span style="font-weight:700;font-size:12.5px;color:var(--blue)">${iconBLFC(bl)} ${bl}</span>
+        <span style="font-size:11.5px;color:var(--text-muted);margin-left:6px">${cl}</span>
+        ${prep?'<span style="font-size:10px;background:#ede9fe;color:#6c63ff;border-radius:8px;padding:1px 6px;margin-left:4px">Prép. avance</span>':''}
+      </div>
+      <span style="font-size:11px;font-weight:600;color:${vColor};white-space:nowrap">${vendeur}</span>
+    </div>`;
+  };
+
+  let html='';
+  let total=0;
+  jours.forEach(d=>{
+    const key=d.toISOString().slice(0,10);
+    const groupe=byDay.get(key);
+    if(!groupe)return;
+    total+=groupe.sessions.length;
+    html+=`<div style="margin-bottom:12px">
+      <div style="font-size:12px;font-weight:700;color:var(--text-muted);text-transform:uppercase;margin-bottom:6px;border-bottom:1px solid var(--border);padding-bottom:4px">${fmtJour(d)} <span style="font-weight:400">(${groupe.sessions.length})</span></div>
+      ${groupe.sessions.map(sessCard).join('')}
+    </div>`;
+  });
+  if(sansDate.length){
+    total+=sansDate.length;
+    html+=`<div style="margin-bottom:12px">
+      <div style="font-size:12px;font-weight:700;color:var(--text-muted);text-transform:uppercase;margin-bottom:6px;border-bottom:1px solid var(--border);padding-bottom:4px">Sans date planifiée <span style="font-weight:400">(${sansDate.length})</span></div>
+      ${sansDate.map(sessCard).join('')}
+    </div>`;
+  }
+  body.innerHTML=total?html:'<div style="padding:16px;text-align:center;color:var(--text-muted);font-size:13px">Aucune livraison planifiée dans les 7 prochains jours</div>';
 }
 
 // ── Lignes d'articles éditées inline dans la modale Traiter ──
@@ -5929,7 +6061,7 @@ async function refetchSessionByBL(blNum){
   const target=String(blNum).trim().toLowerCase();
   try{
     const res=await spFetch('sites/BondeCommande','Sessions_Scan',
-      '$select=ID,Title,Numero_BL,Client,Type_Operation,Vendeur_Emetteur,Magasinier,Date_Emission,Date_Scan,Statut,Nb_Articles_Scannes,Nb_Ecarts,Preparation_Avance,BL_Racine&$orderby=ID desc&$top=150');
+      '$select=ID,Title,Numero_BL,Client,Type_Operation,Vendeur_Emetteur,Magasinier,Date_Emission,Date_Scan,Statut,Nb_Articles_Scannes,Nb_Ecarts,Preparation_Avance,BL_Racine,Date_Livraison_Prevue&$orderby=ID desc&$top=150');
     const sess=(res||[]).find(s=>String(f(s,'Numero_BL')||'').trim().toLowerCase()===target);
     if(sess)DATA.sessionsScan=[...(DATA.sessionsScan||[]).filter(s2=>s2.ID!==sess.ID),sess];
     return sess||null;
@@ -6034,9 +6166,14 @@ function openEmissionBL(){
       </div>
       <div id="em-field-prep">
         <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer">
-          <input type="checkbox" id="em-prep" style="width:16px;height:16px">
+          <input type="checkbox" id="em-prep" style="width:16px;height:16px" onchange="toggleEmDatePrep()">
           Préparation à l'avance (le magasinier prépare avant l'arrivée du client)
         </label>
+        <div id="em-date-prep-row" style="display:none;margin-top:8px;margin-left:24px">
+          <label style="font-size:12px;font-weight:700;color:var(--text-muted);display:block;margin-bottom:4px">📅 Date de livraison prévue <span style="font-weight:400">(pour le planning)</span></label>
+          <input type="date" id="em-date-livraison"
+            style="padding:6px 10px;border:1px solid var(--border);border-radius:var(--radius-sm);font-size:13px;font-family:var(--font-body)">
+        </div>
       </div>
       <div id="em-field-lignes" style="border-top:1px solid var(--border);padding-top:12px">
         <label style="font-size:12px;font-weight:700;color:var(--text-muted);display:block;margin-bottom:6px">
@@ -6055,6 +6192,12 @@ function openEmissionBL(){
     const clientData=Object.entries(DATA.clients||{}).map(([cid,cname])=>({id:cid,name:cname}));
     setupAC('em-client-search','em-client-id','em-client-drop',clientData);
   },60);
+}
+
+function toggleEmDatePrep(){
+  const checked=document.getElementById('em-prep')?.checked;
+  const row=document.getElementById('em-date-prep-row');
+  if(row)row.style.display=checked?'block':'none';
 }
 
 function setEmissionType(type){
@@ -6162,6 +6305,7 @@ async function emettreBL(){
   const client=isInv?'':document.getElementById('em-client-search').value.trim();
   const vendeur=document.getElementById('em-vendeur').value;
   const prep=isInv?false:document.getElementById('em-prep').checked;
+  const dateLiv=(!isInv&&prep)?document.getElementById('em-date-livraison')?.value||'':'';
 
   // Validation
   if(!numero){throw new Error('Le N° de BL est obligatoire.');}
@@ -6186,6 +6330,7 @@ async function emettreBL(){
     Date_Emission:new Date().toISOString().slice(0,10)+'T12:00:00Z',
     Statut:'BL Émis',
     Preparation_Avance:prep,
+    Date_Livraison_Prevue:dateLiv?dateLiv+'T12:00:00Z':null,
     _token:SCAN_TOKEN
   };
 
