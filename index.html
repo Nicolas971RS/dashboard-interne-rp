@@ -3183,9 +3183,14 @@ function getMatinTraiter(){
 function getMatinRelancer(){
   return DATA.suivi.filter(i=>{
     const s=getStatut(i);
+    const sLow=(s||'').toLowerCase();
     const ef=getEtatFact(i);
     const dateLiv=f(i,'DateLivraisonpr_x00e9_vue');
-    return daysLate(dateLiv)>0&&s!=='Reçu'&&s!=='Annulé'&&ef!=='Entièrement facturé';
+    if(!daysLate(dateLiv)>0)return false;
+    if(sLow==='reçu'||sLow==='annulé'||sLow==='terminé'||sLow.includes('entièrement livré')||sLow==='livré')return false;
+    if(ef==='Entièrement facturé')return false;
+    if(estSolde(i))return false;
+    return daysLate(dateLiv)>0;
   }).sort((a,b)=>daysLate(f(b,'DateLivraisonpr_x00e9_vue'))-daysLate(f(a,'DateLivraisonpr_x00e9_vue')));
 }
 function getMatinDevisNouvelle(){
