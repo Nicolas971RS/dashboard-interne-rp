@@ -6166,11 +6166,11 @@ function openEmissionBL(){
       </div>
       <div id="em-field-prep">
         <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer">
-          <input type="checkbox" id="em-prep" style="width:16px;height:16px" onchange="toggleEmDatePrep()">
+          <input type="checkbox" id="em-prep" style="width:16px;height:16px">
           Préparation à l'avance (le magasinier prépare avant l'arrivée du client)
         </label>
-        <div id="em-date-prep-row" style="display:none;margin-top:8px;margin-left:24px">
-          <label style="font-size:12px;font-weight:700;color:var(--text-muted);display:block;margin-bottom:4px">📅 Date de livraison prévue <span style="font-weight:400">(pour le planning)</span></label>
+        <div style="margin-top:8px;margin-left:24px">
+          <label style="font-size:12px;font-weight:700;color:var(--text-muted);display:block;margin-bottom:4px">📅 Date de livraison prévue</label>
           <input type="date" id="em-date-livraison"
             style="padding:6px 10px;border:1px solid var(--border);border-radius:var(--radius-sm);font-size:13px;font-family:var(--font-body)">
         </div>
@@ -6187,17 +6187,16 @@ function openEmissionBL(){
   _emissionType='Livraison client';
   openModal('➕ Nouveau BL ou FC à livrer',html,emettreBL);
 
+  // Pré-remplir la date de livraison avec aujourd'hui
+  const today=new Date().toISOString().slice(0,10);
+  const dateLivEl=document.getElementById('em-date-livraison');
+  if(dateLivEl)dateLivEl.value=today;
+
   // Autocomplete client avec saisie libre (setupAC laisse le texte tapé si rien n'est choisi)
   setTimeout(()=>{
     const clientData=Object.entries(DATA.clients||{}).map(([cid,cname])=>({id:cid,name:cname}));
     setupAC('em-client-search','em-client-id','em-client-drop',clientData);
   },60);
-}
-
-function toggleEmDatePrep(){
-  const checked=document.getElementById('em-prep')?.checked;
-  const row=document.getElementById('em-date-prep-row');
-  if(row)row.style.display=checked?'block':'none';
 }
 
 function setEmissionType(type){
@@ -6305,7 +6304,7 @@ async function emettreBL(){
   const client=isInv?'':document.getElementById('em-client-search').value.trim();
   const vendeur=document.getElementById('em-vendeur').value;
   const prep=isInv?false:document.getElementById('em-prep').checked;
-  const dateLiv=(!isInv&&prep)?document.getElementById('em-date-livraison')?.value||'':'';
+  const dateLiv=(!isInv)?document.getElementById('em-date-livraison')?.value||'':'';
 
   // Validation
   if(!numero){throw new Error('Le N° de BL est obligatoire.');}
