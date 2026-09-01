@@ -751,8 +751,14 @@
       <div class="kpi-row c4">
         <div class="kc a"><div class="kl">⏳ En attente de prise en charge</div><div class="kv" id="kpi-prep-attente">—</div><div class="ks">Personne ne l'a encore pris</div></div>
         <div class="kc t"><div class="kl">🔧 En cours de préparation</div><div class="kv" id="kpi-prep-encours">—</div><div class="ks">Pris en charge, scan en cours</div></div>
+        <div class="kc g" style="cursor:pointer" onclick="document.getElementById('pretes-block-dash')?.scrollIntoView({behavior:'smooth'})"><div class="kl">✅ Prêtes à livrer</div><div class="kv" id="kpi-prep-prete">—</div><div class="ks">En attente du client</div></div>
         <div class="kc r" id="kc-prep-retard" style="cursor:pointer" onclick="togglePrepRetard()"><div class="kl">⚠️ En retard +2 jours</div><div class="kv" id="kpi-prep-retard">—</div><div class="ks" id="ks-prep-retard">Cliquer pour filtrer la liste</div></div>
-        <div class="kc b"><div class="kl">⏱ Délai moyen de prise en charge</div><div class="kv" id="kpi-prep-delai">—</div><div class="ks">Émission → début du scan</div></div>
+      </div>
+
+      <!-- Bloc commandes prêtes à livrer -->
+      <div id="pretes-block-dash" style="display:none;background:#f0fdf4;border:2px solid #16a34a;border-radius:var(--radius);padding:14px 16px;margin-bottom:14px">
+        <div style="font-weight:800;font-size:14px;color:#16a34a;margin-bottom:10px">✅ Prêtes à livrer — en attente du client</div>
+        <div id="pretes-list-dash"></div>
       </div>
 
       <div style="background:var(--navy);border-radius:var(--radius);padding:14px 18px;margin-bottom:14px">
@@ -3753,8 +3759,9 @@ function renderPreparations(){
 
   // ── Classification des statuts scan ──
   const isPending=s=>f(s,'Statut')==='BL Émis';
+  const isPrete=s=>(f(s,'Statut')||'')==='Prête à livrer';
   const isFinal=s=>{const st=(f(s,'Statut')||'').toLowerCase();return st==='terminée'||st==='terminee'||st==='partiellement livrée'||st==='partiellement livree'||st.includes('écart')||st.includes('ecart');};
-  const isEnCours=s=>!isPending(s)&&!isFinal(s); // pris en charge, scan en cours
+  const isEnCours=s=>!isPending(s)&&!isPrete(s)&&!isFinal(s); // pris en charge, scan en cours
 
   const fmtDelai=h=>{
     if(h===null)return '—';
@@ -3807,7 +3814,37 @@ function renderPreparations(){
   // ── KPI (respectent la bascule DATE_DEBUT_PROCESS) ──
   const totalAttente=all.filter(s=>isPending(s)&&afterCutoff(f(s,'Date_Emission')));
   const enCours=all.filter(s=>isEnCours(s)&&afterCutoff(f(s,'Date_Emission')));
+  const pretes=all.filter(s=>isPrete(s));
   const retard=totalAttente.filter(s=>daysSince(f(s,'Date_Emission'))>2);
+
+  // Bloc "Prêtes à livrer"
+  const pretesDash=document.getElementById('pretes-block-dash');
+  const pretesList=document.getElementById('pretes-list-dash');
+  if(pretesDash){
+    if(pretes.length){
+      pretesDash.style.display='block';
+      if(pretesList){
+        pretesList.innerHTML=pretes.map(s=>{
+          const vendeur=f(s,'Vendeur_Emetteur')||'—';
+          const client=f(s,'Client')||'—';
+          const bl=f(s,'Numero_BL')||'—';
+          const mag=f(s,'Magasinier')||'—';
+          return`<div style="background:white;border:1px solid #bbf7d0;border-radius:8px;padding:10px 14px;margin-bottom:8px;display:flex;justify-content:space-between;align-items:center;gap:12px">
+            <div style="min-width:0">
+              <div style="font-weight:700;font-size:13.5px">${iconBLFC(bl)} ${bl} <span style="font-weight:400;color:var(--text-muted);font-size:12px">· ${client}</span></div>
+              <div style="font-size:11.5px;color:var(--text-muted);margin-top:2px">Vendeur : <strong>${vendeur}</strong> · Préparé par : <strong>${mag}</strong></div>
+            </div>
+            <button class="btn" onclick="validerLivraisonPrete(${s.ID},'${bl.replace(/'/g,"\\'")}')"
+              style="background:#16a34a;color:white;border-color:#16a34a;height:32px;font-size:12px;white-space:nowrap">
+              📦 Valider livraison
+            </button>
+          </div>`;
+        }).join('');
+      }
+    }else{
+      pretesDash.style.display='none';
+    }
+  }
 
   // Délai moyen de prise en charge — sessions traitées, hors legacy pré-process
   const traitees=all.filter(s=>!isPending(s)&&f(s,'Date_Scan')&&afterCutoff(f(s,'Date_Emission')));
@@ -3823,6 +3860,7 @@ function renderPreparations(){
   const setTxt=(id,v)=>{const el=document.getElementById(id);if(el)el.textContent=v;};
   setTxt('kpi-prep-attente',totalAttente.length);
   setTxt('kpi-prep-encours',enCours.length);
+  setTxt('kpi-prep-prete',pretes.length);
   setTxt('kpi-prep-retard',retard.length);
   setTxt('kpi-prep-delai',fmtDelai(delaiMoyenH));
 
@@ -4704,6 +4742,23 @@ function openFacturerModal(id,numBC,client){
     renderAll();updateBadges();
     return `${numBC} — facture ${fc} enregistrée (entièrement facturé)`;
   });
+}
+
+// ── Valider livraison depuis le dashboard (statut "Prête à livrer" → "Terminée") ──
+async function validerLivraisonPrete(sessionId, numBL){
+  const ok=await showConfirm(
+    `Valider la livraison du BL ${numBL} ?`,
+    'Le client a bien récupéré sa commande. La session passera à "Terminée".',
+    'Valider','ok'
+  );
+  if(!ok)return;
+  try{
+    await spPatch('sites/BondeCommande','Sessions_Scan',sessionId,{Statut:'Terminée'});
+    const sess=(DATA.sessionsScan||[]).find(s=>s.ID===sessionId);
+    if(sess){sess.Statut='Terminée';}
+    renderPreparations();updateBadges();
+    toast(`✅ BL ${numBL} — livraison validée`);
+  }catch(e){toast('❌ '+e.message);}
 }
 
 // ── Planning 7 prochains jours (Préparations Scan) ──
