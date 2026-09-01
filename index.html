@@ -7848,7 +7848,10 @@ init();
         <div class="mf">
           <label>Vendeur assigné</label>
           <select id="ad-vendeur" style="border:1px solid var(--border);border-radius:var(--radius-sm);padding:8px 10px;font-size:13px;font-family:var(--font-body);outline:none;width:100%">
-            ${VENDEURS_FIXES.map(v=>`<option value="${v}"${v==='Fabrice'?' selected':''}>${v}</option>`).join('')}
+            <option value="Fabrice" selected>Fabrice</option>
+            <option value="Fred">Fred</option>
+            <option value="Fritz">Fritz</option>
+            <option value="Nicolas">Nicolas</option>
           </select>
         </div>
       </div>
