@@ -2558,7 +2558,10 @@ function renderCommandeFournisseur(){
     const arr=f(i,'Date_Arrivage_Attendu');
     if(!arr)return false;
     const s=getStatut(i);
-    if(s==='Annulé'||s==='Terminé')return false;
+    // Exclure tout BC qui n'a plus besoin d'être relancé côté fournisseur
+    const sLow=(s||'').toLowerCase();
+    if(sLow==='annulé'||sLow==='terminé'||sLow==='terminé'||sLow.includes('entièrement livré')||sLow==='livré'||sLow==='facturé')return false;
+    if(estSolde(i))return false; // BC soldé manuellement
     if(estIgnore(i))return false;
     return true;
   }).sort((a,b)=>new Date(f(a,'Date_Arrivage_Attendu'))-new Date(f(b,'Date_Arrivage_Attendu')));
