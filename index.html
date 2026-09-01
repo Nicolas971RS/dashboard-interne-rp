@@ -4785,7 +4785,13 @@ function renderPlanning7j(){
   // sinon DateLivraisonprevue du BC correspondant
   const getBcDateLiv=s=>{
     const numBL=String(f(s,'Numero_BL')||'').trim();
-    const bc=(DATA.suivi||[]).find(bc=>String(f(bc,'N_x00b0_BL')||'').trim()===numBL);
+    if(!numBL)return null;
+    const bc=(DATA.suivi||[]).find(bc=>{
+      // N_x00b0_BL peut être une string ou un objet lookup — on normalise
+      const raw=f(bc,'N_x00b0_BL');
+      const val=raw&&typeof raw==='object'?(raw.Value||raw.Title||''):String(raw||'');
+      return val.trim()===numBL;
+    });
     return bc?f(bc,'DateLivraisonpr_x00e9_vue'):null;
   };
   const getDatePrev=s=>{
