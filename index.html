@@ -4775,19 +4775,31 @@ function renderPlanning7j(){
     return !st.includes('terminée')&&!st.includes('terminee')&&
            !st.includes('partiellement')&&!st.includes('écart')&&!st.includes('ecart');
   });
-  // Jours J à J+7
+  // Jours J à J+7 — comparaison en string YYYY-MM-DD pour éviter décalage UTC-4
+  const toLocalKey=d=>{
+    const y=d.getFullYear();
+    const m=String(d.getMonth()+1).padStart(2,'0');
+    const day=String(d.getDate()).padStart(2,'0');
+    return`${y}-${m}-${day}`;
+  };
+  const isoToLocalKey=iso=>{
+    if(!iso)return null;
+    // T00:00:00Z = minuit UTC = 20h veille en Guadeloupe — on corrige +4h
+    const d=new Date(new Date(iso).getTime()+4*3600000);
+    return toLocalKey(d);
+  };
   const jours=[];
   for(let i=0;i<8;i++){
     const d=new Date(TODAY);d.setDate(d.getDate()+i);
     jours.push(d);
   }
+  const jourKeys=new Set(jours.map(toLocalKey));
   // Pour chaque session : date de référence = Date_Livraison_Prevue (Sessions_Scan) en priorité,
   // sinon DateLivraisonprevue du BC correspondant
   const getBcDateLiv=s=>{
     const numBL=String(f(s,'Numero_BL')||'').trim();
     if(!numBL)return null;
     const bc=(DATA.suivi||[]).find(bc=>{
-      // N_x00b0_BL peut être une string ou un objet lookup — on normalise
       const raw=f(bc,'N_x00b0_BL');
       const val=raw&&typeof raw==='object'?(raw.Value||raw.Title||''):String(raw||'');
       return val.trim()===numBL;
@@ -4804,12 +4816,11 @@ function renderPlanning7j(){
   const sansDate=[];
   sessions.forEach(s=>{
     const dp=getDatePrev(s);
-    if(!dp){sansDate.push(s);return;}
-    const d=new Date(dp);d.setHours(0,0,0,0);
-    const key=d.toISOString().slice(0,10);
-    const inRange=d>=TODAY&&d<=jours[7];
-    if(!inRange)return;
-    if(!byDay.has(key))byDay.set(key,{date:d,sessions:[]});
+    const key=isoToLocalKey(dp);
+    if(!key){sansDate.push(s);return;}
+    if(!jourKeys.has(key)){return;}
+    const dateObj=jours.find(d=>toLocalKey(d)===key)||new Date(key);
+    if(!byDay.has(key))byDay.set(key,{date:dateObj,sessions:[]});
     byDay.get(key).sessions.push(s);
   });
   const JOURS_FR=['Dim','Lun','Mar','Mer','Jeu','Ven','Sam'];
