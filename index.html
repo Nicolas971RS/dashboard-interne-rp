@@ -3186,11 +3186,13 @@ function getMatinRelancer(){
     const sLow=(s||'').toLowerCase();
     const ef=getEtatFact(i);
     const dateLiv=f(i,'DateLivraisonpr_x00e9_vue');
-    if(!daysLate(dateLiv)>0)return false;
-    if(sLow==='reçu'||sLow==='annulé'||sLow==='terminé'||sLow.includes('entièrement livré')||sLow==='livré')return false;
+    if(!dateLiv||daysLate(dateLiv)<=0)return false;
+    // Exclure les BCs déjà livrés ou clôturés — pas besoin de relancer
+    if(sLow==='reçu'||sLow==='annulé'||sLow==='terminé')return false;
+    if(sLow.includes('entièrement livré'))return false;
     if(ef==='Entièrement facturé')return false;
     if(estSolde(i))return false;
-    return daysLate(dateLiv)>0;
+    return true;
   }).sort((a,b)=>daysLate(f(b,'DateLivraisonpr_x00e9_vue'))-daysLate(f(a,'DateLivraisonpr_x00e9_vue')));
 }
 function getMatinDevisNouvelle(){
