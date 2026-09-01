@@ -4185,8 +4185,13 @@ function openSessionPanel(id){
       ${f(s,'BL_Racine')?infoLine('BL d’origine',f(s,'BL_Racine')):''}
     </div>
     <div class="sd"><h2 style="font-size:14px">📋 Articles ${isLiv?'livrés':'inventoriés'}</h2><div class="sd-line"></div></div>
-    <div class="tc"><table>
-      <thead><tr><th>Référence</th><th>Désignation</th><th>${isLiv?'Livré / Prévu':'Scanné / Attendu'}</th><th>Écart</th></tr></thead>
+    <div class="tc"><table style="table-layout:fixed;width:100%">
+      <thead><tr>
+        <th style="width:80px">Référence</th>
+        <th>Désignation</th>
+        <th style="width:80px;text-align:center">${isLiv?'Livré / Prévu':'Scanné / Attendu'}</th>
+        <th style="width:90px;text-align:center">Écart</th>
+      </tr></thead>
       <tbody>${rows}</tbody>
     </table></div>`;
 
@@ -5329,6 +5334,21 @@ async function openTraiterModal(id,numBC,client){
       }catch(e){console.warn('[Lignes_BC patch]',lid,e.message);}
     }
     const rowsNew=document.querySelectorAll('#m-lignes-new .m-ligne-new');
+    // Validation : quantité commandée obligatoire si référence/désignation saisie
+    let errQteTraiter=false;
+    rowsNew.forEach(row=>{
+      const ref=row.querySelector('.m-l-ref-new')?.value.trim()||'';
+      const design=row.querySelector('.m-l-design-new')?.value.trim()||'';
+      const qcEl=row.querySelector('.m-l-qc-new');
+      const qc=parseFloat(qcEl?.value)||0;
+      if((ref||design)&&qc<=0){
+        if(qcEl){qcEl.style.border='2px solid var(--red)';qcEl.title='Quantité obligatoire';}
+        errQteTraiter=true;
+      }else{
+        if(qcEl)qcEl.style.border='';
+      }
+    });
+    if(errQteTraiter)throw new Error('Quantité commandée obligatoire pour chaque article saisi.');
     if(rowsNew.length){
       const lignesExistantesRef=(DATA.lignes||[]).filter(l=>l.BCId===id||parseInt(l.BCId)===id);
       let maxLigne=lignesExistantesRef.reduce((max,l)=>{const n=parseInt(f(l,'Title'))||0;return n>max?n:max;},0);
@@ -6392,6 +6412,26 @@ async function emettreBL(){
   }
 
   const lignes=isInv?[]:emCollectLignes();
+
+  // Validation : si une référence ou désignation est saisie, la quantité est obligatoire
+  if(!isInv){
+    const rows=[...document.querySelectorAll('#em-lignes-list > div[id^="em-ligne-"]')];
+    let errQte=false;
+    rows.forEach(row=>{
+      const idx=row.id.replace('em-ligne-','');
+      const search=document.getElementById('em-l-search-'+idx);
+      const qteEl=document.getElementById('em-l-qte-'+idx);
+      const hasRef=(search?.value||'').trim().length>0;
+      const qte=parseFloat(qteEl?.value)||0;
+      if(hasRef&&qte<=0){
+        if(qteEl)qteEl.style.border='2px solid var(--red)';
+        errQte=true;
+      }else{
+        if(qteEl)qteEl.style.border='';
+      }
+    });
+    if(errQte)throw new Error('Quantité obligatoire pour chaque article saisi.');
+  }
 
   const titre=isInv?`${numero} - Inventaire`:`${numero} - ${client}`;
   const payload={
