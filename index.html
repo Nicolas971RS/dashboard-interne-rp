@@ -3585,13 +3585,10 @@ function getRALLignes(){
     return{ligne:l,qc,ql,ral:qc-ql};
   }).filter(x=>{
     if(x.ral<=0)return false;
-    // Exclure les lignes dont le BC parent est Terminé ou soldé
+    // Exclure uniquement les BCs soldés manuellement (case BC soldé cochée)
     const bcId=x.ligne.BCId||(x.ligne.BC&&x.ligne.BC.Id);
     const bc=(DATA.suivi||[]).find(i=>i.ID===bcId||i.ID===parseInt(bcId));
-    if(!bc)return true; // BC non trouvé → on garde
-    const s=(getStatut(bc)||'').toLowerCase();
-    if(s==='terminé'||s==='annulé')return false;
-    if(estSolde(bc))return false;
+    if(bc&&estSolde(bc))return false;
     return true;
   });
 }
@@ -3632,20 +3629,15 @@ function ralAgePill(jours){
 async function cloturerBC(bcId,numBC){
   const ok=await showConfirm(
     `Clôturer le BC ${numBC} ?`,
-    `Les lignes en reste à livrer seront conservées pour historique. Le statut passera à "Terminé".`,
+    `Ce BC sera marqué comme soldé et ses lignes disparaîtront du suivi RAL.`,
     'Clôturer','delete'
   );
   if(!ok)return;
   try{
-    await spPatch('sites/RseauxPlus','Suivi_BC',bcId,{Statut:'Terminé'});
+    await spPatch('sites/RseauxPlus','Suivi_BC',bcId,{StatutBCLivr_x00e9_etFC:true});
     const bc=(DATA.suivi||[]).find(i=>i.ID===bcId);
-    if(bc){
-      // Normaliser selon le format actuel du champ (string ou objet Choice)
-      if(bc.Statut&&typeof bc.Statut==='object')bc.Statut={...bc.Statut,Value:'Terminé'};
-      else bc.Statut='Terminé';
-    }
+    if(bc)bc.StatutBCLivr_x00e9_etFC=true;
     renderAll();updateBadges();
-    // Forcer re-render du tableau RAL pour faire disparaître la ligne
     if(typeof renderRALTable==='function')renderRALTable();
     toast(`✅ BC ${numBC} clôturé`);
   }catch(e){toast('❌ '+e.message);}
