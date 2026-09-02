@@ -312,6 +312,26 @@
   .matin-ok-icon{font-size:40px;margin-bottom:12px;}
   .matin-ok-title{font-size:15px;font-weight:700;color:var(--green);margin-bottom:6px;}
   .matin-ok-sub{font-size:13px;color:var(--text-muted);}
+/* ── Tooltips survol ── */
+[data-tooltip]{position:relative;}
+[data-tooltip]::after{
+  content:attr(data-tooltip);
+  position:absolute;bottom:calc(100% + 6px);left:50%;transform:translateX(-50%);
+  background:#1a2744;color:white;font-size:11px;font-weight:500;line-height:1.4;
+  padding:5px 9px;border-radius:6px;white-space:nowrap;max-width:220px;white-space:normal;
+  text-align:center;pointer-events:none;opacity:0;transition:opacity .15s;z-index:9999;
+  box-shadow:0 2px 8px rgba(0,0,0,.25);
+}
+[data-tooltip]::before{
+  content:'';position:absolute;bottom:calc(100% + 1px);left:50%;transform:translateX(-50%);
+  border:5px solid transparent;border-top-color:#1a2744;
+  pointer-events:none;opacity:0;transition:opacity .15s;z-index:9999;
+}
+[data-tooltip]:hover::after,[data-tooltip]:hover::before{opacity:1;}
+
+/* ── Champs obligatoires ── */
+.field-required{border-color:var(--red)!important;background:#fff8f8!important;}
+.field-ok{border-color:#16a34a!important;background:#f0fdf4!important;}
 </style>
 </head>
 <body>
@@ -3199,6 +3219,52 @@ function getMatinDevisNouvelle(){
   return DATA.devis.filter(i=>f(i,'Statut')==='Nouvelle');
 }
 
+// ── Tooltips sur les boutons d'action (injectés après chaque render) ──
+const TOOLTIPS={
+  'openTraiterModal':'Renseigner le N° BL, les dates, le montant et les articles livrés',
+  'openFacturerModal':'Saisir le numéro de facture une fois la livraison complète ou partielle',
+  'openLivraisonPartielle':'Enregistrer une livraison incomplète — le reste à livrer est suivi automatiquement',
+  'openEmissionBL':'Créer un bon de livraison pour un client qui vient récupérer sa commande',
+  'openNouveauProjet':'Créer un projet pour regrouper plusieurs BCs d\'un même chantier',
+  'openNouveauDBCModal':'Enregistrer un enlèvement sans bon de commande — une demande est envoyée au client par email',
+  'openPanneauChantiers':'Consulter et modifier la liste des projets et chantiers',
+};
+function injectTooltips(){
+  document.querySelectorAll('button[onclick]').forEach(btn=>{
+    const oc=btn.getAttribute('onclick')||'';
+    for(const [fn,tip] of Object.entries(TOOLTIPS)){
+      if(oc.startsWith(fn+'(')&&!btn.dataset.tooltip){
+        btn.dataset.tooltip=tip;
+        break;
+      }
+    }
+  });
+}
+
+// ── Helpers champs obligatoires rouge/vert ──
+function setupRequiredField(el){
+  if(!el)return;
+  const check=()=>{
+    const v=(el.value||'').trim();
+    el.classList.toggle('field-required',!v);
+    el.classList.toggle('field-ok',!!v);
+  };
+  check();
+  el.addEventListener('input',check);
+  el.addEventListener('change',check);
+}
+function setupRequiredSelect(el){
+  if(!el)return;
+  const check=()=>{
+    const v=(el.value||'').trim();
+    const empty=!v||v==='— Choisir —'||v==='— Inchangé —'||v==='all';
+    el.classList.toggle('field-required',empty);
+    el.classList.toggle('field-ok',!empty);
+  };
+  check();
+  el.addEventListener('change',check);
+}
+
 function renderAll(){
   buildMapEmailClient();
   renderBandeauPriorite();
@@ -3324,6 +3390,7 @@ function renderAll(){
   if(banner)banner.style.display=allOk?'flex':'none';
 
   renderDBCTable();renderDevisTable();renderBLManquant();renderCommandeFournisseur();renderRALTable();renderPreparations();
+  injectTooltips();
 }
 
 function renderSuiviEnCours(){renderHistorique();renderBLManquant();
@@ -4832,7 +4899,7 @@ function toast(msg,type='ok'){
     document.body.appendChild(host);
   }
   const t=document.createElement('div');
-  const c=type==='ko'?{bg:'#ffebee',bd:'#c62828',fg:'#8e1b1b'}:{bg:'#e8f5e9',bd:'#2e7d32',fg:'#1b5e20'};
+  const c=type==='ko'?{bg:'#ffebee',bd:'#c62828',fg:'#8e1b1b'}:type==='warn'?{bg:'#fff7ed',bd:'#d97706',fg:'#92400e'}:{bg:'#e8f5e9',bd:'#2e7d32',fg:'#1b5e20'};
   t.style.cssText=`background:${c.bg};border:1px solid ${c.bd};border-left:4px solid ${c.bd};color:${c.fg};border-radius:7px;padding:12px 15px;font-size:13px;font-weight:500;line-height:1.45;box-shadow:0 4px 16px rgba(10,31,61,.16);cursor:pointer;transition:opacity .25s`;
   t.textContent=msg;
   t.onclick=()=>t.remove();
@@ -5584,6 +5651,14 @@ async function openTraiterModal(id,numBC,client){
     }
     const suffixeLignes=lignesTouchees?` · ${lignesTouchees} article(s) enregistré(s)${sessionLiee?' (+ synchronisé côté Préparation Scan)':' (échec de synchronisation Préparation Scan — voir console)'}`
       :(sessionCreee?' · BL ajouté à Préparation Scan':'');
+
+    // Rappel BC soldé si N° BL renseigné et case non cochée
+    const blRempli=!!(document.getElementById('m-bl')?.value.trim());
+    const soldeCoche=document.getElementById('m-solde')?.checked;
+    if(blRempli&&!soldeCoche){
+      setTimeout(()=>toast('💡 Rappel : si ce BC est entièrement livré et facturé, pensez à cocher "BC soldé" dans Traiter.','warn'),800);
+    }
+
     if(!champs.length)return `${titre||numBC} —${suffixeLignes||' aucune modification BC'}`;
     return `${titre||numBC} — ${champs.join(', ')} enregistré${champs.length>1?'s':''}${suffixeLignes}`;
   });
@@ -5593,6 +5668,9 @@ async function openTraiterModal(id,numBC,client){
     // Client autocomplete depuis cache DATA.clients
     const clientData=Object.entries(DATA.clients||{}).map(([cid,cname])=>({id:cid,name:cname}));
     setupAC('m-client-search','m-client-id','m-client-drop',clientData);
+    // Champs obligatoires rouge/vert
+    setupRequiredField(document.getElementById('m-bl'));
+    setupRequiredField(document.getElementById('m-client-search'));
 
     // Chantier autocomplete depuis API
     const chInput=document.getElementById('m-chantier-search');
@@ -6238,6 +6316,9 @@ function openNouveauProjet(){
       });
       drop.appendChild(ul);
     });
+    // Champs obligatoires rouge/vert
+    setupRequiredField(document.getElementById('np-nom'));
+    setupRequiredField(inp);
   },150);
 }
 
@@ -6485,6 +6566,10 @@ function openEmissionBL(){
   setTimeout(()=>{
     const clientData=Object.entries(DATA.clients||{}).map(([cid,cname])=>({id:cid,name:cname}));
     setupAC('em-client-search','em-client-id','em-client-drop',clientData);
+    // Champs obligatoires rouge/vert
+    setupRequiredField(document.getElementById('em-numero'));
+    setupRequiredField(document.getElementById('em-client-search'));
+    setupRequiredSelect(document.getElementById('em-vendeur'));
   },60);
 }
 
@@ -7698,6 +7783,13 @@ function devisClientAC(){_clientACSetup('ad-client','ad-client-drop',null);}
 
 function openNouveauDBCModal(){
   const today=new Date().toISOString().slice(0,10);
+  // On injecte les helpers champs requis après le rendu de la modale
+  setTimeout(()=>{
+    ['d-client','d-employe','d-email','d-montant','d-articles'].forEach(id=>{
+      setupRequiredField(document.getElementById(id));
+    });
+    setupRequiredSelect(document.getElementById('d-vendeur'));
+  },100);
   openModal('🆕 Nouvelle Demande BC — Enlèvement sans BC',`
     <div style="background:var(--amber-light);border-left:3px solid var(--amber);border-radius:4px;padding:7px 10px;font-size:11px;color:#7a4000;margin-bottom:6px;">
       Un client récupère de la marchandise sans BC. Ce formulaire crée la demande dans SharePoint.
