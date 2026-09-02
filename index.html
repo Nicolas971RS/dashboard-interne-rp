@@ -4190,6 +4190,8 @@ function openSessionPanel(id){
     }).join('');
   }
 
+  const canReopen=low.includes('terminée')||low.includes('terminee')||low.includes('écart')||low.includes('ecart')||low==='prête à livrer';
+
   const html=`
     <div style="margin-bottom:16px">
       ${infoLine('N° BL ou FC',iconBLFC(f(s,'Numero_BL'))+' '+(f(s,'Numero_BL')||'—'))}
@@ -4202,6 +4204,16 @@ function openSessionPanel(id){
       ${infoLine('Statut','<span class="ctag '+stCls+'">'+statut+'</span>')}
       ${f(s,'BL_Racine')?infoLine('BL d’origine',f(s,'BL_Racine')):''}
     </div>
+    ${canReopen?`
+    <div style="background:#fff7ed;border:1px solid #fed7aa;border-radius:var(--radius-sm);padding:10px 14px;margin-bottom:14px;display:flex;justify-content:space-between;align-items:center;gap:12px">
+      <div style="font-size:12px;color:#92400e">
+        <strong>Session clôturée</strong> — Réouvrir remet toutes les quantités à zéro et replace le BL en préparation pour correction.
+      </div>
+      <button class="btn" onclick="reoouvrirSession(${id},\'${String(f(s,'Numero_BL')||'').replace(/'/g,"\\'")}\')"
+        style="background:#d97706;color:white;border-color:#d97706;height:30px;font-size:11.5px;white-space:nowrap;flex-shrink:0">
+        🔓 Réouvrir
+      </button>
+    </div>`:''}
     <div class="sd"><h2 style="font-size:14px">📋 Articles ${isLiv?'livrés':'inventoriés'}</h2><div class="sd-line"></div></div>
     <div class="tc" style="overflow-x:auto"><table style="table-layout:fixed;width:100%;min-width:320px">
       <thead><tr>
@@ -4214,6 +4226,49 @@ function openSessionPanel(id){
     </table></div>`;
 
   openPanel(iconBLFC(f(s,'Numero_BL'))+' '+(f(s,'Numero_BL')||'BL'),html);
+}
+
+// ── Réouverture d'une session clôturée pour correction ──
+async function reoouvrirSession(sessionId, numBL){
+  const ok=await showConfirm(
+    `Réouvrir le BL ${numBL} ?`,
+    `Toutes les quantités scannées seront remises à zéro. Le BL repassera en "BL Émis" et le magasinier pourra reprendre la livraison depuis le début.`,
+    'Réouvrir','ok'
+  );
+  if(!ok)return;
+  try{
+    // 1. Remettre le statut de la session à "BL Émis"
+    await spPatch('sites/BondeCommande','Sessions_Scan',sessionId,{
+      Statut:'BL Émis',
+      Date_Scan:null,
+      Magasinier:'',
+      Nb_Articles_Scannes:0,
+      Nb_Ecarts:0
+    });
+
+    // 2. Remettre toutes les Lignes_Scan à Quantite_Scannee = 0
+    const lignes=(DATA.lignesScan||[]).filter(l=>String(lineSessionId(l))===String(sessionId));
+    for(const l of lignes){
+      try{
+        await spPatch('sites/BondeCommande','Lignes_Scan',l.ID,{Quantite_Scannee:0});
+        l.Quantite_Scannee=0;
+      }catch(e){console.warn('[reoouvrirSession] ligne',l.ID,e.message);}
+    }
+
+    // 3. Mettre à jour en mémoire
+    const sess=(DATA.sessionsScan||[]).find(s=>s.ID===sessionId);
+    if(sess){
+      sess.Statut='BL Émis';
+      sess.Date_Scan=null;
+      sess.Magasinier='';
+      sess.Nb_Articles_Scannes=0;
+      sess.Nb_Ecarts=0;
+    }
+
+    renderPreparations();updateBadges();
+    closePanel();
+    toast(`✅ BL ${numBL} réouvert — le magasinier peut reprendre la livraison`);
+  }catch(e){toast('❌ '+e.message);}
 }
 
 function exportRALCSV(){
