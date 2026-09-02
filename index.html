@@ -329,6 +329,23 @@
 }
 [data-tooltip]:hover::after,[data-tooltip]:hover::before{opacity:1;}
 
+/* Tooltip à gauche pour boutons d'action dans les tableaux */
+[data-tooltip-left]{position:relative;}
+[data-tooltip-left]::after{
+  content:attr(data-tooltip-left);
+  position:absolute;top:50%;right:calc(100% + 8px);transform:translateY(-50%);
+  background:#1a2744;color:white;font-size:11px;font-weight:500;line-height:1.4;
+  padding:5px 9px;border-radius:6px;max-width:200px;white-space:normal;
+  text-align:right;pointer-events:none;opacity:0;transition:opacity .15s;z-index:9999;
+  box-shadow:0 2px 8px rgba(0,0,0,.25);
+}
+[data-tooltip-left]::before{
+  content:'';position:absolute;top:50%;right:calc(100% + 3px);transform:translateY(-50%);
+  border:5px solid transparent;border-left-color:#1a2744;
+  pointer-events:none;opacity:0;transition:opacity .15s;z-index:9999;
+}
+[data-tooltip-left]:hover::after,[data-tooltip-left]:hover::before{opacity:1;}
+
 /* ── Champs obligatoires ── */
 .field-required{border-color:var(--red)!important;background:#fff8f8!important;}
 .field-ok{border-color:#16a34a!important;background:#f0fdf4!important;}
@@ -3220,23 +3237,39 @@ function getMatinDevisNouvelle(){
 }
 
 // ── Tooltips sur les boutons d'action (injectés après chaque render) ──
-const TOOLTIPS={
+const TOOLTIPS_LEFT={
   'openTraiterModal':'Renseigner le N° BL, les dates, le montant et les articles livrés',
   'openFacturerModal':'Saisir le numéro de facture une fois la livraison complète ou partielle',
   'openLivraisonPartielle':'Enregistrer une livraison incomplète — le reste à livrer est suivi automatiquement',
+  'openNouveauDBCModal':'Enregistrer un enlèvement sans bon de commande — une demande est envoyée au client par email',
+};
+const TOOLTIPS_TOP={
   'openEmissionBL':'Créer un bon de livraison pour un client qui vient récupérer sa commande',
   'openNouveauProjet':'Créer un projet pour regrouper plusieurs BCs d\'un même chantier',
-  'openNouveauDBCModal':'Enregistrer un enlèvement sans bon de commande — une demande est envoyée au client par email',
   'openPanneauChantiers':'Consulter et modifier la liste des projets et chantiers',
 };
 function injectTooltips(){
   document.querySelectorAll('button[onclick]').forEach(btn=>{
     const oc=btn.getAttribute('onclick')||'';
-    for(const [fn,tip] of Object.entries(TOOLTIPS)){
-      if(oc.startsWith(fn+'(')&&!btn.dataset.tooltip){
+    for(const [fn,tip] of Object.entries(TOOLTIPS_LEFT)){
+      if(oc.startsWith(fn+'(')&&!btn.dataset.tooltipLeft){
+        btn.dataset.tooltipLeft=tip;
+        break;
+      }
+    }
+    for(const [fn,tip] of Object.entries(TOOLTIPS_TOP)){
+      if(oc.startsWith(fn+'(')&&!btn.dataset.tooltip&&!btn.dataset.tooltipLeft){
         btn.dataset.tooltip=tip;
         break;
       }
+    }
+    // Boutons sans paramètre (onclick="openEmissionBL()")
+    if((oc==='openEmissionBL()'||oc==='openNouveauProjet()'||oc==='openPanneauChantiers()')&&!btn.dataset.tooltip){
+      const match=Object.entries(TOOLTIPS_TOP).find(([fn])=>oc===fn+'()');
+      if(match)btn.dataset.tooltip=match[1];
+    }
+    if((oc==='openNouveauDBCModal()')&&!btn.dataset.tooltipLeft){
+      btn.dataset.tooltipLeft=TOOLTIPS_LEFT['openNouveauDBCModal'];
     }
   });
 }
