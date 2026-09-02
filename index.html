@@ -4214,7 +4214,20 @@ function openSessionPanel(id){
         🔓 Réouvrir
       </button>
     </div>`:''}
-    <div class="sd"><h2 style="font-size:14px">📋 Articles ${isLiv?'livrés':'inventoriés'}</h2><div class="sd-line"></div></div>
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;margin-top:4px">
+      <h2 style="font-size:14px;margin:0">📋 Articles ${isLiv?'livrés':'inventoriés'}</h2>
+      <button class="btn navy" style="height:26px;font-size:11px" onclick="sessionPanelAddLigne(${id})">➕ Ajouter un article</button>
+    </div>
+    <div id="sp-lignes-edit-${id}">
+      ${lignes.map(l=>`<div class="sp-ligne-edit" data-lid="${l.ID}" style="display:grid;grid-template-columns:1fr 1.6fr 60px 26px;gap:5px;margin-bottom:5px;align-items:center">
+        <input class="sp-ref" value="${(f(l,'Reference_Article')||'').replace(/"/g,'&quot;')}" placeholder="Réf." style="padding:4px 6px;border:1px solid var(--border);border-radius:5px;font-size:11.5px;font-family:var(--font-mono);box-sizing:border-box">
+        <input class="sp-design" value="${(f(l,'Designation')||'').replace(/"/g,'&quot;')}" placeholder="Désignation" style="padding:4px 6px;border:1px solid var(--border);border-radius:5px;font-size:11.5px;box-sizing:border-box">
+        <input class="sp-qte" type="number" min="0" value="${f(l,'Quantite_Attendue')||0}" title="Qté attendue" style="padding:4px 4px;border:1px solid var(--border);border-radius:5px;font-size:11.5px;text-align:center;box-sizing:border-box">
+        <button onclick="sessionPanelDeleteLigne(${l.ID},${id})" title="Supprimer" style="background:none;border:none;color:var(--red);font-size:14px;cursor:pointer;padding:2px">🗑</button>
+      </div>`).join('')}
+    </div>
+    <div id="sp-lignes-new-${id}"></div>
+    ${lignes.length?`<button class="btn" style="height:26px;font-size:11px;margin-bottom:10px" onclick="sessionPanelSaveAll(${id})">💾 Enregistrer les modifications</button>`:''}
     <div class="tc" style="overflow-x:auto"><table style="table-layout:fixed;width:100%;min-width:320px">
       <thead><tr>
         <th style="width:22%">Référence</th>
@@ -4226,6 +4239,112 @@ function openSessionPanel(id){
     </table></div>`;
 
   openPanel(iconBLFC(f(s,'Numero_BL'))+' '+(f(s,'Numero_BL')||'BL'),html);
+}
+
+// ── Gestion des articles depuis le panneau session ──
+let _spNewCount=0;
+function sessionPanelAddLigne(sessionId){
+  const idx=_spNewCount++;
+  const container=document.getElementById('sp-lignes-new-'+sessionId);
+  if(!container)return;
+  const row=document.createElement('div');
+  row.className='sp-ligne-new';
+  row.id='sp-new-'+idx;
+  row.style.cssText='display:grid;grid-template-columns:1fr 1.6fr 60px 26px;gap:5px;margin-bottom:5px;align-items:center;position:relative';
+  row.innerHTML=`
+    <div style="position:relative">
+      <input class="sp-ref-new" id="sp-ns-${idx}" autocomplete="off" placeholder="Réf. ou produit..." style="width:100%;padding:4px 6px;border:1px solid var(--border);border-radius:5px;font-size:11.5px;font-family:var(--font-mono);box-sizing:border-box">
+      <div id="sp-nd-${idx}" style="position:absolute;top:100%;left:0;right:0;background:white;border:1px solid var(--border);border-radius:6px;box-shadow:0 4px 12px rgba(0,0,0,.12);z-index:9999;max-height:160px;overflow-y:auto;display:none"></div>
+    </div>
+    <input class="sp-design-new" placeholder="Désignation" style="padding:4px 6px;border:1px solid var(--border);border-radius:5px;font-size:11.5px;box-sizing:border-box">
+    <input class="sp-qte-new" type="number" min="0" placeholder="0" title="Qté attendue" style="padding:4px 4px;border:1px solid var(--border);border-radius:5px;font-size:11.5px;text-align:center;box-sizing:border-box">
+    <button onclick="document.getElementById('sp-new-${idx}').remove()" title="Retirer" style="background:none;border:none;color:var(--red);font-size:14px;cursor:pointer;padding:2px">✕</button>`;
+  container.appendChild(row);
+
+  // Autocomplete catalogue
+  const inp=document.getElementById('sp-ns-'+idx);
+  const drop=document.getElementById('sp-nd-'+idx);
+  const designField=row.querySelector('.sp-design-new');
+  inp.addEventListener('input',()=>{
+    const q=inp.value.trim().toLowerCase();
+    drop.innerHTML='';
+    if(q.length<2){drop.style.display='none';return;}
+    const matches=(DATA.catalogue||[]).map(p=>{
+      const ref=(f(p,'Title')||'').toLowerCase();
+      const des=(f(p,'field_1')||'').toLowerCase();
+      return{p,score:Math.min(scoreMatch(ref,q),scoreMatch(des,q)),ref};
+    }).filter(x=>x.score<3).sort((a,b)=>a.score-b.score||a.ref.localeCompare(b.ref)).map(x=>x.p).slice(0,10);
+    if(!matches.length){drop.style.display='none';return;}
+    matches.forEach(p=>{
+      const ref=f(p,'Title')||'';const des=f(p,'field_1')||'';
+      const li=document.createElement('div');
+      li.innerHTML=`<span style="font-weight:700;font-family:var(--font-mono)">${ref}</span> <span style="color:var(--text-muted);font-size:11px">${des}</span>`;
+      li.style.cssText='padding:5px 10px;cursor:pointer;font-size:12px;border-bottom:1px solid #f0f3f8';
+      li.onmouseenter=()=>li.style.background='var(--grey-light)';
+      li.onmouseleave=()=>li.style.background='';
+      li.onmousedown=(e)=>{e.preventDefault();inp.value=ref;if(designField)designField.value=des;drop.style.display='none';};
+      drop.appendChild(li);
+    });
+    drop.style.display='block';
+  });
+  inp.addEventListener('blur',()=>setTimeout(()=>{drop.style.display='none';},200));
+
+  // Ajouter bouton save si pas encore là
+  const saveBtn=document.getElementById('sp-save-btn-'+sessionId);
+  if(!saveBtn){
+    const btn=document.createElement('button');
+    btn.id='sp-save-btn-'+sessionId;
+    btn.className='btn';
+    btn.style.cssText='height:26px;font-size:11px;margin-bottom:10px';
+    btn.textContent='💾 Enregistrer les modifications';
+    btn.onclick=()=>sessionPanelSaveAll(sessionId);
+    container.parentNode.insertBefore(btn,container.nextSibling);
+  }
+}
+
+async function sessionPanelSaveAll(sessionId){
+  let saved=0;
+  // Sauvegarder lignes existantes modifiées
+  const existingRows=document.querySelectorAll(`#sp-lignes-edit-${sessionId} .sp-ligne-edit`);
+  for(const row of existingRows){
+    const lid=parseInt(row.dataset.lid);
+    const ref=row.querySelector('.sp-ref')?.value.trim()||'';
+    const design=row.querySelector('.sp-design')?.value.trim()||'';
+    const qte=parseFloat(row.querySelector('.sp-qte')?.value)||0;
+    try{
+      await spPatch('sites/BondeCommande','Lignes_Scan',lid,{Reference_Article:ref,Designation:design,Quantite_Attendue:qte});
+      const l=(DATA.lignesScan||[]).find(x=>x.ID===lid);
+      if(l){l.Reference_Article=ref;l.Designation=design;l.Quantite_Attendue=qte;}
+      saved++;
+    }catch(e){console.warn('[sessionPanelSaveAll patch]',lid,e.message);}
+  }
+  // Sauvegarder nouvelles lignes
+  const newRows=document.querySelectorAll(`#sp-lignes-new-${sessionId} .sp-ligne-new`);
+  for(const row of newRows){
+    const ref=row.querySelector('.sp-ref-new')?.value.trim()||'';
+    const design=row.querySelector('.sp-design-new')?.value.trim()||'';
+    const qte=parseFloat(row.querySelector('.sp-qte-new')?.value)||0;
+    if(!design&&!ref)continue;
+    try{
+      const created=await spPost('sites/BondeCommande','Lignes_Scan',{
+        Session_ScanId:sessionId,Reference_Article:ref,Designation:design,Quantite_Attendue:qte,Quantite_Scannee:0
+      });
+      if(created){const cn={...created,ID:created.ID??created.Id};DATA.lignesScan=[...(DATA.lignesScan||[]),cn];}
+      saved++;
+    }catch(e){console.warn('[sessionPanelSaveAll post]',e.message);}
+  }
+  toast(saved?`✅ ${saved} article(s) enregistré(s)`:'Aucune modification à enregistrer');
+}
+
+async function sessionPanelDeleteLigne(lineId, sessionId){
+  const ok=await showConfirm('🗑️ Supprimer cet article ?','Cette ligne sera supprimée de la session.','Supprimer','delete');
+  if(!ok)return;
+  try{
+    await spDelete('sites/BondeCommande','Lignes_Scan',lineId);
+    DATA.lignesScan=(DATA.lignesScan||[]).filter(l=>l.ID!==lineId);
+    document.querySelector(`#sp-lignes-edit-${sessionId} [data-lid="${lineId}"]`)?.remove();
+    toast('✅ Article supprimé');
+  }catch(e){toast('❌ '+e.message);}
 }
 
 // ── Réouverture d'une session clôturée pour correction ──
