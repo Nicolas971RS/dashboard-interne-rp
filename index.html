@@ -4227,7 +4227,9 @@ function openSessionPanel(id){
       </div>`).join('')}
     </div>
     <div id="sp-lignes-new-${id}"></div>
-    ${lignes.length?`<button class="btn" style="height:26px;font-size:11px;margin-bottom:10px" onclick="sessionPanelSaveAll(${id})">💾 Enregistrer les modifications</button>`:''}
+    <div id="sp-save-wrap-${id}">
+      ${lignes.length?`<button id="sp-save-btn-${id}" class="btn" style="height:26px;font-size:11px;margin-bottom:10px" onclick="sessionPanelSaveAll(${id})">💾 Enregistrer les modifications</button>`:''}
+    </div>
     <div class="tc" style="overflow-x:auto"><table style="table-layout:fixed;width:100%;min-width:320px">
       <thead><tr>
         <th style="width:22%">Référence</th>
@@ -4290,15 +4292,16 @@ function sessionPanelAddLigne(sessionId){
   inp.addEventListener('blur',()=>setTimeout(()=>{drop.style.display='none';},200));
 
   // Ajouter bouton save si pas encore là
+  const saveWrap=document.getElementById('sp-save-wrap-'+sessionId);
   const saveBtn=document.getElementById('sp-save-btn-'+sessionId);
-  if(!saveBtn){
+  if(saveWrap&&!saveBtn){
     const btn=document.createElement('button');
     btn.id='sp-save-btn-'+sessionId;
     btn.className='btn';
     btn.style.cssText='height:26px;font-size:11px;margin-bottom:10px';
     btn.textContent='💾 Enregistrer les modifications';
     btn.onclick=()=>sessionPanelSaveAll(sessionId);
-    container.parentNode.insertBefore(btn,container.nextSibling);
+    saveWrap.appendChild(btn);
   }
 }
 
