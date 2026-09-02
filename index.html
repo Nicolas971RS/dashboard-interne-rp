@@ -3629,8 +3629,14 @@ async function cloturerBC(bcId,numBC){
   try{
     await spPatch('sites/RseauxPlus','Suivi_BC',bcId,{Statut:'Terminé'});
     const bc=(DATA.suivi||[]).find(i=>i.ID===bcId);
-    if(bc)bc.Statut='Terminé';
+    if(bc){
+      // Normaliser selon le format actuel du champ (string ou objet Choice)
+      if(bc.Statut&&typeof bc.Statut==='object')bc.Statut={...bc.Statut,Value:'Terminé'};
+      else bc.Statut='Terminé';
+    }
     renderAll();updateBadges();
+    // Forcer re-render du tableau RAL pour faire disparaître la ligne
+    if(typeof renderRALTable==='function')renderRALTable();
     toast(`✅ BC ${numBC} clôturé`);
   }catch(e){toast('❌ '+e.message);}
 }
