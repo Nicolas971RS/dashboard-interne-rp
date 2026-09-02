@@ -3583,7 +3583,17 @@ function getRALLignes(){
     const qc=parseFloat(f(l,'Quantit_x00e9_command_x00e9_e'))||0;
     const ql=parseFloat(f(l,'Quantit_x00e9_livr_x00e9_e'))||0;
     return{ligne:l,qc,ql,ral:qc-ql};
-  }).filter(x=>x.ral>0);
+  }).filter(x=>{
+    if(x.ral<=0)return false;
+    // Exclure les lignes dont le BC parent est Terminé ou soldé
+    const bcId=x.ligne.BCId||(x.ligne.BC&&x.ligne.BC.Id);
+    const bc=(DATA.suivi||[]).find(i=>i.ID===bcId||i.ID===parseInt(bcId));
+    if(!bc)return true; // BC non trouvé → on garde
+    const s=(getStatut(bc)||'').toLowerCase();
+    if(s==='terminé'||s==='annulé')return false;
+    if(estSolde(bc))return false;
+    return true;
+  });
 }
 
 function getCompletLignes(){
