@@ -4888,8 +4888,59 @@ async function submitAjoutDevis(){
 }
 
 // ── PATCH REST SharePoint ──
+// ═══ JOURNAL D'AUDIT — Journal_Actions (sites/BondeCommande) ═══
+// Écrit automatiquement à chaque PATCH/POST/DELETE significatif sur les 4 listes surveillées.
+// Ne bloque jamais l'opération réelle : toute erreur d'écriture du journal est avalée.
+const JOURNAL_LISTES_SUIVIES={
+  'Suivi_BC':{dataKey:'suivi'},
+  'Lignes_BC':{dataKey:'lignes'},
+  'Sessions_Scan':{dataKey:'sessionsScan'},
+  'Lignes_Scan':{dataKey:'lignesScan'}
+};
+const _trunc=(v,n=250)=>{const s=typeof v==='string'?v:JSON.stringify(v);return s&&s.length>n?s.substring(0,n-1)+'…':(s||'');};
+
+function _deduireNumBC(list,id,itemAvant){
+  try{
+    if(list==='Suivi_BC'){
+      const it=itemAvant||(DATA.suivi||[]).find(x=>x.ID===id);
+      return it?(it.Title||`BC-${id}`):`BC-${id}`;
+    }
+    if(list==='Lignes_BC'){
+      const l=itemAvant||(DATA.lignes||[]).find(x=>x.ID===id);
+      const bcId=l?.BCId||(l?.BC&&l.BC.Id);
+      const bc=(DATA.suivi||[]).find(x=>x.ID===bcId||x.ID===parseInt(bcId));
+      return bc?(bc.Title||`BC-${bcId}`):'';
+    }
+    return ''; // Sessions_Scan / Lignes_Scan — pas de lien BC direct fiable, on laisse vide
+  }catch(e){return '';}
+}
+
+async function logAction(typeAction,listeCible,idElement,champModifie,valeurAvant,valeurApres,details,numBC){
+  try{
+    const uname=sessionStorage.getItem('user_name')||'Inconnu';
+    await spPost('sites/BondeCommande','Journal_Actions',{
+      Title:_trunc(`${typeAction} ${listeCible} #${idElement}`,255),
+      Horodatage:new Date().toISOString(),
+      Utilisateur:_trunc(uname),
+      TypeAction:typeAction,
+      Liste_Cible:listeCible,
+      N_BC_Concerne:_trunc(numBC||''),
+      Champ_Modifie:_trunc(champModifie||''),
+      Valeur_Avant:_trunc(valeurAvant||''),
+      Valeur_Apres:_trunc(valeurApres||''),
+      Details:_trunc(details||'')
+    });
+  }catch(e){console.warn('[logAction] échec (non bloquant) —',e.message);}
+}
+
 async function spPatch(site,list,id,body){
   const url=`${C.spRoot}/${site}/_api/web/lists/getbytitle('${list}')/items(${id})`;
+  const _cfg=JOURNAL_LISTES_SUIVIES[list];
+  let _itemAvant=null,_avant=null;
+  if(_cfg){
+    _itemAvant=(DATA[_cfg.dataKey]||[]).find(x=>x.ID===id||x.ID===parseInt(id))||null;
+    if(_itemAvant){_avant={};Object.keys(body).forEach(k=>{_avant[k]=_itemAvant[k]});}
+  }
   const r=await fetch(url,{
     method:'POST',
     headers:{
@@ -4903,6 +4954,9 @@ async function spPatch(site,list,id,body){
   });
   if(r.status===401){sessionStorage.clear();location.reload();throw new Error('401');}
   if(!r.ok){const t=await r.text().catch(()=>'');throw new Error(`PATCH ${list}(${id}): HTTP ${r.status} — ${t.substring(0,200)}`);}
+  if(_cfg){
+    logAction('PATCH',list,id,Object.keys(body).join(', '),_avant,body,'',_deduireNumBC(list,id,_itemAvant)).catch(()=>{});
+  }
 }
 
 // ── POST REST SharePoint (création d'item) ──
@@ -4919,13 +4973,23 @@ async function spPost(site,list,body){
   });
   if(r.status===401){sessionStorage.clear();location.reload();throw new Error('401');}
   if(!r.ok){const t=await r.text().catch(()=>'');throw new Error(`POST ${list}: HTTP ${r.status} — ${t.substring(0,200)}`);}
-  return r.json();
+  const created=await r.json();
+  if(JOURNAL_LISTES_SUIVIES[list]){
+    const newId=created.Id??created.ID;
+    logAction('POST',list,newId,Object.keys(body).join(', '),'',body,'',_deduireNumBC(list,newId,body)).catch(()=>{});
+  }
+  return created;
 }
 
 // ── DELETE REST SharePoint ──
 async function spDelete(site,list,id){
+  const _cfg=JOURNAL_LISTES_SUIVIES[list];
+  const _itemAvant=_cfg?(DATA[_cfg.dataKey]||[]).find(x=>x.ID===id||x.ID===parseInt(id))||null:null;
   const url=`${C.spRoot}/${site}/_api/web/lists/getbytitle('${list}')/items(${id})`;
   await fetch(url,{method:'DELETE',headers:{'Authorization':`Bearer ${getToken()}`,'Accept':'application/json;odata=nometadata','IF-MATCH':'*','X-HTTP-Method':'DELETE'}});
+  if(_cfg){
+    logAction('DELETE',list,id,'',_itemAvant,'','',_deduireNumBC(list,id,_itemAvant)).catch(()=>{});
+  }
 }
 async function spAddAttachment(site,list,itemId,fileName,fileArrayBuffer){
   const safe=encodeURIComponent(fileName.replace(/['"]/g,'_'));
