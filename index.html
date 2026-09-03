@@ -1084,6 +1084,7 @@
             <option value="6">6 mois</option>
             <option value="3">3 mois</option>
             <option value="24">24 mois</option>
+            <option value="0">Mois actuel</option>
           </select>
           <button class="btn-refresh" onclick="renderAnalytics()">🔄 Recalculer</button>
         </div>
@@ -1110,10 +1111,10 @@
 
       <!-- KPI Synthèse -->
       <div class="kpi-row c4" id="kpi-analytics-row" style="margin-bottom:18px">
-        <div class="kc t"><div class="kl">📦 BCs total (12 mois)</div><div class="kv" id="an-total-bc">—</div><div class="ks">Bons de commande</div></div>
+        <div class="kc t"><div class="kl">📦 BCs total (<span id="an-periode-label1">12 mois</span>)</div><div class="kv" id="an-total-bc">—</div><div class="ks">Bons de commande</div></div>
         <div class="kc g"><div class="kl">✅ Taux facturation</div><div class="kv" id="an-taux-fact">—</div><div class="ks">BCs entièrement facturés</div></div>
         <div class="kc r"><div class="kl">⏱ Délai moyen réception</div><div class="kv" id="an-delai">—</div><div class="ks">Jours commande → réception</div></div>
-        <div class="kc a"><div class="kl">🔄 Taux retard fournisseur</div><div class="kv" id="an-retard">—</div><div class="ks">ETA dépassée sur 12 mois</div></div>
+        <div class="kc a"><div class="kl">🔄 Taux retard fournisseur</div><div class="kv" id="an-retard">—</div><div class="ks">ETA dépassée sur <span id="an-periode-label2">12 mois</span></div></div>
       </div>
 
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:14px">
@@ -2981,13 +2982,20 @@ function renderAnalytics(){
     getAllVendeurs().forEach(v=>{const o=document.createElement('option');o.value=v;o.textContent=v;avSel.appendChild(o);});
   }
 
-  const yN=new Date(now); yN.setMonth(yN.getMonth()-fPeriode);
+  const yN=new Date(now);
+  if(fPeriode===0){yN.setDate(1);yN.setHours(0,0,0,0);} // Mois actuel — depuis le 1er du mois en cours
+  else yN.setMonth(yN.getMonth()-fPeriode);
   const recent=suivi.filter(i=>{
     const d=f(i,'Dateder_x00e9_ception')||f(i,'DateLivraisonpr_x00e9_vue');
     if(!d||new Date(d)<yN)return false;
     if(fVendeur!=='all'&&f(i,'Vendeurencharge')!==fVendeur)return false;
     return true;
   });
+
+  // Libellés dynamiques de période
+  const periodeLabel=fPeriode===0?'ce mois-ci':`${fPeriode} mois`;
+  const pl1=document.getElementById('an-periode-label1');if(pl1)pl1.textContent=periodeLabel;
+  const pl2=document.getElementById('an-periode-label2');if(pl2)pl2.textContent=periodeLabel;
 
   // ── KPIs synthèse ──
   document.getElementById('an-total-bc').textContent=recent.length;
@@ -3054,17 +3062,25 @@ function renderAnalytics(){
 
   // ── Graphique 2 — Top clients (barres horizontales) ──
   const byClient={};
-  recent.forEach(i=>{const c=getClient(i)||'Inconnu';byClient[c]=(byClient[c]||0)+1;});
-  const topClients=Object.entries(byClient).sort((a,b)=>b[1]-a[1]).slice(0,10);
-  const maxC=topClients[0]?.[1]||1;
-  document.getElementById('chart-clients').innerHTML=topClients.map(([c,n])=>{
-    const pct=Math.round(n/maxC*100);
+  recent.forEach(i=>{
+    const c=getClient(i)||'Inconnu';
+    const m=parseFloat(f(i,'MontantHT','Montant_HT','MontantHTTotal')||0)||0;
+    if(!byClient[c])byClient[c]={n:0,montant:0};
+    byClient[c].n++;
+    byClient[c].montant+=m;
+  });
+  const topClients=Object.entries(byClient).sort((a,b)=>b[1].n-a[1].n).slice(0,10);
+  const maxC=topClients[0]?.[1].n||1;
+  document.getElementById('chart-clients').innerHTML=topClients.map(([c,d])=>{
+    const pct=Math.round(d.n/maxC*100);
+    const montantFmt=new Intl.NumberFormat('fr-FR',{style:'currency',currency:'EUR',minimumFractionDigits:0,maximumFractionDigits:0}).format(d.montant);
     return`<div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
       <div style="width:130px;font-size:11px;font-weight:600;color:var(--text-secondary);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex-shrink:0" title="${c}">${c}</div>
       <div style="flex:1;background:#eef1f6;border-radius:3px;height:16px;overflow:hidden">
         <div style="width:${pct}%;height:100%;background:var(--teal-mid);border-radius:3px;transition:width .4s"></div>
       </div>
-      <span style="font-size:11px;font-weight:700;color:var(--navy);width:24px;text-align:right">${n}</span>
+      <span style="font-size:11px;font-weight:700;color:var(--navy);width:22px;text-align:right">${d.n}</span>
+      <span style="font-size:10.5px;font-weight:600;color:var(--teal-mid);width:75px;text-align:right;flex-shrink:0" title="Montant total HT">${montantFmt}</span>
     </div>`;
   }).join('')||'<div style="padding:20px;color:var(--text-muted);font-size:12px">Aucune donnée</div>';
 
@@ -3104,7 +3120,8 @@ function renderAnalytics(){
       </div>`).join('')}`;
 
   // ── Tableau clients détaillé ──
-  const clientsDetail=Object.entries(byClient).sort((a,b)=>b[1]-a[1]).map(([c,total])=>{
+  const clientsDetail=Object.entries(byClient).sort((a,b)=>b[1].n-a[1].n).map(([c,d])=>{
+    const total=d.n;
     const bcs=recent.filter(i=>getClient(i)===c);
     const recus=bcs.filter(i=>getStatut(i)==='Reçu'||getEtatFact(i)==='Entièrement facturé').length;
     const enCours=bcs.filter(i=>getStatut(i)!=='Reçu'&&getStatut(i)!=='Annulé'&&getEtatFact(i)!=='Entièrement facturé').length;
