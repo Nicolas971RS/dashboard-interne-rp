@@ -4679,6 +4679,40 @@ function buildJournalFilters(){
   }
 }
 
+// Traduction des noms de champs SharePoint internes → libellés lisibles
+const CHAMP_LABELS={
+  'N_x00b0_FC':'N° FC','N_x00b0__FC':'N° FC','N_x00b0_BL':'N° BL',
+  'OData__x00c9_tatfacturation':'État facturation',
+  'StatutBCLivr_x00e9_etFC':'BC livré et facturé',
+  'R_x00e9_f_x00e9_rence':'Référence','Produit_R_x00e9_f_x00e9_rence':'Référence produit',
+  'Produit_x002f_D_x00e9_signation':'Désignation',
+  'Quantit_x00e9_command_x00e9_e':'Qté commandée','Quantit_x00e9_livr_x00e9_e':'Qté livrée',
+  'BLSign_x00e9_':'BL signé','Unit_x00e9_':'Unité',
+  'Dateder_x00e9_ception':'Date réception','DateLivraisonpr_x00e9_vue':'Date livraison prévue',
+  'Date_Enl_x00e8_vement':'Date enlèvement','Nom_Employ_x00e9_':'Nom employé',
+  'Vendeur_Assign_x00e9_':'Vendeur assigné','ID_Session_Scan':'Session Scan liée',
+  'Statut':'Statut','Vendeurencharge':'Vendeur en charge','Title':'Titre',
+  'Exclure_Suivi':'Exclu du suivi','Exclure_Scan':'Exclu du scan',
+  'Numero_BL':'N° BL','Preparation_Avance':'Préparation avancée',
+  'Quantite_Attendue':'Qté attendue','Quantite_Scannee':'Qté scannée',
+  'Client':'Client','Chantier':'Chantier','MontantHT':'Montant HT'
+};
+const traduireChamps=raw=>String(raw||'').split(',').map(c=>{
+  const k=c.trim();
+  return CHAMP_LABELS[k]||k;
+}).join(', ');
+// Tente de parser un JSON de valeurs {champ:val,...} et traduit les clés ; sinon renvoie tel quel
+const traduireValeurJSON=raw=>{
+  if(!raw||raw==='—')return raw||'—';
+  try{
+    const obj=JSON.parse(raw);
+    if(obj&&typeof obj==='object'){
+      return Object.entries(obj).map(([k,v])=>`${CHAMP_LABELS[k]||k}: ${v===null?'∅':v}`).join(' · ');
+    }
+  }catch(e){/* pas du JSON valide (probablement tronqué à 250 car.) — on affiche tel quel */}
+  return raw;
+};
+
 function renderJournal(){
   const all=DATA.journal||[];
   const q=(document.getElementById('search-journal')?.value||'').toLowerCase();
@@ -4710,9 +4744,9 @@ function renderJournal(){
         <td><span style="background:${badgeColor};color:white;border-radius:10px;padding:2px 8px;font-size:10.5px;font-weight:700">${type}</span></td>
         <td class="mono" style="font-size:11px">${f(j,'Liste_Cible')||'—'}</td>
         <td class="ref">${f(j,'N_BC_Concerne')||'—'}</td>
-        <td style="font-size:11px">${f(j,'Champ_Modifie')||'—'}</td>
-        <td style="font-size:10px;font-family:var(--font-mono);color:var(--text-muted);max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${(f(j,'Valeur_Avant')||'').replace(/"/g,'&quot;')}">${f(j,'Valeur_Avant')||'—'}</td>
-        <td style="font-size:10px;font-family:var(--font-mono);max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${(f(j,'Valeur_Apres')||'').replace(/"/g,'&quot;')}">${f(j,'Valeur_Apres')||'—'}</td>
+        <td style="font-size:11px">${traduireChamps(f(j,'Champ_Modifie'))||'—'}</td>
+        <td style="font-size:10px;font-family:var(--font-mono);color:var(--text-muted);max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${(f(j,'Valeur_Avant')||'').replace(/"/g,'&quot;')}">${traduireValeurJSON(f(j,'Valeur_Avant'))}</td>
+        <td style="font-size:10px;font-family:var(--font-mono);max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${(f(j,'Valeur_Apres')||'').replace(/"/g,'&quot;')}">${traduireValeurJSON(f(j,'Valeur_Apres'))}</td>
       </tr>`;
     }).join(''):'<tr class="empty-row"><td colspan="8">Aucune entrée ne correspond aux critères</td></tr>';
   }
