@@ -1110,11 +1110,12 @@
       </div>
 
       <!-- KPI Synthèse -->
-      <div class="kpi-row c4" id="kpi-analytics-row" style="margin-bottom:18px">
+      <div class="kpi-row c5" id="kpi-analytics-row" style="margin-bottom:18px">
         <div class="kc t"><div class="kl">📦 BCs total (<span id="an-periode-label1">12 mois</span>)</div><div class="kv" id="an-total-bc">—</div><div class="ks">Bons de commande</div></div>
         <div class="kc g"><div class="kl">✅ Taux facturation</div><div class="kv" id="an-taux-fact">—</div><div class="ks">BCs entièrement facturés</div></div>
         <div class="kc r"><div class="kl">⏱ Délai moyen réception</div><div class="kv" id="an-delai">—</div><div class="ks">Jours commande → réception</div></div>
         <div class="kc a"><div class="kl">🔄 Taux retard fournisseur</div><div class="kv" id="an-retard">—</div><div class="ks">ETA dépassée sur <span id="an-periode-label2">12 mois</span></div></div>
+        <div class="kc g"><div class="kl">💶 Montant facturé</div><div class="kv" id="an-montant-facture">—</div><div class="ks">Total HT — entièrement facturés</div></div>
       </div>
 
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:14px">
@@ -2999,8 +3000,11 @@ function renderAnalytics(){
 
   // ── KPIs synthèse ──
   document.getElementById('an-total-bc').textContent=recent.length;
-  const factures=recent.filter(i=>getEtatFact(i)==='Entièrement facturé').length;
+  const bcsFactures=recent.filter(i=>getEtatFact(i)==='Entièrement facturé');
+  const factures=bcsFactures.length;
   document.getElementById('an-taux-fact').textContent=recent.length?Math.round(factures/recent.length*100)+'%':'—';
+  const montantFacture=bcsFactures.reduce((s,i)=>s+(parseFloat(f(i,'MontantHT','Montant_HT','MontantHTTotal')||0)||0),0);
+  document.getElementById('an-montant-facture').textContent=new Intl.NumberFormat('fr-FR',{style:'currency',currency:'EUR',minimumFractionDigits:0,maximumFractionDigits:0}).format(montantFacture);
 
   // Délai moyen réception
   const avecDates=recent.filter(i=>f(i,'Dateder_x00e9_ception')&&f(i,'DateLivraisonpr_x00e9_vue'));
