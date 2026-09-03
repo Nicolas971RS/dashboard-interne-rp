@@ -506,7 +506,10 @@
           <button class="btn" id="bc-search-csv-btn" style="display:none" onclick="exportRechercheCSV()">⬇ CSV</button>
           <span style="font-size:11px;color:var(--text-muted);cursor:pointer;text-decoration:underline" onclick="clearRechercheGlobalBC()">← Retour aux accordéons</span>
         </div>
-        <div class="tc"><table>
+        <div id="bc-search-scrolltop" style="overflow-x:auto;overflow-y:hidden;height:14px" onscroll="document.getElementById('bc-search-tablewrap').scrollLeft=this.scrollLeft">
+          <div id="bc-search-scrolltop-inner" style="height:1px"></div>
+        </div>
+        <div class="tc" id="bc-search-tablewrap" onscroll="document.getElementById('bc-search-scrolltop').scrollLeft=this.scrollLeft"><table>
           <thead><tr><th>N° BC</th><th>Client</th><th>Chantier</th><th>N° Devis</th><th>N° BL</th><th>N° FC</th><th>Montant HT</th><th>Date réception</th><th>Vendeur</th><th>Statut</th><th>État fact.</th><th>Doc.</th><th>Actions</th></tr></thead>
           <tbody id="bc-search-body"><tr class="empty-row"><td colspan="13">Aucun résultat</td></tr></tbody>
         </table></div>
@@ -4745,8 +4748,8 @@ function renderJournal(){
         <td class="mono" style="font-size:11px">${f(j,'Liste_Cible')||'—'}</td>
         <td class="ref">${f(j,'N_BC_Concerne')||'—'}</td>
         <td style="font-size:11px">${traduireChamps(f(j,'Champ_Modifie'))||'—'}</td>
-        <td style="font-size:10px;font-family:var(--font-mono);color:var(--text-muted);max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${(f(j,'Valeur_Avant')||'').replace(/"/g,'&quot;')}">${traduireValeurJSON(f(j,'Valeur_Avant'))}</td>
-        <td style="font-size:10px;font-family:var(--font-mono);max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${(f(j,'Valeur_Apres')||'').replace(/"/g,'&quot;')}">${traduireValeurJSON(f(j,'Valeur_Apres'))}</td>
+        <td style="font-size:10px;font-family:var(--font-mono);color:var(--text-muted)"><div style="width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${(f(j,'Valeur_Avant')||'').replace(/"/g,'&quot;')}">${traduireValeurJSON(f(j,'Valeur_Avant'))}</div></td>
+        <td style="font-size:10px;font-family:var(--font-mono)"><div style="width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${(f(j,'Valeur_Apres')||'').replace(/"/g,'&quot;')}">${traduireValeurJSON(f(j,'Valeur_Apres'))}</div></td>
       </tr>`;
     }).join(''):'<tr class="empty-row"><td colspan="8">Aucune entrée ne correspond aux critères</td></tr>';
   }
@@ -6146,6 +6149,18 @@ function clearRechercheGlobalBC(){
   rechercheGlobalBC();
 }
 
+// Duplique une scrollbar horizontale au-dessus d'un tableau large, synchronisée avec le scroll réel.
+// Évite d'avoir à descendre en bas d'une longue liste de résultats pour scroller horizontalement.
+function _syncScrollBarTop(wrapId,innerId){
+  requestAnimationFrame(()=>{
+    const wrap=document.getElementById(wrapId);
+    const inner=document.getElementById(innerId);
+    if(!wrap||!inner)return;
+    const table=wrap.querySelector('table');
+    inner.style.width=(table?table.scrollWidth:0)+'px';
+  });
+}
+
 function rechercheGlobalBC(){
   buildSGVendeurs();
   const acc=document.getElementById('bc-accordeons');
@@ -6226,6 +6241,7 @@ function rechercheGlobalBC(){
 
   if(!items.length){
     body.innerHTML='<tr class="empty-row"><td colspan="11">Aucun BC trouvé — modifiez les critères</td></tr>';
+    _syncScrollBarTop('bc-search-tablewrap','bc-search-scrolltop-inner');
     return;
   }
 
@@ -6317,6 +6333,7 @@ function rechercheGlobalBC(){
 
   body.innerHTML=rows||(` <tr class="empty-row"><td colspan="13">Erreur rendu — actualisez</td></tr>`);
   if(items.length>150)body.innerHTML+=`<tr class="empty-row"><td colspan="13">... et ${items.length-150} autres — affinez les critères</td></tr>`;
+  _syncScrollBarTop('bc-search-tablewrap','bc-search-scrolltop-inner');
 }
 
 // ── Export CSV recherche globale ──
