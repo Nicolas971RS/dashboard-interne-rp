@@ -3773,38 +3773,73 @@ function renderRALTable(){
 
   const b=document.getElementById('ral-body');
   if(b){
-    b.innerHTML=enriched.length?enriched.map(x=>{
-      const l=x.ligne;
-      const bl=f(l,'BLSign_x00e9_')||'—';
-      const unite=f(l,'Unit_x00e9_')||'';
-      const jours=ralAnciennete(x);
-      const rowBg=jours===null?'':jours>=30?'background:rgba(254,226,226,.25);':jours>=15?'background:rgba(255,247,237,.35);':'';
-      return`<tr style="${rowBg}">
-        <td class="ref" style="cursor:pointer;color:var(--blue)" onclick="closePanel();openBCPanel(${x.info.bcId})">${x.info.numBC}</td>
-        <td class="mono" style="font-size:11px">${fmtDate(x.info.dateBC)}</td>
-        <td class="mono" style="text-align:center;font-weight:600">${f(l,'Title')||'—'}</td>
-        <td class="cname">${x.info.client}</td>
-        <td style="font-size:12px;color:var(--text-secondary)">${f(l,'Chantier')||'—'}</td>
-        <td class="mono">${f(l,'R_x00e9_f_x00e9_rence')||'—'}</td>
-        <td style="font-size:11.5px">${f(l,'Produit_x002f_D_x00e9_signation')||'—'}</td>
-        <td style="text-align:right;font-weight:600">${x.qc}</td>
-        <td style="text-align:right;color:var(--green)">${x.ql}</td>
-        <td style="text-align:right;font-weight:700;color:var(--red)">${x.ral}</td>
-        <td style="text-align:center;font-size:11px">${unite||'—'}</td>
-        <td style="font-size:10.5px;font-family:var(--font-mono)">${bl==='—'?'—':(()=>{
-          const items=parseBLHistorique(bl);
-          if(!items.length)return bl;
-          const total=items.reduce((s,x)=>s+(x.qte||0),0);
-          const lines=items.map(e=>e.qte!==null?`${e.bl} <span style="color:var(--text-muted)">(${e.qte})</span>`:`${e.bl}`).join('<br>');
-          const badge=total>0?`<span style="color:var(--green);font-weight:600"> = ${total}</span>`:'';
-          return`<span title="Détail des livraisons">${lines}${badge}</span>`;
-        })()}</td>
-        <td style="text-align:center">${ralAgePill(jours)}</td>
-        <td style="white-space:nowrap">
-          <button class="btn orange" style="height:24px;font-size:10.5px" onclick="openReceptionnerLigne(${l.ID},${x.info.bcId})">🔄 Mettre à jour</button>
-          ${jours>=15?`<button class="btn" style="height:24px;font-size:10px;margin-top:3px;color:var(--red);border-color:var(--red)" onclick="cloturerBC(${x.info.bcId},'${String(x.info.numBC).replace(/'/g,"\\'")}')">⛔ Clôturer</button>`:''}
+    // Regroupement par BC
+    const groupes=new Map();
+    enriched.forEach(x=>{
+      const key=x.info.bcId||x.info.numBC;
+      if(!groupes.has(key))groupes.set(key,{info:x.info,lignes:[]});
+      groupes.get(key).lignes.push(x);
+    });
+
+    // Tri : ancienneté décroissante, puis client alphabétique en cas d'égalité
+    const groupesArr=[...groupes.values()].map(g=>({
+      ...g,
+      joursMax:Math.max(...g.lignes.map(x=>ralAnciennete(x)??-1))
+    })).sort((a,b)=>{
+      if(b.joursMax!==a.joursMax)return b.joursMax-a.joursMax;
+      return String(a.info.client).localeCompare(String(b.info.client));
+    });
+
+    b.innerHTML=groupesArr.length?groupesArr.map(g=>{
+      const ralTotal=g.lignes.reduce((s,x)=>s+x.ral,0);
+      const chantiers=[...new Set(g.lignes.map(x=>f(x.ligne,'Chantier')).filter(Boolean))];
+      const chantierLabel=chantiers.length===1?chantiers[0]:chantiers.length>1?`${chantiers.length} chantiers`:'—';
+
+      const headerRow=`<tr class="ral-group-header" style="background:rgba(59,130,246,.07);font-weight:600">
+        <td colspan="5" style="cursor:pointer;color:var(--blue)" onclick="closePanel();openBCPanel(${g.info.bcId})">
+          ${g.info.numBC} — ${g.info.client} <span style="font-weight:400;color:var(--text-secondary)">· ${chantierLabel}</span>
+        </td>
+        <td colspan="4" style="text-align:right;font-weight:600">${g.lignes.length} art. · RAL ${ralTotal}</td>
+        <td colspan="2" style="text-align:center">${ralAgePill(g.joursMax)}</td>
+        <td colspan="3" style="text-align:right">
+          ${g.joursMax>=15?`<button class="btn" style="height:24px;font-size:10px;color:var(--red);border-color:var(--red)" onclick="cloturerBC(${g.info.bcId},'${String(g.info.numBC).replace(/'/g,"\\'")}')">⛔ Clôturer</button>`:''}
         </td>
       </tr>`;
+
+      const lignesRows=g.lignes.map(x=>{
+        const l=x.ligne;
+        const bl=f(l,'BLSign_x00e9_')||'—';
+        const unite=f(l,'Unit_x00e9_')||'';
+        const jours=ralAnciennete(x);
+        const rowBg=jours===null?'':jours>=30?'background:rgba(254,226,226,.2);':jours>=15?'background:rgba(255,247,237,.3);':'';
+        return`<tr style="${rowBg}">
+          <td></td>
+          <td class="mono" style="font-size:11px">${fmtDate(x.info.dateBC)}</td>
+          <td class="mono" style="text-align:center;font-weight:600">${f(l,'Title')||'—'}</td>
+          <td></td>
+          <td style="font-size:12px;color:var(--text-secondary)">${f(l,'Chantier')||'—'}</td>
+          <td class="mono">${f(l,'R_x00e9_f_x00e9_rence')||'—'}</td>
+          <td style="font-size:11.5px">${f(l,'Produit_x002f_D_x00e9_signation')||'—'}</td>
+          <td style="text-align:right;font-weight:600">${x.qc}</td>
+          <td style="text-align:right;color:var(--green)">${x.ql}</td>
+          <td style="text-align:right;font-weight:700;color:var(--red)">${x.ral}</td>
+          <td style="text-align:center;font-size:11px">${unite||'—'}</td>
+          <td style="font-size:10.5px;font-family:var(--font-mono)">${bl==='—'?'—':(()=>{
+            const items=parseBLHistorique(bl);
+            if(!items.length)return bl;
+            const total=items.reduce((s,x)=>s+(x.qte||0),0);
+            const lines=items.map(e=>e.qte!==null?`${e.bl} <span style="color:var(--text-muted)">(${e.qte})</span>`:`${e.bl}`).join('<br>');
+            const badge=total>0?`<span style="color:var(--green);font-weight:600"> = ${total}</span>`:'';
+            return`<span title="Détail des livraisons">${lines}${badge}</span>`;
+          })()}</td>
+          <td style="text-align:center">${ralAgePill(jours)}</td>
+          <td style="white-space:nowrap">
+            <button class="btn orange" style="height:24px;font-size:10.5px" onclick="openReceptionnerLigne(${l.ID},${x.info.bcId})">🔄 Mettre à jour</button>
+          </td>
+        </tr>`;
+      }).join('');
+
+      return headerRow+lignesRows;
     }).join(''):'<tr class="empty-row"><td colspan="14">Aucune ligne avec reste à livrer 🎉</td></tr>';
   }
 
