@@ -388,7 +388,7 @@
     <button class="tab" onclick="showTab('matin',this)">📊 Vue Matin</button>
     <button class="tab active" onclick="showTab('suivi',this)">📦 Suivi BC <span class="tab-badge g" id="badge-recu">0</span><span class="tab-badge r" id="badge-retard">0</span><span class="tab-badge r" id="badge-facture-eur" style="display:none"></span></button>
     <button class="tab" onclick="showTab('ral',this);renderRALTable()">🔀 Livraisons Partielles <span class="tab-badge a" id="badge-ral">0</span></button>
-    <button class="tab" onclick="showTab('prepscan',this);renderPreparations()">📦 Préparations Scan <span class="tab-badge a" id="badge-prepscan">0</span></button>
+    <button class="tab" onclick="showTab('prepscan',this);renderPreparations()">📦 Livraison Magasin <span class="tab-badge a" id="badge-prepscan">0</span></button>
     <button class="tab" onclick="showTab('dbc',this)">🧾 Demandes BC <span class="tab-badge r" id="badge-dbc">0</span></button>
     <button class="tab" onclick="showTab('devis',this)">📄 Devis <span class="tab-badge a" id="badge-devis">0</span></button>
     <button class="tab" onclick="showTab('analytics',this);renderAnalytics()">📈 Analytics</button>
@@ -799,7 +799,7 @@
     <!-- PRÉPARATIONS SCAN -->
     <div id="tab-prepscan" class="section-bloc">
       <div class="page-header">
-        <div><h1>BL en attente & Préparations Scan</h1><div class="sub">/sites/BondeCommande · Sessions_Scan · Portail terrain</div></div>
+        <div><h1>BL en attente & Livraison Magasin</h1><div class="sub">/sites/BondeCommande · Sessions_Scan · Portail terrain</div></div>
         <div style="display:flex;gap:8px">
           <button class="btn-refresh" data-label="1" style="background:var(--blue);color:white;border-color:var(--blue)" onclick="openEmissionBL()">➕ Nouveau BL ou FC à livrer</button>
           <button class="btn-refresh" onclick="loadAll()">🔄 Actualiser</button>
@@ -4748,8 +4748,8 @@ function renderJournal(){
         <td class="mono" style="font-size:11px">${f(j,'Liste_Cible')||'—'}</td>
         <td class="ref">${f(j,'N_BC_Concerne')||'—'}</td>
         <td style="font-size:11px">${traduireChamps(f(j,'Champ_Modifie'))||'—'}</td>
-        <td style="font-size:10px;font-family:var(--font-mono);color:var(--text-muted)"><div style="width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${(f(j,'Valeur_Avant')||'').replace(/"/g,'&quot;')}">${traduireValeurJSON(f(j,'Valeur_Avant'))}</div></td>
-        <td style="font-size:10px;font-family:var(--font-mono)"><div style="width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${(f(j,'Valeur_Apres')||'').replace(/"/g,'&quot;')}">${traduireValeurJSON(f(j,'Valeur_Apres'))}</div></td>
+        <td style="font-size:10px;font-family:var(--font-mono);color:var(--text-muted)"><div style="width:280px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${(f(j,'Valeur_Avant')||'').replace(/"/g,'&quot;')}">${traduireValeurJSON(f(j,'Valeur_Avant'))}</div></td>
+        <td style="font-size:10px;font-family:var(--font-mono)"><div style="width:280px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${(f(j,'Valeur_Apres')||'').replace(/"/g,'&quot;')}">${traduireValeurJSON(f(j,'Valeur_Apres'))}</div></td>
       </tr>`;
     }).join(''):'<tr class="empty-row"><td colspan="8">Aucune entrée ne correspond aux critères</td></tr>';
   }
@@ -5570,7 +5570,7 @@ function mAddLigneRow(){
 }
 
 async function mDeleteLigneRow(lineId){
-  const ok=await showConfirm('🗑️ Supprimer cette ligne ?','Cette ligne article sera définitivement supprimée du suivi RAL (et du côté Préparation Scan si elle y était synchronisée).','Supprimer','delete');
+  const ok=await showConfirm('🗑️ Supprimer cette ligne ?','Cette ligne article sera définitivement supprimée du suivi RAL (et du côté Livraison Magasin si elle y était synchronisée).','Supprimer','delete');
   if(!ok)return;
   const row=document.querySelector(`.m-ligne-existing[data-line-id="${lineId}"]`);
   const ref=row?.querySelector('.m-l-ref')?.value.trim()||'';
@@ -6024,8 +6024,8 @@ async function openTraiterModal(id,numBC,client){
       const dArr=fmtDate(body.Date_Arrivage_Attendu);
       return `${titre||numBC} — 📦 marqué en commande, sort du bloc jaune jusqu'au ${dArr}`;
     }
-    const suffixeLignes=lignesTouchees?` · ${lignesTouchees} article(s) enregistré(s)${sessionLiee?' (+ synchronisé côté Préparation Scan)':' (échec de synchronisation Préparation Scan — voir console)'}`
-      :(sessionCreee?' · BL ajouté à Préparation Scan':'');
+    const suffixeLignes=lignesTouchees?` · ${lignesTouchees} article(s) enregistré(s)${sessionLiee?' (+ synchronisé côté Livraison Magasin)':' (échec de synchronisation Livraison Magasin — voir console)'}`
+      :(sessionCreee?' · BL ajouté à Livraison Magasin':'');
 
     // Rappel BC soldé si N° BL renseigné et case non cochée
     const blRempli=!!(document.getElementById('m-bl')?.value.trim());
