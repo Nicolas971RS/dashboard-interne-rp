@@ -4662,7 +4662,9 @@ function exportRALCSV(){
 let _journalLoaded=false;
 async function loadJournal(){
   const b=document.getElementById('journal-body');
+  const btn=document.querySelector('#tab-journal .btn-refresh');
   if(b&&!_journalLoaded)b.innerHTML='<tr class="empty-row"><td colspan="8">⏳ Chargement du journal...</td></tr>';
+  if(btn){btn.disabled=true;btn.textContent='⏳';}
   try{
     const items=await spFetch('sites/BondeCommande','Journal_Actions','$select=*&$orderby=ID desc&$top=500');
     DATA.journal=items||[];
@@ -4671,6 +4673,8 @@ async function loadJournal(){
     renderJournal();
   }catch(e){
     if(b)b.innerHTML=`<tr class="empty-row"><td colspan="8">❌ Erreur de chargement : ${e.message}</td></tr>`;
+  }finally{
+    if(btn){btn.disabled=false;btn.textContent='🔄 Actualiser';}
   }
 }
 
