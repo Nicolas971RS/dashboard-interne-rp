@@ -4488,7 +4488,15 @@ function openSessionPanel(id){
     <div id="sp-save-wrap-${id}">
       ${lignes.length?`<button id="sp-save-btn-${id}" class="btn" style="height:26px;font-size:11px;margin-bottom:10px" onclick="sessionPanelSaveAll(${id})">💾 Enregistrer les modifications</button>`:''}
     </div>
-    <div class="tc" style="overflow-x:auto"><table style="table-layout:fixed;width:100%;min-width:320px">
+    ${(()=>{
+      // Le tableau de réconciliation (scanné vs attendu) fait doublon avec le formulaire
+      // d'édition tant qu'aucun scan n'a eu lieu — on ne l'affiche qu'une fois la
+      // préparation commencée (sinon il ne montre que du 0/attendu partout).
+      const dejaScan=f(s,'Date_Scan')||lignes.some(l=>Number(f(l,'Quantite_Scannee')||0)>0);
+      if(!dejaScan){
+        return `<div style="padding:10px 14px;background:#f4f6fa;border-radius:var(--radius-sm);font-size:11.5px;color:var(--text-muted)">📭 Pas encore scanné — le détail des écarts s'affichera ici une fois la préparation commencée par le magasinier.</div>`;
+      }
+      return `<div class="tc" style="overflow-x:auto"><table style="table-layout:fixed;width:100%;min-width:320px">
       <thead><tr>
         <th style="width:22%">Référence</th>
         <th style="width:38%">Désignation</th>
@@ -4497,6 +4505,7 @@ function openSessionPanel(id){
       </tr></thead>
       <tbody>${rows}</tbody>
     </table></div>`;
+    })()}`;
 
   openPanel(iconBLFC(f(s,'Numero_BL'))+' '+(f(s,'Numero_BL')||'BL'),html);
 }
