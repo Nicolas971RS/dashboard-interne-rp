@@ -6053,6 +6053,8 @@ function rechercheGlobalBC(){
           <button class="btn" onclick="openBCPanel(${i.ID})">Voir BC</button>
           <button class="btn green" onclick="openFacturerModal(${i.ID})">💰</button>
           <button class="btn navy" onclick="openTraiterModal(${i.ID})">🔧</button>
+          <button class="btn orange" onclick="openLivraisonPartielle(${i.ID})">🔀 Livraison Partielle</button>
+          <button class="btn btn-supprimer" title="Supprimer définitivement de SharePoint" onclick="supprimerBCParasite(${i.ID})">🗑 Supprimer</button>
         </div></td>
       </tr>`;
     }catch(e){
