@@ -392,6 +392,7 @@
     <button class="tab" onclick="showTab('dbc',this)">🧾 Demandes BC <span class="tab-badge r" id="badge-dbc">0</span></button>
     <button class="tab" onclick="showTab('devis',this)">📄 Devis <span class="tab-badge a" id="badge-devis">0</span></button>
     <button class="tab" onclick="showTab('analytics',this);renderAnalytics()">📈 Analytics</button>
+    <button class="tab" onclick="showTab('journal',this);loadJournal()">📜 Journal d'Audit</button>
   </div>
 
   <div class="main">
@@ -1155,6 +1156,52 @@
           <tbody id="analytics-vendeurs-body"><tr class="empty-row"><td colspan="6">—</td></tr></tbody>
         </table>
       </div>
+    </div>
+
+    <!-- JOURNAL D'AUDIT -->
+    <div id="tab-journal" class="section-bloc">
+      <div class="page-header">
+        <div><h1>Journal d'Audit</h1><div class="sub">/sites/BondeCommande · Journal_Actions · 500 entrées les plus récentes</div></div>
+        <div style="display:flex;gap:8px">
+          <button class="btn-refresh" onclick="loadJournal()">🔄 Actualiser</button>
+        </div>
+      </div>
+      <div class="kpi-row c3">
+        <div class="kc t"><div class="kl">📜 Actions journalisées</div><div class="kv" id="kpi-journal-count">—</div><div class="ks">Chargées (max 500)</div></div>
+        <div class="kc o"><div class="kl">📅 Aujourd'hui</div><div class="kv" id="kpi-journal-today">—</div><div class="ks">Depuis minuit</div></div>
+        <div class="kc r"><div class="kl">🗑 Suppressions</div><div class="kv" id="kpi-journal-delete">—</div><div class="ks">Toutes listes confondues</div></div>
+      </div>
+      <div style="background:var(--navy);border-radius:var(--radius);padding:14px 18px;margin-bottom:14px">
+        <div style="display:flex;align-items:center;gap:12px;margin-bottom:10px">
+          <span style="font-size:20px">🔍</span>
+          <input type="text" id="search-journal" placeholder="Recherche — N° BC, utilisateur, champ modifié..."
+            style="flex:1;background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.2);border-radius:var(--radius-sm);padding:9px 14px;font-size:13.5px;color:white;font-family:var(--font-body);outline:none"
+            oninput="renderJournal()">
+          <button class="btn" style="border-color:rgba(255,255,255,.3);color:rgba(255,255,255,.7);background:none;white-space:nowrap" onclick="document.getElementById('search-journal').value='';renderJournal()">✕ Effacer</button>
+        </div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:2px">
+          <select id="filter-liste-journal" onchange="renderJournal()" class="fs">
+            <option value="all">Toutes les listes</option>
+            <option value="Suivi_BC">Suivi_BC</option>
+            <option value="Lignes_BC">Lignes_BC</option>
+            <option value="Sessions_Scan">Sessions_Scan</option>
+            <option value="Lignes_Scan">Lignes_Scan</option>
+          </select>
+          <select id="filter-type-journal" onchange="renderJournal()" class="fs">
+            <option value="all">Tous les types</option>
+            <option value="PATCH">PATCH</option>
+            <option value="POST">POST</option>
+            <option value="DELETE">DELETE</option>
+          </select>
+          <select id="filter-user-journal" onchange="renderJournal()" class="fs"><option value="all">Tous les utilisateurs</option></select>
+          <button class="btn" style="border-color:rgba(255,255,255,.3);color:rgba(255,255,255,.7);background:none" onclick="exportJournalCSV()">⬇ CSV</button>
+          <span id="journal-count-label" style="font-size:11px;color:rgba(255,255,255,.5)"></span>
+        </div>
+      </div>
+      <div class="tc"><table>
+        <thead><tr><th>Horodatage</th><th>Utilisateur</th><th>Type</th><th>Liste</th><th>N° BC</th><th>Champ(s) modifié(s)</th><th>Avant</th><th>Après</th></tr></thead>
+        <tbody id="journal-body"><tr class="empty-row"><td colspan="8">Cliquez sur l'onglet pour charger le journal...</td></tr></tbody>
+      </table></div>
     </div>
   </div>
   <div style="text-align:center;padding:10px;font-size:10px;color:#aab;border-top:1px solid var(--border);">
@@ -4606,6 +4653,113 @@ function exportRALCSV(){
     {label:'RAL', fn:x=>x.ral},
     {label:'BL', fn:x=>f(x.ligne,'BLSign_x00e9_')||''},
   ], `livraisons_partielles_${new Date().toISOString().slice(0,10)}.csv`);
+}
+
+// ═══ JOURNAL D'AUDIT — chargement, rendu, export ═══
+let _journalLoaded=false;
+async function loadJournal(){
+  const b=document.getElementById('journal-body');
+  if(b&&!_journalLoaded)b.innerHTML='<tr class="empty-row"><td colspan="8">⏳ Chargement du journal...</td></tr>';
+  try{
+    const items=await spFetch('sites/BondeCommande','Journal_Actions','$select=*&$orderby=ID desc&$top=500');
+    DATA.journal=items||[];
+    _journalLoaded=true;
+    buildJournalFilters();
+    renderJournal();
+  }catch(e){
+    if(b)b.innerHTML=`<tr class="empty-row"><td colspan="8">❌ Erreur de chargement : ${e.message}</td></tr>`;
+  }
+}
+
+function buildJournalFilters(){
+  const selU=document.getElementById('filter-user-journal');
+  if(selU&&selU.options.length===1){
+    const users=[...new Set((DATA.journal||[]).map(j=>f(j,'Utilisateur')).filter(Boolean))].sort();
+    users.forEach(u=>{const o=document.createElement('option');o.value=u;o.textContent=u;selU.appendChild(o);});
+  }
+}
+
+function renderJournal(){
+  const all=DATA.journal||[];
+  const q=(document.getElementById('search-journal')?.value||'').toLowerCase();
+  const fL=document.getElementById('filter-liste-journal')?.value||'all';
+  const fT=document.getElementById('filter-type-journal')?.value||'all';
+  const fU=document.getElementById('filter-user-journal')?.value||'all';
+
+  let items=all.filter(j=>{
+    if(fL!=='all'&&f(j,'Liste_Cible')!==fL)return false;
+    if(fT!=='all'&&f(j,'TypeAction')!==fT)return false;
+    if(fU!=='all'&&f(j,'Utilisateur')!==fU)return false;
+    if(q){
+      const numBC=String(f(j,'N_BC_Concerne')||'').toLowerCase();
+      const user=String(f(j,'Utilisateur')||'').toLowerCase();
+      const champ=String(f(j,'Champ_Modifie')||'').toLowerCase();
+      if(!numBC.includes(q)&&!user.includes(q)&&!champ.includes(q))return false;
+    }
+    return true;
+  });
+
+  const b=document.getElementById('journal-body');
+  if(b){
+    b.innerHTML=items.length?items.map(j=>{
+      const type=f(j,'TypeAction')||'—';
+      const badgeColor=type==='DELETE'?'var(--red)':type==='POST'?'var(--green)':'var(--blue)';
+      return`<tr>
+        <td class="mono" style="font-size:11px;white-space:nowrap">${fmtDateHeure(f(j,'Horodatage'))}</td>
+        <td>${f(j,'Utilisateur')||'—'}</td>
+        <td><span style="background:${badgeColor};color:white;border-radius:10px;padding:2px 8px;font-size:10.5px;font-weight:700">${type}</span></td>
+        <td class="mono" style="font-size:11px">${f(j,'Liste_Cible')||'—'}</td>
+        <td class="ref">${f(j,'N_BC_Concerne')||'—'}</td>
+        <td style="font-size:11px">${f(j,'Champ_Modifie')||'—'}</td>
+        <td style="font-size:10px;font-family:var(--font-mono);color:var(--text-muted);max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${(f(j,'Valeur_Avant')||'').replace(/"/g,'&quot;')}">${f(j,'Valeur_Avant')||'—'}</td>
+        <td style="font-size:10px;font-family:var(--font-mono);max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${(f(j,'Valeur_Apres')||'').replace(/"/g,'&quot;')}">${f(j,'Valeur_Apres')||'—'}</td>
+      </tr>`;
+    }).join(''):'<tr class="empty-row"><td colspan="8">Aucune entrée ne correspond aux critères</td></tr>';
+  }
+
+  const kc=document.getElementById('kpi-journal-count');if(kc)kc.textContent=all.length;
+  const countLbl=document.getElementById('journal-count-label');if(countLbl)countLbl.textContent=items.length+' résultat'+(items.length>1?'s':'');
+  const todayStr=new Date().toISOString().slice(0,10);
+  const kToday=document.getElementById('kpi-journal-today');
+  if(kToday)kToday.textContent=all.filter(j=>String(f(j,'Horodatage')||'').slice(0,10)===todayStr).length;
+  const kDel=document.getElementById('kpi-journal-delete');
+  if(kDel)kDel.textContent=all.filter(j=>f(j,'TypeAction')==='DELETE').length;
+}
+
+function fmtDateHeure(d){
+  if(!d)return'—';
+  try{return new Date(d).toLocaleString('fr-FR',{day:'2-digit',month:'2-digit',year:'2-digit',hour:'2-digit',minute:'2-digit'});}catch(e){return'—';}
+}
+
+function exportJournalCSV(){
+  const all=DATA.journal||[];
+  const q=(document.getElementById('search-journal')?.value||'').toLowerCase();
+  const fL=document.getElementById('filter-liste-journal')?.value||'all';
+  const fT=document.getElementById('filter-type-journal')?.value||'all';
+  const fU=document.getElementById('filter-user-journal')?.value||'all';
+  let items=all.filter(j=>{
+    if(fL!=='all'&&f(j,'Liste_Cible')!==fL)return false;
+    if(fT!=='all'&&f(j,'TypeAction')!==fT)return false;
+    if(fU!=='all'&&f(j,'Utilisateur')!==fU)return false;
+    if(q){
+      const numBC=String(f(j,'N_BC_Concerne')||'').toLowerCase();
+      const user=String(f(j,'Utilisateur')||'').toLowerCase();
+      const champ=String(f(j,'Champ_Modifie')||'').toLowerCase();
+      if(!numBC.includes(q)&&!user.includes(q)&&!champ.includes(q))return false;
+    }
+    return true;
+  });
+  exportCSV(items,[
+    {label:'Horodatage', fn:j=>fmtDateHeure(f(j,'Horodatage'))},
+    {label:'Utilisateur', fn:j=>f(j,'Utilisateur')||''},
+    {label:'Type', fn:j=>f(j,'TypeAction')||''},
+    {label:'Liste', fn:j=>f(j,'Liste_Cible')||''},
+    {label:'N° BC', fn:j=>f(j,'N_BC_Concerne')||''},
+    {label:'Champ modifié', fn:j=>f(j,'Champ_Modifie')||''},
+    {label:'Avant', fn:j=>f(j,'Valeur_Avant')||''},
+    {label:'Après', fn:j=>f(j,'Valeur_Apres')||''},
+    {label:'Details', fn:j=>f(j,'Details')||''},
+  ], `journal_audit_${new Date().toISOString().slice(0,10)}.csv`);
 }
 
 
