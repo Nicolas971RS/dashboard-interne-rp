@@ -4427,26 +4427,32 @@ function openSessionPanel(id){
 
   const infoLine=(lib,val)=>`<div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--border-light)"><span style="color:var(--text-muted);font-size:12px">${lib}</span><span style="font-size:13px;font-weight:600">${val}</span></div>`;
 
-  let rows;
-  if(!lignes.length){
-    rows='<tr class="empty-row"><td colspan="4">Aucun article scanné sur cette session</td></tr>';
-  }else{
-    rows=lignes.map(l=>{
-      const att=Number(f(l,'Quantite_Attendue')||0);
-      const scan=Number(f(l,'Quantite_Scannee')||0);
-      const ecart=scan-att;
-      let ecartTxt;
-      if(ecart===0)ecartTxt='<span class="ctag g">Complet</span>';
-      else if(ecart<0)ecartTxt='<span class="ctag r">manque '+Math.abs(ecart)+'</span>';
-      else ecartTxt='<span class="ctag o">surplus '+ecart+'</span>';
-      return`<tr>
-        <td class="ref">${f(l,'Reference_Article')||'—'}</td>
-        <td style="font-size:12px">${f(l,'Designation')||'—'}</td>
-        <td style="text-align:center">${scan} / ${att}</td>
-        <td style="text-align:center">${ecartTxt}</td>
-      </tr>`;
-    }).join('');
-  }
+  // Le scan n'a pas encore commencé tant qu'aucune ligne n'a de quantité scannée
+  // et que la session n'a pas de date de scan — dans ce cas les colonnes Scanné/Écart
+  // n'ont rien à montrer et restent en "—".
+  const dejaScan=!!f(s,'Date_Scan')||lignes.some(l=>Number(f(l,'Quantite_Scannee')||0)>0);
+
+  const ecartCell=l=>{
+    if(!dejaScan)return'<span style="color:var(--text-muted);font-size:11px">—</span>';
+    const att=Number(f(l,'Quantite_Attendue')||0);
+    const scan=Number(f(l,'Quantite_Scannee')||0);
+    const ecart=scan-att;
+    if(ecart===0)return'<span class="ctag g">Complet</span>';
+    if(ecart<0)return'<span class="ctag r">manque '+Math.abs(ecart)+'</span>';
+    return'<span class="ctag o">surplus '+ecart+'</span>';
+  };
+
+  const rowsExist=lignes.map(l=>{
+    const scan=Number(f(l,'Quantite_Scannee')||0);
+    return`<tr class="sp-ligne-edit" data-lid="${l.ID}">
+      <td style="padding:4px 4px"><input class="sp-ref" value="${(f(l,'Reference_Article')||'').replace(/"/g,'&quot;')}" placeholder="Réf." style="width:100%;padding:4px 6px;border:1px solid var(--border);border-radius:5px;font-size:11.5px;font-family:var(--font-mono);box-sizing:border-box"></td>
+      <td style="padding:4px 4px"><input class="sp-design" value="${(f(l,'Designation')||'').replace(/"/g,'&quot;')}" placeholder="Désignation" style="width:100%;padding:4px 6px;border:1px solid var(--border);border-radius:5px;font-size:11.5px;box-sizing:border-box"></td>
+      <td style="padding:4px 4px"><input class="sp-qte" type="number" min="0" value="${f(l,'Quantite_Attendue')||0}" title="Qté attendue" style="width:100%;padding:4px 4px;border:1px solid var(--border);border-radius:5px;font-size:11.5px;text-align:center;box-sizing:border-box"></td>
+      <td style="text-align:center;font-size:12px;color:var(--text-muted)">${dejaScan?scan:'—'}</td>
+      <td style="text-align:center">${ecartCell(l)}</td>
+      <td style="text-align:center"><button onclick="sessionPanelDeleteLigne(${l.ID},${id})" title="Supprimer" style="background:none;border:none;color:var(--red);font-size:14px;cursor:pointer;padding:2px">🗑</button></td>
+    </tr>`;
+  }).join('');
 
   const canReopen=low.includes('terminée')||low.includes('terminee')||low.includes('écart')||low.includes('ecart')||low==='prête à livrer';
 
@@ -4476,36 +4482,21 @@ function openSessionPanel(id){
       <h2 style="font-size:14px;margin:0">📋 Articles ${isLiv?'livrés':'inventoriés'}</h2>
       <button class="btn navy" style="height:26px;font-size:11px" onclick="sessionPanelAddLigne(${id})">➕ Ajouter un article</button>
     </div>
-    <div id="sp-lignes-edit-${id}">
-      ${lignes.map(l=>`<div class="sp-ligne-edit" data-lid="${l.ID}" style="display:grid;grid-template-columns:1fr 1.6fr 60px 26px;gap:5px;margin-bottom:5px;align-items:center">
-        <input class="sp-ref" value="${(f(l,'Reference_Article')||'').replace(/"/g,'&quot;')}" placeholder="Réf." style="padding:4px 6px;border:1px solid var(--border);border-radius:5px;font-size:11.5px;font-family:var(--font-mono);box-sizing:border-box">
-        <input class="sp-design" value="${(f(l,'Designation')||'').replace(/"/g,'&quot;')}" placeholder="Désignation" style="padding:4px 6px;border:1px solid var(--border);border-radius:5px;font-size:11.5px;box-sizing:border-box">
-        <input class="sp-qte" type="number" min="0" value="${f(l,'Quantite_Attendue')||0}" title="Qté attendue" style="padding:4px 4px;border:1px solid var(--border);border-radius:5px;font-size:11.5px;text-align:center;box-sizing:border-box">
-        <button onclick="sessionPanelDeleteLigne(${l.ID},${id})" title="Supprimer" style="background:none;border:none;color:var(--red);font-size:14px;cursor:pointer;padding:2px">🗑</button>
-      </div>`).join('')}
-    </div>
-    <div id="sp-lignes-new-${id}"></div>
-    <div id="sp-save-wrap-${id}">
-      ${lignes.length?`<button id="sp-save-btn-${id}" class="btn" style="height:26px;font-size:11px;margin-bottom:10px" onclick="sessionPanelSaveAll(${id})">💾 Enregistrer les modifications</button>`:''}
-    </div>
-    ${(()=>{
-      // Le tableau de réconciliation (scanné vs attendu) fait doublon avec le formulaire
-      // d'édition tant qu'aucun scan n'a eu lieu — on ne l'affiche qu'une fois la
-      // préparation commencée (sinon il ne montre que du 0/attendu partout).
-      const dejaScan=f(s,'Date_Scan')||lignes.some(l=>Number(f(l,'Quantite_Scannee')||0)>0);
-      if(!dejaScan){
-        return `<div style="padding:10px 14px;background:#f4f6fa;border-radius:var(--radius-sm);font-size:11.5px;color:var(--text-muted)">📭 Pas encore scanné — le détail des écarts s'affichera ici une fois la préparation commencée par le magasinier.</div>`;
-      }
-      return `<div class="tc" style="overflow-x:auto"><table style="table-layout:fixed;width:100%;min-width:320px">
+    <div class="tc" style="overflow-x:auto"><table style="table-layout:fixed;width:100%;min-width:380px">
       <thead><tr>
-        <th style="width:22%">Référence</th>
-        <th style="width:38%">Désignation</th>
-        <th style="width:20%;text-align:center">${isLiv?'Livré / Prévu':'Scanné / Attendu'}</th>
-        <th style="width:20%;text-align:center">Écart</th>
+        <th style="width:18%">Référence</th>
+        <th style="width:30%">Désignation</th>
+        <th style="width:14%;text-align:center">Attendu</th>
+        <th style="width:12%;text-align:center">Scanné</th>
+        <th style="width:18%;text-align:center">Écart</th>
+        <th style="width:8%"></th>
       </tr></thead>
-      <tbody>${rows}</tbody>
-    </table></div>`;
-    })()}`;
+      <tbody id="sp-lignes-edit-${id}">${rowsExist||'<tr class="empty-row"><td colspan="6">Aucun article — utilisez « Ajouter un article »</td></tr>'}</tbody>
+      <tbody id="sp-lignes-new-${id}"></tbody>
+    </table></div>
+    <div id="sp-save-wrap-${id}" style="margin-top:10px">
+      ${lignes.length?`<button id="sp-save-btn-${id}" class="btn" style="height:26px;font-size:11px" onclick="sessionPanelSaveAll(${id})">💾 Enregistrer les modifications</button>`:''}
+    </div>`;
 
   openPanel(iconBLFC(f(s,'Numero_BL'))+' '+(f(s,'Numero_BL')||'BL'),html);
 }
@@ -4516,18 +4507,19 @@ function sessionPanelAddLigne(sessionId){
   const idx=_spNewCount++;
   const container=document.getElementById('sp-lignes-new-'+sessionId);
   if(!container)return;
-  const row=document.createElement('div');
+  const row=document.createElement('tr');
   row.className='sp-ligne-new';
   row.id='sp-new-'+idx;
-  row.style.cssText='display:grid;grid-template-columns:1fr 1.6fr 60px 26px;gap:5px;margin-bottom:5px;align-items:center;position:relative';
   row.innerHTML=`
-    <div style="position:relative">
+    <td style="padding:4px 4px;position:relative">
       <input class="sp-ref-new" id="sp-ns-${idx}" autocomplete="off" placeholder="Réf. ou produit..." style="width:100%;padding:4px 6px;border:1px solid var(--border);border-radius:5px;font-size:11.5px;font-family:var(--font-mono);box-sizing:border-box">
-      <div id="sp-nd-${idx}" style="position:absolute;top:100%;left:0;right:0;background:white;border:1px solid var(--border);border-radius:6px;box-shadow:0 4px 12px rgba(0,0,0,.12);z-index:9999;max-height:160px;overflow-y:auto;display:none"></div>
-    </div>
-    <input class="sp-design-new" placeholder="Désignation" style="padding:4px 6px;border:1px solid var(--border);border-radius:5px;font-size:11.5px;box-sizing:border-box">
-    <input class="sp-qte-new" type="number" min="0" placeholder="0" title="Qté attendue" style="padding:4px 4px;border:1px solid var(--border);border-radius:5px;font-size:11.5px;text-align:center;box-sizing:border-box">
-    <button onclick="document.getElementById('sp-new-${idx}').remove()" title="Retirer" style="background:none;border:none;color:var(--red);font-size:14px;cursor:pointer;padding:2px">✕</button>`;
+      <div id="sp-nd-${idx}" style="position:absolute;top:100%;left:4px;right:4px;background:white;border:1px solid var(--border);border-radius:6px;box-shadow:0 4px 12px rgba(0,0,0,.12);z-index:9999;max-height:160px;overflow-y:auto;display:none"></div>
+    </td>
+    <td style="padding:4px 4px"><input class="sp-design-new" placeholder="Désignation" style="width:100%;padding:4px 6px;border:1px solid var(--border);border-radius:5px;font-size:11.5px;box-sizing:border-box"></td>
+    <td style="padding:4px 4px"><input class="sp-qte-new" type="number" min="0" placeholder="0" title="Qté attendue" style="width:100%;padding:4px 4px;border:1px solid var(--border);border-radius:5px;font-size:11.5px;text-align:center;box-sizing:border-box"></td>
+    <td style="text-align:center;font-size:12px;color:var(--text-muted)">—</td>
+    <td style="text-align:center;font-size:12px;color:var(--text-muted)">—</td>
+    <td style="text-align:center"><button onclick="document.getElementById('sp-new-${idx}').remove()" title="Retirer" style="background:none;border:none;color:var(--red);font-size:14px;cursor:pointer;padding:2px">✕</button></td>`;
   container.appendChild(row);
 
   // Autocomplete catalogue
@@ -4565,7 +4557,7 @@ function sessionPanelAddLigne(sessionId){
     const btn=document.createElement('button');
     btn.id='sp-save-btn-'+sessionId;
     btn.className='btn';
-    btn.style.cssText='height:26px;font-size:11px;margin-bottom:10px';
+    btn.style.cssText='height:26px;font-size:11px';
     btn.textContent='💾 Enregistrer les modifications';
     btn.onclick=()=>sessionPanelSaveAll(sessionId);
     saveWrap.appendChild(btn);
