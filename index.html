@@ -4444,12 +4444,15 @@ function openSessionPanel(id){
 
   const rowsExist=lignes.map(l=>{
     const scan=Number(f(l,'Quantite_Scannee')||0);
+    const verr=f(l,'Verrouille');
+    const isVerr=verr===true||verr==='Oui'||verr==='1'||verr===1;
     return`<tr class="sp-ligne-edit" data-lid="${l.ID}">
       <td style="padding:4px 4px"><input class="sp-ref" value="${(f(l,'Reference_Article')||'').replace(/"/g,'&quot;')}" placeholder="Réf." style="width:100%;padding:4px 6px;border:1px solid var(--border);border-radius:5px;font-size:11.5px;font-family:var(--font-mono);box-sizing:border-box"></td>
       <td style="padding:4px 4px"><input class="sp-design" value="${(f(l,'Designation')||'').replace(/"/g,'&quot;')}" placeholder="Désignation" style="width:100%;padding:4px 6px;border:1px solid var(--border);border-radius:5px;font-size:11.5px;box-sizing:border-box"></td>
       <td style="padding:4px 4px"><input class="sp-qte" type="number" min="0" value="${f(l,'Quantite_Attendue')||0}" title="Qté attendue" style="width:100%;padding:4px 4px;border:1px solid var(--border);border-radius:5px;font-size:11.5px;text-align:center;box-sizing:border-box"></td>
       <td style="text-align:center;font-size:12px;color:var(--text-muted)">${dejaScan?scan:'—'}</td>
       <td style="text-align:center">${ecartCell(l)}</td>
+      <td style="text-align:center"><input type="checkbox" class="sp-verr" ${isVerr?'checked':''} title="Verrouiller — le magasinier ne pourra pas modifier cette ligne à la réouverture" style="width:16px;height:16px;cursor:pointer"></td>
       <td style="text-align:center"><button onclick="sessionPanelDeleteLigne(${l.ID},${id})" title="Supprimer" style="background:none;border:none;color:var(--red);font-size:14px;cursor:pointer;padding:2px">🗑</button></td>
     </tr>`;
   }).join('');
@@ -4471,7 +4474,7 @@ function openSessionPanel(id){
     ${canReopen?`
     <div style="background:#fff7ed;border:1px solid #fed7aa;border-radius:var(--radius-sm);padding:10px 14px;margin-bottom:14px;display:flex;justify-content:space-between;align-items:center;gap:12px">
       <div style="font-size:12px;color:#92400e">
-        <strong>Session clôturée</strong> — Réouvrir remet toutes les quantités à zéro et replace le BL en préparation pour correction.
+        <strong>Session clôturée</strong> — Réouvrir remet à zéro les quantités des lignes <strong>non verrouillées</strong> uniquement. Cochez 🔒 les lignes correctes avant de réouvrir pour éviter au magasinier de tout rescanner.
       </div>
       <button class="btn" onclick="reoouvrirSession(${id},\'${String(f(s,'Numero_BL')||'').replace(/'/g,"\\'")}\')"
         style="background:#d97706;color:white;border-color:#d97706;height:30px;font-size:11.5px;white-space:nowrap;flex-shrink:0">
@@ -4482,16 +4485,17 @@ function openSessionPanel(id){
       <h2 style="font-size:14px;margin:0">📋 Articles ${isLiv?'livrés':'inventoriés'}</h2>
       <button class="btn navy" style="height:26px;font-size:11px" onclick="sessionPanelAddLigne(${id})">➕ Ajouter un article</button>
     </div>
-    <div class="tc" style="overflow-x:auto"><table style="table-layout:fixed;width:100%;min-width:380px">
+    <div class="tc" style="overflow-x:auto"><table style="table-layout:fixed;width:100%;min-width:420px">
       <thead><tr>
-        <th style="width:18%">Référence</th>
-        <th style="width:30%">Désignation</th>
-        <th style="width:14%;text-align:center">Attendu</th>
-        <th style="width:12%;text-align:center">Scanné</th>
-        <th style="width:18%;text-align:center">Écart</th>
-        <th style="width:8%"></th>
+        <th style="width:16%">Référence</th>
+        <th style="width:26%">Désignation</th>
+        <th style="width:12%;text-align:center">Attendu</th>
+        <th style="width:11%;text-align:center">Scanné</th>
+        <th style="width:16%;text-align:center">Écart</th>
+        <th style="width:10%;text-align:center" title="Verrouiller la ligne pour le magasinier">🔒</th>
+        <th style="width:9%"></th>
       </tr></thead>
-      <tbody id="sp-lignes-edit-${id}">${rowsExist||'<tr class="empty-row"><td colspan="6">Aucun article — utilisez « Ajouter un article »</td></tr>'}</tbody>
+      <tbody id="sp-lignes-edit-${id}">${rowsExist||'<tr class="empty-row"><td colspan="7">Aucun article — utilisez « Ajouter un article »</td></tr>'}</tbody>
       <tbody id="sp-lignes-new-${id}"></tbody>
     </table></div>
     <div id="sp-save-wrap-${id}" style="margin-top:10px">
@@ -4519,6 +4523,7 @@ function sessionPanelAddLigne(sessionId){
     <td style="padding:4px 4px"><input class="sp-qte-new" type="number" min="0" placeholder="0" title="Qté attendue" style="width:100%;padding:4px 4px;border:1px solid var(--border);border-radius:5px;font-size:11.5px;text-align:center;box-sizing:border-box"></td>
     <td style="text-align:center;font-size:12px;color:var(--text-muted)">—</td>
     <td style="text-align:center;font-size:12px;color:var(--text-muted)">—</td>
+    <td style="text-align:center;font-size:11px;color:var(--text-muted)" title="Une ligne tout juste ajoutée ne peut pas être verrouillée">—</td>
     <td style="text-align:center"><button onclick="document.getElementById('sp-new-${idx}').remove()" title="Retirer" style="background:none;border:none;color:var(--red);font-size:14px;cursor:pointer;padding:2px">✕</button></td>`;
   container.appendChild(row);
 
@@ -4573,10 +4578,11 @@ async function sessionPanelSaveAll(sessionId){
     const ref=row.querySelector('.sp-ref')?.value.trim()||'';
     const design=row.querySelector('.sp-design')?.value.trim()||'';
     const qte=parseFloat(row.querySelector('.sp-qte')?.value)||0;
+    const verr=row.querySelector('.sp-verr')?.checked||false;
     try{
-      await spPatch('sites/BondeCommande','Lignes_Scan',lid,{Reference_Article:ref,Designation:design,Quantite_Attendue:qte});
+      await spPatch('sites/BondeCommande','Lignes_Scan',lid,{Reference_Article:ref,Designation:design,Quantite_Attendue:qte,Verrouille:verr});
       const l=(DATA.lignesScan||[]).find(x=>x.ID===lid);
-      if(l){l.Reference_Article=ref;l.Designation=design;l.Quantite_Attendue=qte;}
+      if(l){l.Reference_Article=ref;l.Designation=design;l.Quantite_Attendue=qte;l.Verrouille=verr;}
       saved++;
     }catch(e){console.warn('[sessionPanelSaveAll patch]',lid,e.message);}
   }
@@ -4611,25 +4617,36 @@ async function sessionPanelDeleteLigne(lineId, sessionId){
 
 // ── Réouverture d'une session clôturée pour correction ──
 async function reoouvrirSession(sessionId, numBL){
+  const lignesAvant=(DATA.lignesScan||[]).filter(l=>String(lineSessionId(l))===String(sessionId));
+  const nbVerr=lignesAvant.filter(l=>{const v=f(l,'Verrouille');return v===true||v==='Oui'||v==='1'||v===1;}).length;
+  const msgVerr=nbVerr>0?` ${nbVerr} ligne(s) verrouillée(s) conserveront leur quantité déjà scannée.`:'';
   const ok=await showConfirm(
     `Réouvrir le BL ${numBL} ?`,
-    `Toutes les quantités scannées seront remises à zéro. Le BL repassera en "BL Émis" et le magasinier pourra reprendre la livraison depuis le début.`,
+    `Les quantités scannées des lignes non verrouillées seront remises à zéro.${msgVerr} Le BL repassera en "BL Émis" et le magasinier pourra reprendre la livraison.`,
     'Réouvrir','ok'
   );
   if(!ok)return;
   try{
     // 1. Remettre le statut de la session à "BL Émis"
+    // Nb_Articles_Scannes repart du nombre de lignes verrouillées déjà scannées (pas 0),
+    // pour ne pas faire disparaître leur contribution des compteurs pendant la reprise.
+    const nbDejaScan=lignesAvant.filter(l=>{
+      const v=f(l,'Verrouille');
+      return (v===true||v==='Oui'||v==='1'||v===1)&&Number(f(l,'Quantite_Scannee')||0)>0;
+    }).length;
     await spPatch('sites/BondeCommande','Sessions_Scan',sessionId,{
       Statut:'BL Émis',
       Date_Scan:null,
       Magasinier:'',
-      Nb_Articles_Scannes:0,
+      Nb_Articles_Scannes:nbDejaScan,
       Nb_Ecarts:0
     });
 
-    // 2. Remettre toutes les Lignes_Scan à Quantite_Scannee = 0
-    const lignes=(DATA.lignesScan||[]).filter(l=>String(lineSessionId(l))===String(sessionId));
-    for(const l of lignes){
+    // 2. Remettre à zéro uniquement les lignes NON verrouillées
+    for(const l of lignesAvant){
+      const v=f(l,'Verrouille');
+      const isVerr=v===true||v==='Oui'||v==='1'||v===1;
+      if(isVerr)continue; // ligne verrouillée par le vendeur — on ne la touche pas
       try{
         await spPatch('sites/BondeCommande','Lignes_Scan',l.ID,{Quantite_Scannee:0});
         l.Quantite_Scannee=0;
@@ -4642,7 +4659,7 @@ async function reoouvrirSession(sessionId, numBL){
       sess.Statut='BL Émis';
       sess.Date_Scan=null;
       sess.Magasinier='';
-      sess.Nb_Articles_Scannes=0;
+      sess.Nb_Articles_Scannes=nbDejaScan;
       sess.Nb_Ecarts=0;
     }
 
@@ -4723,7 +4740,7 @@ const CHAMP_LABELS={
   'Statut':'Statut','Vendeurencharge':'Vendeur en charge','Title':'Titre',
   'Exclure_Suivi':'Exclu du suivi','Exclure_Scan':'Exclu du scan',
   'Numero_BL':'N° BL','Preparation_Avance':'Préparation avancée',
-  'Quantite_Attendue':'Qté attendue','Quantite_Scannee':'Qté scannée',
+  'Quantite_Attendue':'Qté attendue','Quantite_Scannee':'Qté scannée','Verrouille':'Verrouillé',
   'Client':'Client','Chantier':'Chantier','MontantHT':'Montant HT'
 };
 const traduireChamps=raw=>String(raw||'').split(',').map(c=>{
