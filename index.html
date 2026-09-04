@@ -4613,7 +4613,7 @@ function sessionPanelAddLigne(sessionId){
 }
 
 async function sessionPanelSaveAll(sessionId){
-  let saved=0;
+  let saved=0,errors=0,lastErr='';
   // Sauvegarder lignes existantes modifiées
   const existingRows=document.querySelectorAll(`#sp-lignes-edit-${sessionId} .sp-ligne-edit`);
   for(const row of existingRows){
@@ -4627,7 +4627,7 @@ async function sessionPanelSaveAll(sessionId){
       const l=(DATA.lignesScan||[]).find(x=>x.ID===lid);
       if(l){l.Reference_Article=ref;l.Designation=design;l.Quantite_Attendue=qte;l.Verrouille=verr;}
       saved++;
-    }catch(e){console.warn('[sessionPanelSaveAll patch]',lid,e.message);}
+    }catch(e){errors++;lastErr=e.message;console.warn('[sessionPanelSaveAll patch]',lid,e.message);}
   }
   // Sauvegarder nouvelles lignes
   const newRows=document.querySelectorAll(`#sp-lignes-new-${sessionId} .sp-ligne-new`);
@@ -4642,9 +4642,10 @@ async function sessionPanelSaveAll(sessionId){
       });
       if(created){const cn={...created,ID:created.ID??created.Id};DATA.lignesScan=[...(DATA.lignesScan||[]),cn];}
       saved++;
-    }catch(e){console.warn('[sessionPanelSaveAll post]',e.message);}
+    }catch(e){errors++;lastErr=e.message;console.warn('[sessionPanelSaveAll post]',e.message);}
   }
-  toast(saved?`✅ ${saved} article(s) enregistré(s)`:'Aucune modification à enregistrer');
+  if(errors>0)toast(`⚠️ ${saved} enregistré(s), ${errors} échec(s) — ${lastErr}`);
+  else toast(saved?`✅ ${saved} article(s) enregistré(s)`:'Aucune ligne à enregistrer');
 }
 
 async function sessionPanelDeleteLigne(lineId, sessionId){
