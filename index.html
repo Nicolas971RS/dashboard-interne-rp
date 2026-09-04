@@ -5724,7 +5724,9 @@ function renderChantiersList(){
   list.innerHTML=filtered.map(c=>{
     const clientNom=clientMap[c.ClientId]||'';
     const remarques=c.Remarques_x0020_projet||'';
-    const nbBC=(DATA.suivi||[]).filter(bc=>parseInt(bc.ProjetId||bc.Projet?.Id)===c.ID).length;
+    const bcsChantier=(DATA.suivi||[]).filter(bc=>parseInt(bc.ProjetId||bc.Projet?.Id)===c.ID);
+    const nbBC=bcsChantier.length;
+    const numsBC=bcsChantier.map(bc=>f(bc,'Title')||('BC-'+bc.ID));
     return`<div id="ch-card-${c.ID}" style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);padding:10px 14px;margin-bottom:6px">
       <div id="ch-view-${c.ID}" style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px">
         <div style="min-width:0">
@@ -5735,9 +5737,19 @@ function renderChantiersList(){
           </div>
         </div>
         <div style="display:flex;align-items:center;gap:8px;flex-shrink:0">
-          <span style="font-size:11px;color:var(--text-muted);white-space:nowrap">${nbBC} BC${nbBC>1?'s':''}</span>
+          <span style="font-size:11px;color:var(--blue);white-space:nowrap;cursor:pointer;text-decoration:underline" onclick="chToggleBCs(${c.ID})" id="ch-bctoggle-${c.ID}">${nbBC} BC${nbBC>1?'s':''} ▾</span>
           <button class="btn" style="height:26px;font-size:11px;padding:0 8px" onclick="chEditMode(${c.ID})">✏️ Modifier</button>
+          <button class="btn" style="height:26px;font-size:11px;padding:0 8px;color:var(--red);border-color:var(--red)" onclick="chDelete(${c.ID},${nbBC})">🗑</button>
         </div>
+      </div>
+      <div id="ch-bcs-${c.ID}" style="display:none;margin-top:8px;padding:8px 10px;background:#f4f6fa;border-radius:6px">
+        ${nbBC?`<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+          <span style="font-size:10.5px;font-weight:700;color:var(--text-muted)">N° BC RATTACHÉS</span>
+          <button class="btn" style="height:22px;font-size:10.5px;padding:0 8px" onclick="chCopyBCs(${c.ID})">📋 Copier</button>
+        </div>
+        <div style="display:flex;flex-wrap:wrap;gap:5px" id="ch-bcs-list-${c.ID}">
+          ${numsBC.map(n=>`<span class="ref" style="background:white;border:1px solid var(--border);border-radius:5px;padding:2px 8px;font-size:11px;cursor:pointer" onclick="closePanel();document.getElementById('search-global-bc').value='${String(n).replace(/'/g,"\\'")}';rechercheGlobalBC()">${n}</span>`).join('')}
+        </div>`:'<div style="font-size:11.5px;color:var(--text-muted)">Aucun BC rattaché — ce chantier peut être supprimé sans risque</div>'}
       </div>
       <div id="ch-edit-${c.ID}" style="display:none;margin-top:8px">
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:6px">
@@ -5819,6 +5831,53 @@ async function chSave(id){
     const ch=DATA.chantiers.find(c=>c.ID===id);
     if(ch){ch.Title=nom;if(clientId)ch.ClientId=parseInt(clientId);ch.Remarques_x0020_projet=rem;}
     toast('✅ Projet mis à jour');
+    renderChantiersList();
+  }catch(e){toast('❌ '+e.message);}
+}
+
+function chToggleBCs(id){
+  const box=document.getElementById(`ch-bcs-${id}`);
+  const toggle=document.getElementById(`ch-bctoggle-${id}`);
+  if(!box)return;
+  const open=box.style.display!=='none';
+  box.style.display=open?'none':'block';
+  if(toggle)toggle.textContent=toggle.textContent.replace(open?'▴':'▾',open?'▾':'▴');
+}
+
+function chCopyBCs(id){
+  const chips=document.querySelectorAll(`#ch-bcs-list-${id} span`);
+  const nums=[...chips].map(el=>el.textContent.trim());
+  if(!nums.length){toast('Aucun BC à copier');return;}
+  const txt=nums.join(', ');
+  if(navigator.clipboard?.writeText){
+    navigator.clipboard.writeText(txt).then(()=>toast(`📋 ${nums.length} N° BC copié(s)`)).catch(()=>toast('❌ Copie impossible'));
+  }else{
+    const ta=document.createElement('textarea');ta.value=txt;document.body.appendChild(ta);ta.select();
+    try{document.execCommand('copy');toast(`📋 ${nums.length} N° BC copié(s)`);}catch(e){toast('❌ Copie impossible');}
+    ta.remove();
+  }
+}
+
+async function chDelete(id,nbBC){
+  if(nbBC>0){
+    await showConfirm(
+      '⛔ Suppression impossible',
+      `Ce chantier a encore ${nbBC} BC rattaché${nbBC>1?'s':''}. Réaffectez-les d'abord vers le bon chantier (bouton Modifier sur chaque BC), puis revenez supprimer celui-ci une fois vide.`,
+      'Compris','ok'
+    );
+    return;
+  }
+  const ch=DATA.chantiers.find(c=>c.ID===id);
+  const ok=await showConfirm(
+    `🗑️ Supprimer le chantier "${ch?.Title||id}" ?`,
+    `Ce chantier n'a aucun BC rattaché. Cette action est définitive.`,
+    'Supprimer','delete'
+  );
+  if(!ok)return;
+  try{
+    await spDelete('sites/RseauxPlus','Chantiers',id);
+    DATA.chantiers=(DATA.chantiers||[]).filter(c=>c.ID!==id);
+    toast('✅ Chantier supprimé');
     renderChantiersList();
   }catch(e){toast('❌ '+e.message);}
 }
