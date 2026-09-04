@@ -5369,6 +5369,47 @@ function toast(msg,type='ok'){
   setTimeout(()=>{t.style.opacity='0';setTimeout(()=>t.remove(),300);},6000);
 }
 
+// ── Bannière interactive "BC soldé ?" — proposée après Traiter si un N°BL est
+// renseigné mais que la case BC soldé n'a pas été cochée. Oui = patch direct
+// (case déjà fermée à ce stade, pas de checkbox visible à cocher) ;
+// Non = rappel de créer une Livraison Partielle pour ce reste à livrer.
+function bannerBCSolde(id,numBC){
+  let host=document.getElementById('rp-toasts');
+  if(!host){
+    host=document.createElement('div');
+    host.id='rp-toasts';
+    host.style.cssText='position:fixed;top:66px;right:18px;z-index:12000;display:flex;flex-direction:column;gap:8px;max-width:380px';
+    document.body.appendChild(host);
+  }
+  const t=document.createElement('div');
+  t.id='bc-solde-banner-'+id;
+  t.style.cssText='background:#fff7ed;border:1px solid #d97706;border-left:4px solid #d97706;color:#92400e;border-radius:7px;padding:12px 15px;font-size:13px;font-weight:500;line-height:1.45;box-shadow:0 4px 16px rgba(10,31,61,.16)';
+  t.innerHTML=`
+    <div style="margin-bottom:8px">💡 <strong>${numBC}</strong> — entièrement livré et facturé ?</div>
+    <div style="display:flex;gap:6px">
+      <button onclick="bcSoldeBannerOui(${id},'${String(numBC).replace(/'/g,"\\'")}')" style="flex:1;background:#d97706;color:white;border:none;border-radius:5px;padding:7px 8px;font-size:12px;font-weight:700;cursor:pointer">✅ Oui</button>
+      <button onclick="bcSoldeBannerNon(${id},'${String(numBC).replace(/'/g,"\\'")}')" style="flex:1;background:white;color:#92400e;border:1px solid #d97706;border-radius:5px;padding:7px 8px;font-size:12px;font-weight:700;cursor:pointer">◻ Non</button>
+    </div>`;
+  host.appendChild(t);
+  // Pas d'auto-fermeture : on attend un choix explicite de l'utilisateur.
+}
+
+async function bcSoldeBannerOui(id,numBC){
+  document.getElementById('bc-solde-banner-'+id)?.remove();
+  try{
+    await spPatch('sites/RseauxPlus','Suivi_BC',id,{StatutBCLivr_x00e9_etFC:true});
+    const it=(DATA.suivi||[]).find(x=>x.ID===id);
+    if(it)it.StatutBCLivr_x00e9_etFC=true;
+    renderAll();updateBadges();
+    toast(`✅ ${numBC} marqué soldé`);
+  }catch(e){toast('❌ '+e.message);}
+}
+
+function bcSoldeBannerNon(id,numBC){
+  document.getElementById('bc-solde-banner-'+id)?.remove();
+  toast(`📦 Pensez à créer une Livraison Partielle pour ${numBC} si le reste à livrer n'est pas terminé.`,'warn');
+}
+
 // ── Protection anti-perte de saisie ──
 // Empreinte de tous les champs d'un conteneur : sert à détecter si l'utilisateur
 // a commencé à saisir avant de fermer la fenêtre.
@@ -6177,7 +6218,7 @@ async function openTraiterModal(id,numBC,client){
     const blRempli=!!(document.getElementById('m-bl')?.value.trim());
     const soldeCoche=document.getElementById('m-solde')?.checked;
     if(blRempli&&!soldeCoche){
-      setTimeout(()=>toast('💡 Rappel : si ce BC est entièrement livré et facturé, pensez à cocher "BC soldé" dans Traiter.','warn'),800);
+      setTimeout(()=>bannerBCSolde(id,titre||numBC),800);
     }
 
     if(!champs.length)return `${titre||numBC} —${suffixeLignes||' aucune modification BC'}`;
