@@ -4411,6 +4411,41 @@ function renderLivres(){
   }).join(''):'<tr class="empty-row"><td colspan="7">Aucun BL livré pour le moment</td></tr>';
 }
 
+function sessionPanelEditClient(id){
+  const line=document.getElementById('sp-client-line-'+id);
+  if(!line)return;
+  const s=(DATA.sessionsScan||[]).find(x=>x.ID===id);
+  const current=(f(s,'Client')||'').replace(/"/g,'&quot;');
+  const clientNames=[...new Set(Object.values(DATA.clients||{}))].sort();
+  line.outerHTML=`<div id="sp-client-line-${id}" style="padding:6px 0;border-bottom:1px solid var(--border-light)">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:5px">
+      <span style="color:var(--text-muted);font-size:12px">Client</span>
+    </div>
+    <div style="display:flex;gap:6px">
+      <input id="sp-client-input-${id}" list="sp-client-dl-${id}" value="${current}" style="flex:1;padding:5px 8px;border:1px solid var(--border);border-radius:5px;font-size:12.5px;box-sizing:border-box">
+      <datalist id="sp-client-dl-${id}">${clientNames.map(c=>`<option value="${c.replace(/"/g,'&quot;')}">`).join('')}</datalist>
+      <button onclick="sessionPanelSaveClient(${id})" class="btn" style="height:28px;font-size:11px;padding:0 10px">✓</button>
+      <button onclick="openSessionPanel(${id})" class="btn" style="height:28px;font-size:11px;padding:0 10px;color:var(--text-muted)">✕</button>
+    </div>
+  </div>`;
+  document.getElementById('sp-client-input-'+id)?.focus();
+}
+
+async function sessionPanelSaveClient(id){
+  const inp=document.getElementById('sp-client-input-'+id);
+  if(!inp)return;
+  const val=inp.value.trim();
+  if(!val){toast('❌ Le client ne peut pas être vide');return;}
+  try{
+    await spPatch('sites/BondeCommande','Sessions_Scan',id,{Client:val});
+    const s=(DATA.sessionsScan||[]).find(x=>x.ID===id);
+    if(s)s.Client=val;
+    toast(`✅ Client mis à jour — ${val}`);
+    openSessionPanel(id);
+    renderPreparations();
+  }catch(e){toast('❌ '+e.message);}
+}
+
 function openSessionPanel(id){
   const all=DATA.sessionsScan||[];
   const s=all.find(x=>x.ID===id);
@@ -4459,10 +4494,18 @@ function openSessionPanel(id){
 
   const canReopen=low.includes('terminée')||low.includes('terminee')||low.includes('écart')||low.includes('ecart')||low==='prête à livrer';
 
+  const clientLineView=(id,clientVal)=>`<div id="sp-client-line-${id}" style="display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-bottom:1px solid var(--border-light)">
+    <span style="color:var(--text-muted);font-size:12px">Client</span>
+    <span style="display:flex;align-items:center;gap:8px">
+      <span style="font-size:13px;font-weight:600">${clientVal||'—'}</span>
+      <button onclick="sessionPanelEditClient(${id})" title="Modifier le client" style="background:none;border:none;color:var(--blue);font-size:12px;cursor:pointer;padding:2px">✏️</button>
+    </span>
+  </div>`;
+
   const html=`
     <div style="margin-bottom:16px">
       ${infoLine('N° BL ou FC',iconBLFC(f(s,'Numero_BL'))+' '+(f(s,'Numero_BL')||'—'))}
-      ${isLiv?infoLine('Client',f(s,'Client')||'—'):''}
+      ${isLiv?clientLineView(id,f(s,'Client')):''}
       ${infoLine('Type',type)}
       ${infoLine('Vendeur',f(s,'Vendeur_Emetteur')||'—')}
       ${infoLine('Magasinier',f(s,'Magasinier')||'—')}
