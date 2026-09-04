@@ -1873,6 +1873,28 @@ function getBLAFacturer(){
   }).sort((a,b)=>daysSince(f(b,'DateBL')||f(b,'Dateder_x00e9_ception'))-daysSince(f(a,'DateBL')||f(a,'Dateder_x00e9_ception')));
 }
 
+// 🟢 BC dont le BL est rempli, le Reste à Livrer réellement à zéro sur toutes ses
+// lignes, mais qui n'a jamais été coché "BC soldé" — proposé à confirmation.
+// On exige RAL=0 (pas juste "BL rempli") pour ne pas remonter des BC encore en
+// cours et noyer le bloc sous des faux positifs.
+function getBCASolder(){
+  return DATA.suivi.filter(i=>{
+    const bl=f(i,'N_x00b0_BL');
+    if(!bl||!String(bl).trim())return false;
+    if(estSolde(i))return false;
+    if(estIgnore(i))return false;
+    if(getStatut(i)==='Annulé')return false;
+    const lignesBC=(DATA.lignes||[]).filter(l=>parseInt(l.BCId)===i.ID);
+    if(!lignesBC.length)return false;
+    const ralRestant=lignesBC.some(l=>{
+      const qc=parseFloat(f(l,'Quantit_x00e9_command_x00e9_e'))||0;
+      const ql=parseFloat(f(l,'Quantit_x00e9_livr_x00e9_e'))||0;
+      return(qc-ql)>0;
+    });
+    return!ralRestant;
+  }).sort((a,b)=>daysSince(f(b,'Dateder_x00e9_ception'))-daysSince(f(a,'Dateder_x00e9_ception')));
+}
+
 // Les BC finissant par -A, -B, -C… sont des copies en attente de la prochaine
 // livraison : le vendeur ira les chercher le moment venu, ils n'ont rien à faire
 // dans la liste des BC à compléter.
@@ -2062,8 +2084,18 @@ function getRetraitDepasse(){
   }).sort((a,b)=>daysLate(f(b,'DateLivraisonpr_x00e9_vue'))-daysLate(f(a,'DateLivraisonpr_x00e9_vue')));
 }
 
+async function soldeInlineOui(id,numBC){
+  try{
+    await spPatch('sites/RseauxPlus','Suivi_BC',id,{StatutBCLivr_x00e9_etFC:true});
+    const it=(DATA.suivi||[]).find(x=>x.ID===id);
+    if(it)it.StatutBCLivr_x00e9_etFC=true;
+    renderAll();updateBadges();
+    toast(`✅ ${numBC} marqué soldé`);
+  }catch(e){toast('❌ '+e.message);}
+}
+
 function renderBandeauPriorite(){
-  const aFact=getBLAFacturer(),aComp=getBCACompleter(),sansBL=getBCSansBL(),retrait=getRetraitDepasse();
+  const aFact=getBLAFacturer(),aComp=getBCACompleter(),sansBL=getBCSansBL(),retrait=getRetraitDepasse(),aSolder=getBCASolder();
   const host=document.getElementById('bandeau-priorite');
   if(!host)return;
 
@@ -2199,8 +2231,30 @@ function renderBandeauPriorite(){
       </tr>`;}).join('')}</tbody></table></div>
     ${retrait.length>40?`<div style="font-size:11px;color:var(--text-muted);margin-top:6px">Les 40 plus en retard sur ${retrait.length}.</div>`:''}`;
 
+  // ── Bloc 5 : BC livré (RAL=0) mais jamais confirmé "soldé" ──
+  const htmlSolde=`<div style="font-size:11.5px;color:var(--text-muted);margin-bottom:8px">
+      ✅ Livraison terminée sur ces BC (reste à livrer = 0) — confirme si la facturation l'est aussi.
+    </div>
+    <div class="tc" style="max-height:290px;overflow-y:auto"><table><thead><tr>
+      <th>N° BC</th><th>Client</th><th>N° BL</th><th>Montant HT</th><th>Vendeur</th><th style="min-width:190px;text-align:center">Entièrement facturé ?</th>
+    </tr></thead><tbody>${aSolder.slice(0,40).map(i=>{
+      const numBC=f(i,'Title')||('BC-'+i.ID);
+      return`<tr id="solde-row-${i.ID}">
+        <td style="font-family:var(--font-mono);font-weight:600">${numBC}</td>
+        <td>${getClient(i)}</td>
+        <td style="font-family:var(--font-mono);font-size:11.5px">${f(i,'N_x00b0_BL')||'—'}</td>
+        <td style="font-family:var(--font-mono);font-weight:600">${fmtMoney(montantBC(i))}</td>
+        <td style="font-size:11.5px">${f(i,'Vendeurencharge')||'—'}</td>
+        <td><div style="display:flex;gap:5px;justify-content:center">
+          <button class="btn green" style="height:27px;font-size:11px" onclick="soldeInlineOui(${i.ID},'${String(numBC).replace(/'/g,"\\'")}')">✅ Oui</button>
+          <button class="btn btn-archiver" style="height:27px;font-size:11px" title="Pas encore facturé — retire ce BC de ce bloc (reste suivi dans « BL livrés à facturer »)" onclick="ignorerBC(${i.ID})">◻ Non</button>
+        </div></td>
+      </tr>`;}).join('')}</tbody></table></div>
+    ${aSolder.length>40?`<div style="font-size:11px;color:var(--text-muted);margin-top:6px">Les 40 plus anciens sur ${aSolder.length}.</div>`:''}`;
+
   const contenu=
     bloc('fact','var(--red)','#ffebee','#ffcdd2','💰 BL livrés à facturer',`Depuis plus de ${SEUIL_FACTURATION} jours`,aFact.length,totalMontant(aFact),htmlFact)+
+    bloc('solde','var(--green)','var(--green-light)','#b7dfc0','✅ BC livrés — à confirmer soldé','Reste à livrer = 0, facturation à confirmer',aSolder.length,totalMontant(aSolder),htmlSolde)+
     bloc('retrait','#c2410c','#fff1e6','#fdba8c','📞 Retrait client en retard','Date de livraison dépassée, à relancer',retrait.length,totalMontant(retrait),htmlRetrait)+
     bloc('comp','var(--amber)','var(--amber-light)','#ffe0a3','✏️ BC à compléter','N° BC, client ou montant manquant',aComp.length,null,htmlComp)+
     bloc('nobl','#8a6d00','#fffbe6','#ffe9a8','📦 BC reçus, non retirés',`Depuis plus de ${SEUIL_RETRAIT} jours`,sansBL.length,totalMontant(sansBL),htmlSansBL);
@@ -5369,46 +5423,8 @@ function toast(msg,type='ok'){
   setTimeout(()=>{t.style.opacity='0';setTimeout(()=>t.remove(),300);},6000);
 }
 
-// ── Bannière interactive "BC soldé ?" — proposée après Traiter si un N°BL est
-// renseigné mais que la case BC soldé n'a pas été cochée. Oui = patch direct
-// (case déjà fermée à ce stade, pas de checkbox visible à cocher) ;
-// Non = rappel de créer une Livraison Partielle pour ce reste à livrer.
-function bannerBCSolde(id,numBC){
-  let host=document.getElementById('rp-toasts');
-  if(!host){
-    host=document.createElement('div');
-    host.id='rp-toasts';
-    host.style.cssText='position:fixed;top:66px;right:18px;z-index:12000;display:flex;flex-direction:column;gap:8px;max-width:380px';
-    document.body.appendChild(host);
-  }
-  const t=document.createElement('div');
-  t.id='bc-solde-banner-'+id;
-  t.style.cssText='background:#fff7ed;border:1px solid #d97706;border-left:4px solid #d97706;color:#92400e;border-radius:7px;padding:12px 15px;font-size:13px;font-weight:500;line-height:1.45;box-shadow:0 4px 16px rgba(10,31,61,.16)';
-  t.innerHTML=`
-    <div style="margin-bottom:8px">💡 <strong>${numBC}</strong> — entièrement livré et facturé ?</div>
-    <div style="display:flex;gap:6px">
-      <button onclick="bcSoldeBannerOui(${id},'${String(numBC).replace(/'/g,"\\'")}')" style="flex:1;background:#d97706;color:white;border:none;border-radius:5px;padding:7px 8px;font-size:12px;font-weight:700;cursor:pointer">✅ Oui</button>
-      <button onclick="bcSoldeBannerNon(${id},'${String(numBC).replace(/'/g,"\\'")}')" style="flex:1;background:white;color:#92400e;border:1px solid #d97706;border-radius:5px;padding:7px 8px;font-size:12px;font-weight:700;cursor:pointer">◻ Non</button>
-    </div>`;
-  host.appendChild(t);
-  // Pas d'auto-fermeture : on attend un choix explicite de l'utilisateur.
-}
-
-async function bcSoldeBannerOui(id,numBC){
-  document.getElementById('bc-solde-banner-'+id)?.remove();
-  try{
-    await spPatch('sites/RseauxPlus','Suivi_BC',id,{StatutBCLivr_x00e9_etFC:true});
-    const it=(DATA.suivi||[]).find(x=>x.ID===id);
-    if(it)it.StatutBCLivr_x00e9_etFC=true;
-    renderAll();updateBadges();
-    toast(`✅ ${numBC} marqué soldé`);
-  }catch(e){toast('❌ '+e.message);}
-}
-
-function bcSoldeBannerNon(id,numBC){
-  document.getElementById('bc-solde-banner-'+id)?.remove();
-  toast(`📦 Pensez à créer une Livraison Partielle pour ${numBC} si le reste à livrer n'est pas terminé.`,'warn');
-}
+// ── Bloc interactif "BC soldé ?" — maintenant intégré au bandeau permanent
+// (voir getBCASolder / soldeInlineOui), plus de popup ponctuel ici.
 
 // ── Protection anti-perte de saisie ──
 // Empreinte de tous les champs d'un conteneur : sert à détecter si l'utilisateur
@@ -6214,12 +6230,10 @@ async function openTraiterModal(id,numBC,client){
     const suffixeLignes=lignesTouchees?` · ${lignesTouchees} article(s) enregistré(s)${sessionLiee?' (+ synchronisé côté Livraison Magasin)':' (échec de synchronisation Livraison Magasin — voir console)'}`
       :(sessionCreee?' · BL ajouté à Livraison Magasin':'');
 
-    // Rappel BC soldé si N° BL renseigné et case non cochée
-    const blRempli=!!(document.getElementById('m-bl')?.value.trim());
-    const soldeCoche=document.getElementById('m-solde')?.checked;
-    if(blRempli&&!soldeCoche){
-      setTimeout(()=>bannerBCSolde(id,titre||numBC),800);
-    }
+    // Rappel BC soldé : plus de popup transitoire ici — le bloc permanent
+    // "✅ BC livrés — à confirmer soldé" (bandeau Suivi BC) reprend ce BC
+    // automatiquement dès que son RAL passe à 0, de façon fiable et visible
+    // à chaque ouverture du dashboard plutôt qu'un instant après la sauvegarde.
 
     if(!champs.length)return `${titre||numBC} —${suffixeLignes||' aucune modification BC'}`;
     return `${titre||numBC} — ${champs.join(', ')} enregistré${champs.length>1?'s':''}${suffixeLignes}`;
