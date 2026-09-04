@@ -5780,7 +5780,7 @@ function renderChantiersList(){
 
   list.innerHTML=filtered.map(c=>{
     const clientNom=clientMap[c.ClientId]||'';
-    const remarques=c.Remarques_x0020_projet||'';
+    const remarques=c.Remarquesprojet||'';
     const bcsChantier=(DATA.suivi||[]).filter(bc=>parseInt(bc.ProjetId||bc.Projet?.Id)===c.ID);
     const nbBC=bcsChantier.length;
     const numsBC=bcsChantier.map(bc=>f(bc,'Title')||('BC-'+bc.ID));
@@ -5881,12 +5881,12 @@ async function chSave(id){
   const clientId=document.getElementById(`ch-client-id-${id}`)?.value||'';
   const rem=(document.getElementById(`ch-rem-${id}`)?.value||'').trim();
   if(!nom){toast('❌ Le nom du projet est obligatoire.');return;}
-  const body={Title:nom,Remarques_x0020_projet:rem};
+  const body={Title:nom,Remarquesprojet:rem};
   if(clientId)body['ClientId']=parseInt(clientId);
   try{
     await spPatch('sites/RseauxPlus','Chantiers',id,body);
     const ch=DATA.chantiers.find(c=>c.ID===id);
-    if(ch){ch.Title=nom;if(clientId)ch.ClientId=parseInt(clientId);ch.Remarques_x0020_projet=rem;}
+    if(ch){ch.Title=nom;if(clientId)ch.ClientId=parseInt(clientId);ch.Remarquesprojet=rem;}
     toast('✅ Projet mis à jour');
     renderChantiersList();
   }catch(e){toast('❌ '+e.message);}
@@ -6862,7 +6862,7 @@ function openNouveauProjet(){
 
     const body={Title:nom};
     if(clientId)body['ClientId']=parseInt(clientId);
-    if(desc)body['Remarques_x0020_projet']=desc;
+    if(desc)body['Remarquesprojet']=desc;
 
     const res=await spPost('sites/RseauxPlus','Chantiers',body);
     const resId=res?.ID??res?.Id;
