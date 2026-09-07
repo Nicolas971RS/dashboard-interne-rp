@@ -5743,6 +5743,54 @@ function openRetourModal(id,numBC){
   },50);
 }
 
+// ── Alerte bloquante "BC entièrement livré ?" ──
+// Déclenchée juste après un Traiter sans case "BC soldé" cochée. Volontairement
+// grande et bloquante (pas un toast coin d'écran) pour guider les collègues moins
+// à l'aise avec l'outil, dans l'ordre : soit on clôt (Oui), soit on enchaîne
+// immédiatement sur la création d'une Livraison Partielle (Non) — jamais les deux
+// actions oubliées entre elles.
+function alerteBCSolde(id,numBC){
+  document.getElementById('alerte-solde-ov')?.remove();
+  const ov=document.createElement('div');
+  ov.id='alerte-solde-ov';
+  ov.style.cssText='position:fixed;inset:0;background:rgba(10,20,40,.6);z-index:20000;display:flex;align-items:center;justify-content:center;padding:20px';
+  ov.innerHTML=`
+    <div style="background:white;border-radius:14px;max-width:440px;width:100%;padding:30px 26px;box-shadow:0 24px 70px rgba(0,0,0,.35);text-align:center">
+      <div style="font-size:42px;margin-bottom:8px">📦</div>
+      <div style="font-size:18px;font-weight:800;color:var(--navy);font-family:var(--font-mono);margin-bottom:10px">${numBC}</div>
+      <div style="font-size:17px;font-weight:700;color:var(--text-primary);margin-bottom:24px;line-height:1.4">
+        Ce BC est-il <u>entièrement livré</u> ?
+      </div>
+      <div style="display:flex;flex-direction:column;gap:11px">
+        <button onclick="alerteSoldeOui(${id},'${String(numBC).replace(/'/g,"\\'")}')"
+          style="background:var(--green);color:white;border:none;border-radius:9px;padding:16px;font-size:16px;font-weight:800;cursor:pointer">
+          ✅ OUI — Marquer ce BC soldé
+        </button>
+        <button onclick="alerteSoldeNon(${id},'${String(numBC).replace(/'/g,"\\'")}')"
+          style="background:white;color:#c2410c;border:2px solid #c2410c;border-radius:9px;padding:16px;font-size:16px;font-weight:800;cursor:pointer">
+          ◻ NON — Créer une Livraison Partielle
+        </button>
+      </div>
+    </div>`;
+  document.body.appendChild(ov);
+}
+
+async function alerteSoldeOui(id,numBC){
+  document.getElementById('alerte-solde-ov')?.remove();
+  try{
+    await spPatch('sites/RseauxPlus','Suivi_BC',id,{StatutBCLivr_x00e9_etFC:true});
+    const it=(DATA.suivi||[]).find(x=>x.ID===id);
+    if(it)it.StatutBCLivr_x00e9_etFC=true;
+    renderAll();updateBadges();
+    toast(`✅ ${numBC} marqué soldé`);
+  }catch(e){toast('❌ '+e.message);}
+}
+
+function alerteSoldeNon(id,numBC){
+  document.getElementById('alerte-solde-ov')?.remove();
+  openLivraisonPartielle(id);
+}
+
 function openFacturerModal(id,numBC,client){
   if(!numBC||!client){
     const item=(DATA.suivi||[]).find(x=>x.ID===id||x.ID===parseInt(id));
@@ -6470,10 +6518,15 @@ async function openTraiterModal(id,numBC,client){
     const suffixeLignes=lignesTouchees?` · ${lignesTouchees} article(s) enregistré(s)${sessionLiee?' (+ synchronisé côté Livraison Magasin)':' (échec de synchronisation Livraison Magasin — voir console)'}`
       :(sessionCreee?' · BL ajouté à Livraison Magasin':'');
 
-    // Rappel BC soldé : plus de popup transitoire ici — le bloc permanent
-    // "✅ BC livrés — à confirmer soldé" (bandeau Suivi BC) reprend ce BC
-    // automatiquement dès que son RAL passe à 0, de façon fiable et visible
-    // à chaque ouverture du dashboard plutôt qu'un instant après la sauvegarde.
+    // Alerte "BC entièrement livré ?" — déclenchée juste après la fermeture de la
+    // modale Traiter (1900ms : laisse le temps au message de succès + fermeture de
+    // s'exécuter proprement, cf. submitModal qui ferme à 1800ms). Seulement si un
+    // N° BL est renseigné et que la case "BC soldé" n'a pas été cochée.
+    const blRempli=!!(document.getElementById('m-bl')?.value.trim());
+    const soldeCoche=document.getElementById('m-solde')?.checked;
+    if(blRempli&&!soldeCoche){
+      setTimeout(()=>alerteBCSolde(id,titre||numBC),1900);
+    }
 
     if(!champs.length)return `${titre||numBC} —${suffixeLignes||' aucune modification BC'}`;
     return `${titre||numBC} — ${champs.join(', ')} enregistré${champs.length>1?'s':''}${suffixeLignes}`;
