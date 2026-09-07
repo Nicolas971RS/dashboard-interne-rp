@@ -8573,11 +8573,39 @@ async function livraisonPartielleFlow(id,numBC,client){
   if(!ok)return;
   try{
     await triggerPAFlow('livraisonPartielle',id);
-    alert('✅ Flow livraison partielle lancé ! La liste sera mise à jour dans quelques secondes.');
     setTimeout(()=>loadAll(),4000);
+    setTimeout(()=>alerteLivraisonPartielleCreee(numBC),600);
   }catch(e){
     alert('Erreur flow : '+e.message);
   }
+}
+
+// ── Rappel bloquant après création d'une livraison partielle ──
+// La ligne suffixée est créée côté Suivi_BC par le flow, mais les articles
+// concernés par ce reste à livrer doivent encore être saisis à la main dans
+// l'onglet Livraisons Partielles — ce rappel guide vers cette étape suivante,
+// avec navigation directe au clic pour ne rien laisser à deviner.
+function alerteLivraisonPartielleCreee(numBC){
+  document.getElementById('alerte-lp-ov')?.remove();
+  const ov=document.createElement('div');
+  ov.id='alerte-lp-ov';
+  ov.style.cssText='position:fixed;inset:0;background:rgba(10,20,40,.6);z-index:20000;display:flex;align-items:center;justify-content:center;padding:20px';
+  ov.innerHTML=`
+    <div style="background:white;border-radius:14px;max-width:440px;width:100%;padding:30px 26px;box-shadow:0 24px 70px rgba(0,0,0,.35);text-align:center">
+      <div style="font-size:42px;margin-bottom:8px">🔀</div>
+      <div style="font-size:18px;font-weight:800;color:var(--navy);font-family:var(--font-mono);margin-bottom:14px">${numBC}</div>
+      <div style="font-size:16px;font-weight:700;color:var(--text-primary);margin-bottom:10px;line-height:1.5">
+        La livraison partielle est créée.
+      </div>
+      <div style="font-size:14px;color:var(--text-secondary);margin-bottom:24px;line-height:1.5">
+        Rendez-vous maintenant dans l'onglet <strong>« Livraisons Partielles »</strong> pour saisir les articles concernés par ce reste à livrer.
+      </div>
+      <button onclick="document.getElementById('alerte-lp-ov').remove();closePanel();showTab('ral');renderRALTable()"
+        style="background:var(--navy);color:white;border:none;border-radius:9px;padding:16px 40px;font-size:16px;font-weight:800;cursor:pointer">
+        ✅ OK, j'y vais
+      </button>
+    </div>`;
+  document.body.appendChild(ov);
 }
 
 // ── Envoyer BC à Docuware — PATCH SharePoint (déclenche le flow via colonne) ──
