@@ -393,6 +393,7 @@
     <button class="tab" onclick="showTab('devis',this)">📄 Devis <span class="tab-badge a" id="badge-devis">0</span></button>
     <button class="tab" onclick="showTab('analytics',this);renderAnalytics()">📈 Analytics</button>
     <button class="tab" onclick="showTab('journal',this);loadJournal()">📜 Journal d'Audit</button>
+    <button class="tab" onclick="showTab('retours',this);loadRetours()">↩️ Retours</button>
   </div>
 
   <div class="main">
@@ -1191,6 +1192,8 @@
             <option value="Lignes_BC">Lignes_BC</option>
             <option value="Sessions_Scan">Sessions_Scan</option>
             <option value="Lignes_Scan">Lignes_Scan</option>
+            <option value="Retours_Marchandise">Retours_Marchandise</option>
+            <option value="Mouvements_Stock">Mouvements_Stock</option>
           </select>
           <select id="filter-type-journal" onchange="renderJournal()" class="fs">
             <option value="all">Tous les types</option>
@@ -1206,6 +1209,39 @@
       <div class="tc"><table>
         <thead><tr><th>Horodatage</th><th>Utilisateur</th><th>Type</th><th>Liste</th><th>N° BC</th><th>Champ(s) modifié(s)</th><th>Avant</th><th>Après</th></tr></thead>
         <tbody id="journal-body"><tr class="empty-row"><td colspan="8">Cliquez sur l'onglet pour charger le journal...</td></tr></tbody>
+      </table></div>
+    </div>
+
+    <!-- RETOURS MARCHANDISE -->
+    <div id="tab-retours" class="section-bloc">
+      <div class="page-header">
+        <div><h1>Retours Marchandise</h1><div class="sub">/sites/BondeCommande · Retours_Marchandise · 500 entrées les plus récentes</div></div>
+        <div style="display:flex;gap:8px">
+          <button class="btn-refresh" onclick="loadRetours()">🔄 Actualiser</button>
+        </div>
+      </div>
+      <div class="kpi-row c3">
+        <div class="kc t"><div class="kl">↩️ Retours enregistrés</div><div class="kv" id="kpi-retours-count">—</div><div class="ks">Chargés (max 500)</div></div>
+        <div class="kc o"><div class="kl">📅 Ce mois-ci</div><div class="kv" id="kpi-retours-mois">—</div><div class="ks">Depuis le 1er du mois</div></div>
+        <div class="kc r"><div class="kl">💶 Montant avoirs</div><div class="kv" id="kpi-retours-montant">—</div><div class="ks">Total HT cumulé</div></div>
+      </div>
+      <div style="background:var(--navy);border-radius:var(--radius);padding:14px 18px;margin-bottom:14px">
+        <div style="display:flex;align-items:center;gap:12px;margin-bottom:10px">
+          <span style="font-size:20px">🔍</span>
+          <input type="text" id="search-retours" placeholder="Recherche — N° BC, référence, N° FC avoir, vendeur..."
+            style="flex:1;background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.2);border-radius:var(--radius-sm);padding:9px 14px;font-size:13.5px;color:white;font-family:var(--font-body);outline:none"
+            oninput="renderRetours()">
+          <button class="btn" style="border-color:rgba(255,255,255,.3);color:rgba(255,255,255,.7);background:none;white-space:nowrap" onclick="document.getElementById('search-retours').value='';renderRetours()">✕ Effacer</button>
+        </div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:2px">
+          <select id="filter-vendeur-retours" onchange="renderRetours()" class="fs"><option value="all">Tous les vendeurs</option></select>
+          <button class="btn" style="border-color:rgba(255,255,255,.3);color:rgba(255,255,255,.7);background:none" onclick="exportRetoursCSV()">⬇ CSV</button>
+          <span id="retours-count-label" style="font-size:11px;color:rgba(255,255,255,.5)"></span>
+        </div>
+      </div>
+      <div class="tc"><table>
+        <thead><tr><th>Date</th><th>N° BC</th><th>Référence</th><th>Désignation</th><th style="text-align:center">Qté</th><th>N° FC Avoir</th><th style="text-align:right">Montant Avoir</th><th>Vendeur</th><th>Commentaire</th></tr></thead>
+        <tbody id="retours-body"><tr class="empty-row"><td colspan="9">Cliquez sur l'onglet pour charger les retours...</td></tr></tbody>
       </table></div>
     </div>
   </div>
@@ -4940,6 +4976,108 @@ function exportJournalCSV(){
   ], `journal_audit_${new Date().toISOString().slice(0,10)}.csv`);
 }
 
+// ═══ RETOURS MARCHANDISE — chargement, rendu, export ═══
+let _retoursLoaded=false;
+async function loadRetours(){
+  const b=document.getElementById('retours-body');
+  const btn=document.querySelector('#tab-retours .btn-refresh');
+  if(b&&!_retoursLoaded)b.innerHTML='<tr class="empty-row"><td colspan="9">⏳ Chargement des retours...</td></tr>';
+  if(btn){btn.disabled=true;btn.textContent='⏳';}
+  try{
+    const items=await spFetch('sites/BondeCommande','Retours_Marchandise','$select=*&$orderby=ID desc&$top=500');
+    DATA.retours=items||[];
+    _retoursLoaded=true;
+    buildRetoursFilters();
+    renderRetours();
+  }catch(e){
+    if(b)b.innerHTML=`<tr class="empty-row"><td colspan="9">❌ Erreur de chargement : ${e.message}</td></tr>`;
+  }finally{
+    if(btn){btn.disabled=false;btn.textContent='🔄 Actualiser';}
+  }
+}
+
+function buildRetoursFilters(){
+  const sel=document.getElementById('filter-vendeur-retours');
+  if(sel&&sel.options.length===1){
+    const vendeurs=[...new Set((DATA.retours||[]).map(r=>f(r,'Vendeur')).filter(Boolean))].sort();
+    vendeurs.forEach(v=>{const o=document.createElement('option');o.value=v;o.textContent=v;sel.appendChild(o);});
+  }
+}
+
+function renderRetours(){
+  const all=DATA.retours||[];
+  const q=(document.getElementById('search-retours')?.value||'').toLowerCase();
+  const fV=document.getElementById('filter-vendeur-retours')?.value||'all';
+
+  let items=all.filter(r=>{
+    if(fV!=='all'&&f(r,'Vendeur')!==fV)return false;
+    if(q){
+      const numBC=String(f(r,'N_BC')||'').toLowerCase();
+      const ref=String(f(r,'Reference_Article')||'').toLowerCase();
+      const fc=String(f(r,'Numero_FC_Avoir')||'').toLowerCase();
+      const vendeur=String(f(r,'Vendeur')||'').toLowerCase();
+      if(!numBC.includes(q)&&!ref.includes(q)&&!fc.includes(q)&&!vendeur.includes(q))return false;
+    }
+    return true;
+  });
+
+  const b=document.getElementById('retours-body');
+  if(b){
+    b.innerHTML=items.length?items.map(r=>{
+      const bcId=r.BCId;
+      const numBC=f(r,'N_BC')||'—';
+      const montant=parseFloat(f(r,'Montant_Avoir'))||0;
+      return`<tr>
+        <td class="mono" style="font-size:11px;white-space:nowrap">${fmtDate(f(r,'Date_Retour'))}</td>
+        <td class="ref" style="${bcId?'cursor:pointer;color:var(--blue)':''}" ${bcId?`onclick="closePanel();openBCPanel(${bcId})"`:''}>${numBC}</td>
+        <td class="mono">${f(r,'Reference_Article')||'—'}</td>
+        <td style="font-size:11.5px">${f(r,'Designation')||'—'}</td>
+        <td style="text-align:center;font-weight:700">${f(r,'Quantite_Retournee')||0}</td>
+        <td class="mono" style="font-size:11px">${f(r,'Numero_FC_Avoir')||'—'}</td>
+        <td style="text-align:right;font-weight:600">${montant>0?fmtMoney(montant):'—'}</td>
+        <td style="font-size:11.5px">${f(r,'Vendeur')||'—'}</td>
+        <td style="font-size:11px;color:var(--text-muted);max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${(f(r,'Commentaire')||'').replace(/"/g,'&quot;')}">${f(r,'Commentaire')||'—'}</td>
+      </tr>`;
+    }).join(''):'<tr class="empty-row"><td colspan="9">Aucun retour ne correspond aux critères</td></tr>';
+  }
+
+  const kc=document.getElementById('kpi-retours-count');if(kc)kc.textContent=all.length;
+  const countLbl=document.getElementById('retours-count-label');if(countLbl)countLbl.textContent=items.length+' résultat'+(items.length>1?'s':'');
+  const moisStr=new Date().toISOString().slice(0,7);
+  const kMois=document.getElementById('kpi-retours-mois');
+  if(kMois)kMois.textContent=all.filter(r=>String(f(r,'Date_Retour')||'').slice(0,7)===moisStr).length;
+  const kMontant=document.getElementById('kpi-retours-montant');
+  if(kMontant)kMontant.textContent=fmtMoney(all.reduce((s,r)=>s+(parseFloat(f(r,'Montant_Avoir'))||0),0));
+}
+
+function exportRetoursCSV(){
+  const all=DATA.retours||[];
+  const q=(document.getElementById('search-retours')?.value||'').toLowerCase();
+  const fV=document.getElementById('filter-vendeur-retours')?.value||'all';
+  let items=all.filter(r=>{
+    if(fV!=='all'&&f(r,'Vendeur')!==fV)return false;
+    if(q){
+      const numBC=String(f(r,'N_BC')||'').toLowerCase();
+      const ref=String(f(r,'Reference_Article')||'').toLowerCase();
+      const fc=String(f(r,'Numero_FC_Avoir')||'').toLowerCase();
+      const vendeur=String(f(r,'Vendeur')||'').toLowerCase();
+      if(!numBC.includes(q)&&!ref.includes(q)&&!fc.includes(q)&&!vendeur.includes(q))return false;
+    }
+    return true;
+  });
+  exportCSV(items,[
+    {label:'Date', fn:r=>fmtDate(f(r,'Date_Retour'))},
+    {label:'N° BC', fn:r=>f(r,'N_BC')||''},
+    {label:'Référence', fn:r=>f(r,'Reference_Article')||''},
+    {label:'Désignation', fn:r=>f(r,'Designation')||''},
+    {label:'Qté retournée', fn:r=>f(r,'Quantite_Retournee')||0},
+    {label:'N° FC Avoir', fn:r=>f(r,'Numero_FC_Avoir')||''},
+    {label:'Montant Avoir', fn:r=>f(r,'Montant_Avoir')||0},
+    {label:'Vendeur', fn:r=>f(r,'Vendeur')||''},
+    {label:'Commentaire', fn:r=>f(r,'Commentaire')||''},
+  ], `retours_marchandise_${new Date().toISOString().slice(0,10)}.csv`);
+}
+
 
 
 // ═══ BADGES ═══
@@ -5227,7 +5365,9 @@ const JOURNAL_LISTES_SUIVIES={
   'Suivi_BC':{dataKey:'suivi'},
   'Lignes_BC':{dataKey:'lignes'},
   'Sessions_Scan':{dataKey:'sessionsScan'},
-  'Lignes_Scan':{dataKey:'lignesScan'}
+  'Lignes_Scan':{dataKey:'lignesScan'},
+  'Retours_Marchandise':{dataKey:'retours'},
+  'Mouvements_Stock':{dataKey:'mouvementsStock'}
 };
 const _trunc=(v,n=250)=>{const s=typeof v==='string'?v:JSON.stringify(v);return s&&s.length>n?s.substring(0,n-1)+'…':(s||'');};
 
@@ -5243,7 +5383,8 @@ function _deduireNumBC(list,id,itemAvant){
       const bc=(DATA.suivi||[]).find(x=>x.ID===bcId||x.ID===parseInt(bcId));
       return bc?(bc.Title||`BC-${bcId}`):'';
     }
-    return ''; // Sessions_Scan / Lignes_Scan — pas de lien BC direct fiable, on laisse vide
+    if(list==='Retours_Marchandise')return itemAvant?.N_BC||'';
+    return ''; // Sessions_Scan / Lignes_Scan / Mouvements_Stock — pas de lien BC direct fiable, on laisse vide
   }catch(e){return '';}
 }
 
