@@ -5503,6 +5503,105 @@ async function submitModal(){
 }
 
 // ── Modal Facturer ──
+// ── Retour marchandise (avoir client) ──
+// Option validée avec Nickos : ne touche JAMAIS Lignes_BC / le RAL du BC d'origine.
+// Le retour est 100% indépendant, tracé dans Retours_Marchandise + un mouvement
+// d'ENTRÉE dans Mouvements_Stock (quantité négative dans Quantite_Sortie — cette
+// liste n'a pas de colonne "type", donc le signe porte l'information ; le Titre
+// commence par "RETOUR" pour que ce soit lisible même en parcourant la liste brute).
+function openRetourModal(id,numBC){
+  const item=(DATA.suivi||[]).find(x=>x.ID===id||x.ID===parseInt(id));
+  const lignes=(DATA.lignes||[]).filter(l=>l.BCId===id||parseInt(l.BCId)===id);
+  const numBL=item?f(item,'N_x00b0_BL'):'';
+  const vendeurDefaut=vendeurConnecte()||f(item,'Vendeurencharge')||'';
+  const optionsArticles=lignes.map((l,idx)=>{
+    const ref=f(l,'R_x00e9_f_x00e9_rence')||'';
+    const des=f(l,'Produit_x002f_D_x00e9_signation')||'';
+    return`<option value="${idx}">${ref} — ${des}</option>`;
+  }).join('');
+
+  openModal(`↩️ Retour marchandise`,`
+    <div style="font-size:12px;color:var(--text-muted);font-family:var(--font-mono);margin-bottom:14px">${numBC}${numBL?' · BL '+numBL:''}</div>
+    <div class="mf"><label>Article retourné *</label>
+      <select id="m-ret-article" style="font-size:13px">
+        <option value="">— Choisir un article de ce BC —</option>
+        ${optionsArticles}
+        <option value="autre">Autre / non listé — saisir manuellement</option>
+      </select>
+    </div>
+    <div id="m-ret-manuel" style="display:none">
+      <div class="mf"><label>Référence</label><input id="m-ret-ref-manuel" placeholder="Référence article"></div>
+      <div class="mf"><label>Désignation</label><input id="m-ret-des-manuel" placeholder="Désignation"></div>
+    </div>
+    <div class="mf"><label>Quantité retournée *</label>
+      <input id="m-ret-qte" type="number" min="1" step="1" placeholder="Ex : 3">
+    </div>
+    <div class="mf"><label>N° FC de l'avoir (Image)</label>
+      <input id="m-ret-fc" placeholder="Ex : AV-2026-0045">
+    </div>
+    <div class="mf"><label>Montant de l'avoir (€ HT)</label>
+      <input id="m-ret-montant" type="number" min="0" step="0.01" placeholder="Optionnel">
+    </div>
+    <div class="mf"><label>Commentaire</label>
+      <textarea id="m-ret-commentaire" rows="2" placeholder="Motif — casse, erreur de commande, surplus..."></textarea>
+    </div>
+    <div style="background:var(--amber-light);border:1px solid var(--amber);border-radius:var(--radius-sm);padding:10px 14px;font-size:11.5px;color:#8a6d00">
+      ℹ️ Ce retour n'affecte ni la quantité livrée ni le Reste à Livrer de ce BC — c'est un mouvement de stock indépendant.
+    </div>`,
+  async()=>{
+    const selArt=document.getElementById('m-ret-article').value;
+    if(!selArt){document.getElementById('m-ret-article').style.borderColor='var(--red)';throw new Error('Choisissez un article.');}
+    let ref,design;
+    if(selArt==='autre'){
+      ref=document.getElementById('m-ret-ref-manuel').value.trim();
+      design=document.getElementById('m-ret-des-manuel').value.trim();
+      if(!ref&&!design){throw new Error('Précisez au moins une référence ou une désignation.');}
+    }else{
+      const l=lignes[parseInt(selArt)];
+      ref=f(l,'R_x00e9_f_x00e9_rence')||'';
+      design=f(l,'Produit_x002f_D_x00e9_signation')||'';
+    }
+    const qte=parseInt(document.getElementById('m-ret-qte').value)||0;
+    if(qte<=0){document.getElementById('m-ret-qte').style.borderColor='var(--red)';throw new Error('La quantité retournée doit être supérieure à 0.');}
+    const fcAvoir=document.getElementById('m-ret-fc').value.trim();
+    const montantAvoir=parseFloat(document.getElementById('m-ret-montant').value)||0;
+    const commentaire=document.getElementById('m-ret-commentaire').value.trim();
+    const nowIso=new Date().toISOString();
+
+    await spPost('sites/BondeCommande','Retours_Marchandise',{
+      Title:`RET-${numBC}-${nowIso.slice(0,10)}`,
+      N_BC:numBC,
+      BCId:id,
+      Reference_Article:ref,
+      Designation:design,
+      Quantite_Retournee:qte,
+      Numero_FC_Avoir:fcAvoir,
+      Montant_Avoir:montantAvoir,
+      Date_Retour:nowIso,
+      Vendeur:vendeurDefaut,
+      Commentaire:commentaire
+    });
+
+    await spPost('sites/BondeCommande','Mouvements_Stock',{
+      Title:`RETOUR ${ref||design} — ${numBC}`,
+      Reference_Article:ref,
+      Designation:design,
+      Quantite_Sortie:-qte,
+      Numero_BL:numBL||'',
+      Vendeur:vendeurDefaut,
+      Date_Mouvement:nowIso
+    });
+
+    return `↩️ Retour enregistré — ${qte} × ${ref||design} (${numBC})`;
+  });
+
+  setTimeout(()=>{
+    const sel=document.getElementById('m-ret-article');
+    const manuel=document.getElementById('m-ret-manuel');
+    if(sel)sel.addEventListener('change',()=>{if(manuel)manuel.style.display=sel.value==='autre'?'block':'none';});
+  },50);
+}
+
 function openFacturerModal(id,numBC,client){
   if(!numBC||!client){
     const item=(DATA.suivi||[]).find(x=>x.ID===id||x.ID===parseInt(id));
@@ -7734,6 +7833,7 @@ async function openBCPanel(id){
     html+=`<div class="pactions">
       <button class="pbtn green" onclick="closePanel();openFacturerModal(${id})">💰 Facturer</button>
       <button class="pbtn blue" onclick="closePanel();openTraiterModal(${id})">🔧 Traiter</button>
+      <button class="pbtn" style="background:#7c3aed;color:white" onclick="openRetourModal(${id},'${String(numBC).replace(/'/g,"\\'")}')">↩️ Retour marchandise</button>
       <button class="pbtn grey" onclick="closePanel()">Fermer</button>
     </div>
     <hr style="border:none;border-top:1px solid var(--border);margin:12px 0 8px">
