@@ -4616,7 +4616,10 @@ function openSessionPanel(id){
     </div>`:''}
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;margin-top:4px">
       <h2 style="font-size:14px;margin:0">📋 Articles ${isLiv?'livrés':'inventoriés'}</h2>
-      <button class="btn navy" style="height:26px;font-size:11px" onclick="sessionPanelAddLigne(${id})">➕ Ajouter un article</button>
+      <div style="display:flex;gap:6px">
+        ${isLiv?`<button class="btn" style="height:26px;font-size:11px;background:#7c3aed;color:white;border-color:#7c3aed" onclick="openRetourModalSession(${id})">↩️ Retour marchandise</button>`:''}
+        <button class="btn navy" style="height:26px;font-size:11px" onclick="sessionPanelAddLigne(${id})">➕ Ajouter un article</button>
+      </div>
     </div>
     <div class="tc" style="overflow:visible"><table style="table-layout:fixed;width:100%;min-width:420px">
       <thead><tr>
@@ -5734,6 +5737,105 @@ function openRetourModal(id,numBC){
     });
 
     return `↩️ Retour enregistré — ${qte} × ${ref||design} (${numBC})`;
+  });
+
+  setTimeout(()=>{
+    const sel=document.getElementById('m-ret-article');
+    const manuel=document.getElementById('m-ret-manuel');
+    if(sel)sel.addEventListener('change',()=>{if(manuel)manuel.style.display=sel.value==='autre'?'block':'none';});
+  },50);
+}
+
+// ── Retour marchandise depuis Livraison Magasin (client sans BC) ──
+// Même logique que openRetourModal, mais construite sur Lignes_Scan/Sessions_Scan
+// puisqu'il n'y a pas de Lignes_BC pour ces clients de passage. BCId reste vide
+// dans Retours_Marchandise (pas de BC à lier) ; N_BC est renseigné avec le N° BL,
+// seule référence disponible dans ce cas, pour que la ligne reste identifiable
+// dans l'onglet Retours.
+function openRetourModalSession(sessionId){
+  const s=(DATA.sessionsScan||[]).find(x=>x.ID===sessionId||x.ID===parseInt(sessionId));
+  const lignes=(DATA.lignesScan||[]).filter(l=>String(lineSessionId(l))===String(sessionId));
+  const numBL=s?f(s,'Numero_BL')||('BL-'+sessionId):('BL-'+sessionId);
+  const client=s?f(s,'Client')||'':'';
+  const vendeurDefaut=vendeurConnecte()||(s?f(s,'Vendeur_Emetteur'):'')||'';
+  const optionsArticles=lignes.map((l,idx)=>{
+    const ref=f(l,'Reference_Article')||'';
+    const des=f(l,'Designation')||'';
+    return`<option value="${idx}">${ref} — ${des}</option>`;
+  }).join('');
+
+  openModal(`↩️ Retour marchandise`,`
+    <div style="font-size:12px;color:var(--text-muted);font-family:var(--font-mono);margin-bottom:14px">BL ${numBL}${client?' · '+client:''}</div>
+    <div class="mf"><label>Article retourné *</label>
+      <select id="m-ret-article" style="font-size:13px">
+        <option value="">— Choisir un article de ce BL —</option>
+        ${optionsArticles}
+        <option value="autre">Autre / non listé — saisir manuellement</option>
+      </select>
+    </div>
+    <div id="m-ret-manuel" style="display:none">
+      <div class="mf"><label>Référence</label><input id="m-ret-ref-manuel" placeholder="Référence article"></div>
+      <div class="mf"><label>Désignation</label><input id="m-ret-des-manuel" placeholder="Désignation"></div>
+    </div>
+    <div class="mf"><label>Quantité retournée *</label>
+      <input id="m-ret-qte" type="number" min="1" step="1" placeholder="Ex : 3">
+    </div>
+    <div class="mf"><label>N° FC de l'avoir (Image)</label>
+      <input id="m-ret-fc" placeholder="Ex : AV-2026-0045">
+    </div>
+    <div class="mf"><label>Montant de l'avoir (€ HT)</label>
+      <input id="m-ret-montant" type="number" min="0" step="0.01" placeholder="Optionnel">
+    </div>
+    <div class="mf"><label>Commentaire</label>
+      <textarea id="m-ret-commentaire" rows="2" placeholder="Motif — casse, erreur, surplus..."></textarea>
+    </div>
+    <div style="background:var(--amber-light);border:1px solid var(--amber);border-radius:var(--radius-sm);padding:10px 14px;font-size:11.5px;color:#8a6d00">
+      ℹ️ Client sans BC — ce retour n'est lié à aucun bon de commande, uniquement au BL ${numBL}.
+    </div>`,
+  async()=>{
+    const selArt=document.getElementById('m-ret-article').value;
+    if(!selArt){document.getElementById('m-ret-article').style.borderColor='var(--red)';throw new Error('Choisissez un article.');}
+    let ref,design;
+    if(selArt==='autre'){
+      ref=document.getElementById('m-ret-ref-manuel').value.trim();
+      design=document.getElementById('m-ret-des-manuel').value.trim();
+      if(!ref&&!design){throw new Error('Précisez au moins une référence ou une désignation.');}
+    }else{
+      const l=lignes[parseInt(selArt)];
+      ref=f(l,'Reference_Article')||'';
+      design=f(l,'Designation')||'';
+    }
+    const qte=parseInt(document.getElementById('m-ret-qte').value)||0;
+    if(qte<=0){document.getElementById('m-ret-qte').style.borderColor='var(--red)';throw new Error('La quantité retournée doit être supérieure à 0.');}
+    const fcAvoir=document.getElementById('m-ret-fc').value.trim();
+    const montantAvoir=parseFloat(document.getElementById('m-ret-montant').value)||0;
+    const commentaire=document.getElementById('m-ret-commentaire').value.trim();
+    const nowIso=new Date().toISOString();
+
+    await spPost('sites/BondeCommande','Retours_Marchandise',{
+      Title:`RET-BL${numBL}-${nowIso.slice(0,10)}`,
+      N_BC:numBL,
+      Reference_Article:ref,
+      Designation:design,
+      Quantite_Retournee:qte,
+      Numero_FC_Avoir:fcAvoir,
+      Montant_Avoir:montantAvoir,
+      Date_Retour:nowIso,
+      Vendeur:vendeurDefaut,
+      Commentaire:commentaire?`${commentaire} (client sans BC — BL ${numBL})`:`Client sans BC — BL ${numBL}`
+    });
+
+    await spPost('sites/BondeCommande','Mouvements_Stock',{
+      Title:`RETOUR ${ref||design} — BL ${numBL}`,
+      Reference_Article:ref,
+      Designation:design,
+      Quantite_Sortie:-qte,
+      Numero_BL:numBL||'',
+      Vendeur:vendeurDefaut,
+      Date_Mouvement:nowIso
+    });
+
+    return `↩️ Retour enregistré — ${qte} × ${ref||design} (BL ${numBL})`;
   });
 
   setTimeout(()=>{
