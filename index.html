@@ -4742,6 +4742,27 @@ async function sessionPanelSaveAll(sessionId){
   }
   if(errors>0){toast(`⚠️ ${saved} enregistré(s), ${errors} échec(s) — ${lastErr}`);return;}
 
+  // Statut_Ligne (Ok/Écart) est un champ par ligne, distinct du Statut global de
+  // la session — on le recalcule ligne par ligne dès qu'une quantité a été
+  // corrigée, dans les deux sens (Ok si résorbé, Écart si une correction en a
+  // recréé un — improbable ici mais garde la cohérence).
+  try{
+    const lignesSession=(DATA.lignesScan||[]).filter(l=>String(lineSessionId(l))===String(sessionId));
+    for(const l of lignesSession){
+      const verr=f(l,'Verrouille');
+      if(verr===true||verr==='Oui'||verr==='1'||verr===1)continue; // verrouillée = plus retouchée
+      const att=Number(f(l,'Quantite_Attendue')||0);
+      const sc=Number(f(l,'Quantite_Scannee')||0);
+      const cible=(sc===att)?'Ok':'Écart';
+      if((f(l,'Statut_Ligne')||'')!==cible){
+        try{
+          await spPatch('sites/BondeCommande','Lignes_Scan',l.ID,{Statut_Ligne:cible});
+          l.Statut_Ligne=cible;
+        }catch(e){console.warn('[sessionPanelSaveAll] Statut_Ligne',l.ID,e.message);}
+      }
+    }
+  }catch(e){console.warn('[sessionPanelSaveAll] recalcul Statut_Ligne',e.message);}
+
   // Le Statut de session ("Écarts détectés", posé au moment de la clôture côté
   // portail scan) ne se recalcule jamais tout seul quand on corrige une ligne
   // depuis le dashboard. Si la correction a résorbé tous les écarts, on le
