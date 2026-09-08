@@ -4740,8 +4740,37 @@ async function sessionPanelSaveAll(sessionId){
       saved++;
     }catch(e){errors++;lastErr=e.message;console.warn('[sessionPanelSaveAll post]',e.message);}
   }
-  if(errors>0)toast(`⚠️ ${saved} enregistré(s), ${errors} échec(s) — ${lastErr}`);
-  else toast(saved?`✅ ${saved} article(s) enregistré(s)`:'Aucune ligne à enregistrer');
+  if(errors>0){toast(`⚠️ ${saved} enregistré(s), ${errors} échec(s) — ${lastErr}`);return;}
+
+  // Le Statut de session ("Écarts détectés", posé au moment de la clôture côté
+  // portail scan) ne se recalcule jamais tout seul quand on corrige une ligne
+  // depuis le dashboard. Si la correction a résorbé tous les écarts, on le
+  // repasse à "Terminée" pour que le tableau général (BL livrés récemment)
+  // arrête d'afficher un écart qui n'existe plus.
+  try{
+    const sessionActuelle=(DATA.sessionsScan||[]).find(x=>x.ID===sessionId);
+    const statutActuel=f(sessionActuelle,'Statut')||'';
+    if(/écart|ecart/i.test(statutActuel)){
+      const lignesSession=(DATA.lignesScan||[]).filter(l=>String(lineSessionId(l))===String(sessionId));
+      const aEncoreEcart=lignesSession.some(l=>{
+        const verr=f(l,'Verrouille');
+        if(verr===true||verr==='Oui'||verr==='1'||verr===1)return false; // verrouillée = plus suivie ici
+        const att=Number(f(l,'Quantite_Attendue')||0);
+        const sc=Number(f(l,'Quantite_Scannee')||0);
+        return sc!==att;
+      });
+      if(!aEncoreEcart&&lignesSession.length){
+        await spPatch('sites/BondeCommande','Sessions_Scan',sessionId,{Statut:'Terminée'});
+        if(sessionActuelle)sessionActuelle.Statut='Terminée';
+        toast('✅ Écart résorbé — statut du BL repassé à "Terminée"');
+      }
+    }
+  }catch(e){console.warn('[sessionPanelSaveAll] recalcul statut',e.message);}
+
+  toast(saved?`✅ ${saved} article(s) enregistré(s)`:'Aucune ligne à enregistrer');
+  openSessionPanel(sessionId);
+  renderPreparations();updateBadges();
+  if(document.getElementById('livres-details')?.open)renderLivres();
 }
 
 async function sessionPanelDeleteLigne(lineId, sessionId){
