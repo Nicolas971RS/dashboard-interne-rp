@@ -761,7 +761,10 @@
           <span id="ral-count-label" style="font-size:11px;color:rgba(255,255,255,.5)"></span>
         </div>
       </div>
-      <div class="tc"><table>
+      <div id="ral-scrolltop" style="overflow-x:auto;overflow-y:hidden;height:14px" onscroll="document.getElementById('ral-tablewrap').scrollLeft=this.scrollLeft">
+        <div id="ral-scrolltop-inner" style="height:1px"></div>
+      </div>
+      <div class="tc" id="ral-tablewrap" onscroll="document.getElementById('ral-scrolltop').scrollLeft=this.scrollLeft"><table>
         <thead><tr><th>N° BC</th><th>Date BC</th><th>Ligne</th><th>Client</th><th>Chantier</th><th>Référence</th><th>Désignation</th><th>Cmd</th><th>Livré</th><th>RAL</th><th>Unité</th><th>BL</th><th>Ancienneté</th><th>Action</th></tr></thead>
         <tbody id="ral-body"><tr class="empty-row"><td colspan="14">Chargement...</td></tr></tbody>
       </table></div>
@@ -4034,13 +4037,16 @@ function renderRALTable(){
           return`<span title="Détail des livraisons">${lines}${badge}</span>`;
         })()}</td>
         <td style="text-align:center">${ralAgePill(jours)}</td>
-        <td style="white-space:nowrap">
-          <button class="btn orange" style="height:24px;font-size:12px" onclick="openReceptionnerLigne(${l.ID},${x.info.bcId})">🔄 Mettre à jour</button>
-          ${jours>=15?`<button class="btn" style="height:24px;font-size:12px;margin-top:3px;color:var(--red);border-color:var(--red)" onclick="cloturerBC(${x.info.bcId},'${String(x.info.numBC).replace(/'/g,"\\'")}')">⛔ Clôturer</button>`:''}
+        <td>
+          <div style="display:flex;flex-direction:column;gap:5px;align-items:stretch;min-width:118px">
+            <button class="btn orange" style="height:26px;font-size:12px" onclick="openReceptionnerLigne(${l.ID},${x.info.bcId})">🔄 Mettre à jour</button>
+            ${jours>=15?`<button class="btn" style="height:26px;font-size:12px;color:var(--red);border-color:var(--red)" onclick="cloturerBC(${x.info.bcId},'${String(x.info.numBC).replace(/'/g,"\\'")}')">⛔ Clôturer</button>`:''}
+          </div>
         </td>
       </tr>`;
     }).join(''):'<tr class="empty-row"><td colspan="14">Aucune ligne avec reste à livrer 🎉</td></tr>';
   }
+  _syncScrollBarTop('ral-tablewrap','ral-scrolltop-inner');
 
   // KPIs
   const totalRal=enriched.reduce((s,x)=>s+x.ral,0);
