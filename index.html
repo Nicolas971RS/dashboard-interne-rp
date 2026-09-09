@@ -5639,6 +5639,49 @@ function snapFields(root){
     .join('\u0001');
 }
 let _modalSnap='',_panelSnap='';
+let _retourLines=[],_retourLinesSource=[];
+
+// ── Retour marchandise : gestion des lignes multiples ──
+// Un même retour (un même avoir) peut porter sur plusieurs articles.
+// _retourLinesSource = articles disponibles pour ce BC/BL (pour le menu déroulant)
+// _retourLines = lignes en cours de saisie [{art, qte, refManuel, desManuel}]
+function _retourRenderLines(){
+  const c=document.getElementById('m-ret-lines-container');
+  if(!c)return;
+  c.innerHTML=_retourLines.map((ln,i)=>{
+    const opts=_retourLinesSource.map((a,ai)=>`<option value="${ai}" ${String(ln.art)===String(ai)?'selected':''}>${a.ref} — ${a.des}</option>`).join('');
+    const isAutre=ln.art==='autre';
+    return`<div style="display:flex;gap:8px;align-items:flex-start;margin-bottom:8px;padding:10px;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--surface)">
+      <div style="flex:1;min-width:0">
+        <select style="width:100%;font-size:12.5px;${isAutre?'margin-bottom:6px':''}" onchange="_retourSetLine(${i},'art',this.value)">
+          <option value="">— Choisir un article —</option>
+          ${opts}
+          <option value="autre" ${isAutre?'selected':''}>Autre / non listé — saisir manuellement</option>
+        </select>
+        ${isAutre?`<div style="display:flex;gap:6px">
+          <input placeholder="Référence" value="${(ln.refManuel||'').replace(/"/g,'&quot;')}" oninput="_retourSetLine(${i},'refManuel',this.value)" style="flex:1;font-size:12px;padding:6px 8px;border:1px solid var(--border);border-radius:5px">
+          <input placeholder="Désignation" value="${(ln.desManuel||'').replace(/"/g,'&quot;')}" oninput="_retourSetLine(${i},'desManuel',this.value)" style="flex:1;font-size:12px;padding:6px 8px;border:1px solid var(--border);border-radius:5px">
+        </div>`:''}
+      </div>
+      <input type="number" min="1" step="1" value="${ln.qte||1}" oninput="_retourSetLine(${i},'qte',this.value)" style="width:64px;font-size:13px;padding:6px 8px;border:1px solid var(--border);border-radius:5px" placeholder="Qté">
+      ${_retourLines.length>1?`<button type="button" onclick="_retourRemoveLine(${i})" title="Retirer cette ligne" style="background:none;border:none;color:var(--red);cursor:pointer;font-size:15px;padding:4px 2px">🗑</button>`:'<span style="width:23px"></span>'}
+    </div>`;
+  }).join('');
+}
+function _retourSetLine(i,field,val){
+  if(!_retourLines[i])return;
+  _retourLines[i][field]=val;
+  if(field==='art')_retourRenderLines();
+}
+function _retourAddLine(){
+  _retourLines.push({art:'',qte:1});
+  _retourRenderLines();
+}
+function _retourRemoveLine(i){
+  if(_retourLines.length<=1)return;
+  _retourLines.splice(i,1);
+  _retourRenderLines();
+}
 
 function openModal(title,html,onSubmit){
   document.getElementById('modal-title').textContent=title;
@@ -5721,94 +5764,92 @@ function openRetourModal(id,numBC){
   const sessionMatch=numBL?(DATA.sessionsScan||[]).find(s=>String(f(s,'Numero_BL')||'')===String(numBL)):null;
   const sessionId=sessionMatch?sessionMatch.ID:null;
   const vendeurDefaut=vendeurConnecte()||f(item,'Vendeurencharge')||'';
-  const optionsArticles=lignes.map((l,idx)=>{
-    const ref=f(l,'R_x00e9_f_x00e9_rence')||'';
-    const des=f(l,'Produit_x002f_D_x00e9_signation')||'';
-    return`<option value="${idx}">${ref} — ${des}</option>`;
-  }).join('');
+
+  _retourLinesSource=lignes.map(l=>({
+    ref:f(l,'R_x00e9_f_x00e9_rence')||'',
+    des:f(l,'Produit_x002f_D_x00e9_signation')||''
+  }));
+  _retourLines=[{art:'',qte:1}];
 
   openModal(`↩️ Retour marchandise`,`
     <div style="font-size:12px;color:var(--text-muted);font-family:var(--font-mono);margin-bottom:14px">${numBC}${numBL?' · BL '+numBL:''}</div>
-    <div class="mf"><label>Article retourné *</label>
-      <select id="m-ret-article" style="font-size:13px">
-        <option value="">— Choisir un article de ce BC —</option>
-        ${optionsArticles}
-        <option value="autre">Autre / non listé — saisir manuellement</option>
-      </select>
-    </div>
-    <div id="m-ret-manuel" style="display:none">
-      <div class="mf"><label>Référence</label><input id="m-ret-ref-manuel" placeholder="Référence article"></div>
-      <div class="mf"><label>Désignation</label><input id="m-ret-des-manuel" placeholder="Désignation"></div>
-    </div>
-    <div class="mf"><label>Quantité retournée *</label>
-      <input id="m-ret-qte" type="number" min="1" step="1" placeholder="Ex : 3">
-    </div>
+    <div class="mf"><label>Articles retournés *</label></div>
+    <div id="m-ret-lines-container"></div>
+    <button type="button" class="btn" style="margin-bottom:14px;font-size:12px" onclick="_retourAddLine()">+ Ajouter une ligne</button>
     <div class="mf"><label>N° FC de l'avoir (Image)</label>
       <input id="m-ret-fc" placeholder="Ex : AV-2026-0045">
     </div>
-    <div class="mf"><label>Montant de l'avoir (€ HT)</label>
+    <div class="mf"><label>Montant total de l'avoir (€ HT)</label>
       <input id="m-ret-montant" type="number" min="0" step="0.01" placeholder="Optionnel">
     </div>
     <div class="mf"><label>Commentaire</label>
       <textarea id="m-ret-commentaire" rows="2" placeholder="Motif — casse, erreur de commande, surplus..."></textarea>
     </div>
     <div style="background:var(--amber-light);border:1px solid var(--amber);border-radius:var(--radius-sm);padding:10px 14px;font-size:11.5px;color:#8a6d00">
-      ℹ️ Ce retour n'affecte ni la quantité livrée ni le Reste à Livrer de ce BC — c'est un mouvement de stock indépendant.
+      ℹ️ Ce retour n'affecte ni la quantité livrée ni le Reste à Livrer de ce BC. Si plusieurs articles, le montant saisi est rattaché à la première ligne uniquement, pour ne pas être compté plusieurs fois dans les totaux.
     </div>`,
   async()=>{
-    const selArt=document.getElementById('m-ret-article').value;
-    if(!selArt){document.getElementById('m-ret-article').style.borderColor='var(--red)';throw new Error('Choisissez un article.');}
-    let ref,design;
-    if(selArt==='autre'){
-      ref=document.getElementById('m-ret-ref-manuel').value.trim();
-      design=document.getElementById('m-ret-des-manuel').value.trim();
-      if(!ref&&!design){throw new Error('Précisez au moins une référence ou une désignation.');}
-    }else{
-      const l=lignes[parseInt(selArt)];
-      ref=f(l,'R_x00e9_f_x00e9_rence')||'';
-      design=f(l,'Produit_x002f_D_x00e9_signation')||'';
-    }
-    const qte=parseInt(document.getElementById('m-ret-qte').value)||0;
-    if(qte<=0){document.getElementById('m-ret-qte').style.borderColor='var(--red)';throw new Error('La quantité retournée doit être supérieure à 0.');}
+    if(!_retourLines.length)throw new Error('Ajoutez au moins un article.');
     const fcAvoir=document.getElementById('m-ret-fc').value.trim();
     const montantAvoir=parseFloat(document.getElementById('m-ret-montant').value)||0;
     const commentaire=document.getElementById('m-ret-commentaire').value.trim();
     const nowIso=new Date().toISOString();
 
-    await spPost('sites/BondeCommande','Retours_Marchandise',{
-      Title:`RET-${numBC}-${nowIso.slice(0,10)}`,
-      N_BC:numBC,
-      BCId:id,
-      N_BL_Origine:numBL||'',
-      SessionId:sessionId,
-      Reference_Article:ref,
-      Designation:design,
-      Quantite_Retournee:qte,
-      Numero_FC_Avoir:fcAvoir,
-      Montant_Avoir:montantAvoir,
-      Date_Retour:nowIso,
-      Vendeur:vendeurDefaut,
-      Commentaire:commentaire
-    });
+    const resolved=[];
+    for(let i=0;i<_retourLines.length;i++){
+      const ln=_retourLines[i];
+      let ref,design;
+      if(ln.art==='autre'){
+        ref=(ln.refManuel||'').trim();
+        design=(ln.desManuel||'').trim();
+        if(!ref&&!design)throw new Error(`Ligne ${i+1} : précisez une référence ou une désignation.`);
+      }else if(ln.art===''||ln.art===undefined){
+        throw new Error(`Ligne ${i+1} : choisissez un article.`);
+      }else{
+        const a=_retourLinesSource[parseInt(ln.art)];
+        if(!a)throw new Error(`Ligne ${i+1} : article invalide.`);
+        ref=a.ref;design=a.des;
+      }
+      const qte=parseInt(ln.qte)||0;
+      if(qte<=0)throw new Error(`Ligne ${i+1} : la quantité doit être supérieure à 0.`);
+      resolved.push({ref,design,qte});
+    }
 
-    await spPost('sites/BondeCommande','Mouvements_Stock',{
-      Title:`RETOUR ${ref||design} — ${numBC}`,
-      Reference_Article:ref,
-      Designation:design,
-      Quantite_Sortie:-qte,
-      Numero_BL:numBL||'',
-      Vendeur:vendeurDefaut,
-      Date_Mouvement:nowIso
-    });
+    for(let i=0;i<resolved.length;i++){
+      const {ref,design,qte}=resolved[i];
+      const suffix=resolved.length>1?`-L${i+1}`:'';
+      await spPost('sites/BondeCommande','Retours_Marchandise',{
+        Title:`RET-${numBC}-${nowIso.slice(0,10)}${suffix}`,
+        N_BC:numBC,
+        BCId:id,
+        N_BL_Origine:numBL||'',
+        SessionId:sessionId,
+        Reference_Article:ref,
+        Designation:design,
+        Quantite_Retournee:qte,
+        Numero_FC_Avoir:fcAvoir,
+        Montant_Avoir:i===0?montantAvoir:0,
+        Date_Retour:nowIso,
+        Vendeur:vendeurDefaut,
+        Commentaire:commentaire
+      });
 
-    return `↩️ Retour enregistré — ${qte} × ${ref||design} (${numBC})`;
+      await spPost('sites/BondeCommande','Mouvements_Stock',{
+        Title:`RETOUR ${ref||design} — ${numBC}`,
+        Reference_Article:ref,
+        Designation:design,
+        Quantite_Sortie:-qte,
+        Numero_BL:numBL||'',
+        Vendeur:vendeurDefaut,
+        Date_Mouvement:nowIso
+      });
+    }
+
+    const totalQte=resolved.reduce((s,r)=>s+r.qte,0);
+    return `↩️ Retour enregistré — ${resolved.length} article${resolved.length>1?'s':''} (${totalQte} unité${totalQte>1?'s':''}) — ${numBC}`;
   });
 
-  setTimeout(()=>{
-    const sel=document.getElementById('m-ret-article');
-    const manuel=document.getElementById('m-ret-manuel');
-    if(sel)sel.addEventListener('change',()=>{if(manuel)manuel.style.display=sel.value==='autre'?'block':'none';});
-  },50);
+  setTimeout(()=>_retourRenderLines(),50);
 }
 
 // ── Retour marchandise depuis Livraison Magasin (client sans BC) ──
@@ -5823,92 +5864,90 @@ function openRetourModalSession(sessionId){
   const numBL=s?f(s,'Numero_BL')||('BL-'+sessionId):('BL-'+sessionId);
   const client=s?f(s,'Client')||'':'';
   const vendeurDefaut=vendeurConnecte()||(s?f(s,'Vendeur_Emetteur'):'')||'';
-  const optionsArticles=lignes.map((l,idx)=>{
-    const ref=f(l,'Reference_Article')||'';
-    const des=f(l,'Designation')||'';
-    return`<option value="${idx}">${ref} — ${des}</option>`;
-  }).join('');
+
+  _retourLinesSource=lignes.map(l=>({
+    ref:f(l,'Reference_Article')||'',
+    des:f(l,'Designation')||''
+  }));
+  _retourLines=[{art:'',qte:1}];
 
   openModal(`↩️ Retour marchandise`,`
     <div style="font-size:12px;color:var(--text-muted);font-family:var(--font-mono);margin-bottom:14px">BL ${numBL}${client?' · '+client:''}</div>
-    <div class="mf"><label>Article retourné *</label>
-      <select id="m-ret-article" style="font-size:13px">
-        <option value="">— Choisir un article de ce BL —</option>
-        ${optionsArticles}
-        <option value="autre">Autre / non listé — saisir manuellement</option>
-      </select>
-    </div>
-    <div id="m-ret-manuel" style="display:none">
-      <div class="mf"><label>Référence</label><input id="m-ret-ref-manuel" placeholder="Référence article"></div>
-      <div class="mf"><label>Désignation</label><input id="m-ret-des-manuel" placeholder="Désignation"></div>
-    </div>
-    <div class="mf"><label>Quantité retournée *</label>
-      <input id="m-ret-qte" type="number" min="1" step="1" placeholder="Ex : 3">
-    </div>
+    <div class="mf"><label>Articles retournés *</label></div>
+    <div id="m-ret-lines-container"></div>
+    <button type="button" class="btn" style="margin-bottom:14px;font-size:12px" onclick="_retourAddLine()">+ Ajouter une ligne</button>
     <div class="mf"><label>N° FC de l'avoir (Image)</label>
       <input id="m-ret-fc" placeholder="Ex : AV-2026-0045">
     </div>
-    <div class="mf"><label>Montant de l'avoir (€ HT)</label>
+    <div class="mf"><label>Montant total de l'avoir (€ HT)</label>
       <input id="m-ret-montant" type="number" min="0" step="0.01" placeholder="Optionnel">
     </div>
     <div class="mf"><label>Commentaire</label>
       <textarea id="m-ret-commentaire" rows="2" placeholder="Motif — casse, erreur, surplus..."></textarea>
     </div>
     <div style="background:var(--amber-light);border:1px solid var(--amber);border-radius:var(--radius-sm);padding:10px 14px;font-size:11.5px;color:#8a6d00">
-      ℹ️ Client sans BC — ce retour n'est lié à aucun bon de commande, uniquement au BL ${numBL}.
+      ℹ️ Client sans BC — ce retour n'est lié à aucun bon de commande, uniquement au BL ${numBL}. Si plusieurs articles, le montant saisi est rattaché à la première ligne uniquement.
     </div>`,
   async()=>{
-    const selArt=document.getElementById('m-ret-article').value;
-    if(!selArt){document.getElementById('m-ret-article').style.borderColor='var(--red)';throw new Error('Choisissez un article.');}
-    let ref,design;
-    if(selArt==='autre'){
-      ref=document.getElementById('m-ret-ref-manuel').value.trim();
-      design=document.getElementById('m-ret-des-manuel').value.trim();
-      if(!ref&&!design){throw new Error('Précisez au moins une référence ou une désignation.');}
-    }else{
-      const l=lignes[parseInt(selArt)];
-      ref=f(l,'Reference_Article')||'';
-      design=f(l,'Designation')||'';
-    }
-    const qte=parseInt(document.getElementById('m-ret-qte').value)||0;
-    if(qte<=0){document.getElementById('m-ret-qte').style.borderColor='var(--red)';throw new Error('La quantité retournée doit être supérieure à 0.');}
+    if(!_retourLines.length)throw new Error('Ajoutez au moins un article.');
     const fcAvoir=document.getElementById('m-ret-fc').value.trim();
     const montantAvoir=parseFloat(document.getElementById('m-ret-montant').value)||0;
     const commentaire=document.getElementById('m-ret-commentaire').value.trim();
     const nowIso=new Date().toISOString();
 
-    await spPost('sites/BondeCommande','Retours_Marchandise',{
-      Title:`RET-BL${numBL}-${nowIso.slice(0,10)}`,
-      N_BL_Origine:numBL,
-      SessionId:sessionId,
-      Reference_Article:ref,
-      Designation:design,
-      Quantite_Retournee:qte,
-      Numero_FC_Avoir:fcAvoir,
-      Montant_Avoir:montantAvoir,
-      Date_Retour:nowIso,
-      Vendeur:vendeurDefaut,
-      Commentaire:commentaire?`${commentaire} (client sans BC — BL ${numBL})`:`Client sans BC — BL ${numBL}`
-    });
+    const resolved=[];
+    for(let i=0;i<_retourLines.length;i++){
+      const ln=_retourLines[i];
+      let ref,design;
+      if(ln.art==='autre'){
+        ref=(ln.refManuel||'').trim();
+        design=(ln.desManuel||'').trim();
+        if(!ref&&!design)throw new Error(`Ligne ${i+1} : précisez une référence ou une désignation.`);
+      }else if(ln.art===''||ln.art===undefined){
+        throw new Error(`Ligne ${i+1} : choisissez un article.`);
+      }else{
+        const a=_retourLinesSource[parseInt(ln.art)];
+        if(!a)throw new Error(`Ligne ${i+1} : article invalide.`);
+        ref=a.ref;design=a.des;
+      }
+      const qte=parseInt(ln.qte)||0;
+      if(qte<=0)throw new Error(`Ligne ${i+1} : la quantité doit être supérieure à 0.`);
+      resolved.push({ref,design,qte});
+    }
 
-    await spPost('sites/BondeCommande','Mouvements_Stock',{
-      Title:`RETOUR ${ref||design} — BL ${numBL}`,
-      Reference_Article:ref,
-      Designation:design,
-      Quantite_Sortie:-qte,
-      Numero_BL:numBL||'',
-      Vendeur:vendeurDefaut,
-      Date_Mouvement:nowIso
-    });
+    for(let i=0;i<resolved.length;i++){
+      const {ref,design,qte}=resolved[i];
+      const suffix=resolved.length>1?`-L${i+1}`:'';
+      await spPost('sites/BondeCommande','Retours_Marchandise',{
+        Title:`RET-BL${numBL}-${nowIso.slice(0,10)}${suffix}`,
+        N_BL_Origine:numBL,
+        SessionId:sessionId,
+        Reference_Article:ref,
+        Designation:design,
+        Quantite_Retournee:qte,
+        Numero_FC_Avoir:fcAvoir,
+        Montant_Avoir:i===0?montantAvoir:0,
+        Date_Retour:nowIso,
+        Vendeur:vendeurDefaut,
+        Commentaire:commentaire?`${commentaire} (client sans BC — BL ${numBL})`:`Client sans BC — BL ${numBL}`
+      });
 
-    return `↩️ Retour enregistré — ${qte} × ${ref||design} (BL ${numBL})`;
+      await spPost('sites/BondeCommande','Mouvements_Stock',{
+        Title:`RETOUR ${ref||design} — BL ${numBL}`,
+        Reference_Article:ref,
+        Designation:design,
+        Quantite_Sortie:-qte,
+        Numero_BL:numBL||'',
+        Vendeur:vendeurDefaut,
+        Date_Mouvement:nowIso
+      });
+    }
+
+    const totalQte=resolved.reduce((s,r)=>s+r.qte,0);
+    return `↩️ Retour enregistré — ${resolved.length} article${resolved.length>1?'s':''} (${totalQte} unité${totalQte>1?'s':''}) — BL ${numBL}`;
   });
 
-  setTimeout(()=>{
-    const sel=document.getElementById('m-ret-article');
-    const manuel=document.getElementById('m-ret-manuel');
-    if(sel)sel.addEventListener('change',()=>{if(manuel)manuel.style.display=sel.value==='autre'?'block':'none';});
-  },50);
+  setTimeout(()=>_retourRenderLines(),50);
 }
 
 // ── Alerte bloquante "BC entièrement livré ?" ──
