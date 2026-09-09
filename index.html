@@ -1240,8 +1240,8 @@
         </div>
       </div>
       <div class="tc"><table>
-        <thead><tr><th>Date</th><th>N° BC</th><th>Référence</th><th>Désignation</th><th style="text-align:center">Qté</th><th>N° FC Avoir</th><th style="text-align:right">Montant Avoir</th><th>Vendeur</th><th>Commentaire</th></tr></thead>
-        <tbody id="retours-body"><tr class="empty-row"><td colspan="9">Cliquez sur l'onglet pour charger les retours...</td></tr></tbody>
+        <thead><tr><th>Date</th><th>N° BC</th><th>N° BL origine</th><th>Référence</th><th>Désignation</th><th style="text-align:center">Qté</th><th>N° FC Avoir</th><th style="text-align:right">Montant Avoir</th><th>Vendeur</th><th>Commentaire</th></tr></thead>
+        <tbody id="retours-body"><tr class="empty-row"><td colspan="10">Cliquez sur l'onglet pour charger les retours...</td></tr></tbody>
       </table></div>
     </div>
   </div>
@@ -5069,10 +5069,11 @@ function renderRetours(){
     if(fV!=='all'&&f(r,'Vendeur')!==fV)return false;
     if(q){
       const numBC=String(f(r,'N_BC')||'').toLowerCase();
+      const numBL=String(f(r,'N_BL_Origine')||'').toLowerCase();
       const ref=String(f(r,'Reference_Article')||'').toLowerCase();
       const fc=String(f(r,'Numero_FC_Avoir')||'').toLowerCase();
       const vendeur=String(f(r,'Vendeur')||'').toLowerCase();
-      if(!numBC.includes(q)&&!ref.includes(q)&&!fc.includes(q)&&!vendeur.includes(q))return false;
+      if(!numBC.includes(q)&&!numBL.includes(q)&&!ref.includes(q)&&!fc.includes(q)&&!vendeur.includes(q))return false;
     }
     return true;
   });
@@ -5081,11 +5082,14 @@ function renderRetours(){
   if(b){
     b.innerHTML=items.length?items.map(r=>{
       const bcId=r.BCId;
-      const numBC=f(r,'N_BC')||'—';
+      const sessId=r.SessionId;
+      const numBC=bcId?(f(r,'N_BC')||'—'):'—';
+      const numBL=f(r,'N_BL_Origine')||(!bcId?f(r,'N_BC'):'')||'—';
       const montant=parseFloat(f(r,'Montant_Avoir'))||0;
       return`<tr>
         <td class="mono" style="font-size:11px;white-space:nowrap">${fmtDate(f(r,'Date_Retour'))}</td>
         <td class="ref" style="${bcId?'cursor:pointer;color:var(--blue)':''}" ${bcId?`onclick="closePanel();openBCPanel(${bcId})"`:''}>${numBC}</td>
+        <td class="mono" style="font-size:11px;${sessId?'cursor:pointer;color:var(--blue)':''}" ${sessId?`onclick="closePanel();openSessionPanel(${sessId})"`:''}>${numBL}</td>
         <td class="mono">${f(r,'Reference_Article')||'—'}</td>
         <td style="font-size:11.5px">${f(r,'Designation')||'—'}</td>
         <td style="text-align:center;font-weight:700">${f(r,'Quantite_Retournee')||0}</td>
@@ -5094,7 +5098,7 @@ function renderRetours(){
         <td style="font-size:11.5px">${f(r,'Vendeur')||'—'}</td>
         <td style="font-size:11px;color:var(--text-muted);max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${(f(r,'Commentaire')||'').replace(/"/g,'&quot;')}">${f(r,'Commentaire')||'—'}</td>
       </tr>`;
-    }).join(''):'<tr class="empty-row"><td colspan="9">Aucun retour ne correspond aux critères</td></tr>';
+    }).join(''):'<tr class="empty-row"><td colspan="10">Aucun retour ne correspond aux critères</td></tr>';
   }
 
   const kc=document.getElementById('kpi-retours-count');if(kc)kc.textContent=all.length;
@@ -5114,16 +5118,18 @@ function exportRetoursCSV(){
     if(fV!=='all'&&f(r,'Vendeur')!==fV)return false;
     if(q){
       const numBC=String(f(r,'N_BC')||'').toLowerCase();
+      const numBL=String(f(r,'N_BL_Origine')||'').toLowerCase();
       const ref=String(f(r,'Reference_Article')||'').toLowerCase();
       const fc=String(f(r,'Numero_FC_Avoir')||'').toLowerCase();
       const vendeur=String(f(r,'Vendeur')||'').toLowerCase();
-      if(!numBC.includes(q)&&!ref.includes(q)&&!fc.includes(q)&&!vendeur.includes(q))return false;
+      if(!numBC.includes(q)&&!numBL.includes(q)&&!ref.includes(q)&&!fc.includes(q)&&!vendeur.includes(q))return false;
     }
     return true;
   });
   exportCSV(items,[
     {label:'Date', fn:r=>fmtDate(f(r,'Date_Retour'))},
-    {label:'N° BC', fn:r=>f(r,'N_BC')||''},
+    {label:'N° BC', fn:r=>r.BCId?(f(r,'N_BC')||''):''},
+    {label:'N° BL origine', fn:r=>f(r,'N_BL_Origine')||(!r.BCId?f(r,'N_BC'):'')||''},
     {label:'Référence', fn:r=>f(r,'Reference_Article')||''},
     {label:'Désignation', fn:r=>f(r,'Designation')||''},
     {label:'Qté retournée', fn:r=>f(r,'Quantite_Retournee')||0},
@@ -5710,6 +5716,10 @@ function openRetourModal(id,numBC){
   const item=(DATA.suivi||[]).find(x=>x.ID===id||x.ID===parseInt(id));
   const lignes=(DATA.lignes||[]).filter(l=>l.BCId===id||parseInt(l.BCId)===id);
   const numBL=item?f(item,'N_x00b0_BL'):'';
+  // Le BC peut avoir été scanné (Sessions_Scan) — si oui, on garde l'ID de session
+  // pour que la colonne "N° BL origine" de Retours_Marchandise reste cliquable.
+  const sessionMatch=numBL?(DATA.sessionsScan||[]).find(s=>String(f(s,'Numero_BL')||'')===String(numBL)):null;
+  const sessionId=sessionMatch?sessionMatch.ID:null;
   const vendeurDefaut=vendeurConnecte()||f(item,'Vendeurencharge')||'';
   const optionsArticles=lignes.map((l,idx)=>{
     const ref=f(l,'R_x00e9_f_x00e9_rence')||'';
@@ -5769,6 +5779,8 @@ function openRetourModal(id,numBC){
       Title:`RET-${numBC}-${nowIso.slice(0,10)}`,
       N_BC:numBC,
       BCId:id,
+      N_BL_Origine:numBL||'',
+      SessionId:sessionId,
       Reference_Article:ref,
       Designation:design,
       Quantite_Retournee:qte,
@@ -5801,10 +5813,10 @@ function openRetourModal(id,numBC){
 
 // ── Retour marchandise depuis Livraison Magasin (client sans BC) ──
 // Même logique que openRetourModal, mais construite sur Lignes_Scan/Sessions_Scan
-// puisqu'il n'y a pas de Lignes_BC pour ces clients de passage. BCId reste vide
-// dans Retours_Marchandise (pas de BC à lier) ; N_BC est renseigné avec le N° BL,
-// seule référence disponible dans ce cas, pour que la ligne reste identifiable
-// dans l'onglet Retours.
+// puisqu'il n'y a pas de Lignes_BC pour ces clients de passage. BCId et N_BC
+// restent vides (pas de BC à lier) ; le N° BL va dans N_BL_Origine, colonne
+// dédiée distincte de N_BC pour ne jamais mélanger les deux références dans
+// Analytics ou un futur rapprochement.
 function openRetourModalSession(sessionId){
   const s=(DATA.sessionsScan||[]).find(x=>x.ID===sessionId||x.ID===parseInt(sessionId));
   const lignes=(DATA.lignesScan||[]).filter(l=>String(lineSessionId(l))===String(sessionId));
@@ -5867,7 +5879,8 @@ function openRetourModalSession(sessionId){
 
     await spPost('sites/BondeCommande','Retours_Marchandise',{
       Title:`RET-BL${numBL}-${nowIso.slice(0,10)}`,
-      N_BC:numBL,
+      N_BL_Origine:numBL,
+      SessionId:sessionId,
       Reference_Article:ref,
       Designation:design,
       Quantite_Retournee:qte,
