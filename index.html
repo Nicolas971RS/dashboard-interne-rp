@@ -1260,7 +1260,7 @@
   <div class="modal-box" onclick="event.stopPropagation()">
     <div class="modal-hd">
       <span class="modal-hd-t" id="modal-title">—</span>
-      <button class="modal-x" onclick="tryCloseModal()">✕</button>
+      <button class="modal-x" title="Fermer" onclick="tryCloseModal()">✕</button>
     </div>
     <div class="modal-bd" id="modal-body"></div>
     <div class="modal-ft">
@@ -2204,7 +2204,7 @@ function renderBandeauPriorite(){
         <td><div style="display:flex;gap:5px;align-items:center">
           <input id="fc-inline-${i.ID}" placeholder="N° facture puis Entrée" onkeydown="if(event.key==='Enter')facturerInline(${i.ID})"
             style="flex:1;height:27px;border:1px solid var(--border);border-radius:5px;padding:0 8px;font-size:12px;font-family:var(--font-mono);outline:none">
-          <button class="btn green" style="height:27px;font-size:11px" onclick="facturerInline(${i.ID})">✓</button>
+          <button class="btn green" title="Valider la facturation" style="height:27px;font-size:11px" onclick="facturerInline(${i.ID})">✓</button>
         </div></td>
       </tr>`;}).join('')}</tbody></table></div>
     ${aFact.length>40?`<div style="font-size:11px;color:var(--text-muted);margin-top:6px">Les 40 plus anciens sur ${aFact.length}.</div>`:''}`;
@@ -2415,7 +2415,7 @@ function showRappelFacturation(){
       <td><div style="display:flex;gap:5px;align-items:center">
         <input id="rf-${i.ID}" placeholder="N° facture puis Entrée" onkeydown="if(event.key==='Enter')facturerInline(${i.ID},'rf-')"
           style="flex:1;height:28px;border:1px solid var(--border);border-radius:5px;padding:0 8px;font-size:12px;font-family:var(--font-mono);outline:none">
-        <button class="btn green" style="height:28px;font-size:11px" onclick="facturerInline(${i.ID},'rf-')">✓</button>
+        <button class="btn green" title="Valider la facturation" style="height:28px;font-size:11px" onclick="facturerInline(${i.ID},'rf-')">✓</button>
       </div></td>
     </tr>`;};
 
@@ -2596,7 +2596,7 @@ async function openCompleterBC(id){
           <div style="font-size:11px;color:var(--text-muted)">${logo?'Probablement un logo de signature — à supprimer':'Cliquer pour ouvrir et recopier les informations'}</div>
         </div>
         <button type="button" class="btn btn-supprimer" style="height:26px;padding:0 8px" title="Supprimer cette pièce jointe" onclick="supprimerPJ(${id},${JSON.stringify(nom).replace(/"/g,'&quot;')},${idx})">🗑</button>
-        <span style="font-size:15px;color:${c.fg};cursor:pointer" onclick="openAttachment('${url}')">→</span>
+        <span style="font-size:15px;color:${c.fg};cursor:pointer" title="Ouvrir le document" onclick="openAttachment('${url}')">→</span>
       </div>`;}).join('')
       +`<div style="display:flex;gap:6px;margin-top:8px">
          <button type="button" class="btn btn-supprimer" style="height:28px" onclick="closeModal();supprimerBCParasite(${id})">🗑 Ce n'est pas un BC — supprimer</button>
@@ -4579,8 +4579,8 @@ function sessionPanelEditClient(id){
     <div style="display:flex;gap:6px">
       <input id="sp-client-input-${id}" list="sp-client-dl-${id}" value="${current}" style="flex:1;padding:5px 8px;border:1px solid var(--border);border-radius:5px;font-size:12.5px;box-sizing:border-box">
       <datalist id="sp-client-dl-${id}">${clientNames.map(c=>`<option value="${c.replace(/"/g,'&quot;')}">`).join('')}</datalist>
-      <button onclick="sessionPanelSaveClient(${id})" class="btn" style="height:28px;font-size:11px;padding:0 10px">✓</button>
-      <button onclick="openSessionPanel(${id})" class="btn" style="height:28px;font-size:11px;padding:0 10px;color:var(--text-muted)">✕</button>
+      <button onclick="sessionPanelSaveClient(${id})" class="btn" title="Enregistrer le client" style="height:28px;font-size:11px;padding:0 10px">✓</button>
+      <button onclick="openSessionPanel(${id})" class="btn" title="Annuler" style="height:28px;font-size:11px;padding:0 10px;color:var(--text-muted)">✕</button>
     </div>
   </div>`;
   document.getElementById('sp-client-input-'+id)?.focus();
@@ -5637,8 +5637,9 @@ async function deleteDBCAttachment(id,fileName){
   if(!ok)return;
   try{
     await spDeleteAttachment('sites/BondeCommande','Demandes_BC',id,fileName);
+    toast('🗑 Pièce jointe supprimée','ok');
     setTimeout(()=>openDBCPanel(id),400);
-  }catch(e){alert('Erreur suppression : '+e.message);}
+  }catch(e){toast('🔴 Suppression impossible : '+e.message,'ko');}
 }
 
 async function deleteBCAttachment(id,fileName){
@@ -5646,8 +5647,9 @@ async function deleteBCAttachment(id,fileName){
   if(!ok)return;
   try{
     await spDeleteAttachment('sites/RseauxPlus','Suivi_BC',id,fileName);
+    toast('🗑 Pièce jointe supprimée','ok');
     setTimeout(()=>openBCPanel(id),400);
-  }catch(e){alert('Erreur suppression : '+e.message);}
+  }catch(e){toast('🔴 Suppression impossible : '+e.message,'ko');}
 }
 
 // ── Récupérer pièces jointes ──
@@ -5684,7 +5686,7 @@ async function openAttachment(rawUrl){
     console.warn('REST download failed, trying direct:',e.message);
     const directUrl=C.spRoot+serverRelativeUrl;
     const w=window.open(directUrl,'_blank');
-    if(!w)alert('Autorise les popups pour ce site puis réessaie.');
+    if(!w)toast('🔴 Popups bloqués — autorise-les pour ce site puis réessaie','ko');
   }
 }
 
@@ -6376,7 +6378,7 @@ function renderChantiersList(){
         <div style="display:flex;align-items:center;gap:8px;flex-shrink:0">
           <span style="font-size:11px;color:var(--blue);white-space:nowrap;cursor:pointer;text-decoration:underline" onclick="chToggleBCs(${c.ID})" id="ch-bctoggle-${c.ID}">${nbBC} BC${nbBC>1?'s':''} ▾</span>
           <button class="btn" style="height:26px;font-size:11px;padding:0 8px" onclick="chEditMode(${c.ID})">✏️ Modifier</button>
-          <button class="btn" style="height:26px;font-size:11px;padding:0 8px;color:var(--red);border-color:var(--red)" onclick="chDelete(${c.ID},${nbBC})">🗑</button>
+          <button class="btn" title="Supprimer ce chantier" style="height:26px;font-size:11px;padding:0 8px;color:var(--red);border-color:var(--red)" onclick="chDelete(${c.ID},${nbBC})">🗑</button>
         </div>
       </div>
       <div id="ch-bcs-${c.ID}" style="display:none;margin-top:8px;padding:8px 10px;background:#f4f6fa;border-radius:6px">
@@ -7105,8 +7107,8 @@ function rechercheGlobalBC(){
         <td style="text-align:center">${docBadge}</td>
         <td onclick="event.stopPropagation()"><div class="btn-grp">
           <button class="btn" onclick="openBCPanel(${i.ID})">Voir BC</button>
-          <button class="btn green" onclick="openFacturerModal(${i.ID})">💰</button>
-          <button class="btn navy" onclick="openTraiterModal(${i.ID})">🔧</button>
+          <button class="btn green" title="Facturer ce BC" onclick="openFacturerModal(${i.ID})">💰</button>
+          <button class="btn navy" title="Traiter ce BC" onclick="openTraiterModal(${i.ID})">🔧</button>
           <button class="btn orange" onclick="openLivraisonPartielle(${i.ID})">🔀 Livraison Partielle</button>
           <button class="btn btn-supprimer" title="Supprimer définitivement de SharePoint" onclick="supprimerBCParasite(${i.ID})">🗑 Supprimer</button>
         </div></td>
@@ -7984,7 +7986,7 @@ async function openDBCPanel(id){
     let html=`
       <div class="pf"><div class="pf-lbl">Client (Entreprise)</div>
         <div class="pf-val" style="font-size:14px;font-weight:700;display:flex;align-items:center;gap:8px">${client}
-          <button onclick="navigator.clipboard.writeText('${client.replace(/'/g,"\\'")}').then(()=>{this.textContent='✅';setTimeout(()=>this.textContent='📋',1200)})" style="background:none;border:1px solid var(--border);border-radius:4px;padding:2px 7px;font-size:11px;cursor:pointer;color:var(--text-muted)">📋</button>
+          <button onclick="navigator.clipboard.writeText('${client.replace(/'/g,"\\'")}').then(()=>{this.textContent='✅';setTimeout(()=>this.textContent='📋',1200)})" title="Copier le nom du client" style="background:none;border:1px solid var(--border);border-radius:4px;padding:2px 7px;font-size:11px;cursor:pointer;color:var(--text-muted)">📋</button>
         </div>
       </div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:0">
@@ -8120,7 +8122,7 @@ async function updateDBCPanel(id){
 
 async function uploadDBCAttachment(id){
   const inp=document.getElementById('dbc-panel-file');
-  if(!inp?.files?.length){alert('Sélectionnez un fichier d\'abord.');return;}
+  if(!inp?.files?.length){toast('⚠️ Sélectionnez un fichier d\'abord','warn');return;}
   const file=inp.files[0];
   const msg=document.getElementById('dbc-panel-msg');
   try{
@@ -8154,10 +8156,10 @@ async function relancerDBC(id,email){
     });
     const idx=DATA.dbc.findIndex(i=>i.ID===id);
     if(idx!==-1){DATA.dbc[idx]['Statut']='Relancé';DATA.dbc[idx]['Nb_Relances']=nbRel;}
-    alert(`✅ Statut mis à jour : Relancé (${nbRel}ème relance)\n\nPensez à envoyer l'email manuellement à : ${email}`);
+    toast(`✅ Relancé (${nbRel}${nbRel>1?'e':'re'} relance) — pensez à envoyer l'email à ${email}`,'ok');
     renderDBCTable();updateBadges();
     openDBCPanel(id);
-  }catch(e){alert('Erreur : '+e.message);}
+  }catch(e){toast('🔴 Erreur : '+e.message,'ko');}
 }
 
 async function escaladerDBC(id){
@@ -8169,10 +8171,10 @@ async function escaladerDBC(id){
     await spPatch('sites/BondeCommande','Demandes_BC',id,{Statut:'Litigieux'});
     const idx=DATA.dbc.findIndex(i=>i.ID===id);
     if(idx!==-1)DATA.dbc[idx]['Statut']='Litigieux';
-    alert('✅ Statut mis à jour : Litigieux\nFabrice peut maintenant voir ce dossier dans la vue "Litigieux".');
+    toast('⚡ Statut mis à jour : Litigieux — visible dans la vue "Litigieux"','ok');
     renderDBCTable();updateBadges();
     openDBCPanel(id);
-  }catch(e){alert('Erreur : '+e.message);}
+  }catch(e){toast('🔴 Erreur : '+e.message,'ko');}
 }
 
 // ── Panneau Devis ──
@@ -8205,7 +8207,7 @@ async function openBCPanel(id){
 
     let html=`
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:0">
-        <div class="pf"><div class="pf-lbl">N° BC</div><div class="pf-val mono" style="font-size:15px;font-weight:800;color:var(--navy);display:flex;align-items:center;gap:8px">${numBC}<button onclick="navigator.clipboard.writeText('${numBC}').then(()=>{this.textContent='✅';setTimeout(()=>this.textContent='📋',1200)})" style="background:none;border:1px solid var(--border);border-radius:4px;padding:2px 7px;font-size:11px;cursor:pointer;color:var(--text-muted)">📋</button></div></div>
+        <div class="pf"><div class="pf-lbl">N° BC</div><div class="pf-val mono" style="font-size:15px;font-weight:800;color:var(--navy);display:flex;align-items:center;gap:8px">${numBC}<button onclick="navigator.clipboard.writeText('${numBC}').then(()=>{this.textContent='✅';setTimeout(()=>this.textContent='📋',1200)})" title="Copier le N° BC" style="background:none;border:1px solid var(--border);border-radius:4px;padding:2px 7px;font-size:11px;cursor:pointer;color:var(--text-muted)">📋</button></div></div>
         <div class="pf"><div class="pf-lbl">Statut</div><div class="pf-val">${bStatut(s)}</div></div>
       </div>
       ${(()=>{
@@ -8496,7 +8498,7 @@ async function passerEnCours(id,fromPanel=false){
     loadAll();
   }catch(e){
     if(target){target.disabled=false;target.textContent='📋 Prendre en charge';}
-    alert('Erreur PATCH Statut : '+e.message);
+    toast('🔴 Erreur : '+e.message,'ko');
   }
 }
 
@@ -8516,7 +8518,7 @@ async function envoyerDevisFlow(id){
     setTimeout(()=>loadAll(),3000);
   }catch(e){
     if(btn){btn.disabled=false;btn.textContent='📨 Envoyer devis';}
-    alert('Erreur flow : '+e.message);
+    toast('🔴 Erreur d\'envoi : '+e.message,'ko');
   }
 }
 
@@ -8797,7 +8799,7 @@ function ralMajApercu(){
 
 function openReceptionnerLigne(ligneId,bcId){
   const ligne=(DATA.lignes||[]).find(l=>l.ID===ligneId);
-  if(!ligne){alert('Ligne non trouvée en cache.');return;}
+  if(!ligne){toast('🔴 Ligne non trouvée en cache — actualise et réessaie','ko');return;}
   const qc=parseFloat(f(ligne,'Quantit_x00e9_command_x00e9_e'))||0;
   const ql=parseFloat(f(ligne,'Quantit_x00e9_livr_x00e9_e'))||0;
   const ral=qc-ql;
@@ -8868,7 +8870,7 @@ async function livraisonPartielleFlow(id,numBC,client){
     setTimeout(()=>loadAll(),4000);
     setTimeout(()=>alerteLivraisonPartielleCreee(numBC),600);
   }catch(e){
-    alert('Erreur flow : '+e.message);
+    toast('🔴 Erreur flow : '+e.message,'ko');
   }
 }
 
@@ -8913,15 +8915,10 @@ async function envoyerBCFlow(id,numBC){
     const idx=DATA.suivi.findIndex(i=>i.ID===id);
     if(idx!==-1)DATA.suivi[idx]['Envoyer_Docuware']=true;
     renderAll();updateBadges();
-    // Feedback non-bloquant
-    const toast=document.createElement('div');
-    toast.textContent='📦 Docuware — envoi déclenché ✅';
-    toast.style.cssText='position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:var(--teal-mid);color:white;padding:10px 24px;border-radius:var(--radius);font-weight:600;font-size:13px;z-index:9999;box-shadow:var(--shadow-md)';
-    document.body.appendChild(toast);
-    setTimeout(()=>toast.remove(),4000);
+    toast('📦 Docuware — envoi déclenché','ok');
     setTimeout(()=>loadAll(),6000);
   }catch(e){
-    alert('Erreur : '+e.message);
+    toast('🔴 Erreur : '+e.message,'ko');
   }
 }
 
@@ -9198,7 +9195,7 @@ const PA_FLOWS = {
 // ── Déclencher un flow PA via HTTP trigger ──
 async function triggerPAFlow(flowKey, itemId){
   const url = PA_FLOWS[flowKey];
-  if(!url){alert(`Flow "${flowKey}" non configuré.`);return false;}
+  if(!url){toast(`🔴 Flow "${flowKey}" non configuré — contacte Nickos`,'ko');return false;}
 
   const headers = {'Content-Type':'application/json'};
   // URLs sans sig= → token Power Platform requis
@@ -9270,7 +9267,7 @@ init();
   <div class="modal-box" style="width:420px">
     <div class="modal-hd">
       <span class="modal-hd-t" id="confirm-title">Confirmation</span>
-      <button class="modal-x" onclick="confirmResolve(false)">✕</button>
+      <button class="modal-x" title="Fermer" onclick="confirmResolve(false)">✕</button>
     </div>
     <div class="modal-bd" style="gap:0">
       <p id="confirm-body" style="font-size:13.5px;line-height:1.6;color:var(--text-secondary)"></p>
@@ -9287,7 +9284,7 @@ init();
   <div class="modal-box" style="width:680px;max-width:96vw">
     <div class="modal-hd">
       <span class="modal-hd-t">➕ Saisie manuelle devis — Réseaux Plus</span>
-      <button class="modal-x" onclick="closeAjoutDevisModal()">✕</button>
+      <button class="modal-x" title="Fermer" onclick="closeAjoutDevisModal()">✕</button>
     </div>
     <div class="modal-bd" style="gap:10px">
 
