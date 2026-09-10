@@ -4425,16 +4425,48 @@ function renderPartielles(){
     return !!racine || statut==='partiellement livrée'||statut==='partiellement livree';
   };
   const familleInit=all.filter(isPartielleFamily);
-  const racines=[...new Set(familleInit.map(s=>f(s,'BL_Racine')||f(s,'Numero_BL')))];
+
+  // On ne peut pas se fier à Date_Emission pour ordonner les étapes (le flow
+  // peut recopier une date au lieu d'utiliser "maintenant" à la création du
+  // report), ni à BL_Racine du parent immédiat pour regrouper (un BL reporté
+  // plusieurs fois a chaque étape qui pointe seulement vers son parent direct,
+  // pas vers la racine d'origine). On remonte donc la chaîne réelle jusqu'à la
+  // véritable racine, puis on reconstruit l'ordre des étapes par chaînage
+  // (qui pointe vers qui), pas par tri de date.
+  const trouverRacineVraie=s=>{
+    let courant=s,racineVal=f(s,'BL_Racine');
+    const vus=new Set([s.ID]);
+    while(racineVal){
+      const parent=all.find(x=>String(f(x,'Numero_BL'))===String(racineVal));
+      if(!parent||vus.has(parent.ID))break;
+      vus.add(parent.ID);
+      courant=parent;
+      racineVal=f(parent,'BL_Racine');
+    }
+    return f(courant,'Numero_BL');
+  };
+
+  const racines=[...new Set(familleInit.map(trouverRacineVraie))];
 
   const q=(document.getElementById('search-part')?.value||'').toLowerCase();
   const fC=document.getElementById('filter-client-part')?.value||'all';
   const fS=document.getElementById('filter-statut-part')?.value||'all';
 
-  // Construire les groupes : une racine = un accordéon, ses sessions triées chronologiquement
+  // Construire les groupes : une vraie racine = un accordéon, étapes ordonnées
+  // en suivant le chaînage BL_Racine → Numero_BL (pas par date)
   let groupes=racines.map(rac=>{
-    const sessions=all.filter(s=>(f(s,'BL_Racine')||f(s,'Numero_BL'))===rac)
-      .sort((a,b)=>new Date(f(a,'Date_Emission'))-new Date(f(b,'Date_Emission')));
+    const membres=all.filter(s=>trouverRacineVraie(s)===rac);
+    const parNumero={};
+    membres.forEach(s=>{parNumero[f(s,'Numero_BL')]=s;});
+    const sessions=[];
+    const vus=new Set();
+    let courantNum=rac;
+    while(courantNum&&parNumero[courantNum]&&!vus.has(courantNum)){
+      vus.add(courantNum);
+      sessions.push(parNumero[courantNum]);
+      const enfant=membres.find(s=>f(s,'BL_Racine')===courantNum);
+      courantNum=enfant?f(enfant,'Numero_BL'):null;
+    }
     const client=f(sessions[0],'Client')||'—';
     return {rac,sessions,client};
   });
@@ -4649,20 +4681,35 @@ function openSessionPanel(id){
 
   const canReopen=low.includes('terminée')||low.includes('terminee')||low.includes('écart')||low.includes('ecart')||low==='prête à livrer';
 
-  // Si cette session est un "report" (BL_Racine renseigné), on résume ce qui a déjà
-  // été livré sur le BL d'origine — sinon un magasinier qui reprend le reste n'a
-  // aucune visibilité sur l'historique, même si la donnée existe dans SharePoint.
+  // Si cette session est un "report" (BL_Racine renseigné), on remonte TOUTE la
+  // chaîne des reports précédents — pas juste le parent immédiat, car un BL peut
+  // avoir été reporté plusieurs fois de suite (BL → BL-A → BL-B...). S'arrêter à
+  // un seul niveau sous-évalue ce qui a déjà été livré.
   const blRacineVal=f(s,'BL_Racine');
   let origineBanner='';
   if(blRacineVal){
-    const sOrigine=all.find(x=>String(f(x,'Numero_BL'))===String(blRacineVal));
-    if(sOrigine){
-      const lignesOrigine=(DATA.lignesScan||[]).filter(l=>String(lineSessionId(l))===String(sOrigine.ID)&&Number(f(l,'Quantite_Scannee')||0)>0);
-      const totalOrigine=lignesOrigine.reduce((a,l)=>a+Number(f(l,'Quantite_Scannee')||0),0);
-      const detailOrigine=lignesOrigine.map(l=>(f(l,'Reference_Article')||'').trim()+' ×'+Number(f(l,'Quantite_Scannee')||0)).join(', ');
+    const etapes=[];
+    const vus=new Set([id]);
+    let racineCourante=blRacineVal;
+    while(racineCourante){
+      const parent=all.find(x=>String(f(x,'Numero_BL'))===String(racineCourante));
+      if(!parent||vus.has(parent.ID))break; // sécurité anti-boucle
+      vus.add(parent.ID);
+      etapes.push(parent);
+      racineCourante=f(parent,'BL_Racine');
+    }
+    if(etapes.length){
+      let totalGlobal=0;
+      const detailParEtape=etapes.map(sOrigine=>{
+        const lignesOrigine=(DATA.lignesScan||[]).filter(l=>String(lineSessionId(l))===String(sOrigine.ID)&&Number(f(l,'Quantite_Scannee')||0)>0);
+        const totalEtape=lignesOrigine.reduce((a,l)=>a+Number(f(l,'Quantite_Scannee')||0),0);
+        totalGlobal+=totalEtape;
+        const detail=lignesOrigine.map(l=>(f(l,'Reference_Article')||'').trim()+' ×'+Number(f(l,'Quantite_Scannee')||0)).join(', ');
+        return `<div style="margin-top:4px">• BL ${f(sOrigine,'Numero_BL')} — ${fmtDate(f(sOrigine,'Date_Scan'))} par ${f(sOrigine,'Magasinier')||'—'} : <strong>${totalEtape} unité${totalEtape>1?'s':''}</strong>${detail?' ('+detail+')':''}</div>`;
+      }).join('');
       origineBanner=`<div style="background:var(--amber-light);border:1px solid var(--amber);border-radius:var(--radius-sm);padding:10px 14px;margin-bottom:14px;font-size:12px;color:#8a6d00;line-height:1.5">
-        📋 Suite du BL <strong>${blRacineVal}</strong> — déjà livré le ${fmtDate(f(sOrigine,'Date_Scan'))} par ${f(sOrigine,'Magasinier')||'—'} :
-        <strong>${totalOrigine} unité${totalOrigine>1?'s':''}</strong>${detailOrigine?'<br>'+detailOrigine:''}
+        📋 Historique des reports précédents — <strong>${totalGlobal} unité${totalGlobal>1?'s':''}</strong> déjà livrées au total sur ${etapes.length} étape${etapes.length>1?'s':''} :
+        ${detailParEtape}
       </div>`;
     }
   }
