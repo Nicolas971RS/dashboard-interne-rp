@@ -6557,6 +6557,9 @@ async function openTraiterModal(id,numBC,client){
 
   const lignesExistantes=(DATA.lignes||[]).filter(l=>l.BCId===id||parseInt(l.BCId)===id);
   _traiterCurBL=curBL;
+  const curSess=curBL?findSessionByBL(curBL):null;
+  const curSessPrep=curSess?(curSess.Preparation_Avance===true||curSess.Preparation_Avance==='Yes'||curSess.Preparation_Avance==='1'):false;
+  const curSessDateLiv=curSess&&f(curSess,'Date_Livraison_Prevue')?f(curSess,'Date_Livraison_Prevue').slice(0,10):today;
   const mLigneRowHtml=l=>{
     const lid=l.ID;
     const ref=(f(l,'R_x00e9_f_x00e9_rence')||'').replace(/"/g,'&quot;');
@@ -6601,6 +6604,18 @@ async function openTraiterModal(id,numBC,client){
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
       <div class="mf"><label>N° BL ou FC</label><input id="m-bl" value="${curBL}" placeholder="Ex: 820950 (BL) ou 156413 (FC)"></div>
       <div class="mf"><label>Vendeur en charge</label><select id="m-vendeur" onchange="this.classList.remove('err')"><option value="">— Inchangé —</option>${vendOpts}</select></div>
+    </div>
+    <div id="m-field-prep" style="border:1px solid var(--border);border-radius:var(--radius-sm);padding:10px 14px;margin-bottom:12px">
+      <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer">
+        <input type="checkbox" id="m-prep" ${curSessPrep?'checked':''} style="width:16px;height:16px">
+        Préparation à l'avance (le magasinier prépare avant l'arrivée du client)
+      </label>
+      <div style="margin-top:8px;margin-left:24px">
+        <label style="font-size:12px;font-weight:700;color:var(--text-muted);display:block;margin-bottom:4px">📅 Date de livraison prévue</label>
+        <input type="date" id="m-date-livraison-prep" value="${curSessDateLiv}"
+          style="padding:6px 10px;border:1px solid var(--border);border-radius:var(--radius-sm);font-size:13px;font-family:var(--font-body)">
+      </div>
+      <div style="font-size:11px;color:var(--text-muted);margin-top:6px">Nécessite un N° BL ou FC renseigné ci-dessus — crée ou met à jour la session de scan correspondante.</div>
     </div>
     <div class="mf"><label>Statut BC</label><select id="m-statut">${stOpts}</select></div>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
@@ -6732,9 +6747,11 @@ async function openTraiterModal(id,numBC,client){
     let lignesTouchees=0;
     let sessionLiee=null;
     let sessionCreee=false;
+    const prepCheck=document.getElementById('m-prep')?.checked||false;
+    const prepDateLiv=document.getElementById('m-date-livraison-prep')?.value||'';
     if(blEffectif){
       const clientNom=DATA.clients?.[clientId||currentItem.ClientId]||f(currentItem,'ClientId')||'';
-      const r=await findOrCreateSessionForBL(blEffectif,clientNom,vendeur||f(currentItem,'Vendeurencharge'));
+      const r=await findOrCreateSessionForBL(blEffectif,clientNom,vendeur||f(currentItem,'Vendeurencharge'),prepCheck,prepDateLiv);
       sessionLiee=r.sess;sessionCreee=r.created;
     }
     const rowsExist=document.querySelectorAll('#m-lignes-list .m-ligne-existing');
@@ -7618,12 +7635,23 @@ async function refetchSessionByBL(blNum){
 }
 // Trouve la session pour ce N° BL, ou la crée si rien n'existe (confirmé le 31/08/2026 :
 // aucune automatisation SharePoint ne crée Sessions_Scan depuis Suivi_BC).
-async function findOrCreateSessionForBL(blNum,client,vendeur){
+async function findOrCreateSessionForBL(blNum,client,vendeur,prep,dateLiv){
   if(!blNum)return{sess:null,created:false};
+  const dateLivIso=dateLiv?dateLiv+'T12:00:00Z':null;
   let sess=findSessionByBL(blNum);
-  if(sess)return{sess,created:false};
-  sess=await refetchSessionByBL(blNum);
-  if(sess)return{sess,created:false};
+  if(!sess)sess=await refetchSessionByBL(blNum);
+  if(sess){
+    // Session déjà existante (ex: créée par le portail) — si Traiter coche
+    // "Préparation à l'avance" a posteriori, on met à jour la session en place
+    // plutôt que d'ignorer le choix du vendeur.
+    if(prep&&!(sess.Preparation_Avance===true||sess.Preparation_Avance==='Yes'||sess.Preparation_Avance==='1')){
+      try{
+        await spPatch('sites/BondeCommande','Sessions_Scan',sess.ID??sess.Id,{Preparation_Avance:true,Date_Livraison_Prevue:dateLivIso});
+        sess.Preparation_Avance=true;sess.Date_Livraison_Prevue=dateLivIso;
+      }catch(e){console.warn('[findOrCreateSessionForBL] maj prep',e.message);}
+    }
+    return{sess,created:false};
+  }
   try{
     const created=await spPost('sites/BondeCommande','Sessions_Scan',{
       Title:`${blNum} - ${client||''}`.trim(),
@@ -7633,7 +7661,8 @@ async function findOrCreateSessionForBL(blNum,client,vendeur){
       Vendeur_Emetteur:vendeur||'',
       Date_Emission:new Date().toISOString().slice(0,10)+'T12:00:00Z',
       Statut:'BL Émis',
-      Preparation_Avance:false
+      Preparation_Avance:!!prep,
+      Date_Livraison_Prevue:dateLivIso
     });
     if(created){
       const sessNorm={...created,ID:created.ID??created.Id};
