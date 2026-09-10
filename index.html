@@ -641,8 +641,8 @@
       </div>
       <div class="acc-body open" id="acc-bl-manquant" style="margin-bottom:4px">
         <div class="tc"><table>
-          <thead><tr><th>Ancienneté</th><th>N° BC</th><th>Client</th><th>Chantier</th><th>N° FC</th><th>Montant HT</th><th>Date réception</th><th>Vendeur</th><th>Actions</th></tr></thead>
-          <tbody id="suivi-bl-manquant-body"><tr class="empty-row"><td colspan="9">Chargement...</td></tr></tbody>
+          <thead><tr><th>Ancienneté</th><th>N° BC</th><th>Client</th><th>Chantier</th><th>N° FC</th><th>Montant HT</th><th>Date réception</th><th>Vendeur</th><th>Suivi</th><th>Actions</th></tr></thead>
+          <tbody id="suivi-bl-manquant-body"><tr class="empty-row"><td colspan="10">Chargement...</td></tr></tbody>
         </table></div>
       </div>
 
@@ -2734,11 +2734,16 @@ function iconBLFC(numero){
   if(/^1/.test(n))return '🧾';
   return '📦';
 }
-function agePillHtml(dateStr){
+function agePillHtml(dateStr,extraLabel){
   if(!dateStr)return'—';
   const age=daysSince(dateStr);
-  const style=age>=7?'color:var(--red);font-weight:700;background:#ffebee':age>=3?'color:var(--amber);font-weight:600;background:var(--amber-light)':'color:var(--green);background:var(--green-light)';
-  return`<span style="font-family:var(--font-mono);font-size:11px;padding:2px 7px;border-radius:8px;${style}">${age}j</span>`;
+  const color=age>=7?'var(--red)':age>=3?'var(--amber)':'var(--green)';
+  const bg=age>=7?'#ffebee':age>=3?'var(--amber-light)':'var(--green-light)';
+  const label=extraLabel?`<div style="font-size:9.5px;color:${color};font-weight:700;margin-top:2px;white-space:nowrap">${extraLabel}</div>`:'';
+  return`<div style="display:flex;flex-direction:column;align-items:flex-start">
+    <span style="font-family:var(--font-mono);font-size:11px;padding:2px 7px;border-radius:8px;color:${color};font-weight:${age>=3?700:600};background:${bg}">${age}j</span>
+    ${label}
+  </div>`;
 }
 
 function renderAFacturer(){
@@ -2756,7 +2761,7 @@ function renderAFacturer(){
     const montantFmt=montantRaw?new Intl.NumberFormat('fr-FR',{style:'currency',currency:'EUR',minimumFractionDigits:2,maximumFractionDigits:2}).format(montantRaw):'—';
     const dateRec=f(i,'Dateder_x00e9_ception');
     return`<tr class="rr" data-bc-id="${i.ID}">
-      <td>${agePillHtml(dateRec)}</td>
+      <td>${agePillHtml(dateRec,'Facturer')}</td>
       <td class="ref">${numBC}</td><td class="cname">${client}</td>
       <td class="mono">${bl}</td>
       <td>${fcPillHtml(fcVal)}</td>
@@ -2838,7 +2843,7 @@ function renderBLManquant(){
   if(el)el.textContent=items.length+' BC'+(items.length!==1?'s':'');
   const b=document.getElementById('suivi-bl-manquant-body');
   if(!b)return;
-  if(!items.length){b.innerHTML='<tr class="empty-row"><td colspan="9">✅ Aucun BC sans N° BL</td></tr>';return;}
+  if(!items.length){b.innerHTML='<tr class="empty-row"><td colspan="10">✅ Aucun BC sans N° BL</td></tr>';return;}
   b.innerHTML=items.map(i=>{
     const client=getClient(i),vendeur=f(i,'Vendeurencharge')||'—';
     const numBC=f(i,'Title')||`BC-${i.ID}`;
@@ -2847,6 +2852,7 @@ function renderBLManquant(){
     const montantRaw=f(i,'MontantHT','Montant_HT','MontantHTTotal');
     const montantFmt=montantRaw?new Intl.NumberFormat('fr-FR',{style:'currency',currency:'EUR',minimumFractionDigits:2,maximumFractionDigits:2}).format(montantRaw):'—';
     const dateRec=f(i,'Dateder_x00e9_ception');
+    const noteSuivi=f(i,'Commentaire_Suivi')||'';
     return`<tr class="rr" data-bc-id="${i.ID}">
       <td>${agePillHtml(dateRec)}</td>
       <td class="ref">${numBC}${(()=>{
@@ -2862,6 +2868,11 @@ function renderBLManquant(){
       <td class="amt" style="font-size:11.5px">${montantFmt}</td>
       <td class="mono">${fmtDate(dateRec)}</td>
       <td>${vendeur}</td>
+      <td style="max-width:170px">
+        <div onclick="editCommentaireSuivi(${i.ID},this)" style="cursor:pointer;font-size:11.5px;${noteSuivi?'color:var(--text-secondary)':'color:var(--text-muted);font-style:italic'};white-space:normal;line-height:1.35" title="Cliquer pour ${noteSuivi?'modifier':'ajouter'} une note de suivi">
+          ${noteSuivi?`📝 ${noteSuivi}`:'+ Ajouter une note'}
+        </div>
+      </td>
       <td><div class="btn-grp">
         <button class="btn" onclick="openBCPanel(${i.ID})">Voir BC</button>
         <button class="btn navy" onclick="openTraiterModal(${i.ID})">🔧 Traiter</button>
@@ -2870,6 +2881,24 @@ function renderBLManquant(){
       </div></td>
     </tr>`;
   }).join('');
+}
+
+// Note de suivi manuelle — pour les BC sans N° BL où l'automatique ne suffit pas
+// (client injoignable, retrait reporté, litige...). Champ SharePoint requis :
+// Commentaire_Suivi (Texte multiligne) sur Suivi_BC.
+async function editCommentaireSuivi(id,el){
+  const item=(DATA.suivi||[]).find(x=>x.ID===id||x.ID===parseInt(id));
+  const current=item?(f(item,'Commentaire_Suivi')||''):'';
+  const val=prompt('Note de suivi — pourquoi ce BC est encore sans N° BL ?\n(ex : client injoignable, retrait reporté au..., litige en cours...)',current);
+  if(val===null)return;
+  try{
+    await spPatch('sites/RseauxPlus','Suivi_BC',id,{Commentaire_Suivi:val});
+    if(item)item.Commentaire_Suivi=val;
+    toast(val.trim()?'📝 Note de suivi enregistrée':'📝 Note de suivi supprimée','ok');
+    renderBLManquant();
+  }catch(e){
+    toast('🔴 Impossible d\'enregistrer la note — réessayez','ko');
+  }
 }
 
 
@@ -3558,7 +3587,7 @@ function renderAll(){
     const montantFmt=montantRaw?new Intl.NumberFormat('fr-FR',{style:'currency',currency:'EUR',minimumFractionDigits:2,maximumFractionDigits:2}).format(montantRaw):'—';
     const ef=getEtatFact(i);
     return`<tr class="rr" data-bc-id="${i.ID}">
-      <td class="ref">${numBC}</td><td class="cname">${client}</td>
+      <td class="ref">${numBC}</td><td class="cname">${client==='—'?'<span style="background:var(--amber-light);color:var(--amber);font-weight:700;padding:2px 9px;border-radius:10px;font-size:11.5px;white-space:nowrap">⚠️ À compléter</span>':client}</td>
       <td style="font-size:12px;color:var(--text-secondary)">${chantier}</td>
       <td class="mono">${bl!=='—'?bl:'<span style="color:var(--red);font-weight:600">❌ Manquant</span>'}</td>
       <td>${fcPillHtml(fcVal)}</td>
