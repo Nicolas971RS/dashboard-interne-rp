@@ -1521,7 +1521,7 @@ async function loadAll(){
       chargerCatalogue(),
       // Sessions_Scan — portail scan BL (préparations, livraisons, inventaires)
       spFetch('sites/BondeCommande','Sessions_Scan',
-        '$select=ID,Title,Numero_BL,Client,Type_Operation,Vendeur_Emetteur,Magasinier,Date_Emission,Date_Scan,Statut,Nb_Articles_Scannes,Nb_Ecarts,Preparation_Avance,BL_Racine,Date_Livraison_Prevue&$orderby=ID desc&$top=2000'),
+        '$select=ID,Title,Numero_BL,Client,Type_Operation,Vendeur_Emetteur,Magasinier,Date_Emission,Date_Scan,Statut,Nb_Articles_Scannes,Nb_Ecarts,Preparation_Avance,BL_Racine,Date_Livraison_Prevue,Repris_Par&$orderby=ID desc&$top=2000'),
       // Lignes_Scan — détail des articles scannés par session
       spFetch('sites/BondeCommande','Lignes_Scan',
         '$select=ID,Title,Session_ScanId,Session_Scan/Id,Reference_Article,Designation,Quantite_Attendue,Quantite_Scannee&$expand=Session_Scan&$orderby=ID asc&$top=5000')
@@ -4664,6 +4664,7 @@ function openSessionPanel(id){
       ${infoLine('Type',type)}
       ${infoLine('Vendeur',f(s,'Vendeur_Emetteur')||'—')}
       ${infoLine('Magasinier',f(s,'Magasinier')||'—')}
+      ${f(s,'Repris_Par')?infoLine('Repris par',f(s,'Repris_Par')+' <span style="font-weight:400;color:var(--text-muted);font-size:11px">(client absent au retour du magasinier initial)</span>'):''}
       ${infoLine('Émis le',fmtDate(f(s,'Date_Emission')))}
       ${infoLine('Scanné le',fmtDate(f(s,'Date_Scan')))}
       ${infoLine('Statut','<span class="ctag '+stCls+'">'+statut+'</span>')}
@@ -7627,7 +7628,7 @@ async function refetchSessionByBL(blNum){
   const target=String(blNum).trim().toLowerCase();
   try{
     const res=await spFetch('sites/BondeCommande','Sessions_Scan',
-      '$select=ID,Title,Numero_BL,Client,Type_Operation,Vendeur_Emetteur,Magasinier,Date_Emission,Date_Scan,Statut,Nb_Articles_Scannes,Nb_Ecarts,Preparation_Avance,BL_Racine,Date_Livraison_Prevue&$orderby=ID desc&$top=150');
+      '$select=ID,Title,Numero_BL,Client,Type_Operation,Vendeur_Emetteur,Magasinier,Date_Emission,Date_Scan,Statut,Nb_Articles_Scannes,Nb_Ecarts,Preparation_Avance,BL_Racine,Date_Livraison_Prevue,Repris_Par&$orderby=ID desc&$top=150');
     const sess=(res||[]).find(s=>String(f(s,'Numero_BL')||'').trim().toLowerCase()===target);
     if(sess)DATA.sessionsScan=[...(DATA.sessionsScan||[]).filter(s2=>s2.ID!==sess.ID),sess];
     return sess||null;
