@@ -4649,6 +4649,24 @@ function openSessionPanel(id){
 
   const canReopen=low.includes('terminée')||low.includes('terminee')||low.includes('écart')||low.includes('ecart')||low==='prête à livrer';
 
+  // Si cette session est un "report" (BL_Racine renseigné), on résume ce qui a déjà
+  // été livré sur le BL d'origine — sinon un magasinier qui reprend le reste n'a
+  // aucune visibilité sur l'historique, même si la donnée existe dans SharePoint.
+  const blRacineVal=f(s,'BL_Racine');
+  let origineBanner='';
+  if(blRacineVal){
+    const sOrigine=all.find(x=>String(f(x,'Numero_BL'))===String(blRacineVal));
+    if(sOrigine){
+      const lignesOrigine=(DATA.lignesScan||[]).filter(l=>String(lineSessionId(l))===String(sOrigine.ID)&&Number(f(l,'Quantite_Scannee')||0)>0);
+      const totalOrigine=lignesOrigine.reduce((a,l)=>a+Number(f(l,'Quantite_Scannee')||0),0);
+      const detailOrigine=lignesOrigine.map(l=>(f(l,'Reference_Article')||'').trim()+' ×'+Number(f(l,'Quantite_Scannee')||0)).join(', ');
+      origineBanner=`<div style="background:var(--amber-light);border:1px solid var(--amber);border-radius:var(--radius-sm);padding:10px 14px;margin-bottom:14px;font-size:12px;color:#8a6d00;line-height:1.5">
+        📋 Suite du BL <strong>${blRacineVal}</strong> — déjà livré le ${fmtDate(f(sOrigine,'Date_Scan'))} par ${f(sOrigine,'Magasinier')||'—'} :
+        <strong>${totalOrigine} unité${totalOrigine>1?'s':''}</strong>${detailOrigine?'<br>'+detailOrigine:''}
+      </div>`;
+    }
+  }
+
   const clientLineView=(id,clientVal)=>`<div id="sp-client-line-${id}" style="display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-bottom:1px solid var(--border-light)">
     <span style="color:var(--text-muted);font-size:12px">Client</span>
     <span style="display:flex;align-items:center;gap:8px">
@@ -4659,6 +4677,7 @@ function openSessionPanel(id){
 
   const html=`
     <div style="margin-bottom:16px">
+      ${origineBanner}
       ${infoLine('N° BL ou FC',iconBLFC(f(s,'Numero_BL'))+' '+(f(s,'Numero_BL')||'—'))}
       ${isLiv?clientLineView(id,f(s,'Client')):''}
       ${infoLine('Type',type)}
@@ -4668,7 +4687,7 @@ function openSessionPanel(id){
       ${infoLine('Émis le',fmtDate(f(s,'Date_Emission')))}
       ${infoLine('Scanné le',fmtDate(f(s,'Date_Scan')))}
       ${infoLine('Statut','<span class="ctag '+stCls+'">'+statut+'</span>')}
-      ${f(s,'BL_Racine')?infoLine('BL d’origine',f(s,'BL_Racine')):''}
+      ${blRacineVal?infoLine('BL d’origine',blRacineVal):''}
     </div>
     ${canReopen?`
     <div style="background:#fff7ed;border:1px solid #fed7aa;border-radius:var(--radius-sm);padding:10px 14px;margin-bottom:14px;display:flex;justify-content:space-between;align-items:center;gap:12px">
