@@ -6777,13 +6777,25 @@ async function openTraiterModal(id,numBC,client){
         <span class="sec-arrow">▼</span>
       </div>
       <div class="sec-body">
-        <div class="mf"><label>Chantier / Projet</label>
+        <div class="mf"><label style="display:flex;align-items:center;justify-content:space-between">
+            <span>Chantier / Projet</span>
+            <span onclick="toggleChantierInline()" style="text-transform:none;letter-spacing:0;font-weight:600;color:var(--teal);cursor:pointer;font-size:11.5px">➕ Chantier</span>
+          </label>
           <div style="position:relative">
             <input id="m-chantier-search" autocomplete="off" placeholder="⏳ Chargement..." style="${acInput}" value="${currentChantier.replace(/"/g,'&quot;')}" disabled>
             <input type="hidden" id="m-chantier-id" value="${currentProjetId||''}">
             <div id="m-chantier-drop" style="${acDrop}"></div>
           </div>
           <div style="font-size:12px;color:var(--text-muted);margin-top:2px">Tapez 3 caractères · <span id="m-chantier-clear" style="color:var(--red);cursor:pointer;text-decoration:underline">✕ Effacer</span></div>
+          <div id="m-chantier-new-panel" style="display:none;margin-top:8px;border:1px solid var(--teal-mid);border-radius:var(--radius-sm);padding:10px 12px;background:var(--teal-light)">
+            <div style="font-size:11.5px;font-weight:700;color:var(--teal);margin-bottom:6px">➕ Nouveau chantier — client : <span id="m-chantier-new-client">${(client&&client!=='—'?client:'—')}</span></div>
+            <input id="m-chantier-new-nom" placeholder="Nom du chantier, ex : 0161959 AEP ST-PROTAIS" style="width:100%;padding:7px 9px;border:1.5px solid #aab8c9;border-radius:5px;font-size:12.5px;margin-bottom:6px;box-sizing:border-box">
+            <div id="m-chantier-new-msg" style="font-size:11px;color:var(--red);margin-bottom:6px;display:none;font-weight:600"></div>
+            <div style="display:flex;gap:8px">
+              <button type="button" onclick="creerChantierInline()" class="btn navy" style="height:28px;font-size:11.5px;flex:1">Créer et sélectionner</button>
+              <button type="button" onclick="toggleChantierInline()" class="btn" style="height:28px;font-size:11.5px">Annuler</button>
+            </div>
+          </div>
         </div>
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
           <div class="mf"><label>N° BL ou FC</label><input id="m-bl" value="${curBL}" placeholder="Ex: 820950 (BL) ou 156413 (FC)"></div>
@@ -7071,11 +7083,64 @@ async function openTraiterModal(id,numBC,client){
       chInput.disabled=false;
       chInput.placeholder='Tapez 3 caractères...';
       const chData=chantiers.map(c=>({id:String(c.ID),name:c.Title,sub:c.ClientId&&DATA.clients[c.ClientId]?('Client : '+DATA.clients[c.ClientId]):''}));
+      window._mChantierData=chData;
       setupAC('m-chantier-search','m-chantier-id','m-chantier-drop',chData);
       const clr=document.getElementById('m-chantier-clear');
       if(clr)clr.onclick=()=>{chInput.value='';document.getElementById('m-chantier-id').value='__clear__';};
     }catch(e){chInput.placeholder='Erreur chargement';console.warn('[Chantiers]',e);}
   },120);
+}
+
+// ── Création de chantier sans quitter le modal Traiter ──
+// openNouveauProjet() ouvre SA PROPRE modale, mais l'app n'a qu'un seul
+// conteneur de modale (#modal-ov) — l'appeler depuis Traiter écraserait la
+// saisie en cours. On fait donc un mini-panneau intégré directement dans le
+// formulaire, client déjà pré-rempli avec celui du BC en cours de saisie.
+function toggleChantierInline(){
+  const panel=document.getElementById('m-chantier-new-panel');
+  if(!panel)return;
+  const show=panel.style.display==='none';
+  panel.style.display=show?'block':'none';
+  if(show){
+    const clientVal=document.getElementById('m-client-search')?.value||'';
+    document.getElementById('m-chantier-new-client').textContent=clientVal||'—';
+    const nomInp=document.getElementById('m-chantier-new-nom');
+    nomInp.value='';
+    document.getElementById('m-chantier-new-msg').style.display='none';
+    nomInp.focus();
+  }
+}
+async function creerChantierInline(){
+  const nom=document.getElementById('m-chantier-new-nom').value.trim();
+  const msg=document.getElementById('m-chantier-new-msg');
+  const clientId=document.getElementById('m-client-id')?.value||'';
+  const clientNom=document.getElementById('m-client-search')?.value||'';
+  msg.style.display='none';
+  if(!nom){msg.textContent='Le nom du chantier est obligatoire.';msg.style.display='block';return;}
+  if(!clientId||clientId==='__clear__'){msg.textContent='Sélectionne d\'abord le client du BC (champ Client en haut du formulaire).';msg.style.display='block';return;}
+  const nomNorm=nom.toLowerCase();
+  const doublon=(DATA.chantiers||[]).find(c=>(f(c,'Title')||'').toLowerCase()===nomNorm);
+  if(doublon){msg.textContent=`Ce chantier existe déjà : "${f(doublon,'Title')}"`;msg.style.display='block';return;}
+  const btn=document.querySelector('#m-chantier-new-panel button.btn.navy');
+  if(btn){btn.disabled=true;btn.textContent='Création...';}
+  try{
+    const res=await spPost('sites/RseauxPlus','Chantiers',{Title:nom,ClientId:parseInt(clientId,10)});
+    const resId=res?.ID??res?.Id;
+    if(!resId)throw new Error('Création échouée — réessaie.');
+    if(!DATA.chantiers)DATA.chantiers=[];
+    DATA.chantiers.push({ID:resId,Title:nom,ClientId:parseInt(clientId,10)});
+    if(!window._mChantierData)window._mChantierData=[];
+    window._mChantierData.push({id:String(resId),name:nom,sub:clientNom?('Client : '+clientNom):''});
+    // Sélectionner directement le chantier tout juste créé
+    document.getElementById('m-chantier-search').value=nom;
+    document.getElementById('m-chantier-id').value=String(resId);
+    toggleChantierInline();
+    toast('✅ Chantier créé et sélectionné : '+nom,'ok');
+  }catch(e){
+    msg.textContent='Erreur : '+e.message;msg.style.display='block';
+  }finally{
+    if(btn){btn.disabled=false;btn.textContent='Créer et sélectionner';}
+  }
 }
 
 // ── Confirmation modale — remplace confirm() natif ──
