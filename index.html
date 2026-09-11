@@ -4524,34 +4524,41 @@ function renderPartielles(){
     // Cumuler par référence sur TOUTE la chaîne — peu importe le nombre
     // d'articles différents partiellement livrés, chacun a sa propre ligne
     // avec Commandé (valeur de l'étape d'origine) / Livré (somme de toutes
-    // les étapes) / Reste à livrer.
+    // les étapes, détaillée par BL comme dans la colonne BL du tableau RAL) /
+    // Reste à livrer.
     const parRef={};
     const ordreRef=[];
     g.sessions.forEach((s,idx)=>{
+      const numBLetape=f(s,'Numero_BL')||'';
       const lignes=(DATA.lignesScan||[]).filter(l=>String(lineSessionId(l))===String(s.ID));
       lignes.forEach(l=>{
         const ref=(f(l,'Reference_Article')||'').trim()||'(sans réf.)';
         const design=f(l,'Designation')||'';
         const att=Number(f(l,'Quantite_Attendue')||0);
         const sc=Number(f(l,'Quantite_Scannee')||0);
-        if(!parRef[ref]){parRef[ref]={ref,design,commande:0,livre:0};ordreRef.push(ref);}
+        if(!parRef[ref]){parRef[ref]={ref,design,commande:0,livre:0,parBL:[]};ordreRef.push(ref);}
         // Commandé = celui de l'étape d'origine (idx 0) ; si l'article n'existait
         // pas encore à l'origine (ajouté en cours de route), on prend la première
         // valeur rencontrée à défaut.
         if(idx===0||parRef[ref].commande===0)parRef[ref].commande=att;
         parRef[ref].livre+=sc;
+        if(sc>0)parRef[ref].parBL.push({bl:numBLetape,qte:sc});
         if(design&&!parRef[ref].design)parRef[ref].design=design;
       });
     });
     const rowsArticles=ordreRef.map(ref=>{
       const a=parRef[ref];
       const reste=Math.max(0,a.commande-a.livre);
+      const livreCell=a.parBL.length?(()=>{
+        const lines=a.parBL.map(e=>`${e.bl} <span style="color:var(--text-muted)">(${e.qte})</span>`).join('<br>');
+        return`<span title="Détail des livraisons" style="font-family:var(--font-mono);font-size:11px;line-height:1.5">${lines}<br><span style="color:var(--green);font-weight:700">= ${a.livre}</span></span>`;
+      })():`<span style="color:var(--green)">${a.livre}</span>`;
       return`<tr>
-        <td class="mono">${a.ref}</td>
+        <td class="mono" style="width:90px">${a.ref}</td>
         <td style="font-size:11.5px">${a.design||'—'}</td>
-        <td style="text-align:right;font-weight:600">${a.commande}</td>
-        <td style="text-align:right;color:var(--green)">${a.livre}</td>
-        <td style="text-align:right;font-weight:700;color:${reste>0?'var(--red)':'var(--green)'}">${reste}</td>
+        <td style="text-align:right;font-weight:600;width:70px">${a.commande}</td>
+        <td style="text-align:right;width:130px">${livreCell}</td>
+        <td style="text-align:right;font-weight:700;width:90px;color:${reste>0?'var(--red)':'var(--green)'}">${reste}</td>
       </tr>`;
     }).join('');
 
@@ -4570,8 +4577,8 @@ function renderPartielles(){
       <div style="padding:8px 4px;font-size:11.5px;color:var(--text-muted)">
         BL : ${chaineBL} — actuellement chez <strong>${magActuel}</strong> (${blActuel})
       </div>
-      <div class="tc"><table>
-        <thead><tr><th>Référence</th><th>Désignation</th><th style="text-align:right">Commandé</th><th style="text-align:right">Livré</th><th style="text-align:right">Reste à livrer</th></tr></thead>
+      <div class="tc"><table style="table-layout:fixed;max-width:640px">
+        <thead><tr><th style="width:90px">Référence</th><th>Désignation</th><th style="text-align:right;width:70px">Commandé</th><th style="text-align:right;width:130px">Livré</th><th style="text-align:right;width:90px">Reste à livrer</th></tr></thead>
         <tbody>${rowsArticles||'<tr class="empty-row"><td colspan="5">Aucune ligne trouvée</td></tr>'}</tbody>
       </table></div>
     </div>`;
