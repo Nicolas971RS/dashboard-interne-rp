@@ -4519,7 +4519,11 @@ function renderPartielles(){
     const enCours=g.sessions.some(s=>{const st=(f(s,'Statut')||'').toLowerCase();return st==='bl émis'||st==='en cours de scan';});
     const blActuel=f(g.sessions[g.sessions.length-1],'Numero_BL')||g.rac;
     const magActuel=f(g.sessions[g.sessions.length-1],'Magasinier')||'—';
-    const chaineBL=g.sessions.map(s=>f(s,'Numero_BL')).join(' → ');
+    const chaineBL=g.sessions.map(s=>{
+      const num=f(s,'Numero_BL')||'';
+      const mag=f(s,'Magasinier');
+      return mag?`${num} (${mag})`:num;
+    }).join(' → ');
 
     // Cumuler par référence sur TOUTE la chaîne — peu importe le nombre
     // d'articles différents partiellement livrés, chacun a sa propre ligne
