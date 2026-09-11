@@ -260,9 +260,22 @@
   .mbtn.submit:hover{background:var(--teal);}
   .mf{display:flex;flex-direction:column;gap:4px;}
   .mf label{font-size:12px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:.08em;}
-  .mf input,.mf select,.mf textarea{border:1px solid var(--border);border-radius:var(--radius-sm);padding:8px 10px;font-size:13px;font-family:var(--font-body);outline:none;transition:border-color .15s,box-shadow .15s;}
+  .mf input,.mf select,.mf textarea{border:1.5px solid #aab8c9;border-radius:var(--radius-sm);padding:8px 10px;font-size:13px;font-family:var(--font-body);outline:none;transition:border-color .15s,box-shadow .15s;}
   .mf input:focus,.mf select:focus,.mf textarea:focus{border-color:var(--teal-mid);box-shadow:0 0 0 2.5px rgba(0,151,167,.1);}
   .mf input.err,.mf select.err{border-color:var(--red)!important;}
+  /* ── Sections repliables (modal Traiter) ── */
+  .sec{border:1px solid var(--border-light);border-radius:var(--radius);overflow:hidden;margin-bottom:2px;}
+  .sec-hd{display:flex;align-items:center;justify-content:space-between;padding:11px 14px;background:var(--grey-xlight);cursor:pointer;user-select:none;}
+  .sec-hd:hover{background:var(--grey-light);}
+  .sec-hd-l{display:flex;align-items:center;gap:9px;}
+  .sec-icon{font-size:14px;}
+  .sec-title{font-size:12.5px;font-weight:700;color:var(--navy);text-transform:uppercase;letter-spacing:.05em;}
+  .sec-sub{font-size:11px;color:var(--text-muted);font-weight:500;}
+  .sec-arrow{font-size:11px;color:var(--text-muted);transition:transform .2s;}
+  .sec.open .sec-arrow{transform:rotate(180deg);}
+  .sec-body{overflow:hidden;max-height:0;transition:max-height .25s ease;display:flex;flex-direction:column;gap:10px;padding:0 14px;border-top:0 solid var(--border-light);}
+  .sec.open .sec-body{max-height:2000px;padding:14px;border-top-width:1px;}
+  .art-drop-sub{font-size:11px;color:var(--text-muted);}
   .mf .hint{font-size:12px;color:var(--text-muted);margin-top:1px;}
   .modal-msg{font-size:12px;padding:8px 12px;border-radius:var(--radius-sm);display:none;}
   .modal-msg.ok{background:var(--green-light);color:var(--green);display:block;}
@@ -1642,6 +1655,15 @@ function toggleAcc(id,hd){
   const isOpen=body.classList.contains('open');
   body.classList.toggle('open',!isOpen);
   arrow.classList.toggle('open',!isOpen);
+}
+
+// Sections repliables du modal Traiter — un clic sur l'en-tête ouvre/ferme,
+// sauf si le clic vient d'un champ de saisie à l'intérieur (rare mais possible
+// avec le padding de la zone cliquable).
+function toggleSec(el,e){
+  const tag=e?.target?.tagName;
+  if(tag==='INPUT'||tag==='TEXTAREA'||tag==='SELECT')return;
+  el.classList.toggle('open');
 }
 
 // ═══ FILTRE VENDEUR GLOBAL ═══
@@ -6424,12 +6446,22 @@ function mAddLigneRow(){
       li.style.cssText='padding:6px 10px;cursor:pointer;font-size:12.5px;border-bottom:1px solid #f0f3f8';
       li.onmouseenter=()=>li.style.background='var(--grey-light)';
       li.onmouseleave=()=>li.style.background='';
-      li.onmousedown=(e)=>{e.preventDefault();inp.value=ref;if(designField)designField.value=des;drop.style.display='none';};
+      li.onmousedown=(e)=>{
+        e.preventDefault();
+        inp.value=ref;if(designField)designField.value=des;drop.style.display='none';
+        const qcField=row.querySelector('.m-l-qc-new');
+        if(qcField){qcField.focus();qcField.select();}
+      };
       drop.appendChild(li);
     });
     drop.style.display='block';
   });
   inp.addEventListener('blur',()=>setTimeout(()=>{drop.style.display='none';},200));
+  const qcField=row.querySelector('.m-l-qc-new');
+  const qlField=row.querySelector('.m-l-ql-new');
+  qcField.addEventListener('keydown',ev=>{
+    if(ev.key==='Enter'){ev.preventDefault();qlField.focus();qlField.select();}
+  });
 }
 
 async function mDeleteLigneRow(lineId){
@@ -6712,6 +6744,7 @@ async function openTraiterModal(id,numBC,client){
     </div>`;
   };
 
+  const secArt=lignesExistantes.length?' open':'';
   openModal(`🔧 Traiter — ${numBC} · ${client}`,`
     <div class="mf"><label>Client</label>
       <div style="position:relative">
@@ -6730,47 +6763,100 @@ async function openTraiterModal(id,numBC,client){
         <input id="m-numdevis" value="${curNumDevis}" placeholder="ex: DEV-105">
       </div>
     </div>
-    <div class="mf"><label>Chantier / Projet</label>
-      <div style="position:relative">
-        <input id="m-chantier-search" autocomplete="off" placeholder="⏳ Chargement..." style="${acInput}" value="${currentChantier.replace(/"/g,'&quot;')}" disabled>
-        <input type="hidden" id="m-chantier-id" value="${currentProjetId||''}">
-        <div id="m-chantier-drop" style="${acDrop}"></div>
+
+    <div class="sec open" onclick="toggleSec(this,event)">
+      <div class="sec-hd">
+        <div class="sec-hd-l"><span class="sec-icon">📦</span><span class="sec-title">Livraison</span><span class="sec-sub">— Chantier, BL, dates, préparation</span></div>
+        <span class="sec-arrow">▼</span>
       </div>
-      <div style="font-size:12px;color:var(--text-muted);margin-top:2px">Tapez 3 caractères · <span id="m-chantier-clear" style="color:var(--red);cursor:pointer;text-decoration:underline">✕ Effacer</span></div>
-    </div>
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
-      <div class="mf"><label>N° BL ou FC</label><input id="m-bl" value="${curBL}" placeholder="Ex: 820950 (BL) ou 156413 (FC)"></div>
-      <div class="mf"><label>Vendeur en charge</label><select id="m-vendeur" onchange="this.classList.remove('err')"><option value="">— Inchangé —</option>${vendOpts}</select></div>
-    </div>
-    <div id="m-field-prep" style="border:1px solid var(--border);border-radius:var(--radius-sm);padding:10px 14px;margin-bottom:12px">
-      <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer">
-        <input type="checkbox" id="m-prep" ${curSessPrep?'checked':''} style="width:16px;height:16px">
-        Préparation à l'avance (le magasinier prépare avant l'arrivée du client)
-      </label>
-      <div style="margin-top:8px;margin-left:24px">
-        <label style="font-size:12px;font-weight:700;color:var(--text-muted);display:block;margin-bottom:4px">📅 Date de livraison prévue</label>
-        <input type="date" id="m-date-livraison-prep" value="${curSessDateLiv}"
-          style="padding:6px 10px;border:1px solid var(--border);border-radius:var(--radius-sm);font-size:13px;font-family:var(--font-body)">
+      <div class="sec-body">
+        <div class="mf"><label>Chantier / Projet</label>
+          <div style="position:relative">
+            <input id="m-chantier-search" autocomplete="off" placeholder="⏳ Chargement..." style="${acInput}" value="${currentChantier.replace(/"/g,'&quot;')}" disabled>
+            <input type="hidden" id="m-chantier-id" value="${currentProjetId||''}">
+            <div id="m-chantier-drop" style="${acDrop}"></div>
+          </div>
+          <div style="font-size:12px;color:var(--text-muted);margin-top:2px">Tapez 3 caractères · <span id="m-chantier-clear" style="color:var(--red);cursor:pointer;text-decoration:underline">✕ Effacer</span></div>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+          <div class="mf"><label>N° BL ou FC</label><input id="m-bl" value="${curBL}" placeholder="Ex: 820950 (BL) ou 156413 (FC)"></div>
+          <div class="mf"><label>Statut BC</label><select id="m-statut">${stOpts}</select></div>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+          <div class="mf"><label>Date BL</label><input id="m-datebl" type="date" value="${curDateBL?curDateBL.slice(0,10):today}"></div>
+          <div class="mf"><label>Date prise en charge</label><input id="m-datepec" type="date" value="${curDatePEC?curDatePEC.slice(0,10):today}"></div>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+          <div class="mf"><label>Date de livraison <span style="font-weight:400;color:var(--text-muted)">(retrait client)</span></label><input id="m-eta" type="date" value="${curETA?curETA.slice(0,10):''}"></div>
+          <div class="mf"><label>Arrivage attendu <span style="font-weight:400;color:var(--text-muted)">(optionnel)</span></label><input id="m-arrivage" type="date" value="${curArrivage?curArrivage.slice(0,10):''}"></div>
+        </div>
+        <div id="m-field-prep" style="border:1px solid var(--border);border-radius:var(--radius-sm);padding:10px 14px">
+          <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer">
+            <input type="checkbox" id="m-prep" ${curSessPrep?'checked':''} style="width:16px;height:16px">
+            Préparation à l'avance (le magasinier prépare avant l'arrivée du client)
+          </label>
+          <div style="margin-top:8px;margin-left:24px">
+            <label style="font-size:12px;font-weight:700;color:var(--text-muted);display:block;margin-bottom:4px">📅 Date de livraison prévue</label>
+            <input type="date" id="m-date-livraison-prep" value="${curSessDateLiv}"
+              style="padding:6px 10px;border:1px solid var(--border);border-radius:var(--radius-sm);font-size:13px;font-family:var(--font-body)">
+          </div>
+          <div style="font-size:11px;color:var(--text-muted);margin-top:6px">Nécessite un N° BL ou FC renseigné ci-dessus — crée ou met à jour la session de scan correspondante.</div>
+        </div>
       </div>
-      <div style="font-size:11px;color:var(--text-muted);margin-top:6px">Nécessite un N° BL ou FC renseigné ci-dessus — crée ou met à jour la session de scan correspondante.</div>
     </div>
-    <div class="mf"><label>Statut BC</label><select id="m-statut">${stOpts}</select></div>
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
-      <div class="mf"><label>Date BL</label><input id="m-datebl" type="date" value="${curDateBL?curDateBL.slice(0,10):today}"></div>
-      <div class="mf"><label>Date prise en charge</label><input id="m-datepec" type="date" value="${curDatePEC?curDatePEC.slice(0,10):today}"></div>
+
+    <div class="sec open" onclick="toggleSec(this,event)">
+      <div class="sec-hd">
+        <div class="sec-hd-l"><span class="sec-icon">👤</span><span class="sec-title">Suivi</span><span class="sec-sub">— Vendeur, montant</span></div>
+        <span class="sec-arrow">▼</span>
+      </div>
+      <div class="sec-body">
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+          <div class="mf"><label>Vendeur en charge</label><select id="m-vendeur" onchange="this.classList.remove('err')"><option value="">— Inchangé —</option>${vendOpts}</select></div>
+          <div class="mf"><label>Montant HT (€)</label><input id="m-montant" type="number" step="0.01" value="${curMontant}" placeholder="0.00"></div>
+        </div>
+      </div>
     </div>
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
-      <div class="mf"><label>Date de livraison <span style="font-weight:400;color:var(--text-muted)">(retrait client)</span></label><input id="m-eta" type="date" value="${curETA?curETA.slice(0,10):''}"></div>
-      <div class="mf"><label>Montant HT (€)</label><input id="m-montant" type="number" step="0.01" value="${curMontant}" placeholder="0.00"></div>
+
+    <div class="sec${secArt}" onclick="toggleSec(this,event)">
+      <div class="sec-hd">
+        <div class="sec-hd-l"><span class="sec-icon">📝</span><span class="sec-title">Articles</span><span class="sec-sub">— ${lignesExistantes.length?lignesExistantes.length+' ligne'+(lignesExistantes.length>1?'s':''):'aucune ligne'}</span></div>
+        <span class="sec-arrow">▼</span>
+      </div>
+      <div class="sec-body">
+        <div style="font-size:11.5px;color:var(--text-muted);margin-bottom:2px">Référence, désignation, quantité — sert au suivi RAL</div>
+        <div style="display:grid;grid-template-columns:1fr 1.4fr 55px 55px 26px;gap:6px;margin-bottom:4px">
+          <div style="font-size:11.5px;font-weight:700;color:var(--text-muted);text-transform:uppercase">Réf.</div>
+          <div style="font-size:11.5px;font-weight:700;color:var(--text-muted);text-transform:uppercase">Désignation</div>
+          <div style="font-size:11.5px;font-weight:700;color:var(--text-muted);text-transform:uppercase;text-align:center">Cmdé</div>
+          <div style="font-size:11.5px;font-weight:700;color:var(--text-muted);text-transform:uppercase;text-align:center">Livré</div>
+          <div></div>
+        </div>
+        <div id="m-lignes-list">${lignesExistantes.map(mLigneRowHtml).join('')}</div>
+        <div id="m-lignes-new"></div>
+        <button type="button" class="btn navy" style="height:28px;font-size:11.5px;margin-top:4px" onclick="mAddLigneRow()">➕ Ajouter un article</button>
+      </div>
     </div>
-    <div class="mf"><label>📦 Article en commande — arrivage attendu le <span style="font-weight:400;color:var(--text-muted)">(optionnel)</span></label>
-      <input id="m-arrivage" type="date" value="${curArrivage?curArrivage.slice(0,10):''}">
-      <div style="font-size:12px;color:var(--text-muted);margin-top:3px">Si rempli, ce BC sort du bloc jaune tant que la date n'est pas dépassée.</div>
+
+    <div class="sec" onclick="toggleSec(this,event)">
+      <div class="sec-hd">
+        <div class="sec-hd-l"><span class="sec-icon">💬</span><span class="sec-title">Remarques</span></div>
+        <span class="sec-arrow">▼</span>
+      </div>
+      <div class="sec-body">
+        <div class="mf"><label>Remarque livraison</label>
+          <textarea id="m-rem" rows="3" placeholder="Notes de suivi, anomalies, manquants, casse...">${curRem}</textarea>
+          <div style="font-size:12px;color:var(--text-muted);margin-top:3px">Champ Remarque_Livraison · Suivi_BC SharePoint</div>
+        </div>
+        ${cleanEmail?`<div class="mf"><label>📧 Contenu Email Client</label>
+          <div style="background:#f8fafd;border:1px solid var(--border);border-radius:var(--radius-sm);padding:14px 16px;">
+            <div style="font-size:12px;color:var(--text-secondary);line-height:1.7;white-space:pre-wrap;margin-bottom:12px">${cleanEmail.replace(/`/g,"'")}</div>
+            ${portailUrl?`<a href="${portailUrl}" target="_blank" style="display:inline-block;background:var(--blue-mid);color:white;padding:9px 20px;border-radius:var(--radius-sm);font-size:13px;font-weight:600;text-decoration:none;">Accéder au portail →</a>`:''}
+          </div>
+        </div>`:''}
+      </div>
     </div>
-    <div class="mf"><label>📝 Remarque livraison</label>
-      <textarea id="m-rem" rows="3" placeholder="Notes de suivi, anomalies, manquants, casse...">${curRem}</textarea>
-      <div style="font-size:12px;color:var(--text-muted);margin-top:3px">Champ Remarque_Livraison · Suivi_BC SharePoint</div>
-    </div>
+
     <div style="border-top:2px solid var(--green);border-radius:var(--radius-sm);padding:12px 14px;margin-top:6px;background:#f0faf0">
       <label style="display:flex;align-items:flex-start;gap:10px;cursor:pointer">
         <input type="checkbox" id="m-solde" ${estSolde(currentItem)?'checked':''} style="width:18px;height:18px;margin-top:2px;accent-color:var(--green);flex-shrink:0">
@@ -6779,26 +6865,7 @@ async function openTraiterModal(id,numBC,client){
           <div style="font-size:11px;color:var(--text-muted);margin-top:2px">Coche cette case lors du traitement du BL final pour clôturer définitivement ce BC. Il disparaîtra des listes d'action et affichera ✅ dans toute l'application.</div>
         </div>
       </label>
-    </div>
-    <div style="border:1px solid var(--border);border-radius:var(--radius-sm);padding:12px 14px;margin-top:6px;background:var(--grey-xlight)">
-      <div style="font-weight:700;font-size:12.5px;margin-bottom:8px">📦 Articles de ce BC <span style="font-weight:400;color:var(--text-muted);text-transform:none">(référence, désignation, quantité — sert au suivi RAL)</span></div>
-      <div style="display:grid;grid-template-columns:1fr 1.4fr 55px 55px 26px;gap:6px;margin-bottom:4px">
-        <div style="font-size:11.5px;font-weight:700;color:var(--text-muted);text-transform:uppercase">Réf.</div>
-        <div style="font-size:11.5px;font-weight:700;color:var(--text-muted);text-transform:uppercase">Désignation</div>
-        <div style="font-size:11.5px;font-weight:700;color:var(--text-muted);text-transform:uppercase;text-align:center">Cmdé</div>
-        <div style="font-size:11.5px;font-weight:700;color:var(--text-muted);text-transform:uppercase;text-align:center">Livré</div>
-        <div></div>
-      </div>
-      <div id="m-lignes-list">${lignesExistantes.map(mLigneRowHtml).join('')}</div>
-      <div id="m-lignes-new"></div>
-      <button type="button" class="btn navy" style="height:28px;font-size:11.5px;margin-top:4px" onclick="mAddLigneRow()">➕ Ajouter un article</button>
-    </div>
-    ${cleanEmail?`<div class="mf"><label>📧 Contenu Email Client</label>
-      <div style="background:#f8fafd;border:1px solid var(--border);border-radius:var(--radius-sm);padding:14px 16px;">
-        <div style="font-size:12px;color:var(--text-secondary);line-height:1.7;white-space:pre-wrap;margin-bottom:12px">${cleanEmail.replace(/`/g,"'")}</div>
-        ${portailUrl?`<a href="${portailUrl}" target="_blank" style="display:inline-block;background:var(--blue-mid);color:white;padding:9px 20px;border-radius:var(--radius-sm);font-size:13px;font-weight:600;text-decoration:none;">Accéder au portail →</a>`:''}
-      </div>
-    </div>`:''}`,
+    </div>`,
   async()=>{
     const body={};
     const titre=document.getElementById('m-titre').value.trim();
@@ -6996,7 +7063,7 @@ async function openTraiterModal(id,numBC,client){
       const chantiers=await spFetch('sites/RseauxPlus','Chantiers','$select=ID,Title,ClientId&$orderby=Title asc&$top=500');
       chInput.disabled=false;
       chInput.placeholder='Tapez 3 caractères...';
-      const chData=chantiers.map(c=>({id:String(c.ID),name:c.Title}));
+      const chData=chantiers.map(c=>({id:String(c.ID),name:c.Title,sub:c.ClientId&&DATA.clients[c.ClientId]?('Client : '+DATA.clients[c.ClientId]):''}));
       setupAC('m-chantier-search','m-chantier-id','m-chantier-drop',chData);
       const clr=document.getElementById('m-chantier-clear');
       if(clr)clr.onclick=()=>{chInput.value='';document.getElementById('m-chantier-id').value='__clear__';};
@@ -7749,8 +7816,12 @@ function setupAC(inputId,hiddenId,dropId,data,onSelect){
     }
     matches.forEach(d=>{
       const item=document.createElement('div');
-      item.textContent=d.name;
       item.style.cssText='padding:8px 12px;font-size:12.5px;cursor:pointer;border-bottom:1px solid #f0f3f8;';
+      if(d.sub){
+        item.innerHTML=`<div>${d.name}</div><div class="art-drop-sub">${d.sub}</div>`;
+      }else{
+        item.textContent=d.name;
+      }
       item.onmouseenter=()=>item.style.background='var(--teal-light)';
       item.onmouseleave=()=>item.style.background='';
       item.onmousedown=(e)=>{e.preventDefault();input.value=d.name;if(hidden)hidden.value=d.id;drop.style.display='none';if(typeof onSelect==='function')onSelect(d);};
