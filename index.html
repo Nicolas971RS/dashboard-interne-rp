@@ -249,6 +249,7 @@
   .modal-x{background:none;border:none;font-size:17px;cursor:pointer;color:var(--text-muted);line-height:1;padding:0 4px;transition:color .12s;}
   .modal-x:hover{color:var(--text-primary);}
   .modal-bd{padding:20px;display:flex;flex-direction:column;gap:12px;overflow-y:auto;}
+  .modal-bd>*{flex-shrink:0;}
   .modal-ft{display:flex;justify-content:flex-end;gap:8px;padding:13px 20px;border-top:1px solid var(--border-light);}
   .mbtn{padding:10px 22px;border-radius:var(--radius);font-size:13px;font-weight:600;cursor:pointer;font-family:var(--font-body);border:none;transition:opacity .15s;}
   .em-type-btn{flex:1;padding:12px 8px;border:2px solid var(--border);background:white;border-radius:var(--radius-sm);font-size:12.5px;font-weight:600;color:var(--text-muted);cursor:pointer;font-family:var(--font-body);transition:all .15s;}
@@ -264,7 +265,7 @@
   .mf input:focus,.mf select:focus,.mf textarea:focus{border-color:var(--teal-mid);box-shadow:0 0 0 2.5px rgba(0,151,167,.1);}
   .mf input.err,.mf select.err{border-color:var(--red)!important;}
   /* ── Sections repliables (modal Traiter) ── */
-  .sec{border:1px solid var(--border-light);border-radius:var(--radius);overflow:hidden;margin-bottom:2px;}
+  .sec{border:1px solid var(--border-light);border-radius:var(--radius);overflow:hidden;margin-bottom:2px;flex-shrink:0;}
   .sec-hd{display:flex;align-items:center;justify-content:space-between;padding:11px 14px;background:var(--grey-xlight);cursor:pointer;user-select:none;}
   .sec-hd:hover{background:var(--grey-light);}
   .sec-hd-l{display:flex;align-items:center;gap:9px;}
