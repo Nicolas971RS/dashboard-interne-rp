@@ -6212,22 +6212,32 @@ function alerteSoldeNon(id,numBC){
   openLivraisonPartielle(id);
 }
 
-function openFacturerModal(id,numBC,client){
+async function openFacturerModal(id,numBC,client){
   if(!numBC||!client){
     const item=(DATA.suivi||[]).find(x=>x.ID===id||x.ID===parseInt(id));
     if(item){numBC=numBC||f(item,'Title')||('BC-'+id);client=client||getClient(item);}
   }
+  const attachments=await getAttachments('sites/RseauxPlus','Suivi_BC',id);
   openModal(`💰 Saisir le numéro de facture`,`
     <div style="font-size:12px;color:var(--text-muted);font-family:var(--font-mono);margin-bottom:14px">${numBC} · ${client}</div>
     <div class="mf"><label>N° FC (Facture Client) *</label>
       <input id="m-fc" placeholder="Ex : FC-2026-0312" style="font-size:14px;font-weight:600;">
     </div>
-    <div style="background:var(--green-light);border:1px solid var(--green);border-radius:var(--radius-sm);padding:10px 14px;font-size:12px;color:var(--green);font-weight:600;">
+    <div style="background:var(--green-light);border:1px solid var(--green);border-radius:var(--radius-sm);padding:10px 14px;font-size:12px;color:var(--green);font-weight:600;margin-bottom:14px">
       ✅ État : Entièrement facturé
-    </div>`,
+    </div>
+    <div style="background:var(--amber-light);border:1px solid var(--amber);border-radius:var(--radius-sm);padding:10px 14px;margin-bottom:10px;font-size:12.5px;color:#8a6d00;line-height:1.5">
+      ⚠️ Enregistrer ce N° FC déclenche l'envoi automatique du BC à Docuware, et le flow n'envoie qu'<strong>une seule pièce jointe</strong>. Si le client a joint un devis, un logo ou tout autre fichier en plus du BC, supprime-les ci-dessous avant de valider.
+    </div>
+    <div id="m-docuware-pj-list">${_docuwarePjListHtml(attachments,id)}</div>`,
   async()=>{
     const fc=document.getElementById('m-fc').value.trim();
     if(!fc){document.getElementById('m-fc').style.borderColor='var(--red)';throw new Error('Le N° de facture est obligatoire.');}
+    // On revérifie au moment de valider, pas seulement à l'ouverture — au cas
+    // où la personne aurait ignoré le rappel.
+    const current=await getAttachments('sites/RseauxPlus','Suivi_BC',id);
+    if(current.length>1)throw new Error(`Il reste ${current.length} pièces jointes — supprime les indésirables avant de valider (le flow Docuware n'en accepte qu'une).`);
+    if(current.length===0)throw new Error('Aucune pièce jointe trouvée — le BC doit être joint avant de facturer.');
     const body={};
     body[nFCKey()]=fc;
     body[etatFactKey()]='Entièrement facturé';
