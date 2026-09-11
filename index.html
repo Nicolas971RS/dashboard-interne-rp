@@ -6746,6 +6746,12 @@ async function openTraiterModal(id,numBC,client){
   };
 
   const secArt=lignesExistantes.length?' open':'';
+  // Badge "À compléter" — Date prise en charge est exclue car toujours
+  // pré-remplie par défaut (aujourd'hui), donc jamais réellement vide.
+  const livraisonVide=!currentChantier&&!curBL&&!curDateBL&&!curETA&&!curArrivage;
+  const suiviVide=!currentV&&!curMontant;
+  const articlesVide=lignesExistantes.length===0;
+  const badgeVide=`<span style="background:var(--amber-light);color:var(--amber);font-weight:700;padding:1px 7px;border-radius:9px;font-size:10.5px;margin-left:6px;white-space:nowrap">⚠️ À compléter</span>`;
   openModal(`🔧 Traiter — ${numBC} · ${client}`,`
     <div class="mf"><label>Client</label>
       <div style="position:relative">
@@ -6767,7 +6773,7 @@ async function openTraiterModal(id,numBC,client){
 
     <div class="sec open">
       <div class="sec-hd" onclick="toggleSec(this.parentElement,event)">
-        <div class="sec-hd-l"><span class="sec-icon">📦</span><span class="sec-title">Livraison</span><span class="sec-sub">— Chantier, BL, dates, préparation</span></div>
+        <div class="sec-hd-l"><span class="sec-icon">📦</span><span class="sec-title">Livraison</span>${livraisonVide?badgeVide:'<span class="sec-sub">— Chantier, BL, dates, préparation</span>'}</div>
         <span class="sec-arrow">▼</span>
       </div>
       <div class="sec-body">
@@ -6808,7 +6814,7 @@ async function openTraiterModal(id,numBC,client){
 
     <div class="sec open">
       <div class="sec-hd" onclick="toggleSec(this.parentElement,event)">
-        <div class="sec-hd-l"><span class="sec-icon">👤</span><span class="sec-title">Suivi</span><span class="sec-sub">— Vendeur, montant</span></div>
+        <div class="sec-hd-l"><span class="sec-icon">👤</span><span class="sec-title">Suivi</span>${suiviVide?badgeVide:'<span class="sec-sub">— Vendeur, montant</span>'}</div>
         <span class="sec-arrow">▼</span>
       </div>
       <div class="sec-body">
@@ -6821,7 +6827,7 @@ async function openTraiterModal(id,numBC,client){
 
     <div class="sec${secArt}">
       <div class="sec-hd" onclick="toggleSec(this.parentElement,event)">
-        <div class="sec-hd-l"><span class="sec-icon">📝</span><span class="sec-title">Articles</span><span class="sec-sub">— ${lignesExistantes.length?lignesExistantes.length+' ligne'+(lignesExistantes.length>1?'s':''):'aucune ligne'}</span></div>
+        <div class="sec-hd-l"><span class="sec-icon">📝</span><span class="sec-title">Articles</span>${articlesVide?badgeVide:'<span class="sec-sub">— '+lignesExistantes.length+' ligne'+(lignesExistantes.length>1?'s':'')+'</span>'}</div>
         <span class="sec-arrow">▼</span>
       </div>
       <div class="sec-body">
