@@ -9069,23 +9069,52 @@ function alerteLivraisonPartielleCreee(numBC){
 }
 
 // ── Envoyer BC à Docuware — PATCH SharePoint (déclenche le flow via colonne) ──
-async function envoyerBCFlow(id,numBC){
-  const ok=await showConfirm('📦 Archiver dans Docuware',`Le flow va archiver les pièces jointes du BC <strong>${numBC||id}</strong> dans la GED Docuware.<br><br>Confirmer l'archivage ?`,'📦 Archiver','submit');
-  if(!ok)return;
+// Le flow Docuware n'envoie qu'UNE seule pièce jointe. Les clients joignent
+// souvent un devis, un logo embarqué dans leur signature, etc. en plus du BC —
+// il faut nettoyer avant d'archiver, sinon le flow envoie n'importe quoi.
+function _docuwarePjListHtml(attachments,id){
+  if(!attachments.length)return'<div style="font-size:12px;color:var(--text-muted);font-style:italic">Aucune pièce jointe trouvée.</div>';
+  return attachments.map(a=>`<div style="display:flex;align-items:center;justify-content:space-between;padding:6px 10px;border:1px solid var(--border);border-radius:6px;margin-bottom:6px;font-size:12.5px">
+    <span>📎 ${a.FileName}</span>
+    <button type="button" onclick="_docuwareSupprimerPJ(${id},'${a.FileName.replace(/'/g,"\\'")}')" style="background:none;border:none;color:var(--red);cursor:pointer;font-size:14px" title="Supprimer">🗑</button>
+  </div>`).join('');
+}
+async function _docuwareSupprimerPJ(id,fileName){
   try{
+    await spDeleteAttachment('sites/RseauxPlus','Suivi_BC',id,fileName);
+    toast('🗑 Pièce jointe supprimée','ok');
+  }catch(e){
+    toast('🔴 Suppression impossible : '+e.message,'ko');
+  }
+  const list=document.getElementById('m-docuware-pj-list');
+  if(list){
+    const attachments=await getAttachments('sites/RseauxPlus','Suivi_BC',id);
+    list.innerHTML=_docuwarePjListHtml(attachments,id);
+  }
+}
+async function envoyerBCFlow(id,numBC){
+  const attachments=await getAttachments('sites/RseauxPlus','Suivi_BC',id);
+  openModal('📦 Archiver dans Docuware',`
+    <div style="background:var(--amber-light);border:1px solid var(--amber);border-radius:var(--radius-sm);padding:10px 14px;margin-bottom:14px;font-size:12.5px;color:#8a6d00;line-height:1.5">
+      ⚠️ Le flow Docuware n'envoie qu'<strong>une seule pièce jointe</strong>. Si le client a joint un devis, un logo ou tout autre fichier en plus du BC <strong>${numBC||id}</strong>, supprime-les ci-dessous — il ne doit rester que le bon de commande avant d'archiver.
+    </div>
+    <div id="m-docuware-pj-list">${_docuwarePjListHtml(attachments,id)}</div>`,
+  async()=>{
+    // On revérifie au moment de valider, pas seulement à l'ouverture — au cas
+    // où la personne aurait ignoré le rappel et cliqué directement.
+    const current=await getAttachments('sites/RseauxPlus','Suivi_BC',id);
+    if(current.length>1)throw new Error(`Il reste ${current.length} pièces jointes — supprime les indésirables avant d'archiver (le flow Docuware n'en accepte qu'une).`);
+    if(current.length===0)throw new Error('Aucune pièce jointe trouvée — le BC doit être joint avant archivage.');
     await spPatch('sites/RseauxPlus','Suivi_BC',id,{
       'Envoyer_Docuware':true
       // Envoyer_Docuware sera mis à true par le flow PA après exécution réussie
     });
-    // Marquer localement en mémoire pour feedback immédiat
     const idx=DATA.suivi.findIndex(i=>i.ID===id);
     if(idx!==-1)DATA.suivi[idx]['Envoyer_Docuware']=true;
     renderAll();updateBadges();
-    toast('📦 Docuware — envoi déclenché','ok');
     setTimeout(()=>loadAll(),6000);
-  }catch(e){
-    toast('🔴 Erreur : '+e.message,'ko');
-  }
+    return '📦 Docuware — envoi déclenché';
+  });
 }
 
 // ── Fusion de plusieurs fichiers (PDF et/ou images) en un seul PDF ──
