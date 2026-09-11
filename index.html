@@ -9237,8 +9237,8 @@ function openNouveauDBCModal(){
         <input id="d-blfile" type="file" accept=".pdf,.jpg,.jpeg,.png" style="font-size:11.5px;padding:4px 0;width:100%" onchange="this.classList.remove('err')">
         <span class="hint">PDF, JPG, PNG — obligatoire (preuve d'enlèvement)</span>
       </div>
-      <div class="mf"><label>📋 Devis joint — fichier (optionnel)</label>
-        <input id="d-devisfile" type="file" accept=".pdf,.jpg,.jpeg,.png" style="font-size:11.5px;padding:4px 0;width:100%">
+      <div class="mf"><label>📋 Devis joint — fichier *</label>
+        <input id="d-devisfile" type="file" accept=".pdf,.jpg,.jpeg,.png" style="font-size:11.5px;padding:4px 0;width:100%" onchange="this.classList.remove('err')">
         <span class="hint">PDF, JPG, PNG</span>
       </div>
     </div>
@@ -9307,6 +9307,11 @@ function openNouveauDBCModal(){
     if(!blInputCheck?.files?.[0]){
       blInputCheck?.classList.add('err');
       throw new Error('Le BL signé est obligatoire — il sert de preuve d\'enlèvement, même quand le devis suffit au client pour établir son BC.');
+    }
+    const devisInputCheck=document.getElementById('d-devisfile');
+    if(!devisInputCheck?.files?.[0]){
+      devisInputCheck?.classList.add('err');
+      throw new Error('Le devis joint est obligatoire.');
     }
 
     const dateEnlev=document.getElementById('d-dateenlev').value;
