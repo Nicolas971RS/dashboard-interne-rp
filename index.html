@@ -6765,8 +6765,8 @@ async function openTraiterModal(id,numBC,client){
       </div>
     </div>
 
-    <div class="sec open" onclick="toggleSec(this,event)">
-      <div class="sec-hd">
+    <div class="sec open">
+      <div class="sec-hd" onclick="toggleSec(this.parentElement,event)">
         <div class="sec-hd-l"><span class="sec-icon">📦</span><span class="sec-title">Livraison</span><span class="sec-sub">— Chantier, BL, dates, préparation</span></div>
         <span class="sec-arrow">▼</span>
       </div>
@@ -6806,8 +6806,8 @@ async function openTraiterModal(id,numBC,client){
       </div>
     </div>
 
-    <div class="sec open" onclick="toggleSec(this,event)">
-      <div class="sec-hd">
+    <div class="sec open">
+      <div class="sec-hd" onclick="toggleSec(this.parentElement,event)">
         <div class="sec-hd-l"><span class="sec-icon">👤</span><span class="sec-title">Suivi</span><span class="sec-sub">— Vendeur, montant</span></div>
         <span class="sec-arrow">▼</span>
       </div>
@@ -6819,8 +6819,8 @@ async function openTraiterModal(id,numBC,client){
       </div>
     </div>
 
-    <div class="sec${secArt}" onclick="toggleSec(this,event)">
-      <div class="sec-hd">
+    <div class="sec${secArt}">
+      <div class="sec-hd" onclick="toggleSec(this.parentElement,event)">
         <div class="sec-hd-l"><span class="sec-icon">📝</span><span class="sec-title">Articles</span><span class="sec-sub">— ${lignesExistantes.length?lignesExistantes.length+' ligne'+(lignesExistantes.length>1?'s':''):'aucune ligne'}</span></div>
         <span class="sec-arrow">▼</span>
       </div>
@@ -6839,8 +6839,8 @@ async function openTraiterModal(id,numBC,client){
       </div>
     </div>
 
-    <div class="sec" onclick="toggleSec(this,event)">
-      <div class="sec-hd">
+    <div class="sec">
+      <div class="sec-hd" onclick="toggleSec(this.parentElement,event)">
         <div class="sec-hd-l"><span class="sec-icon">💬</span><span class="sec-title">Remarques</span></div>
         <span class="sec-arrow">▼</span>
       </div>
