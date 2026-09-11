@@ -4452,23 +4452,30 @@ function renderPartielles(){
   const fC=document.getElementById('filter-client-part')?.value||'all';
   const fS=document.getElementById('filter-statut-part')?.value||'all';
 
-  // Construire les groupes : une vraie racine = un accordéon, étapes ordonnées
-  // en suivant le chaînage BL_Racine → Numero_BL (pas par date)
+  // Construire les groupes : une vraie racine = un accordéon. On ordonne les
+  // étapes par le suffixe du N° BL (racine, puis -A, -B, -C...) plutôt que par
+  // chaînage BL_Racine → Numero_BL : le flow peut faire pointer CHAQUE report
+  // directement vers la racine d'origine plutôt que vers l'étape précédente,
+  // auquel cas un chaînage en aurait perdu en route (un seul "enfant" trouvé
+  // par racine). Le suffixe alphabétique reste fiable quel que soit le schéma
+  // utilisé par le flow.
   let groupes=racines.map(rac=>{
     const membres=all.filter(s=>trouverRacineVraie(s)===rac);
-    const parNumero={};
-    membres.forEach(s=>{parNumero[f(s,'Numero_BL')]=s;});
-    const sessions=[];
-    const vus=new Set();
-    let courantNum=rac;
-    while(courantNum&&parNumero[courantNum]&&!vus.has(courantNum)){
-      vus.add(courantNum);
-      sessions.push(parNumero[courantNum]);
-      const enfant=membres.find(s=>f(s,'BL_Racine')===courantNum);
-      courantNum=enfant?f(enfant,'Numero_BL'):null;
-    }
+    const suffixeDe=s=>{
+      const num=String(f(s,'Numero_BL')||'');
+      if(num===rac)return'';
+      const echapRac=rac.replace(/[.*+?^${}()|[\]\\]/g,'\\$&');
+      const m=num.match(new RegExp('^'+echapRac+'-([A-Za-z]+)$'));
+      return m?m[1]:'zzz'; // format inattendu → poussé en fin plutôt que de casser l'ordre
+    };
+    const sessions=[...membres].sort((a,b)=>{
+      const sa=suffixeDe(a),sb=suffixeDe(b);
+      if(sa===''&&sb!=='')return-1;
+      if(sb===''&&sa!=='')return 1;
+      return sa.localeCompare(sb);
+    });
     const client=f(sessions[0],'Client')||'—';
-    return {rac,sessions,client};
+    return{rac,sessions,client};
   });
 
   // Appliquer les filtres au niveau du groupe (un groupe reste si au moins une étape correspond)
@@ -4510,19 +4517,44 @@ function renderPartielles(){
     // Statut de synthèse = statut de la dernière étape (l'état courant de la chaîne)
     const statutCourant=f(g.sessions[g.sessions.length-1],'Statut')||'—';
     const enCours=g.sessions.some(s=>{const st=(f(s,'Statut')||'').toLowerCase();return st==='bl émis'||st==='en cours de scan';});
-    const rows=g.sessions.map((s,idx)=>{
-      const statut=f(s,'Statut')||'—';
-      const etape=idx===0?'Origine':'Report '+String.fromCharCode(64+idx);
-      const scanEc=(f(s,'Nb_Articles_Scannes')??'—')+' scannées · '+(f(s,'Nb_Ecarts')??0)+' écarts';
-      const dateAff=fmtDate(f(s,'Date_Scan')||f(s,'Date_Emission'));
+    const blActuel=f(g.sessions[g.sessions.length-1],'Numero_BL')||g.rac;
+    const magActuel=f(g.sessions[g.sessions.length-1],'Magasinier')||'—';
+    const chaineBL=g.sessions.map(s=>f(s,'Numero_BL')).join(' → ');
+
+    // Cumuler par référence sur TOUTE la chaîne — peu importe le nombre
+    // d'articles différents partiellement livrés, chacun a sa propre ligne
+    // avec Commandé (valeur de l'étape d'origine) / Livré (somme de toutes
+    // les étapes) / Reste à livrer.
+    const parRef={};
+    const ordreRef=[];
+    g.sessions.forEach((s,idx)=>{
+      const lignes=(DATA.lignesScan||[]).filter(l=>String(lineSessionId(l))===String(s.ID));
+      lignes.forEach(l=>{
+        const ref=(f(l,'Reference_Article')||'').trim()||'(sans réf.)';
+        const design=f(l,'Designation')||'';
+        const att=Number(f(l,'Quantite_Attendue')||0);
+        const sc=Number(f(l,'Quantite_Scannee')||0);
+        if(!parRef[ref]){parRef[ref]={ref,design,commande:0,livre:0};ordreRef.push(ref);}
+        // Commandé = celui de l'étape d'origine (idx 0) ; si l'article n'existait
+        // pas encore à l'origine (ajouté en cours de route), on prend la première
+        // valeur rencontrée à défaut.
+        if(idx===0||parRef[ref].commande===0)parRef[ref].commande=att;
+        parRef[ref].livre+=sc;
+        if(design&&!parRef[ref].design)parRef[ref].design=design;
+      });
+    });
+    const rowsArticles=ordreRef.map(ref=>{
+      const a=parRef[ref];
+      const reste=Math.max(0,a.commande-a.livre);
       return`<tr>
-        <td style="font-size:11px;font-weight:700;color:var(--text-muted)">${etape}</td>
-        <td class="ref">${f(s,'Numero_BL')||'—'}</td>
-        <td>${tag(statut)}</td>
-        <td style="font-size:12px">${scanEc}</td>
-        <td class="mono" style="font-size:11px">${dateAff}</td>
+        <td class="mono">${a.ref}</td>
+        <td style="font-size:11.5px">${a.design||'—'}</td>
+        <td style="text-align:right;font-weight:600">${a.commande}</td>
+        <td style="text-align:right;color:var(--green)">${a.livre}</td>
+        <td style="text-align:right;font-weight:700;color:${reste>0?'var(--red)':'var(--green)'}">${reste}</td>
       </tr>`;
     }).join('');
+
     return`<div class="acc-hd" onclick="toggleAcc('${accId}',this)" style="margin-bottom:4px">
       <div class="acc-hd-left">
         <span class="acc-arrow">▼</span>
@@ -4535,9 +4567,12 @@ function renderPartielles(){
       </div>
     </div>
     <div class="acc-body" id="${accId}">
+      <div style="padding:8px 4px;font-size:11.5px;color:var(--text-muted)">
+        BL : ${chaineBL} — actuellement chez <strong>${magActuel}</strong> (${blActuel})
+      </div>
       <div class="tc"><table>
-        <thead><tr><th>Étape</th><th>N° BL</th><th>Statut</th><th>Scanné / Écarts</th><th>Date</th></tr></thead>
-        <tbody>${rows}</tbody>
+        <thead><tr><th>Référence</th><th>Désignation</th><th style="text-align:right">Commandé</th><th style="text-align:right">Livré</th><th style="text-align:right">Reste à livrer</th></tr></thead>
+        <tbody>${rowsArticles||'<tr class="empty-row"><td colspan="5">Aucune ligne trouvée</td></tr>'}</tbody>
       </table></div>
     </div>`;
   }).join('');
@@ -4681,23 +4716,32 @@ function openSessionPanel(id){
 
   const canReopen=low.includes('terminée')||low.includes('terminee')||low.includes('écart')||low.includes('ecart')||low==='prête à livrer';
 
-  // Si cette session est un "report" (BL_Racine renseigné), on remonte TOUTE la
-  // chaîne des reports précédents — pas juste le parent immédiat, car un BL peut
-  // avoir été reporté plusieurs fois de suite (BL → BL-A → BL-B...). S'arrêter à
-  // un seul niveau sous-évalue ce qui a déjà été livré.
+  // Si cette session est un "report" (BL_Racine renseigné), on regroupe par
+  // vraie racine plutôt que de remonter un seul parent — le flow peut faire
+  // pointer chaque report directement vers la racine d'origine (pas vers
+  // l'étape précédente), auquel cas un simple remontage ancêtre-par-ancêtre
+  // manquerait les étapes intermédiaires.
   const blRacineVal=f(s,'BL_Racine');
   let origineBanner='';
   if(blRacineVal){
-    const etapes=[];
-    const vus=new Set([id]);
-    let racineCourante=blRacineVal;
-    while(racineCourante){
-      const parent=all.find(x=>String(f(x,'Numero_BL'))===String(racineCourante));
-      if(!parent||vus.has(parent.ID))break; // sécurité anti-boucle
-      vus.add(parent.ID);
-      etapes.push(parent);
-      racineCourante=f(parent,'BL_Racine');
-    }
+    const racineDe=sess=>{
+      let courant=sess,rv=f(sess,'BL_Racine');
+      const vus=new Set([sess.ID]);
+      while(rv){
+        const p=all.find(x=>String(f(x,'Numero_BL'))===String(rv));
+        if(!p||vus.has(p.ID))break;
+        vus.add(p.ID);courant=p;rv=f(p,'BL_Racine');
+      }
+      return f(courant,'Numero_BL');
+    };
+    const racineVraie=racineDe(s);
+    const etapes=all.filter(x=>x.ID!==id&&racineDe(x)===racineVraie)
+      .sort((a,b)=>{
+        const na=String(f(a,'Numero_BL')||''),nb=String(f(b,'Numero_BL')||'');
+        if(na===racineVraie&&nb!==racineVraie)return-1;
+        if(nb===racineVraie&&na!==racineVraie)return 1;
+        return na.localeCompare(nb);
+      });
     if(etapes.length){
       let totalGlobal=0;
       const detailParEtape=etapes.map(sOrigine=>{
