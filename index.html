@@ -6468,6 +6468,107 @@ function mAddLigneRow(){
   });
 }
 
+// Variante de mAddLigneRow qui pré-remplit directement la ligne (pas de
+// recherche interactive) — utilisée pour importer ce qui a déjà été scanné.
+function mAddLigneRowPrefilled(ref,design,qte){
+  const idx=_mLigneNewCount++;
+  const container=document.getElementById('m-lignes-new');
+  if(!container)return;
+  const row=document.createElement('div');
+  row.className='m-ligne-new';
+  row.id='m-ligne-new-'+idx;
+  row.style.cssText='display:grid;grid-template-columns:1fr 1.4fr 55px 55px 26px;gap:6px;margin-bottom:6px;align-items:center;position:relative;background:var(--green-light);border-radius:5px;padding:2px';
+  const refEsc=(ref||'').replace(/"/g,'&quot;');
+  const desEsc=(design||'').replace(/"/g,'&quot;');
+  row.innerHTML=`
+    <div style="position:relative">
+      <input class="m-l-ref-new" id="m-l-search-new-${idx}" autocomplete="off" value="${refEsc}" placeholder="Réf." title="Importé depuis le scan du BL" style="width:100%;padding:5px 7px;border:1px solid var(--green);border-radius:5px;font-size:12px;font-family:var(--font-mono);box-sizing:border-box">
+      <div id="m-l-drop-new-${idx}" style="position:absolute;top:100%;left:0;right:0;background:white;border:1px solid var(--border);border-radius:6px;box-shadow:0 4px 12px rgba(0,0,0,.12);z-index:9999;max-height:180px;overflow-y:auto;display:none"></div>
+    </div>
+    <input class="m-l-design-new" value="${desEsc}" placeholder="Désignation" title="Importé depuis le scan du BL" style="padding:5px 7px;border:1px solid var(--green);border-radius:5px;font-size:12px;box-sizing:border-box">
+    <input class="m-l-qc-new" type="number" min="0" step="1" value="${qte}" title="Qté commandée — reprend la qté scannée, à ajuster si différente" style="padding:5px 4px;border:1px solid var(--green);border-radius:5px;font-size:12px;box-sizing:border-box;text-align:center">
+    <input class="m-l-ql-new" type="number" min="0" step="1" value="${qte}" title="Qté livrée — reprise du scan réel" style="padding:5px 4px;border:1px solid var(--green);border-radius:5px;font-size:12px;box-sizing:border-box;text-align:center">
+    <button type="button" onclick="document.getElementById('m-ligne-new-${idx}').remove()" title="Retirer" style="background:none;border:none;color:var(--red);font-size:14px;cursor:pointer;padding:4px">✕</button>`;
+  container.appendChild(row);
+  // Recherche toujours disponible si la personne veut corriger la référence
+  const inp=document.getElementById('m-l-search-new-'+idx);
+  const drop=document.getElementById('m-l-drop-new-'+idx);
+  const designField=row.querySelector('.m-l-design-new');
+  inp.addEventListener('input',()=>{
+    inp.style.borderColor='';designField.style.borderColor='';
+    const q=inp.value.trim().toLowerCase();
+    drop.innerHTML='';
+    if(q.length<3){drop.style.display='none';return;}
+    const matches=(DATA.catalogue||[])
+      .map(p=>{
+        const ref2=(f(p,'Title')||'').toLowerCase();
+        const des2=(f(p,'field_1')||'').toLowerCase();
+        return{p,score:Math.min(scoreMatch(ref2,q),scoreMatch(des2,q)),ref:ref2};
+      })
+      .filter(x=>x.score<3)
+      .sort((a,b)=>a.score-b.score||a.ref.localeCompare(b.ref))
+      .map(x=>x.p)
+      .slice(0,12);
+    if(!matches.length){drop.style.display='none';return;}
+    matches.forEach(p=>{
+      const ref2=f(p,'Title')||'';const des2=f(p,'field_1')||'';
+      const li=document.createElement('div');
+      li.innerHTML=`<span class="mono" style="font-weight:700">${ref2}</span> <span style="color:var(--text-muted);font-size:11px">${des2}</span>`;
+      li.style.cssText='padding:6px 10px;cursor:pointer;font-size:12.5px;border-bottom:1px solid #f0f3f8';
+      li.onmouseenter=()=>li.style.background='var(--grey-light)';
+      li.onmouseleave=()=>li.style.background='';
+      li.onmousedown=(e)=>{e.preventDefault();inp.value=ref2;if(designField)designField.value=des2;drop.style.display='none';};
+      drop.appendChild(li);
+    });
+    drop.style.display='block';
+  });
+  inp.addEventListener('blur',()=>setTimeout(()=>{drop.style.display='none';},200));
+}
+
+// ── Import automatique des lignes déjà scannées sur ce BL ──
+// Sens correct du lien : ce qui a été réellement scanné au comptoir (source
+// de vérité terrain) vient s'inscrire dans le BC — jamais l'inverse, pour ne
+// pas risquer qu'une saisie de mémoire écrase un scan réel.
+function importerLignesDepuisScan(){
+  const blVal=document.getElementById('m-bl')?.value.trim();
+  if(!blVal)return;
+  const session=findSessionByBL(blVal);
+  if(!session)return;
+  const lignesScannees=(DATA.lignesScan||[]).filter(l=>
+    String(lineSessionId(l))===String(session.ID)&&Number(f(l,'Quantite_Scannee')||0)>0
+  );
+  if(!lignesScannees.length)return;
+
+  // Références déjà présentes dans le formulaire (existantes + déjà ajoutées) —
+  // on n'importe que ce qui manque, sans toucher à ce qui est déjà saisi.
+  const refsPresentes=new Set();
+  document.querySelectorAll('#m-lignes-list .m-l-ref, #m-lignes-new .m-l-ref-new').forEach(inp=>{
+    const v=inp.value.trim().toLowerCase();
+    if(v)refsPresentes.add(v);
+  });
+
+  let nbImportees=0;
+  lignesScannees.forEach(l=>{
+    const ref=(f(l,'Reference_Article')||'').trim();
+    const design=f(l,'Designation')||'';
+    const qte=Number(f(l,'Quantite_Scannee')||0);
+    const refKey=ref.toLowerCase();
+    if(refKey&&refsPresentes.has(refKey))return; // déjà là, on ne touche pas
+    mAddLigneRowPrefilled(ref,design,qte);
+    if(refKey)refsPresentes.add(refKey);
+    nbImportees++;
+  });
+
+  if(nbImportees>0){
+    document.getElementById('m-l-search-new-'+(_mLigneNewCount-1))?.closest('.sec')?.classList.add('open');
+    // La section Articles est le 3e bloc repliable du modal Traiter
+    document.querySelectorAll('.sec').forEach(s=>{
+      if(s.querySelector('#m-lignes-new'))s.classList.add('open');
+    });
+    toast(`📦 ${nbImportees} ligne${nbImportees>1?'s':''} importée${nbImportees>1?'s':''} depuis le scan du BL ${blVal}`,'ok');
+  }
+}
+
 async function mDeleteLigneRow(lineId){
   const ok=await showConfirm('🗑️ Supprimer cette ligne ?','Cette ligne article sera définitivement supprimée du suivi RAL (et du côté Livraison Magasin si elle y était synchronisée).','Supprimer','delete');
   if(!ok)return;
@@ -7091,6 +7192,13 @@ async function openTraiterModal(id,numBC,client){
     // Champs obligatoires rouge/vert
     setupRequiredField(document.getElementById('m-bl'));
     setupRequiredField(document.getElementById('m-client-search'));
+
+    // Import auto des lignes déjà scannées quand le N° BL est saisi/modifié
+    const blInput=document.getElementById('m-bl');
+    if(blInput)blInput.addEventListener('blur',importerLignesDepuisScan);
+    // Cas où le BL est déjà rempli à l'ouverture (BC déjà pris en charge
+    // avant, réouvert pour complément) — même logique appliquée une fois.
+    if(blInput&&blInput.value.trim())importerLignesDepuisScan();
 
     // Chantier autocomplete depuis API
     const chInput=document.getElementById('m-chantier-search');
