@@ -5982,6 +5982,9 @@ async function submitModal(){
   }catch(e){
     msgEl.className='modal-msg ko';msgEl.textContent='❌ '+e.message;
     btn.disabled=false;btn.textContent='Valider';
+    // Le message peut apparaître hors écran si le formulaire est long (ex:
+    // sections repliables du modal Traiter) — on le ramène toujours en vue.
+    msgEl.scrollIntoView({behavior:'smooth',block:'center'});
   }
 }
 
@@ -6937,9 +6940,23 @@ async function openTraiterModal(id,numBC,client){
       const clientEffectif=clientId||currentItem.ClientId;
       const vendeurEffectif=vendeur||f(currentItem,'Vendeurencharge');
       const errs=[];
-      if(!clientEffectif){document.getElementById('m-client-search')?.classList.add('err');errs.push('client');}
-      if(!vendeurEffectif){document.getElementById('m-vendeur')?.classList.add('err');errs.push('vendeur');}
-      if(errs.length)throw new Error(`Un N° BL est renseigné — le ${errs.join(' et le ')} doi${errs.length>1?'vent':'t'} être précisé${errs.length>1?'s':''} avant d'enregistrer.`);
+      if(!clientEffectif){
+        document.getElementById('m-client-search')?.classList.add('err');
+        errs.push('client');
+      }
+      if(!vendeurEffectif){
+        const vSel=document.getElementById('m-vendeur');
+        vSel?.classList.add('err');
+        vSel?.closest('.sec')?.classList.add('open'); // rouvre "Suivi" si repliée
+        errs.push('vendeur');
+      }
+      if(errs.length){
+        // Ramène le premier champ en erreur à l'écran — sans ça, sur le
+        // modal restructuré en sections, un champ replié en erreur peut
+        // rester invisible même avec le message d'erreur affiché.
+        setTimeout(()=>document.querySelector('#modal-body .err')?.scrollIntoView({behavior:'smooth',block:'center'}),50);
+        throw new Error(`Un N° BL est renseigné — le ${errs.join(' et le ')} doi${errs.length>1?'vent':'t'} être précisé${errs.length>1?'s':''} avant d'enregistrer.`);
+      }
     }
 
     const hasLigneRows=document.querySelectorAll('#m-lignes-list .m-ligne-existing, #m-lignes-new .m-ligne-new').length>0;
