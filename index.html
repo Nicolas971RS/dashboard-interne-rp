@@ -1247,7 +1247,7 @@
       <div style="background:var(--navy);border-radius:var(--radius);padding:14px 18px;margin-bottom:14px">
         <div style="display:flex;align-items:center;gap:12px;margin-bottom:10px">
           <span style="font-size:20px">🔍</span>
-          <input type="text" id="search-retours" placeholder="Recherche — N° BC, référence, N° FC avoir, vendeur..."
+          <input type="text" id="search-retours" placeholder="Recherche — N° BC, client, référence, N° FC avoir, vendeur..."
             style="flex:1;background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.2);border-radius:var(--radius-sm);padding:9px 14px;font-size:13.5px;color:white;font-family:var(--font-body);outline:none"
             oninput="renderRetours()">
           <button class="btn" style="border-color:rgba(255,255,255,.3);color:rgba(255,255,255,.7);background:none;white-space:nowrap" onclick="document.getElementById('search-retours').value='';renderRetours()">✕ Effacer</button>
@@ -1259,8 +1259,8 @@
         </div>
       </div>
       <div class="tc"><table>
-        <thead><tr><th>Date</th><th>N° BC</th><th>N° BL origine</th><th>Référence</th><th>Désignation</th><th style="text-align:center">Qté</th><th>N° FC Avoir</th><th style="text-align:right">Montant Avoir</th><th>Vendeur</th><th>Commentaire</th></tr></thead>
-        <tbody id="retours-body"><tr class="empty-row"><td colspan="10">Cliquez sur l'onglet pour charger les retours...</td></tr></tbody>
+        <thead><tr><th>Date</th><th>N° BC</th><th>N° BL origine</th><th>Client</th><th>Référence</th><th>Désignation</th><th style="text-align:center">Qté</th><th>N° FC Avoir</th><th style="text-align:right">Montant Avoir</th><th>Vendeur</th><th>Commentaire</th></tr></thead>
+        <tbody id="retours-body"><tr class="empty-row"><td colspan="11">Cliquez sur l'onglet pour charger les retours...</td></tr></tbody>
       </table></div>
     </div>
   </div>
@@ -5272,6 +5272,19 @@ function buildRetoursFilters(){
   }
 }
 
+// Le client n'est pas stocké directement sur un retour — on le retrouve via
+// le BC lié (BCId) ou, pour un retour sans BC, via la session de scan liée
+// (SessionId), qui porte elle-même le nom du client du BL.
+function getRetourClient(r){
+  if(r.BCId){
+    const bcItem=(DATA.suivi||[]).find(x=>x.ID===r.BCId);
+    if(bcItem)return getClient(bcItem);
+  }else if(r.SessionId){
+    const sess=(DATA.sessionsScan||[]).find(x=>x.ID===r.SessionId);
+    if(sess)return f(sess,'Client')||'—';
+  }
+  return '—';
+}
 function renderRetours(){
   const all=DATA.retours||[];
   const q=(document.getElementById('search-retours')?.value||'').toLowerCase();
@@ -5285,7 +5298,8 @@ function renderRetours(){
       const ref=String(f(r,'Reference_Article')||'').toLowerCase();
       const fc=String(f(r,'Numero_FC_Avoir')||'').toLowerCase();
       const vendeur=String(f(r,'Vendeur')||'').toLowerCase();
-      if(!numBC.includes(q)&&!numBL.includes(q)&&!ref.includes(q)&&!fc.includes(q)&&!vendeur.includes(q))return false;
+      const clientQ=getRetourClient(r).toLowerCase();
+      if(!numBC.includes(q)&&!numBL.includes(q)&&!ref.includes(q)&&!fc.includes(q)&&!vendeur.includes(q)&&!clientQ.includes(q))return false;
     }
     return true;
   });
@@ -5301,6 +5315,7 @@ function renderRetours(){
       const numBL=f(r,'N_BL_Origine')||(!bcId?f(r,'N_BC'):'')||'—';
       const fc=String(f(r,'Numero_FC_Avoir')||'').trim();
       const montant=parseFloat(f(r,'Montant_Avoir'))||0;
+      const client=getRetourClient(r);
       // Un même avoir peut couvrir plusieurs lignes d'articles (retour multi-lignes).
       // On les détecte par contiguïté (même N° FC avoir sur des lignes voisines,
       // ce qui est toujours le cas puisqu'elles sont créées d'un seul bloc) pour
@@ -5314,6 +5329,7 @@ function renderRetours(){
         <td class="mono" style="font-size:11px;white-space:nowrap">${fmtDate(f(r,'Date_Retour'))}</td>
         <td class="ref" style="${bcId?'cursor:pointer;color:var(--blue)':''}" ${bcId?`onclick="closePanel();openBCPanel(${bcId})"`:''}>${numBC}</td>
         <td class="mono" style="font-size:11px;${sessId?'cursor:pointer;color:var(--blue)':''}" ${sessId?`onclick="closePanel();openSessionPanel(${sessId})"`:''}>${numBL}</td>
+        <td style="font-size:11.5px">${client}</td>
         <td class="mono">${f(r,'Reference_Article')||'—'}</td>
         <td style="font-size:11.5px">${f(r,'Designation')||'—'}</td>
         <td style="text-align:center;font-weight:700">${f(r,'Quantite_Retournee')||0}</td>
@@ -5327,13 +5343,13 @@ function renderRetours(){
         let total=0,j=idx;
         while(j>=0&&String(f(items[j],'Numero_FC_Avoir')||'').trim()===fc){total+=parseFloat(f(items[j],'Montant_Avoir'))||0;j--;}
         rows+=`<tr style="background:var(--bg-subtle,#f4f6f9)">
-          <td colspan="7" style="text-align:right;font-size:11.5px;color:var(--text-muted);font-weight:600">Sous-total avoir ${fc}</td>
+          <td colspan="8" style="text-align:right;font-size:11.5px;color:var(--text-muted);font-weight:600">Sous-total avoir ${fc}</td>
           <td style="text-align:right;font-weight:700">${total>0?fmtMoney(total):'—'}</td>
           <td colspan="2"></td>
         </tr>`;
       }
     }
-    b.innerHTML=items.length?rows:'<tr class="empty-row"><td colspan="10">Aucun retour ne correspond aux critères</td></tr>';
+    b.innerHTML=items.length?rows:'<tr class="empty-row"><td colspan="11">Aucun retour ne correspond aux critères</td></tr>';
   }
 
   const kc=document.getElementById('kpi-retours-count');if(kc)kc.textContent=all.length;
@@ -5357,7 +5373,8 @@ function exportRetoursCSV(){
       const ref=String(f(r,'Reference_Article')||'').toLowerCase();
       const fc=String(f(r,'Numero_FC_Avoir')||'').toLowerCase();
       const vendeur=String(f(r,'Vendeur')||'').toLowerCase();
-      if(!numBC.includes(q)&&!numBL.includes(q)&&!ref.includes(q)&&!fc.includes(q)&&!vendeur.includes(q))return false;
+      const clientQ=getRetourClient(r).toLowerCase();
+      if(!numBC.includes(q)&&!numBL.includes(q)&&!ref.includes(q)&&!fc.includes(q)&&!vendeur.includes(q)&&!clientQ.includes(q))return false;
     }
     return true;
   });
@@ -5365,6 +5382,7 @@ function exportRetoursCSV(){
     {label:'Date', fn:r=>fmtDate(f(r,'Date_Retour'))},
     {label:'N° BC', fn:r=>r.BCId?(f(r,'N_BC')||''):''},
     {label:'N° BL origine', fn:r=>f(r,'N_BL_Origine')||(!r.BCId?f(r,'N_BC'):'')||''},
+    {label:'Client', fn:r=>getRetourClient(r)},
     {label:'Référence', fn:r=>f(r,'Reference_Article')||''},
     {label:'Désignation', fn:r=>f(r,'Designation')||''},
     {label:'Qté retournée', fn:r=>f(r,'Quantite_Retournee')||0},
