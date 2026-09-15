@@ -1507,6 +1507,46 @@ async function fetchProjetTitles(){
   }catch(e){console.warn('[fetchProjetTitles]',e);return[];}
 }
 
+// ── Synchronisation automatique Livré (BC) ← Scan réel (magasinier) ──
+// Le scan physique fait foi. Dès qu'un BC a un N° BL correspondant à une
+// session de scan, chaque ligne d'article dont la référence matche voit son
+// "Quantité livrée" alignée automatiquement sur "Quantité scannée" — sans
+// jamais demander à personne de recopier un chiffre à la main. S'exécute à
+// chaque chargement du dashboard, silencieusement si rien n'a changé.
+async function syncLivraisonDepuisScan(){
+  const updates=[];
+  (DATA.lignes||[]).forEach(ligne=>{
+    const bcId=ligne.BCId??parseInt(ligne.BCId);
+    const bc=(DATA.suivi||[]).find(x=>x.ID===bcId);
+    if(!bc)return;
+    const numBL=f(bc,'N_x00b0_BL');
+    if(!numBL)return;
+    const session=findSessionByBL(numBL);
+    if(!session)return;
+    const ref=(f(ligne,'R_x00e9_f_x00e9_rence')||'').trim().toLowerCase();
+    const design=(f(ligne,'Produit_x002f_D_x00e9_signation')||'').trim().toLowerCase();
+    const ligneScan=(DATA.lignesScan||[]).find(l=>
+      String(lineSessionId(l))===String(session.ID)&&
+      ((ref&&(f(l,'Reference_Article')||'').trim().toLowerCase()===ref)||
+       (!ref&&design&&(f(l,'Designation')||'').trim().toLowerCase()===design))
+    );
+    if(!ligneScan)return;
+    const scanne=Number(f(ligneScan,'Quantite_Scannee')||0);
+    const livreActuel=Number(f(ligne,'Quantit_x00e9_livr_x00e9_e')||0);
+    if(scanne!==livreActuel)updates.push({ligne,scanne});
+  });
+  if(!updates.length)return;
+  let ok=0;
+  for(const u of updates){
+    try{
+      await spPatch('sites/RseauxPlus','Lignes_BC',u.ligne.ID,{Quantit_x00e9_livr_x00e9_e:u.scanne});
+      u.ligne.Quantit_x00e9_livr_x00e9_e=u.scanne;
+      ok++;
+    }catch(e){console.warn('[syncLivraisonDepuisScan]',u.ligne.ID,e.message);}
+  }
+  if(ok)toast(`🔄 ${ok} ligne${ok>1?'s':''} de livraison mise${ok>1?'s':''} à jour automatiquement depuis le scan`,'ok');
+}
+
 async function loadAll(){
   setLoading(true);hideError();
   try{
@@ -1564,6 +1604,12 @@ async function loadAll(){
     clients.forEach(c=>{if(c.ID&&c.Title)clientMap[c.ID]=c.Title;});
 
     DATA={suivi,lignes,dbc,devis,clients:clientMap,chantiers:chantiers||[],catalogue:catalogue||[],sessionsScan:sessionsScan||[],lignesScan:lignesScan||[]};
+
+    // Synchronise automatiquement "Livré" (Lignes_BC) depuis le scan réel
+    // (Lignes_Scan) — aucune recopie manuelle : dès que le magasinier scanne,
+    // le suivi RAL/Livraisons Partielles se met à jour tout seul au prochain
+    // chargement du dashboard.
+    await syncLivraisonDepuisScan();
 
     // Debug: log first suivi item to help identify field names
     if(suivi.length>0){console.log('DEBUG Suivi_BC[0] keys:',Object.keys(suivi[0]).sort().join(', '));}
@@ -6588,11 +6634,21 @@ function importerLignesDepuisScan(){
 }
 
 async function mDeleteLigneRow(lineId){
-  const ok=await showConfirm('🗑️ Supprimer cette ligne ?','Cette ligne article sera définitivement supprimée du suivi RAL (et du côté Livraison Magasin si elle y était synchronisée).','Supprimer','delete');
-  if(!ok)return;
   const row=document.querySelector(`.m-ligne-existing[data-line-id="${lineId}"]`);
   const ref=row?.querySelector('.m-l-ref')?.value.trim()||'';
   const design=row?.querySelector('.m-l-design')?.value.trim()||'';
+  // On vérifie d'avance si une ligne miroir existe côté scan, pour le dire
+  // clairement AVANT de supprimer — plutôt que de la faire disparaître sans
+  // prévenir et le découvrir seulement en rouvrant le BL plus tard.
+  const sessionAvant=findSessionByBL(_traiterCurBL);
+  const miroirExiste=sessionAvant&&(DATA.lignesScan||[]).some(l=>
+    String(lineSessionId(l))===String(sessionAvant.ID)&&
+    ((ref&&(f(l,'Reference_Article')||'').trim().toLowerCase()===ref.toLowerCase())||
+     (!ref&&(f(l,'Designation')||'').trim().toLowerCase()===design.toLowerCase()))
+  );
+  const avertMiroir=miroirExiste?`<br><br>⚠️ Cette référence est aussi enregistrée sur le BL <strong>${_traiterCurBL}</strong> (scan) — elle sera supprimée là aussi, le BL n'affichera plus cet article.`:'';
+  const ok=await showConfirm('🗑️ Supprimer cette ligne ?',`Cette ligne article sera définitivement supprimée du suivi RAL.${avertMiroir}`,'Supprimer','delete');
+  if(!ok)return;
   try{
     await spDelete('sites/RseauxPlus','Lignes_BC',lineId);
     row?.remove();
@@ -7147,6 +7203,24 @@ async function openTraiterModal(id,numBC,client){
       }
     });
     if(errQteTraiter)throw new Error('Quantité commandée obligatoire pour chaque article saisi.');
+
+    // Empêche d'ajouter une référence déjà présente sur ce BC (ligne existante
+    // OU une autre nouvelle ligne de cette même saisie) — cause du bug vécu où
+    // une référence déjà comptabilisée dans le suivi RAL se retrouvait
+    // dupliquée en l'ajoutant une seconde fois via cette section.
+    const refsExistantesTraiter=[...rowsExist].map(row=>(row.querySelector('.m-l-ref')?.value.trim()||'').toLowerCase()).filter(Boolean);
+    const refsVues=new Set();
+    for(const row of rowsNew){
+      const refChk=(row.querySelector('.m-l-ref-new')?.value.trim()||'').toLowerCase();
+      if(!refChk)continue;
+      if(refsExistantesTraiter.includes(refChk)||refsVues.has(refChk)){
+        const inpChk=row.querySelector('.m-l-ref-new');
+        if(inpChk)inpChk.style.border='2px solid var(--red)';
+        throw new Error(`La référence "${row.querySelector('.m-l-ref-new').value.trim()}" est déjà sur ce BC — modifie sa quantité dans la ligne existante au lieu d'en ajouter une nouvelle, sinon elle apparaîtra en double dans le suivi RAL.`);
+      }
+      refsVues.add(refChk);
+    }
+
     if(rowsNew.length){
       const lignesExistantesRef=(DATA.lignes||[]).filter(l=>l.BCId===id||parseInt(l.BCId)===id);
       let maxLigne=lignesExistantesRef.reduce((max,l)=>{const n=parseInt(f(l,'Title'))||0;return n>max?n:max;},0);
@@ -8123,14 +8197,22 @@ async function syncLigneToScan(session,ref,design,qc,ql){
     String(lineSessionId(l))===String(sessId)&&
     (f(l,'Designation')||'').trim().toLowerCase()===(design||'').trim().toLowerCase()
   );
-  const body={Reference_Article:ref||'',Designation:design,Quantite_Attendue:qc,Quantite_Scannee:ql};
   try{
     if(existing){
-      await spPatch('sites/BondeCommande','Lignes_Scan',existing.ID,body);
-      Object.assign(existing,body);
+      // Ligne déjà là côté scan : seule la quantité ATTENDUE (commandée) se
+      // met à jour depuis Traiter. Quantite_Scannee appartient exclusivement
+      // au scan réel du magasinier — la toucher ici écraserait une livraison
+      // déjà scannée avec ce qui est tapé au bureau, ce qui a déjà causé une
+      // perte de données sur un vrai BL.
+      const bodyMaj={Reference_Article:ref||'',Designation:design,Quantite_Attendue:qc};
+      await spPatch('sites/BondeCommande','Lignes_Scan',existing.ID,bodyMaj);
+      Object.assign(existing,bodyMaj);
     }else{
-      body.Session_ScanId=sessId;
-      const created=await spPost('sites/BondeCommande','Lignes_Scan',body);
+      // Nouvelle ligne : rien n'a encore été scanné, Quantite_Scannee démarre
+      // à 0 — jamais à la valeur "livré" tapée dans Traiter, qui reste une
+      // donnée BC/RAL, pas une donnée de scan physique.
+      const bodyNew={Reference_Article:ref||'',Designation:design,Quantite_Attendue:qc,Quantite_Scannee:0,Session_ScanId:sessId};
+      const created=await spPost('sites/BondeCommande','Lignes_Scan',bodyNew);
       if(created){
         const createdNorm={...created,ID:created.ID??created.Id};
         console.log('[syncLigneToScan] ligne créée',createdNorm.ID,'liée à session',sessId,createdNorm);
