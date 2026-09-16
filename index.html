@@ -6371,7 +6371,11 @@ async function openFacturerModal(id,numBC,client){
     const item=(DATA.suivi||[]).find(x=>x.ID===id||x.ID===parseInt(id));
     if(item){numBC=numBC||f(item,'Title')||('BC-'+id);client=client||getClient(item);}
   }
-  const attachments=await getAttachments('sites/RseauxPlus','Suivi_BC',id);
+  // Un BC de suite (TRA26-720-A, -B...) reprend un BC déjà entamé — le
+  // document d'origine a déjà été envoyé à Docuware avec le tout premier BL.
+  // Pas de nouvel envoi à déclencher ici, donc pas d'exigence de pièce jointe.
+  const estSuite=bcRacine(numBC)!==numBC;
+  const attachments=estSuite?[]:await getAttachments('sites/RseauxPlus','Suivi_BC',id);
   openModal(`💰 Saisir le numéro de facture`,`
     <div style="font-size:12px;color:var(--text-muted);font-family:var(--font-mono);margin-bottom:14px">${numBC} · ${client}</div>
     <div class="mf"><label>N° FC (Facture Client) *</label>
@@ -6380,18 +6384,22 @@ async function openFacturerModal(id,numBC,client){
     <div style="background:var(--green-light);border:1px solid var(--green);border-radius:var(--radius-sm);padding:10px 14px;font-size:12px;color:var(--green);font-weight:600;margin-bottom:14px">
       ✅ État : Entièrement facturé
     </div>
-    <div style="background:var(--amber-light);border:1px solid var(--amber);border-radius:var(--radius-sm);padding:10px 14px;margin-bottom:10px;font-size:12.5px;color:#8a6d00;line-height:1.5">
+    ${estSuite?`<div style="background:var(--blue-xlight);border:1px solid var(--blue);border-radius:var(--radius-sm);padding:10px 14px;margin-bottom:10px;font-size:12.5px;color:var(--blue);line-height:1.5">
+      ℹ️ BC de suite (reprise de <strong>${bcRacine(numBC)}</strong>) — le document a déjà été envoyé à Docuware avec le premier BL, aucune pièce jointe requise ici.
+    </div>`:`<div style="background:var(--amber-light);border:1px solid var(--amber);border-radius:var(--radius-sm);padding:10px 14px;margin-bottom:10px;font-size:12.5px;color:#8a6d00;line-height:1.5">
       ⚠️ Enregistrer ce N° FC déclenche l'envoi automatique du BC à Docuware, et le flow n'envoie qu'<strong>une seule pièce jointe</strong>. Si le client a joint un devis, un logo ou tout autre fichier en plus du BC, supprime-les ci-dessous avant de valider.
     </div>
-    <div id="m-docuware-pj-list">${_docuwarePjListHtml(attachments,id)}</div>`,
+    <div id="m-docuware-pj-list">${_docuwarePjListHtml(attachments,id)}</div>`}`,
   async()=>{
     const fc=document.getElementById('m-fc').value.trim();
     if(!fc){document.getElementById('m-fc').style.borderColor='var(--red)';throw new Error('Le N° de facture est obligatoire.');}
-    // On revérifie au moment de valider, pas seulement à l'ouverture — au cas
-    // où la personne aurait ignoré le rappel.
-    const current=await getAttachments('sites/RseauxPlus','Suivi_BC',id);
-    if(current.length>1)throw new Error(`Il reste ${current.length} pièces jointes — supprime les indésirables avant de valider (le flow Docuware n'en accepte qu'une).`);
-    if(current.length===0)throw new Error('Aucune pièce jointe trouvée — le BC doit être joint avant de facturer.');
+    if(!estSuite){
+      // On revérifie au moment de valider, pas seulement à l'ouverture — au cas
+      // où la personne aurait ignoré le rappel. Non applicable à un BC de suite.
+      const current=await getAttachments('sites/RseauxPlus','Suivi_BC',id);
+      if(current.length>1)throw new Error(`Il reste ${current.length} pièces jointes — supprime les indésirables avant de valider (le flow Docuware n'en accepte qu'une).`);
+      if(current.length===0)throw new Error('Aucune pièce jointe trouvée — le BC doit être joint avant de facturer.');
+    }
     const body={};
     body[nFCKey()]=fc;
     body[etatFactKey()]='Entièrement facturé';
