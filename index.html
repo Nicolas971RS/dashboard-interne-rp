@@ -594,6 +594,8 @@
         <button onclick="clearKpiFocus()" style="background:none;border:none;color:var(--text-muted);cursor:pointer;font-size:13px;padding:4px 10px;border-radius:var(--radius-sm);font-family:var(--font-body);">✕ Retirer le filtre</button>
       </div>
 
+      <div id="annonces-bandeau"></div>
+
       <!-- ══ SECTION ARRIVÉES DU JOUR ══ -->
       <div class="sd"><h2>📥 Arrivées du jour</h2><span class="site-tag rp">Statut = Reçu · Aujourd'hui</span><div class="sd-line"></div></div>
       <div class="acc-hd open" onclick="toggleAcc('acc-recu',this)">
@@ -1547,12 +1549,57 @@ async function syncLivraisonDepuisScan(){
   if(ok)toast(`🔄 ${ok} ligne${ok>1?'s':''} de livraison mise${ok>1?'s':''} à jour automatiquement depuis le scan`,'ok');
 }
 
+// ── Bandeau d'annonces partagé entre vendeurs (ex: "ne pas vendre X, réservé
+// pour tel client") — au-dessus d'Arrivées du jour, visible de tous. ──
+function renderAnnonces(){
+  const host=document.getElementById('annonces-bandeau');
+  if(!host)return;
+  const list=DATA.annonces||[];
+  const cartes=list.map(a=>{
+    const msg=(f(a,'Message')||'').replace(/</g,'&lt;');
+    const auteur=f(a,'Auteur')||'—';
+    const dateStr=fmtDate(f(a,'Created'));
+    return`<div style="display:flex;align-items:flex-start;gap:10px;background:#fff3e0;border:1.5px solid var(--amber);border-left:5px solid var(--amber);border-radius:var(--radius-sm);padding:11px 14px;margin-bottom:6px">
+      <span style="font-size:16px;flex-shrink:0">📌</span>
+      <div style="flex:1;font-size:13px;color:#7a4a00;line-height:1.4">${msg}
+        <div style="font-size:11px;color:#a9822f;margin-top:3px">— ${auteur}, ${dateStr}</div>
+      </div>
+      <button onclick="retirerAnnonce(${a.ID})" title="Retirer cette annonce" style="background:none;border:none;color:#a9822f;cursor:pointer;font-size:14px;padding:2px 4px;flex-shrink:0">✕</button>
+    </div>`;
+  }).join('');
+  host.innerHTML=cartes+`<button onclick="ajouterAnnonce()" class="btn" style="height:28px;font-size:11.5px;margin-bottom:10px">📌 + Annonce</button>`;
+}
+async function ajouterAnnonce(){
+  const msg=prompt('Message à afficher pour tous les vendeurs :\n(ex : Ne pas vendre les grilles concave en stock — réservées pour SAS TRAPEG)');
+  if(!msg||!msg.trim())return;
+  try{
+    const auteur=vendeurConnecte()||sessionStorage.getItem('user_name')||'—';
+    const created=await spPost('sites/RseauxPlus','Annonces',{Title:msg.trim().slice(0,80),Message:msg.trim(),Auteur:auteur});
+    if(created){
+      const createdNorm={...created,ID:created.ID??created.Id,Message:msg.trim(),Auteur:auteur,Created:new Date().toISOString()};
+      DATA.annonces=[createdNorm,...(DATA.annonces||[])];
+      renderAnnonces();
+      toast('📌 Annonce publiée pour tous les vendeurs','ok');
+    }
+  }catch(e){toast('🔴 Impossible de publier l\'annonce : '+e.message,'ko');}
+}
+async function retirerAnnonce(id){
+  const ok=await showConfirm('Retirer cette annonce ?','Elle ne sera plus visible pour personne.','Retirer','delete');
+  if(!ok)return;
+  try{
+    await spDelete('sites/RseauxPlus','Annonces',id);
+    DATA.annonces=(DATA.annonces||[]).filter(a=>a.ID!==id);
+    renderAnnonces();
+    toast('✅ Annonce retirée','ok');
+  }catch(e){toast('🔴 Suppression impossible : '+e.message,'ko');}
+}
+
 async function loadAll(){
   setLoading(true);hideError();
   try{
     const _sources=[
       'Suivi_BC','Chantiers (lookup)','Lignes_BC','Demandes_BC','Demandes_Devis',
-      'Base_Clients','Chantiers','Cathalogue_Produits','Sessions_Scan','Lignes_Scan'
+      'Base_Clients','Chantiers','Cathalogue_Produits','Sessions_Scan','Lignes_Scan','Annonces'
     ];
     const _settled=await Promise.allSettled([
       // Suivi_BC: $select=*
@@ -1578,7 +1625,9 @@ async function loadAll(){
         '$select=ID,Title,Numero_BL,Client,Type_Operation,Vendeur_Emetteur,Magasinier,Date_Emission,Date_Scan,Statut,Nb_Articles_Scannes,Nb_Ecarts,Preparation_Avance,BL_Racine,Date_Livraison_Prevue,Repris_Par&$orderby=ID desc&$top=2000'),
       // Lignes_Scan — détail des articles scannés par session
       spFetch('sites/BondeCommande','Lignes_Scan',
-        '$select=ID,Title,Session_ScanId,Session_Scan/Id,Reference_Article,Designation,Quantite_Attendue,Quantite_Scannee&$expand=Session_Scan&$orderby=ID asc&$top=5000')
+        '$select=ID,Title,Session_ScanId,Session_Scan/Id,Reference_Article,Designation,Quantite_Attendue,Quantite_Scannee&$expand=Session_Scan&$orderby=ID asc&$top=5000'),
+      // Annonces — bandeau d'alerte partagé entre vendeurs
+      spFetch('sites/RseauxPlus','Annonces','$select=ID,Message,Auteur,Created&$orderby=ID desc&$top=20')
     ]);
 
     // Dégradation par bloc : une liste en échec n'invalide plus tout le dashboard.
@@ -1590,7 +1639,7 @@ async function loadAll(){
       console.warn(`[loadAll] ${_sources[i]} en échec :`,r.reason);
       return [];
     });
-    const [suivi,projTitles,lignes,dbc,devis,clients,chantiers,catalogue,sessionsScan,lignesScan]=_val;
+    const [suivi,projTitles,lignes,dbc,devis,clients,chantiers,catalogue,sessionsScan,lignesScan,annonces]=_val;
     if(_settled[0].status==='rejected')throw _settled[0].reason;
     if(_failed.length)showError(`Données partielles — ${_failed.length} source(s) indisponible(s) : ${_failed.join(', ')}. Le reste du tableau de bord est à jour.`);
 
@@ -1603,7 +1652,7 @@ async function loadAll(){
     const clientMap={};
     clients.forEach(c=>{if(c.ID&&c.Title)clientMap[c.ID]=c.Title;});
 
-    DATA={suivi,lignes,dbc,devis,clients:clientMap,chantiers:chantiers||[],catalogue:catalogue||[],sessionsScan:sessionsScan||[],lignesScan:lignesScan||[]};
+    DATA={suivi,lignes,dbc,devis,clients:clientMap,chantiers:chantiers||[],catalogue:catalogue||[],sessionsScan:sessionsScan||[],lignesScan:lignesScan||[],annonces:annonces||[]};
 
     // Synchronise automatiquement "Livré" (Lignes_BC) depuis le scan réel
     // (Lignes_Scan) — aucune recopie manuelle : dès que le magasinier scanne,
@@ -1615,7 +1664,7 @@ async function loadAll(){
     if(suivi.length>0){console.log('DEBUG Suivi_BC[0] keys:',Object.keys(suivi[0]).sort().join(', '));}
 
     _lastLoad=Date.now();updateTimer();
-    buildFilters();renderAll();updateBadges();buildSGVendeurs();
+    buildFilters();renderAll();updateBadges();buildSGVendeurs();renderAnnonces();
     saveCache();hideOfflineBanner();
     showRappelFacturation(); // une seule fois par session
     initSortableHeaders();
