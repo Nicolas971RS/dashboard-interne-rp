@@ -1564,6 +1564,7 @@ function renderAnnonces(){
       <div style="flex:1;font-size:13px;color:#7a4a00;line-height:1.4">${msg}
         <div style="font-size:11px;color:#a9822f;margin-top:3px">— ${auteur}, ${dateStr}</div>
       </div>
+      <button onclick="modifierAnnonce(${a.ID})" title="Modifier cette annonce" style="background:none;border:none;color:#a9822f;cursor:pointer;font-size:13px;padding:2px 4px;flex-shrink:0">✏️</button>
       <button onclick="retirerAnnonce(${a.ID})" title="Retirer cette annonce" style="background:none;border:none;color:#a9822f;cursor:pointer;font-size:14px;padding:2px 4px;flex-shrink:0">✕</button>
     </div>`;
   }).join('');
@@ -1582,6 +1583,20 @@ async function ajouterAnnonce(){
       toast('📌 Annonce publiée pour tous les vendeurs','ok');
     }
   }catch(e){toast('🔴 Impossible de publier l\'annonce : '+e.message,'ko');}
+}
+async function modifierAnnonce(id){
+  const a=(DATA.annonces||[]).find(x=>x.ID===id);
+  if(!a)return;
+  const nouveau=prompt('Modifier le message :',f(a,'Message')||'');
+  if(nouveau===null)return; // annulé
+  const texte=nouveau.trim();
+  if(!texte){toast('⚠️ Le message ne peut pas être vide','warn');return;}
+  try{
+    await spPatch('sites/BondeCommande','Annonces',id,{Title:texte.slice(0,80),Message:texte});
+    a.Message=texte;a.Title=texte.slice(0,80);
+    renderAnnonces();
+    toast('✅ Annonce modifiée','ok');
+  }catch(e){toast('🔴 Modification impossible : '+e.message,'ko');}
 }
 async function retirerAnnonce(id){
   const ok=await showConfirm('Retirer cette annonce ?','Elle ne sera plus visible pour personne.','Retirer','delete');
