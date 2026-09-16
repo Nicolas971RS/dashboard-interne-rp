@@ -1574,7 +1574,7 @@ async function ajouterAnnonce(){
   if(!msg||!msg.trim())return;
   try{
     const auteur=vendeurConnecte()||sessionStorage.getItem('user_name')||'—';
-    const created=await spPost('sites/RseauxPlus','Annonces',{Title:msg.trim().slice(0,80),Message:msg.trim(),Auteur:auteur});
+    const created=await spPost('sites/BondeCommande','Annonces',{Title:msg.trim().slice(0,80),Message:msg.trim(),Auteur:auteur});
     if(created){
       const createdNorm={...created,ID:created.ID??created.Id,Message:msg.trim(),Auteur:auteur,Created:new Date().toISOString()};
       DATA.annonces=[createdNorm,...(DATA.annonces||[])];
@@ -1587,7 +1587,7 @@ async function retirerAnnonce(id){
   const ok=await showConfirm('Retirer cette annonce ?','Elle ne sera plus visible pour personne.','Retirer','delete');
   if(!ok)return;
   try{
-    await spDelete('sites/RseauxPlus','Annonces',id);
+    await spDelete('sites/BondeCommande','Annonces',id);
     DATA.annonces=(DATA.annonces||[]).filter(a=>a.ID!==id);
     renderAnnonces();
     toast('✅ Annonce retirée','ok');
@@ -1627,7 +1627,7 @@ async function loadAll(){
       spFetch('sites/BondeCommande','Lignes_Scan',
         '$select=ID,Title,Session_ScanId,Session_Scan/Id,Reference_Article,Designation,Quantite_Attendue,Quantite_Scannee&$expand=Session_Scan&$orderby=ID asc&$top=5000'),
       // Annonces — bandeau d'alerte partagé entre vendeurs
-      spFetch('sites/RseauxPlus','Annonces','$select=ID,Message,Auteur,Created&$orderby=ID desc&$top=20')
+      spFetch('sites/BondeCommande','Annonces','$select=ID,Message,Auteur,Created&$orderby=ID desc&$top=20')
     ]);
 
     // Dégradation par bloc : une liste en échec n'invalide plus tout le dashboard.
