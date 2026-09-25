@@ -827,11 +827,19 @@
           <button class="btn-refresh" onclick="loadAll()">🔄 Actualiser</button>
         </div>
       </div>
-      <div class="kpi-row c4">
+      <div class="kpi-row c5">
         <div class="kc a"><div class="kl">⏳ En attente de prise en charge</div><div class="kv" id="kpi-prep-attente">—</div><div class="ks">Personne ne l'a encore pris</div></div>
         <div class="kc t"><div class="kl">🔧 En cours de préparation</div><div class="kv" id="kpi-prep-encours">—</div><div class="ks">Pris en charge, scan en cours</div></div>
         <div class="kc g" style="cursor:pointer" onclick="document.getElementById('pretes-block-dash')?.scrollIntoView({behavior:'smooth'})"><div class="kl">✅ Prêtes à livrer</div><div class="kv" id="kpi-prep-prete">—</div><div class="ks">En attente du client</div></div>
         <div class="kc r" id="kc-prep-retard" style="cursor:pointer" onclick="togglePrepRetard()"><div class="kl">⚠️ En retard +2 jours</div><div class="kv" id="kpi-prep-retard">—</div><div class="ks" id="ks-prep-retard">Cliquer pour filtrer la liste</div></div>
+        <div class="kc" id="kc-prep-libre" style="cursor:pointer;background:#f3f0ff;border-color:#7c3aed" onclick="document.getElementById('preplibre-block-dash')?.scrollIntoView({behavior:'smooth'})"><div class="kl" style="color:#7c3aed">📦 À affecter</div><div class="kv" id="kpi-prep-libre" style="color:#7c3aed">—</div><div class="ks" id="ks-prep-libre">Préparations sans client</div></div>
+      </div>
+
+      <!-- Bloc préparations matériel en attente d'affectation à un client -->
+      <div id="preplibre-block-dash" style="display:none;background:#f3f0ff;border:2px solid #7c3aed;border-radius:var(--radius);padding:14px 16px;margin-bottom:14px">
+        <div style="font-weight:800;font-size:14px;color:#7c3aed;margin-bottom:4px">📦 Préparations en attente d'affectation</div>
+        <div style="font-size:11.5px;color:#6b5b95;margin-bottom:10px">Matériel déjà préparé par un magasinier, sans client ni BL/FC associé pour l'instant.</div>
+        <div id="preplibre-list-dash"></div>
       </div>
 
       <!-- Bloc commandes prêtes à livrer -->
@@ -4407,6 +4415,11 @@ function renderPreparations(){
     }
   }
 
+  // Préparations matériel terminées, sans client ni BL — à affecter par un vendeur
+  const isPrepLibre=s=>(f(s,'Type_Operation')||'').toLowerCase()==='préparation matériel';
+  const isTerminee=s=>{const st=(f(s,'Statut')||'').toLowerCase();return st==='terminée'||st==='terminee';};
+  const preplibres=all.filter(s=>isPrepLibre(s)&&isTerminee(s)&&!f(s,'Client'));
+
   // Délai moyen de prise en charge — sessions traitées, hors legacy pré-process
   const traitees=all.filter(s=>!isPending(s)&&f(s,'Date_Scan')&&afterCutoff(f(s,'Date_Emission')));
   let delaiMoyenH=null;
@@ -4424,6 +4437,51 @@ function renderPreparations(){
   setTxt('kpi-prep-prete',pretes.length);
   setTxt('kpi-prep-retard',retard.length);
   setTxt('kpi-prep-delai',fmtDelai(delaiMoyenH));
+  setTxt('kpi-prep-libre',preplibres.length);
+
+  // Bloc "Préparations à affecter" + badge coloré selon l'ancienneté (une
+  // demande de préparation doit toujours finir traitée — badge visible tant
+  // qu'elle traîne, rouge passé 2 jours pour inciter à trancher : affecter
+  // ou archiver sans suite).
+  const kcPrepLibre=document.getElementById('kc-prep-libre');
+  const ksPrepLibre=document.getElementById('ks-prep-libre');
+  const preplibreDash=document.getElementById('preplibre-block-dash');
+  const preplibreList=document.getElementById('preplibre-list-dash');
+  if(preplibres.length){
+    const joursMax=Math.max(...preplibres.map(s=>daysSince(f(s,'Date_Emission'))));
+    if(kcPrepLibre){
+      kcPrepLibre.style.background=joursMax>=2?'#fee2e2':'#f3f0ff';
+      kcPrepLibre.style.borderColor=joursMax>=2?'var(--red)':'#7c3aed';
+    }
+    if(ksPrepLibre)ksPrepLibre.textContent=joursMax>=2?'⚠️ En attente depuis '+joursMax+'j':'Préparations sans client';
+    if(preplibreDash){
+      preplibreDash.style.display='block';
+      preplibreDash.style.borderColor=joursMax>=2?'var(--red)':'#7c3aed';
+    }
+    if(preplibreList){
+      preplibreList.innerHTML=preplibres.map(s=>{
+        const ref=f(s,'Numero_BL')||'—';
+        const mag=f(s,'Magasinier')||'—';
+        const jours=daysSince(f(s,'Date_Emission'));
+        const nbArt=f(s,'Nb_Articles_Scannes')??'—';
+        const urgent=jours>=2;
+        return`<div style="background:white;border:1px solid ${urgent?'#fecaca':'#e3d9ff'};border-radius:8px;padding:10px 14px;margin-bottom:8px;display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap">
+          <div style="min-width:0">
+            <div style="font-weight:700;font-size:13.5px">📦 ${ref} <span style="font-weight:400;color:var(--text-muted);font-size:12px">· ${nbArt} référence${nbArt>1?'s':''} scannée${nbArt>1?'s':''}</span></div>
+            <div style="font-size:11.5px;color:var(--text-muted);margin-top:2px">Préparé par : <strong>${mag}</strong> · <span style="${urgent?'color:var(--red);font-weight:700':''}">${jours} j${urgent?' ⚠️':''}</span></div>
+          </div>
+          <div style="display:flex;gap:6px">
+            <button class="btn" onclick="openPrendreEnChargePrepLibre(${s.ID})" style="background:#7c3aed;color:white;border-color:#7c3aed;height:32px;font-size:12px;white-space:nowrap">✅ Prendre en charge</button>
+            <button class="btn" onclick="archiverPrepLibre(${s.ID},'${ref.replace(/'/g,"\\'")}')" style="height:32px;font-size:12px;color:var(--text-muted)" title="Aucun client trouvé, aucune suite prévue">🗄 Sans suite</button>
+          </div>
+        </div>`;
+      }).join('');
+    }
+  }else{
+    if(preplibreDash)preplibreDash.style.display='none';
+    if(kcPrepLibre){kcPrepLibre.style.background='#f3f0ff';kcPrepLibre.style.borderColor='#7c3aed';}
+    if(ksPrepLibre)ksPrepLibre.textContent='Préparations sans client';
+  }
 
   // État visuel du KPI retard cliquable
   const rc=document.getElementById('kc-prep-retard');
@@ -6424,6 +6482,70 @@ async function validerLivraisonPrete(sessionId, numBL){
     renderPreparations();updateBadges();
     toast(`✅ BL ${numBL} — livraison validée`);
   }catch(e){toast('❌ '+e.message);}
+}
+
+// ── Prise en charge d'une préparation matériel sans client ──
+// On affecte simplement client + N° BL/FC réel à la session déjà scannée :
+// elle rejoint alors "Prêtes à livrer" comme n'importe quelle préparation à
+// l'avance classique. Si le vendeur veut ensuite un vrai BC de suivi, il
+// utilise ce même N° BL dans Traiter — l'import automatique déjà en place
+// récupère les articles scannés, pas besoin de les ressaisir.
+function openPrendreEnChargePrepLibre(sessionId){
+  const sess=(DATA.sessionsScan||[]).find(s=>s.ID===sessionId);
+  if(!sess){toast('🔴 Session introuvable — actualise.','ko');return;}
+  const refPrep=f(sess,'Numero_BL')||'—';
+  const acInput=`width:100%;border:1px solid var(--border);border-radius:var(--radius-sm);padding:8px 10px;font-size:13px;font-family:var(--font-body);outline:none;box-sizing:border-box;`;
+  const acDrop=`position:absolute;top:100%;left:0;right:0;z-index:9999;background:white;border:1px solid var(--teal-mid);border-radius:0 0 var(--radius-sm) var(--radius-sm);max-height:200px;overflow-y:auto;box-shadow:var(--shadow-md);display:none;`;
+  openModal(`✅ Prendre en charge — ${refPrep}`,`
+    <div style="font-size:12px;color:var(--text-muted);margin-bottom:14px">Préparé par ${f(sess,'Magasinier')||'—'} · ${f(sess,'Nb_Articles_Scannes')??'—'} référence(s) scannée(s)</div>
+    <div class="mf"><label>Client</label>
+      <div style="position:relative">
+        <input id="pl-client-search" autocomplete="off" placeholder="Tapez 3 caractères..." style="${acInput}">
+        <input type="hidden" id="pl-client-id">
+        <div id="pl-client-drop" style="${acDrop}"></div>
+      </div>
+    </div>
+    <div class="mf"><label>N° BL ou FC *</label>
+      <input id="pl-numbl" placeholder="Ex : 820950 (BL) ou 156413 (FC)">
+    </div>
+    <div style="font-size:11.5px;color:var(--text-muted)">Cette préparation apparaîtra dans "Prêtes à livrer" avec ce N° BL/FC, prête pour le client.</div>`,
+  async()=>{
+    const clientVal=document.getElementById('pl-client-search').value.trim();
+    const numBL=document.getElementById('pl-numbl').value.trim();
+    if(!clientVal){document.getElementById('pl-client-search').classList.add('err');throw new Error('Le client est obligatoire.');}
+    if(!numBL){document.getElementById('pl-numbl').classList.add('err');throw new Error('Le N° BL ou FC est obligatoire.');}
+    const doublon=(DATA.sessionsScan||[]).find(s=>s.ID!==sessionId&&String(f(s,'Numero_BL')||'').trim().toLowerCase()===numBL.toLowerCase());
+    if(doublon)throw new Error(`Ce N° BL/FC existe déjà (session ${doublon.ID}) — choisis-en un autre.`);
+    const body={Client:clientVal,Numero_BL:numBL,Titre:`${numBL} - ${clientVal}`,Statut:'Prête à livrer'};
+    await spPatch('sites/BondeCommande','Sessions_Scan',sessionId,body);
+    Object.assign(sess,body);
+    renderPreparations();updateBadges();
+    return `✅ ${refPrep} affecté à ${clientVal} — BL ${numBL}, visible dans "Prêtes à livrer"`;
+  });
+  setTimeout(()=>{
+    const clientData=Object.entries(DATA.clients||{}).map(([cid,cname])=>({id:cid,name:cname}));
+    setupAC('pl-client-search','pl-client-id','pl-client-drop',clientData);
+  },50);
+}
+
+async function archiverPrepLibre(sessionId,ref){
+  const ok=await showConfirm(
+    '🗄 Archiver sans suite ?',
+    `Aucun client ne sera associé à la préparation <strong>${ref}</strong> — elle sera retirée définitivement (session et lignes scannées supprimées). À utiliser si le matériel a finalement été remis en stock ou la demande annulée.`,
+    '🗄 Archiver sans suite','delete'
+  );
+  if(!ok)return;
+  try{
+    const lignes=(DATA.lignesScan||[]).filter(l=>String(lineSessionId(l))===String(sessionId));
+    for(const l of lignes){
+      try{await spDelete('sites/BondeCommande','Lignes_Scan',l.ID);}catch(e){console.warn('[archiverPrepLibre] ligne',l.ID,e.message);}
+    }
+    await spDelete('sites/BondeCommande','Sessions_Scan',sessionId);
+    DATA.sessionsScan=(DATA.sessionsScan||[]).filter(s=>s.ID!==sessionId);
+    DATA.lignesScan=(DATA.lignesScan||[]).filter(l=>String(lineSessionId(l))!==String(sessionId));
+    renderPreparations();updateBadges();
+    toast(`🗄 ${ref} archivé sans suite`,'ok');
+  }catch(e){toast('🔴 Erreur : '+e.message,'ko');}
 }
 
 // ── Planning 7 prochains jours (Préparations Scan) ──
