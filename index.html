@@ -4884,7 +4884,7 @@ function openSessionPanel(id){
   if(!s){openPanel('Session','<div class="pspin">Session introuvable</div>');return;}
 
   const type=f(s,'Type_Operation')||'—';
-  const isLiv=type.toLowerCase()==='livraison client';
+  const isLiv=type.toLowerCase()==='livraison client'||type.toLowerCase()==='préparation matériel';
 
   // Lignes de cette session
   const lignes=(DATA.lignesScan||[]).filter(l=>String(lineSessionId(l))===String(id));
@@ -6503,14 +6503,17 @@ function openPrendreEnChargePrepLibre(sessionId){
   const acDrop=`position:absolute;top:100%;left:0;right:0;z-index:9999;background:white;border:1px solid var(--teal-mid);border-radius:0 0 var(--radius-sm) var(--radius-sm);max-height:200px;overflow-y:auto;box-shadow:var(--shadow-md);display:none;`;
   const lignes=(DATA.lignesScan||[]).filter(l=>String(lineSessionId(l))===String(sessionId));
   const lignesHtml=lignes.length?`
+    <div style="font-size:11px;color:var(--text-muted);margin-bottom:6px">Décoche un article si tu ne le prends pas en charge maintenant — il restera disponible pour une prise en charge séparée.</div>
     <div style="border:1px solid var(--border);border-radius:var(--radius-sm);overflow:hidden;margin-bottom:14px">
       <table style="width:100%;border-collapse:collapse;font-size:12.5px">
         <thead><tr style="background:var(--grey-xlight)">
+          <th style="text-align:center;padding:6px 8px;width:30px"></th>
           <th style="text-align:left;padding:6px 10px;font-size:11px;color:var(--text-muted);text-transform:uppercase">Référence</th>
           <th style="text-align:left;padding:6px 10px;font-size:11px;color:var(--text-muted);text-transform:uppercase">Désignation</th>
           <th style="text-align:center;padding:6px 10px;font-size:11px;color:var(--text-muted);text-transform:uppercase">Qté</th>
         </tr></thead>
         <tbody>${lignes.map(l=>`<tr style="border-top:1px solid var(--border)">
+          <td style="padding:6px 8px;text-align:center"><input type="checkbox" class="pl-art-check" data-lid="${l.ID}" checked style="width:16px;height:16px;cursor:pointer"></td>
           <td class="mono" style="padding:6px 10px;font-weight:700">${f(l,'Reference_Article')||'—'}</td>
           <td style="padding:6px 10px;color:var(--text-secondary)">${f(l,'Designation')||'—'}</td>
           <td style="padding:6px 10px;text-align:center;font-weight:700">${f(l,'Quantite_Scannee')??0}</td>
@@ -6538,11 +6541,47 @@ function openPrendreEnChargePrepLibre(sessionId){
     if(!numBL){document.getElementById('pl-numbl').classList.add('err');throw new Error('Le N° BL ou FC est obligatoire.');}
     const doublon=(DATA.sessionsScan||[]).find(s=>s.ID!==sessionId&&String(f(s,'Numero_BL')||'').trim().toLowerCase()===numBL.toLowerCase());
     if(doublon)throw new Error(`Ce N° BL/FC existe déjà (session ${doublon.ID}) — choisis-en un autre.`);
-    const body={Client:clientVal,Numero_BL:numBL,Titre:`${numBL} - ${clientVal}`,Statut:'Prête à livrer'};
-    await spPatch('sites/BondeCommande','Sessions_Scan',sessionId,body);
-    Object.assign(sess,body);
+
+    const checkedIds=[...document.querySelectorAll('.pl-art-check:checked')].map(cb=>parseInt(cb.dataset.lid));
+    const nonCoches=lignes.filter(l=>!checkedIds.includes(l.ID));
+    const coches=lignes.filter(l=>checkedIds.includes(l.ID));
+    if(lignes.length&&coches.length===0)throw new Error('Sélectionne au moins un article à prendre en charge.');
+
+    if(nonCoches.length===0){
+      // Tout est pris en charge — comportement simple, la session existante est réaffectée telle quelle.
+      const body={Client:clientVal,Numero_BL:numBL,Titre:`${numBL} - ${clientVal}`,Statut:'Prête à livrer'};
+      await spPatch('sites/BondeCommande','Sessions_Scan',sessionId,body);
+      Object.assign(sess,body);
+    }else{
+      // Prise en charge partielle — on scinde : une nouvelle session emporte
+      // les articles cochés, l'ancienne garde le reste et redevient
+      // disponible pour une prise en charge séparée par la suite.
+      const newSessBody={
+        Title:`${numBL} - ${clientVal}`,
+        Type_Operation:f(sess,'Type_Operation')||'Préparation matériel',
+        Numero_BL:numBL,
+        Client:clientVal,
+        Vendeur_Emetteur:f(sess,'Vendeur_Emetteur')||'',
+        Magasinier:f(sess,'Magasinier')||'',
+        Date_Emission:f(sess,'Date_Emission')||new Date().toISOString(),
+        Statut:'Prête à livrer',
+        Nb_Articles_Scannes:coches.length
+      };
+      const created=await spPost('sites/BondeCommande','Sessions_Scan',newSessBody);
+      const newId=created?.ID??created?.Id;
+      if(!newId)throw new Error('La nouvelle session n\'a pas pu être créée — réessaie.');
+      for(const l of coches){
+        await spPatch('sites/BondeCommande','Lignes_Scan',l.ID,{Session_ScanId:newId});
+        l.Session_ScanId=newId;
+      }
+      await spPatch('sites/BondeCommande','Sessions_Scan',sessionId,{Nb_Articles_Scannes:nonCoches.length});
+      sess.Nb_Articles_Scannes=nonCoches.length;
+      DATA.sessionsScan.push({...newSessBody,ID:newId});
+    }
     renderPreparations();updateBadges();
-    return `✅ ${refPrep} affecté à ${clientVal} — BL ${numBL}, visible dans "Prêtes à livrer"`;
+    return nonCoches.length===0
+      ? `✅ ${refPrep} affecté à ${clientVal} — BL ${numBL}, visible dans "Prêtes à livrer"`
+      : `✅ ${coches.length} article(s) affecté(s) à ${clientVal} — BL ${numBL}. ${nonCoches.length} article(s) reste(nt) disponible(s) dans "À affecter".`;
   });
   setTimeout(()=>{
     const clientData=Object.entries(DATA.clients||{}).map(([cid,cname])=>({id:cid,name:cname}));
