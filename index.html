@@ -961,33 +961,23 @@
         <div class="kc o"><div class="kl">🔴 Sans réponse +5 jours</div><div class="kv" id="kpi-dbc-urgents">—</div><div class="ks">Relance ou escalade</div></div>
         <div class="kc a"><div class="kl">🟡 En attente &lt;5 jours</div><div class="kv" id="kpi-dbc-ok">—</div><div class="ks">Délai normal</div></div>
       </div>
-      <div class="sh">
-        <div class="st">🧾 Filtres</div>
-        <div class="fb">
-          <input class="fs" type="text" id="search-dbc" placeholder="🔍 Recherche libre..." oninput="renderDBCTable()" style="min-width:160px">
+      <div style="background:var(--navy);border-radius:var(--radius);padding:14px 18px;margin-bottom:14px">
+        <div style="display:flex;align-items:center;gap:12px;margin-bottom:10px">
+          <span style="font-size:20px">🔍</span>
+          <input type="text" id="search-dbc" placeholder="Recherche — N° DBC, client, employé, chef chantier, N° devis, N° BL..."
+            style="flex:1;background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.2);border-radius:var(--radius-sm);padding:9px 14px;font-size:13.5px;color:white;font-family:var(--font-body);outline:none"
+            oninput="renderDBCTable()">
+          <button class="btn" style="border-color:rgba(255,255,255,.3);color:rgba(255,255,255,.7);background:none;white-space:nowrap" onclick="document.getElementById('search-dbc').value='';renderDBCTable()">✕ Effacer</button>
+        </div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:2px">
           <select class="fs" id="filter-vendeur-dbc" onchange="renderDBCTable()"><option value="all">Tous les vendeurs</option></select>
           <select class="fs" id="filter-statut-dbc" onchange="renderDBCTable()"><option value="all">Tous les statuts</option><option value="En attente BC">En attente BC</option><option value="Relancé">Relancé</option><option value="Rappel Envoyé">Rappel Envoyé</option><option value="Litigieux">Litigieux</option><option value="BC Reçu">BC Reçu</option></select>
-          <button class="btn" onclick="exportDBCCSV()">⬇ CSV</button>
+          <button class="btn" style="border-color:rgba(255,255,255,.3);color:rgba(255,255,255,.7);background:none" onclick="exportDBCCSV()">⬇ CSV</button>
+          <span id="dbc-count-label" style="font-size:11px;color:rgba(255,255,255,.5)"></span>
         </div>
       </div>
 
       <div id="dbc-accordeons-vendeurs"><!-- généré dynamiquement par vendeur --></div>
-
-      <!-- ══ RELANCÉ ══ -->
-      <div class="sd" style="margin-top:18px"><h2>🔁 Relancé</h2><span class="site-tag rp">Tous vendeurs</span><div class="sd-line"></div></div>
-      <div class="acc-hd" onclick="toggleAcc('acc-dbc-relance',this)">
-        <div class="acc-hd-left">
-          <span class="acc-arrow">▼</span>
-          <div class="acc-hd-title">🔁 Demandes relancées</div>
-          <div class="acc-hd-meta"><span class="ctag o" id="sd-dbc-relance-count">0</span></div>
-        </div>
-      </div>
-      <div class="acc-body" id="acc-dbc-relance">
-        <div class="tc"><table>
-          <thead><tr><th>Urgence</th><th>Réf.</th><th>Client</th><th>Chef Chantier</th><th>Employé</th><th>N° Devis</th><th>N° BL</th><th>Date enlèv.</th><th>Montant HT</th><th>Vendeur</th><th>Statut</th><th>Relances</th><th>Action</th></tr></thead>
-          <tbody id="dbc-relance-body"><tr class="empty-row"><td colspan="13">Chargement...</td></tr></tbody>
-        </table></div>
-      </div>
 
       <!-- ══ BC REÇU ══ -->
       <div class="sd" style="margin-top:18px"><h2>✅ BC Reçu</h2><span class="site-tag rp">Tous vendeurs</span><div class="sd-line"></div></div>
@@ -3870,7 +3860,10 @@ function dbcRowFull(i){
   const hasAttach=f(i,'Attachments');
   const vendeur=getDBCVendeur(i);
   const isReceu=f(i,'Statut')==='BC Reçu';
-  return`<tr class="${urg.row}" style="cursor:pointer" onclick="openDBCPanel(${i.ID})"><td><span class="urg ${urg.cls}">${urg.lbl}</span></td><td class="ref">DBC-${i.ID}</td><td class="cname">${f(i,'NomClient')||f(i,'Title')||'—'}</td><td style="font-size:11.5px">${f(i,'Chefdechantier')||'—'}</td><td>${f(i,'Nom_Employ_x00e9_')||'—'}</td><td class="ref" style="color:var(--blue)">${devisRef}</td><td class="mono">${f(i,'N_x00b0_BL')||'—'}</td><td class="mono">${fmtDate(f(i,'Date_Enl_x00e8_vement'))}</td><td class="amt" style="${days>5&&!isReceu?'color:var(--red)':''}">${fmtMoney(f(i,'Montant_HT'))}</td><td>${vendeur}</td><td>${bDBC(f(i,'Statut'))}</td><td class="mono" style="text-align:center;${nbRel>=2?'color:var(--red);font-weight:700':''}">${nbRel}${hasAttach?' 📎':''}</td><td onclick="event.stopPropagation()"><div class="btn-grp">
+  const statutNorm=(f(i,'Statut')||'').trim().toLowerCase().normalize('NFC');
+  const estRelance=['relancé','rappel envoyé'].includes(statutNorm);
+  const rowStyle=estRelance?'cursor:pointer;background:#f2f6ff':'cursor:pointer';
+  return`<tr class="${urg.row}" style="${rowStyle}" onclick="openDBCPanel(${i.ID})"><td><span class="urg ${urg.cls}">${urg.lbl}</span></td><td class="ref">DBC-${i.ID}</td><td class="cname">${f(i,'NomClient')||f(i,'Title')||'—'}</td><td style="font-size:11.5px">${f(i,'Chefdechantier')||'—'}</td><td>${f(i,'Nom_Employ_x00e9_')||'—'}</td><td class="ref" style="color:var(--blue)">${devisRef}</td><td class="mono">${f(i,'N_x00b0_BL')||'—'}</td><td class="mono">${fmtDate(f(i,'Date_Enl_x00e8_vement'))}</td><td class="amt" style="${days>5&&!isReceu?'color:var(--red)':''}">${fmtMoney(f(i,'Montant_HT'))}</td><td>${vendeur}</td><td>${bDBC(f(i,'Statut'))}</td><td class="mono" style="text-align:center;${nbRel>=2?'color:var(--red);font-weight:700':''}">${nbRel}${hasAttach?' 📎':''}</td><td onclick="event.stopPropagation()"><div class="btn-grp">
     <button class="btn" onclick="openDBCPanel(${i.ID})">🔍 Détail</button>
     ${days>10&&!isReceu?`<button class="btn w" onclick="openDBCPanel(${i.ID})">⚡ Escalade</button>`:`<button class="btn" onclick="openDBCPanel(${i.ID})">📧 Relancer</button>`}
   </div></td></tr>`;
@@ -3893,6 +3886,7 @@ function renderDBCTable(){
     return [client,employe,vendeur,devisRef,numBL,chef,`DBC-${i.ID}`].some(v=>v.toLowerCase().includes(q));
   });
   items=applySort(items,'dbc-body',SORT_COLS_DBC);
+  const countLbl=document.getElementById('dbc-count-label');if(countLbl)countLbl.textContent=items.length+' résultat'+(items.length>1?'s':'');
 
   const norm=s=>(s||'').trim().toLowerCase().normalize('NFC');
   const enAttente=items.filter(i=>{const s=norm(f(i,'Statut'));return s===''||s==='en attente bc';});
@@ -3900,9 +3894,13 @@ function renderDBCTable(){
   const recu=items.filter(i=>norm(f(i,'Statut'))==='bc reçu');
   const litige=items.filter(i=>norm(f(i,'Statut'))==='litigieux');
 
-  // ── Accordéons par vendeur (En attente BC uniquement) ──
+  // ── Accordéons par vendeur (En attente BC + Relancé/Rappel envoyé ensemble) ──
+  // Les demandes relancées restent dans le bloc de leur vendeur plutôt que
+  // d'être isolées à part — plus simple à suivre pour l'équipe. Le nombre de
+  // relances (déjà visible en colonne) et une teinte de ligne distincte
+  // suffisent à les repérer sans fragmenter la vue par vendeur.
   const vendeurs={};
-  enAttente.forEach(i=>{
+  [...enAttente,...relance].forEach(i=>{
     const v=getDBCVendeur(i);
     if(!vendeurs[v])vendeurs[v]=[];
     vendeurs[v].push(i);
@@ -3916,12 +3914,13 @@ function renderDBCTable(){
       wrap.innerHTML=vendeurNames.map((v,idx)=>{
         const list=vendeurs[v];
         const urgentCount=list.filter(i=>daysSince(f(i,'Date_Enl_x00e8_vement'))>5).length;
+        const relanceCount=list.filter(i=>['relancé','rappel envoyé'].includes(norm(f(i,'Statut')))).length;
         const accId='acc-dbc-vendeur-'+idx;
         return`<div class="acc-hd" onclick="toggleAcc('${accId}',this)" style="margin-top:10px">
           <div class="acc-hd-left">
             <span class="acc-arrow open">▼</span>
             <div class="acc-hd-title">👤 ${v}</div>
-            <div class="acc-hd-meta"><span class="ctag o">${list.length} en attente</span>${urgentCount?`<span class="ctag r">${urgentCount} &gt;5j</span>`:''}</div>
+            <div class="acc-hd-meta"><span class="ctag o">${list.length} en attente</span>${urgentCount?`<span class="ctag r">${urgentCount} &gt;5j</span>`:''}${relanceCount?`<span class="ctag" style="background:#e3edff;color:#2952cc">🔁 ${relanceCount} relancée${relanceCount>1?'s':''}</span>`:''}</div>
           </div>
         </div>
         <div class="acc-body open" id="${accId}">
@@ -3941,7 +3940,6 @@ function renderDBCTable(){
     const c=document.getElementById(countId);
     if(c)c.textContent=list.length;
   };
-  fillBody('dbc-relance-body','sd-dbc-relance-count',relance,'Aucune demande relancée');
   fillBody('dbc-recu-body','sd-dbc-recu-count',recu,'Aucun BC reçu');
   fillBody('dbc-litige-body','sd-dbc-litige-count',litige,'Aucune demande litigieuse');
 }
@@ -8607,7 +8605,21 @@ async function openDBCPanel(id){
       </div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:0">
         <div class="pf"><div class="pf-lbl">Employé</div><div class="pf-val">${employe}</div></div>
-        <div class="pf"><div class="pf-lbl">Email client</div><div class="pf-val mono" style="font-size:11.5px">${email}</div></div>
+        <div class="pf">
+          <div class="pf-lbl" style="display:flex;align-items:center;justify-content:space-between">
+            <span>Email client</span>
+            <span onclick="toggleEditEmailDBC(${id})" id="dbc-email-edit-toggle" style="text-transform:none;letter-spacing:0;font-weight:600;color:var(--teal);cursor:pointer;font-size:11px">✏️ Modifier</span>
+          </div>
+          <div class="pf-val mono" id="dbc-email-view" style="font-size:11.5px">${email}</div>
+          <div id="dbc-email-edit-wrap" style="display:none;margin-top:4px">
+            <input id="dbc-email-input" type="email" value="${email==='—'?'':email}" placeholder="client@exemple.com" style="width:100%;border:1.5px solid var(--teal-mid);border-radius:5px;padding:5px 8px;font-size:11.5px;font-family:inherit;box-sizing:border-box">
+            <div style="display:flex;gap:6px;margin-top:5px">
+              <button class="pbtn blue" style="flex:1;padding:5px;font-size:11px" onclick="sauverEmailDBC(${id})">💾 Enregistrer l'email</button>
+              <button class="pbtn grey" style="padding:5px 10px;font-size:11px" onclick="toggleEditEmailDBC(${id})">Annuler</button>
+            </div>
+            <div id="dbc-email-msg" style="font-size:11px;margin-top:4px;min-height:14px"></div>
+          </div>
+        </div>
       </div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:0">
         <div class="pf"><div class="pf-lbl">📅 Date enlèvement</div><div class="pf-val">${fmtDate(f(item,'Date_Enl_x00e8_vement'))}</div></div>
@@ -8736,6 +8748,44 @@ async function updateDBCPanel(id){
   }
 }
 
+// ── Email client — corrigeable directement depuis le panneau, sans passer
+// par SharePoint (cause fréquente : mauvaise valeur saisie par erreur à la
+// création, ex. un N° de BC collé dans le champ email par inadvertance) ──
+function toggleEditEmailDBC(id){
+  const view=document.getElementById('dbc-email-view');
+  const wrap=document.getElementById('dbc-email-edit-wrap');
+  const toggle=document.getElementById('dbc-email-edit-toggle');
+  if(!view||!wrap)return;
+  const show=wrap.style.display==='none';
+  wrap.style.display=show?'block':'none';
+  view.style.display=show?'none':'block';
+  toggle.style.display=show?'none':'inline';
+  if(show){
+    const inp=document.getElementById('dbc-email-input');
+    inp?.focus();inp?.select();
+  }
+}
+async function sauverEmailDBC(id){
+  const inp=document.getElementById('dbc-email-input');
+  const msg=document.getElementById('dbc-email-msg');
+  const nouveau=inp?.value.trim()||'';
+  if(!nouveau){msg.innerHTML='<span style="color:var(--red)">L\'email est obligatoire.</span>';return;}
+  if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(nouveau)){
+    msg.innerHTML='<span style="color:var(--red)">Format d\'email invalide.</span>';
+    return;
+  }
+  msg.innerHTML='<span style="color:var(--text-muted)">⏳ Enregistrement...</span>';
+  try{
+    await spPatch('sites/BondeCommande','Demandes_BC',id,{Email_Client:nouveau});
+    const idx=DATA.dbc.findIndex(i=>i.ID===id);
+    if(idx!==-1)DATA.dbc[idx]['Email_Client']=nouveau;
+    toast('✅ Email client corrigé','ok');
+    openDBCPanel(id); // rafraîchit le panneau avec la nouvelle valeur
+  }catch(e){
+    msg.innerHTML=`<span style="color:var(--red)">❌ ${e.message}</span>`;
+  }
+}
+
 async function uploadDBCAttachment(id){
   const inp=document.getElementById('dbc-panel-file');
   if(!inp?.files?.length){toast('⚠️ Sélectionnez un fichier d\'abord','warn');return;}
@@ -8760,19 +8810,23 @@ async function uploadDBCAttachment(id){
 // (updateDBCVendeur fusionnée dans updateDBCPanel)
 
 async function relancerDBC(id,email){
-  const ok=await showConfirm('📧 Relancer le client',`Un email de relance va être envoyé à <strong>${email}</strong> pour lui demander de fournir son bon de commande.<br><br>Confirmer l'envoi ?`,'📧 Envoyer relance','submit');
+  const ok=await showConfirm('📧 Relancer le client',`Cette demande sera marquée pour relance — le flow automatique enverra le rappel à <strong>${email}</strong> lors de son prochain passage (toutes les 3 jours, après validation vendeur).<br><br>Confirmer ?`,'📧 Marquer pour relance','submit');
   if(!ok)return;
   try{
     const item=DATA.dbc.find(i=>i.ID===id);
     const nbRel=parseInt(f(item,'Nb_Relances')||0)+1;
+    // Le flow automatique "DBC - Relances avec validation vendeur" ne
+    // reprend que les statuts 'En attente BC' et 'Rappel envoyé' — écrire
+    // 'Relancé' (comme avant) faisait sortir le dossier du cycle
+    // automatique définitivement, sans jamais renvoyer de vraie relance.
     await spPatch('sites/BondeCommande','Demandes_BC',id,{
-      Statut:'Relancé',
+      Statut:'Rappel envoyé',
       Nb_Relances:nbRel,
       Date_Relance:new Date().toISOString()
     });
     const idx=DATA.dbc.findIndex(i=>i.ID===id);
-    if(idx!==-1){DATA.dbc[idx]['Statut']='Relancé';DATA.dbc[idx]['Nb_Relances']=nbRel;}
-    toast(`✅ Relancé (${nbRel}${nbRel>1?'e':'re'} relance) — pensez à envoyer l'email à ${email}`,'ok');
+    if(idx!==-1){DATA.dbc[idx]['Statut']='Rappel envoyé';DATA.dbc[idx]['Nb_Relances']=nbRel;}
+    toast(`✅ Marqué pour relance (${nbRel}${nbRel>1?'e':'re'}) — le flow reprendra ce dossier automatiquement`,'ok');
     renderDBCTable();updateBadges();
     openDBCPanel(id);
   }catch(e){toast('🔴 Erreur : '+e.message,'ko');}
