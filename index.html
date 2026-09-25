@@ -4418,7 +4418,12 @@ function renderPreparations(){
   // Préparations matériel terminées, sans client ni BL — à affecter par un vendeur
   const isPrepLibre=s=>(f(s,'Type_Operation')||'').toLowerCase()==='préparation matériel';
   const isTerminee=s=>{const st=(f(s,'Statut')||'').toLowerCase();return st==='terminée'||st==='terminee';};
-  const preplibres=all.filter(s=>isPrepLibre(s)&&isTerminee(s)&&!f(s,'Client'));
+  // Le critère fiable n'est pas "client vide" (une simple indication de
+  // client, posée via le ✏️ du panneau, ne doit jamais faire sortir la
+  // préparation d'ici) mais l'absence d'un VRAI numéro de BL/FC — tant que
+  // la session porte encore sa référence provisoire "PREP-...", rien n'a
+  // été facturé ni livré, elle doit rester à affecter.
+  const preplibres=all.filter(s=>isPrepLibre(s)&&isTerminee(s)&&String(f(s,'Numero_BL')||'').startsWith('PREP-'));
 
   // Délai moyen de prise en charge — sessions traitées, hors legacy pré-process
   const traitees=all.filter(s=>!isPending(s)&&f(s,'Date_Scan')&&afterCutoff(f(s,'Date_Emission')));
@@ -4587,7 +4592,11 @@ function renderPreparations(){
     if([...selSt.options].some(o=>o.value===cur))selSt.value=cur;
   }
   // BL livrés — peupler filtres puis déléguer
-  const isLivre=s=>{const st=(f(s,'Statut')||'').toLowerCase();return st==='terminée'||st==='terminee'||st==='partiellement livrée'||st==='partiellement livree'||st.includes('écart')||st.includes('ecart');};
+  const isLivre=s=>{
+    const st=(f(s,'Statut')||'').toLowerCase();
+    const estTerminee=st==='terminée'||st==='terminee'||st==='partiellement livrée'||st==='partiellement livree'||st.includes('écart')||st.includes('ecart');
+    return estTerminee&&!String(f(s,'Numero_BL')||'').startsWith('PREP-');
+  };
   const livres=all.filter(isLivre);
   const selVL=document.getElementById('filter-vendeur-livres');
   if(selVL){
@@ -4801,7 +4810,16 @@ function renderLivres(){
   const all=DATA.sessionsScan||[];
   const body=document.getElementById('prep-livres-body');
   if(!body)return;
-  const isLivre=s=>{const st=(f(s,'Statut')||'').toLowerCase();return st==='terminée'||st==='terminee'||st==='partiellement livrée'||st==='partiellement livree'||st.includes('écart')||st.includes('ecart');};
+  const isLivre=s=>{
+    const st=(f(s,'Statut')||'').toLowerCase();
+    const estTerminee=st==='terminée'||st==='terminee'||st==='partiellement livrée'||st==='partiellement livree'||st.includes('écart')||st.includes('ecart');
+    if(!estTerminee)return false;
+    // Une préparation matériel encore sur sa référence provisoire "PREP-..."
+    // n'a pas de vrai BL/FC — elle n'est pas "livrée", juste préparée et pas
+    // encore affectée. Elle reste dans "À affecter", pas ici.
+    if(String(f(s,'Numero_BL')||'').startsWith('PREP-'))return false;
+    return true;
+  };
   let livres=all.filter(isLivre);
 
   const q=(document.getElementById('search-livres')?.value||'').toLowerCase();
