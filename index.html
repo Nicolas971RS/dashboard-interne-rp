@@ -6581,7 +6581,11 @@ function openPrendreEnChargePrepLibre(sessionId){
 
     if(nonCoches.length===0){
       // Tout est pris en charge — comportement simple, la session existante est réaffectée telle quelle.
-      const body={Client:clientVal,Numero_BL:numBL,Title:`${numBL} - ${clientVal}`,Statut:'Prête à livrer'};
+      // Type_Operation bascule à 'Livraison client' : ce n'est plus une préparation
+      // en attente d'affectation, c'est désormais une vraie livraison avec client et BL/FC,
+      // et elle doit se comporter comme telle partout ailleurs dans le dashboard
+      // (tableau "BL livrés récemment", filtres, badges...).
+      const body={Client:clientVal,Numero_BL:numBL,Title:`${numBL} - ${clientVal}`,Statut:'Prête à livrer',Type_Operation:'Livraison client'};
       await spPatch('sites/BondeCommande','Sessions_Scan',sessionId,body);
       Object.assign(sess,body);
     }else{
@@ -6590,7 +6594,7 @@ function openPrendreEnChargePrepLibre(sessionId){
       // disponible pour une prise en charge séparée par la suite.
       const newSessBody={
         Title:`${numBL} - ${clientVal}`,
-        Type_Operation:f(sess,'Type_Operation')||'Préparation matériel',
+        Type_Operation:'Livraison client',
         Numero_BL:numBL,
         Client:clientVal,
         Vendeur_Emetteur:f(sess,'Vendeur_Emetteur')||'',
