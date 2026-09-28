@@ -6581,7 +6581,7 @@ function openPrendreEnChargePrepLibre(sessionId){
 
     if(nonCoches.length===0){
       // Tout est pris en charge — comportement simple, la session existante est réaffectée telle quelle.
-      const body={Client:clientVal,Numero_BL:numBL,Titre:`${numBL} - ${clientVal}`,Statut:'Prête à livrer'};
+      const body={Client:clientVal,Numero_BL:numBL,Title:`${numBL} - ${clientVal}`,Statut:'Prête à livrer'};
       await spPatch('sites/BondeCommande','Sessions_Scan',sessionId,body);
       Object.assign(sess,body);
     }else{
