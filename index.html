@@ -1547,6 +1547,75 @@ async function syncLivraisonDepuisScan(){
   if(ok)toast(`🔄 ${ok} ligne${ok>1?'s':''} de livraison mise${ok>1?'s':''} à jour automatiquement depuis le scan`,'ok');
 }
 
+// ── Remontée automatique vers le BC racine ──────────────────────────────
+// Un BC splitté (suffixe -A, -A-A, -A-A-A... via le bouton "Clôturer") garde
+// son propre suivi Lignes_BC — utile pour Image/facturation — mais rien ne
+// relie automatiquement ça au BC d'origine. On recopie ici chaque livraison
+// d'un split vers la ligne correspondante du BC racine, avec exactement le
+// même principe que le bouton manuel "Mettre à jour" côté Livraisons
+// Partielles : Quantité livrée += quantité livrée du split, et le N° BL
+// ajouté à l'historique BLSigné (ex: "821324 (50) · 821538 (30)"). Le but :
+// un seul endroit à consulter pour suivre un dossier — le BC d'origine —
+// même quand la livraison réelle est passée par un split.
+// Idempotent : un N° BL n'est remonté qu'une fois — on vérifie d'abord
+// qu'il n'est pas déjà présent dans l'historique BLSigné de la ligne racine,
+// donc rejouer cette fonction plusieurs fois (à chaque chargement) ne
+// duplique jamais une entrée déjà remontée.
+async function syncLivraisonVersRacine(){
+  const updates=[];
+  (DATA.lignes||[]).forEach(ligneSplit=>{
+    const bcSplitId=ligneSplit.BCId??parseInt(ligneSplit.BCId);
+    const bcSplit=(DATA.suivi||[]).find(x=>x.ID===bcSplitId);
+    if(!bcSplit)return;
+    const titreSplit=(f(bcSplit,'Title')||'').trim();
+    const titreRacine=bcRacine(titreSplit);
+    if(!titreRacine||titreRacine===titreSplit)return; // ce n'est pas un split, rien à remonter
+
+    const numBLSplit=String(f(bcSplit,'N_x00b0_BL')||'').trim();
+    if(!numBLSplit)return; // le split n'a pas encore de N° BL — pas livré
+
+    const scanne=Number(f(ligneSplit,'Quantit_x00e9_livr_x00e9_e')||0);
+    if(!scanne)return; // rien de livré sur cette ligne du split
+
+    const bcRoot=(DATA.suivi||[]).find(x=>(f(x,'Title')||'').trim()===titreRacine);
+    if(!bcRoot||bcRoot.ID===bcSplit.ID)return;
+
+    const refSplit=(f(ligneSplit,'R_x00e9_f_x00e9_rence')||'').trim().toLowerCase();
+    const designSplit=(f(ligneSplit,'Produit_x002f_D_x00e9_signation')||'').trim().toLowerCase();
+    const ligneRoot=(DATA.lignes||[]).find(l=>
+      l.BCId===bcRoot.ID&&
+      ((refSplit&&(f(l,'R_x00e9_f_x00e9_rence')||'').trim().toLowerCase()===refSplit)||
+       (!refSplit&&designSplit&&(f(l,'Produit_x002f_D_x00e9_signation')||'').trim().toLowerCase()===designSplit))
+    );
+    if(!ligneRoot)return; // article introuvable sur la racine — rien à faire
+
+    const blSigneRoot=f(ligneRoot,'BLSign_x00e9_')||'';
+    const numEchappe=numBLSplit.replace(/[.*+?^${}()|[\]\\]/g,'\\$&');
+    const dejaRemonte=new RegExp(`(^|·)\\s*${numEchappe}\\s*\\(`).test(blSigneRoot);
+    if(dejaRemonte)return; // déjà remonté lors d'un passage précédent
+
+    const livreRootActuel=Number(f(ligneRoot,'Quantit_x00e9_livr_x00e9_e')||0);
+    const nouvelleLivree=livreRootActuel+scanne;
+    const entree=`${numBLSplit} (${scanne})`;
+    const nouveauBLSigne=blSigneRoot?`${blSigneRoot} · ${entree}`:entree;
+    updates.push({ligneRoot,nouvelleLivree,nouveauBLSigne});
+  });
+  if(!updates.length)return;
+  let ok=0;
+  for(const u of updates){
+    try{
+      await spPatch('sites/RseauxPlus','Lignes_BC',u.ligneRoot.ID,{
+        Quantit_x00e9_livr_x00e9_e:u.nouvelleLivree,
+        BLSign_x00e9_:u.nouveauBLSigne
+      });
+      u.ligneRoot.Quantit_x00e9_livr_x00e9_e=u.nouvelleLivree;
+      u.ligneRoot.BLSign_x00e9_=u.nouveauBLSigne;
+      ok++;
+    }catch(e){console.warn('[syncLivraisonVersRacine]',u.ligneRoot.ID,e.message);}
+  }
+  if(ok)toast(`🔗 ${ok} ligne${ok>1?'s':''} du BC d'origine mise${ok>1?'s':''} à jour depuis un split livré`,'ok');
+}
+
 // ── Bandeau d'annonces partagé entre vendeurs (ex: "ne pas vendre X, réservé
 // pour tel client") — au-dessus d'Arrivées du jour, visible de tous. ──
 function renderAnnonces(){
@@ -1672,6 +1741,9 @@ async function loadAll(){
     // le suivi RAL/Livraisons Partielles se met à jour tout seul au prochain
     // chargement du dashboard.
     await syncLivraisonDepuisScan();
+    // Puis on remonte vers le BC d'origine toute livraison passée par un split
+    // (suffixe -A, -A-A...) — pour garder un suivi complet en un seul endroit.
+    await syncLivraisonVersRacine();
 
     // Debug: log first suivi item to help identify field names
     if(suivi.length>0){console.log('DEBUG Suivi_BC[0] keys:',Object.keys(suivi[0]).sort().join(', '));}
