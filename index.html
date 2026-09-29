@@ -1838,6 +1838,17 @@ function toggleAcc(id,hd){
   arrow.classList.toggle('open',!isOpen);
 }
 
+// Repli/dépli d'un groupe de lignes "Complètement livré" partageant le même
+// BC racine (dossier avec splits -A, -A-A...) — voir renderRALTable.
+function toggleRalGroup(gid){
+  const rows=document.querySelectorAll(`tr[data-ralgroup="${gid}"]`);
+  if(!rows.length)return;
+  const hidden=rows[0].style.display==='none';
+  rows.forEach(r=>{r.style.display=hidden?'':'none';});
+  const arrow=document.getElementById('arr-'+gid);
+  if(arrow)arrow.textContent=hidden?'▼':'▶';
+}
+
 // Sections repliables du modal Traiter — un clic sur l'en-tête ouvre/ferme,
 // sauf si le clic vient d'un champ de saisie à l'intérieur (rare mais possible
 // avec le padding de la zone cliquable).
@@ -4314,11 +4325,11 @@ function renderRALTable(){
   });
   const bComplet=document.getElementById('ral-complet-body');
   if(bComplet){
-    bComplet.innerHTML=completEnriched.length?completEnriched.map(x=>{
+    const rowHtmlComplet=(x,groupAttr)=>{
       const l=x.ligne;
       const bl=f(l,'BLSign_x00e9_')||'—';
       const unite=f(l,'Unit_x00e9_')||'';
-      return`<tr>
+      return`<tr${groupAttr}>
         <td class="ref" style="cursor:pointer;color:var(--blue)" onclick="closePanel();openBCPanel(${x.info.bcId})">${x.info.numBC}</td>
         <td class="mono" style="font-size:11px">${fmtDate(x.info.dateBC)}</td>
         <td class="mono" style="text-align:center;font-weight:600">${f(l,'Title')||'—'}</td>
@@ -4338,7 +4349,43 @@ function renderRALTable(){
           return`<span title="Détail des livraisons">${lines}${badge}</span>`;
         })()}</td>
       </tr>`;
-    }).join(''):'<tr class="empty-row"><td colspan="11">Aucune ligne entièrement livrée</td></tr>';
+    };
+    if(!completEnriched.length){
+      bComplet.innerHTML='<tr class="empty-row"><td colspan="11">Aucune ligne entièrement livrée</td></tr>';
+    }else{
+      // Regroupement par BC racine — un dossier avec plusieurs splits
+      // (TRA26-513, -A, -A-A, ...) noie sinon la liste sous une dizaine de
+      // lignes qui représentent en fait un seul dossier déjà consolidé sur
+      // la racine (voir syncLivraisonVersRacine). Un groupe n'est replié
+      // que s'il contient réellement plusieurs BC distincts — un dossier
+      // sans split s'affiche normalement, sans étape en plus.
+      const groupes=new Map();
+      completEnriched.forEach(x=>{
+        const racine=bcRacine(x.info.numBC)||x.info.numBC;
+        if(!groupes.has(racine))groupes.set(racine,[]);
+        groupes.get(racine).push(x);
+      });
+      let html='';
+      let gi=0;
+      groupes.forEach((items,racine)=>{
+        const bcDistincts=new Set(items.map(x=>x.info.numBC));
+        if(bcDistincts.size<=1){
+          html+=items.map(x=>rowHtmlComplet(x,'')).join('');
+          return;
+        }
+        gi++;
+        const gid=`ralg-${gi}-${racine.replace(/[^a-zA-Z0-9]/g,'')}`;
+        const totalLivre=items.reduce((s,x)=>s+x.ql,0);
+        html+=`<tr class="ral-group-hd" style="cursor:pointer;background:var(--grey-xlight)" onclick="toggleRalGroup('${gid}')">
+          <td colspan="11" style="padding:7px 10px;font-size:12px;font-weight:700;color:var(--navy)">
+            <span id="arr-${gid}" style="display:inline-block;width:12px">▶</span>
+            📦 ${racine} — ${items.length} ligne${items.length>1?'s':''} sur ${bcDistincts.size} BC (dossier avec splits) · ${totalLivre} unité${totalLivre>1?'s':''} livrée${totalLivre>1?'s':''} au total
+          </td>
+        </tr>`;
+        html+=items.map(x=>rowHtmlComplet(x,` data-ralgroup="${gid}" style="display:none"`)).join('');
+      });
+      bComplet.innerHTML=html;
+    }
   }
   const sdComplet=document.getElementById('sd-ral-complet-count');
   if(sdComplet)sdComplet.textContent=completEnriched.length;
