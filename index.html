@@ -6652,14 +6652,14 @@ function openPrendreEnChargePrepLibre(sessionId){
   const lignes=(DATA.lignesScan||[]).filter(l=>String(lineSessionId(l))===String(sessionId));
   const lignesHtml=lignes.length?`
     <div style="font-size:11px;color:var(--text-muted);margin-bottom:6px">Décoche un article si tu ne le prends pas en charge maintenant — il restera disponible pour une prise en charge séparée.</div>
-    <div style="border:1px solid var(--border);border-radius:var(--radius-sm);overflow:hidden;margin-bottom:14px">
-      <table style="width:100%;border-collapse:collapse;font-size:12.5px">
+    <div style="border:1px solid var(--border);border-radius:var(--radius-sm);overflow:visible;margin-bottom:14px">
+      <table style="width:100%;min-width:0;table-layout:fixed;border-collapse:collapse;font-size:12.5px">
         <thead><tr style="background:var(--grey-xlight)">
-          <th style="text-align:center;padding:6px 8px;width:30px"></th>
-          <th style="text-align:left;padding:6px 10px;font-size:11px;color:var(--text-muted);text-transform:uppercase">Référence</th>
+          <th style="text-align:center;padding:6px 8px;width:40px"></th>
+          <th style="width:30%;text-align:left;padding:6px 10px;font-size:11px;color:var(--text-muted);text-transform:uppercase">Référence</th>
           <th style="text-align:left;padding:6px 10px;font-size:11px;color:var(--text-muted);text-transform:uppercase">Désignation</th>
-          <th style="text-align:center;padding:6px 10px;font-size:11px;color:var(--text-muted);text-transform:uppercase">Qté</th>
-          <th style="text-align:center;padding:6px 8px;width:30px"></th>
+          <th style="width:76px;text-align:center;padding:6px 10px;font-size:11px;color:var(--text-muted);text-transform:uppercase">Qté</th>
+          <th style="text-align:center;padding:6px 8px;width:36px"></th>
         </tr></thead>
         <tbody id="pl-art-tbody">${lignes.map(l=>`<tr style="border-top:1px solid var(--border)" data-lid="${l.ID}">
           <td style="padding:6px 8px;text-align:center"><input type="checkbox" class="pl-art-check" data-lid="${l.ID}" checked style="width:16px;height:16px;cursor:pointer"></td>
@@ -6668,11 +6668,24 @@ function openPrendreEnChargePrepLibre(sessionId){
           <td style="padding:6px 10px;text-align:center;font-weight:700">${f(l,'Quantite_Scannee')??0}</td>
           <td style="padding:6px 8px;text-align:center"><button type="button" onclick="plPrepDeleteLigne(${l.ID},${sessionId})" title="Supprimer définitivement cet article" style="background:none;border:none;color:var(--red);font-size:14px;cursor:pointer;padding:2px">🗑</button></td>
         </tr>`).join('')}</tbody>
+        <tbody id="pl-art-new"></tbody>
       </table>
-    </div>`:`<div style="background:var(--grey-xlight);border:1px dashed var(--border);border-radius:var(--radius-sm);padding:12px;text-align:center;color:var(--text-muted);font-size:12.5px;margin-bottom:14px">Aucun article scanné trouvé pour cette préparation.</div>`;
+    </div>`:`<div style="background:var(--grey-xlight);border:1px dashed var(--border);border-radius:var(--radius-sm);padding:12px;text-align:center;color:var(--text-muted);font-size:12.5px;margin-bottom:8px">Aucun article scanné trouvé pour cette préparation.</div>
+    <div style="border:1px solid var(--border);border-radius:var(--radius-sm);overflow:visible;margin-bottom:6px">
+      <table style="width:100%;min-width:0;table-layout:fixed;border-collapse:collapse;font-size:12.5px"><colgroup><col style="width:40px"><col style="width:30%"><col><col style="width:76px"><col style="width:36px"></colgroup><tbody id="pl-art-new"></tbody></table>
+    </div>`;
+  // Ajout d'articles oubliés à la préparation : le vendeur complète ici ce qui
+  // figurera sur le BL final. Ces lignes partent avec Quantite_Scannee=0 (le scan
+  // réel fait foi) — le magasinier les scannera à la validation de la livraison.
+  const ajoutHtml=`
+    <div style="margin:-8px 0 14px">
+      <button type="button" class="btn navy" data-label="1" style="height:28px;font-size:11.5px" onclick="plPrepAddLigne()">➕ Ajouter un article</button>
+      <div style="font-size:11px;color:var(--text-muted);margin-top:4px">Article manquant dans la préparation ? Ajoute-le ici : il sera à scanner par le magasinier lors de la livraison.</div>
+    </div>`;
   openModal(`✅ Prendre en charge — ${refPrep}`,`
     <div style="font-size:12px;color:var(--text-muted);margin-bottom:10px">Préparé par ${f(sess,'Magasinier')||'—'} · ${lignes.length} référence${lignes.length>1?'s':''} scannée${lignes.length>1?'s':''}</div>
     ${lignesHtml}
+    ${ajoutHtml}
     <div class="mf"><label>Client</label>
       <div style="position:relative">
         <input id="pl-client-search" autocomplete="off" placeholder="Tapez 3 caractères..." style="${acInput}">
@@ -6698,6 +6711,24 @@ function openPrendreEnChargePrepLibre(sessionId){
     const coches=lignesActuelles.filter(l=>checkedIds.includes(l.ID));
     if(lignesActuelles.length&&coches.length===0)throw new Error('Sélectionne au moins un article à prendre en charge.');
 
+    // Articles ajoutés par le vendeur — validés AVANT toute écriture pour ne
+    // jamais laisser une prise en charge à moitié faite.
+    const nouvelles=[];
+    let errNew=false;
+    document.querySelectorAll('#pl-art-new .pl-ligne-new').forEach(row=>{
+      const ref=row.querySelector('.pl-ref-new')?.value.trim()||'';
+      const design=row.querySelector('.pl-design-new')?.value.trim()||'';
+      const qteEl=row.querySelector('.pl-qte-new');
+      const qte=parseFloat(qteEl?.value)||0;
+      if(!ref&&!design)return; // ligne vide ignorée
+      if(qte<=0){if(qteEl)qteEl.style.border='2px solid var(--red)';errNew=true;return;}
+      if(qteEl)qteEl.style.border='';
+      nouvelles.push({ref,design:design||ref,qte});
+    });
+    if(errNew)throw new Error('Quantité obligatoire pour chaque article ajouté.');
+    if(!lignesActuelles.length&&!nouvelles.length)throw new Error('Aucun article à prendre en charge — ajoute au moins un article.');
+
+    let targetId=sessionId;
     if(nonCoches.length===0){
       // Tout est pris en charge — comportement simple, la session existante est réaffectée telle quelle.
       // Type_Operation bascule à 'Livraison client' : ce n'est plus une préparation
@@ -6732,16 +6763,85 @@ function openPrendreEnChargePrepLibre(sessionId){
       await spPatch('sites/BondeCommande','Sessions_Scan',sessionId,{Nb_Articles_Scannes:nonCoches.length});
       sess.Nb_Articles_Scannes=nonCoches.length;
       DATA.sessionsScan.push({...newSessBody,ID:newId});
+      targetId=newId;
+    }
+    // Création des articles ajoutés sur la session effectivement prise en charge.
+    // Quantite_Scannee=0 : seul le scan magasinier fera foi à la livraison.
+    // Pas de throw ici — la session est déjà réaffectée, un throw laisserait la
+    // modale ouverte et un 2e clic créerait un doublon.
+    let okNew=0,koNew=0;
+    for(const n of nouvelles){
+      try{
+        const created=await spPost('sites/BondeCommande','Lignes_Scan',{
+          Session_ScanId:targetId,Reference_Article:n.ref,Designation:n.design,Quantite_Attendue:n.qte,Quantite_Scannee:0
+        });
+        if(created)DATA.lignesScan=[...(DATA.lignesScan||[]),{...created,ID:created.ID??created.Id}];
+        okNew++;
+      }catch(e){koNew++;console.warn('[openPrendreEnChargePrepLibre] ajout article',n,e.message);}
     }
     renderPreparations();updateBadges();
+    const suffixeAjout=okNew?` + ${okNew} article(s) ajouté(s) à scanner.`:'';
+    if(koNew)toast(`⚠️ ${koNew} article(s) ajouté(s) n'ont pas pu être enregistrés — ajoute-les depuis « Voir » sur le BL ${numBL}.`,'ko');
     return nonCoches.length===0
-      ? `✅ ${refPrep} affecté à ${clientVal} — BL ${numBL}, visible dans "Prêtes à livrer"`
-      : `✅ ${coches.length} article(s) affecté(s) à ${clientVal} — BL ${numBL}. ${nonCoches.length} article(s) reste(nt) disponible(s) dans "À affecter".`;
+      ? `✅ ${refPrep} affecté à ${clientVal} — BL ${numBL}, visible dans "Prêtes à livrer"${suffixeAjout}`
+      : `✅ ${coches.length} article(s) affecté(s) à ${clientVal} — BL ${numBL}${suffixeAjout} ${nonCoches.length} article(s) reste(nt) disponible(s) dans "À affecter".`;
   });
   setTimeout(()=>{
     const clientData=Object.entries(DATA.clients||{}).map(([cid,cname])=>({id:cid,name:cname}));
     setupAC('pl-client-search','pl-client-id','pl-client-drop',clientData);
   },50);
+}
+
+// Ajout d'un article oublié depuis la fenêtre "Prendre en charge" — même logique
+// d'autocomplétion catalogue que sessionPanelAddLigne. La ligne n'est écrite en
+// SharePoint qu'à la validation de la prise en charge (voir openPrendreEnChargePrepLibre).
+let _plNewCount=0;
+function plPrepAddLigne(){
+  const container=document.getElementById('pl-art-new');
+  if(!container)return;
+  const idx=_plNewCount++;
+  const row=document.createElement('tr');
+  row.className='pl-ligne-new';
+  row.id='pl-new-'+idx;
+  row.style.cssText='border-top:1px solid var(--border);background:#fffbeb';
+  row.innerHTML=`
+    <td style="padding:6px 8px;text-align:center;font-size:10px;font-weight:700;color:var(--amber,#d97706)" title="Article ajouté — à scanner à la livraison">NEW</td>
+    <td style="padding:4px 4px;position:relative">
+      <input class="pl-ref-new" id="pl-ns-${idx}" autocomplete="off" placeholder="Réf. ou produit..." style="width:100%;padding:5px 6px;border:1px solid var(--border);border-radius:5px;font-size:12px;font-family:var(--font-mono);box-sizing:border-box">
+      <div id="pl-nd-${idx}" style="position:absolute;top:100%;left:4px;right:4px;background:white;border:1px solid var(--border);border-radius:6px;box-shadow:0 4px 12px rgba(0,0,0,.12);z-index:9999;max-height:160px;overflow-y:auto;display:none"></div>
+    </td>
+    <td style="padding:4px 4px"><input class="pl-design-new" placeholder="Désignation" style="width:100%;padding:5px 6px;border:1px solid var(--border);border-radius:5px;font-size:12px;box-sizing:border-box"></td>
+    <td style="padding:4px 4px"><input class="pl-qte-new" type="number" min="0" placeholder="Qté" title="Quantité à livrer" style="width:64px;padding:5px 4px;border:1px solid var(--border);border-radius:5px;font-size:12px;text-align:center;box-sizing:border-box"></td>
+    <td style="padding:6px 8px;text-align:center"><button type="button" onclick="document.getElementById('pl-new-${idx}').remove()" title="Retirer cet ajout" style="background:none;border:none;color:var(--red);font-size:14px;cursor:pointer;padding:2px">✕</button></td>`;
+  container.appendChild(row);
+
+  const inp=document.getElementById('pl-ns-'+idx);
+  const drop=document.getElementById('pl-nd-'+idx);
+  const designField=row.querySelector('.pl-design-new');
+  inp.addEventListener('input',()=>{
+    const q=inp.value.trim().toLowerCase();
+    drop.innerHTML='';
+    if(q.length<2){drop.style.display='none';return;}
+    const matches=(DATA.catalogue||[]).map(p=>{
+      const ref=(f(p,'Title')||'').toLowerCase();
+      const des=(f(p,'field_1')||'').toLowerCase();
+      return{p,score:Math.min(scoreMatch(ref,q),scoreMatch(des,q)),ref};
+    }).filter(x=>x.score<3).sort((a,b)=>a.score-b.score||a.ref.localeCompare(b.ref)).map(x=>x.p).slice(0,10);
+    if(!matches.length){drop.style.display='none';return;}
+    matches.forEach(p=>{
+      const ref=f(p,'Title')||'';const des=f(p,'field_1')||'';
+      const li=document.createElement('div');
+      li.innerHTML=`<span style="font-weight:700;font-family:var(--font-mono)">${ref}</span> <span style="color:var(--text-muted);font-size:11px">${des}</span>`;
+      li.style.cssText='padding:5px 10px;cursor:pointer;font-size:12px;border-bottom:1px solid #f0f3f8';
+      li.onmouseenter=()=>li.style.background='var(--grey-light)';
+      li.onmouseleave=()=>li.style.background='';
+      li.onmousedown=(e)=>{e.preventDefault();inp.value=ref;if(designField)designField.value=des;drop.style.display='none';row.querySelector('.pl-qte-new')?.focus();};
+      drop.appendChild(li);
+    });
+    drop.style.display='block';
+  });
+  inp.addEventListener('blur',()=>setTimeout(()=>{drop.style.display='none';},200));
+  inp.focus();
 }
 
 // Suppression définitive d'un article depuis la fenêtre "Prendre en charge"
@@ -8584,6 +8684,19 @@ async function findOrCreateSessionForBL(blNum,client,vendeur,prep,dateLiv){
         await spPatch('sites/BondeCommande','Sessions_Scan',sess.ID??sess.Id,{Preparation_Avance:true,Date_Livraison_Prevue:dateLivIso});
         sess.Preparation_Avance=true;sess.Date_Livraison_Prevue=dateLivIso;
       }catch(e){console.warn('[findOrCreateSessionForBL] maj prep',e.message);}
+    }
+    // Session préexistante (prise en charge d'une préparation, "+Nouveau BL"
+    // sans vendeur...) : on complète Vendeur_Emetteur et Client s'ils sont vides.
+    // Jamais d'écrasement d'une valeur déjà renseignée. Magasinier n'est PAS
+    // touché ici : c'est l'identité de celui qui scanne, posée par le portail.
+    const complement={};
+    if(vendeur&&!String(f(sess,'Vendeur_Emetteur')||'').trim())complement.Vendeur_Emetteur=vendeur;
+    if(client&&!String(f(sess,'Client')||'').trim())complement.Client=client;
+    if(Object.keys(complement).length){
+      try{
+        await spPatch('sites/BondeCommande','Sessions_Scan',sess.ID??sess.Id,complement);
+        Object.assign(sess,complement);
+      }catch(e){console.warn('[findOrCreateSessionForBL] complément vendeur/client',e.message);}
     }
     return{sess,created:false};
   }
