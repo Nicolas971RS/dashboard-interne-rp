@@ -6650,6 +6650,14 @@ function openPrendreEnChargePrepLibre(sessionId){
   const acInput=`width:100%;border:1px solid var(--border);border-radius:var(--radius-sm);padding:8px 10px;font-size:13px;font-family:var(--font-body);outline:none;box-sizing:border-box;`;
   const acDrop=`position:absolute;top:100%;left:0;right:0;z-index:9999;background:white;border:1px solid var(--teal-mid);border-radius:0 0 var(--radius-sm) var(--radius-sm);max-height:200px;overflow-y:auto;box-shadow:var(--shadow-md);display:none;`;
   const lignes=(DATA.lignesScan||[]).filter(l=>String(lineSessionId(l))===String(sessionId));
+  // Vendeur obligatoire : une préparation créée par un magasinier n'en a pas, et
+  // sans lui le BL reste orphelin (portail "Prêtes à livrer", filtres vendeur...).
+  // Pré-rempli avec le vendeur déjà sur la session, sinon l'utilisateur connecté
+  // ("Frédéric Ballet" → Fred), mais toujours modifiable.
+  const _normV=x=>String(x||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').trim().toLowerCase();
+  const _vSess=String(f(sess,'Vendeur_Emetteur')||'').trim();
+  const _prenom=_normV((sessionStorage.getItem('user_name')||'').split(' ')[0]);
+  const vendeurDefaut=VENDEURS_FIXES.includes(_vSess)?_vSess:(VENDEURS_FIXES.find(v=>_prenom&&_prenom.startsWith(_normV(v)))||'');
   const lignesHtml=lignes.length?`
     <div style="font-size:11px;color:var(--text-muted);margin-bottom:6px">Décoche un article si tu ne le prends pas en charge maintenant — il restera disponible pour une prise en charge séparée.</div>
     <div style="border:1px solid var(--border);border-radius:var(--radius-sm);overflow:visible;margin-bottom:14px">
@@ -6693,6 +6701,12 @@ function openPrendreEnChargePrepLibre(sessionId){
         <div id="pl-client-drop" style="${acDrop}"></div>
       </div>
     </div>
+    <div class="mf"><label>Vendeur *</label>
+      <select id="pl-vendeur" style="${acInput}">
+        <option value="">— Choisir —</option>
+        ${VENDEURS_FIXES.map(v=>`<option value="${v}"${v===vendeurDefaut?' selected':''}>${v}</option>`).join('')}
+      </select>
+    </div>
     <div class="mf"><label>N° BL ou FC *</label>
       <input id="pl-numbl" placeholder="Ex : 820950 (BL) ou 156413 (FC)">
     </div>
@@ -6702,6 +6716,8 @@ function openPrendreEnChargePrepLibre(sessionId){
     const numBL=document.getElementById('pl-numbl').value.trim();
     if(!clientVal){document.getElementById('pl-client-search').classList.add('err');throw new Error('Le client est obligatoire.');}
     if(!numBL){document.getElementById('pl-numbl').classList.add('err');throw new Error('Le N° BL ou FC est obligatoire.');}
+    const vendeurVal=document.getElementById('pl-vendeur').value.trim();
+    if(!vendeurVal){document.getElementById('pl-vendeur').classList.add('err');throw new Error('Le vendeur est obligatoire.');}
     const doublon=(DATA.sessionsScan||[]).find(s=>s.ID!==sessionId&&String(f(s,'Numero_BL')||'').trim().toLowerCase()===numBL.toLowerCase());
     if(doublon)throw new Error(`Ce N° BL/FC existe déjà (session ${doublon.ID}) — choisis-en un autre.`);
 
@@ -6735,7 +6751,7 @@ function openPrendreEnChargePrepLibre(sessionId){
       // en attente d'affectation, c'est désormais une vraie livraison avec client et BL/FC,
       // et elle doit se comporter comme telle partout ailleurs dans le dashboard
       // (tableau "BL livrés récemment", filtres, badges...).
-      const body={Client:clientVal,Numero_BL:numBL,Title:`${numBL} - ${clientVal}`,Statut:'Prête à livrer',Type_Operation:'Livraison client'};
+      const body={Client:clientVal,Numero_BL:numBL,Title:`${numBL} - ${clientVal}`,Statut:'Prête à livrer',Type_Operation:'Livraison client',Vendeur_Emetteur:vendeurVal};
       await spPatch('sites/BondeCommande','Sessions_Scan',sessionId,body);
       Object.assign(sess,body);
     }else{
@@ -6747,7 +6763,7 @@ function openPrendreEnChargePrepLibre(sessionId){
         Type_Operation:'Livraison client',
         Numero_BL:numBL,
         Client:clientVal,
-        Vendeur_Emetteur:f(sess,'Vendeur_Emetteur')||'',
+        Vendeur_Emetteur:vendeurVal,
         Magasinier:f(sess,'Magasinier')||'',
         Date_Emission:f(sess,'Date_Emission')||new Date().toISOString(),
         Statut:'Prête à livrer',
@@ -6802,6 +6818,7 @@ function openPrendreEnChargePrepLibre(sessionId){
   setTimeout(()=>{
     const clientData=Object.entries(DATA.clients||{}).map(([cid,cname])=>({id:cid,name:cname}));
     setupAC('pl-client-search','pl-client-id','pl-client-drop',clientData);
+    setupRequiredSelect(document.getElementById('pl-vendeur'));
   },50);
 }
 
