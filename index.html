@@ -1361,6 +1361,24 @@ function toggleGrandFormat(){
   document.addEventListener('DOMContentLoaded',_updateGrandFormatBtn);
 })();
 
+// Sessions_Scan : Contact_Client est une colonne récente — si elle n'existe pas
+// (encore) dans SharePoint, on recharge sans elle plutôt que de perdre tout
+// l'onglet Livraison Magasin.
+const SESS_SELECT_BASE='ID,Title,Numero_BL,Client,Type_Operation,Vendeur_Emetteur,Magasinier,Date_Emission,Date_Scan,Statut,Nb_Articles_Scannes,Nb_Ecarts,Preparation_Avance,BL_Racine,Date_Livraison_Prevue,Repris_Par,Origine,Created';
+let _contactClientDispo=true;
+async function fetchSessionsScan(){
+  const qs=sel=>`$select=${sel}&$orderby=ID desc&$top=2000`;
+  if(_contactClientDispo){
+    try{return await spFetch('sites/BondeCommande','Sessions_Scan',qs(SESS_SELECT_BASE+',Contact_Client'));}
+    catch(e){
+      if(!/Contact_Client/i.test(e.message||''))throw e;
+      _contactClientDispo=false;
+      console.warn('[Sessions_Scan] colonne Contact_Client absente — chargement sans elle.');
+    }
+  }
+  return spFetch('sites/BondeCommande','Sessions_Scan',qs(SESS_SELECT_BASE));
+}
+
 // ═══ SHAREPOINT FETCH ═══
 async function spFetch(site,list,qs){
   const hasTop=qs.includes('$top=');
@@ -1698,8 +1716,7 @@ async function loadAll(){
       // Cathalogue_Produits — pour autocomplete ajout ligne article (pagination par ID)
       chargerCatalogue(),
       // Sessions_Scan — portail scan BL (préparations, livraisons, inventaires)
-      spFetch('sites/BondeCommande','Sessions_Scan',
-        '$select=ID,Title,Numero_BL,Client,Type_Operation,Vendeur_Emetteur,Magasinier,Date_Emission,Date_Scan,Statut,Nb_Articles_Scannes,Nb_Ecarts,Preparation_Avance,BL_Racine,Date_Livraison_Prevue,Repris_Par,Origine,Created&$orderby=ID desc&$top=2000'),
+      fetchSessionsScan(),
       // Lignes_Scan — détail des articles scannés par session
       spFetch('sites/BondeCommande','Lignes_Scan',
         '$select=ID,Title,Session_ScanId,Session_Scan/Id,Reference_Article,Designation,Quantite_Attendue,Quantite_Scannee&$expand=Session_Scan&$orderby=ID asc&$top=5000'),
@@ -4732,7 +4749,9 @@ function renderPreparations(){
         return`<div style="background:white;border:1px solid ${urgent?'#fecaca':'#e3d9ff'};border-radius:8px;padding:10px 14px;margin-bottom:8px;display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap">
           <div style="min-width:0">
             <div style="font-weight:700;font-size:13.5px">📦 ${ref} <span style="font-weight:400;color:var(--text-muted);font-size:12px">· ${nbArt} référence${nbArt>1?'s':''} scannée${nbArt>1?'s':''}</span></div>
-            ${hintTxt?`<div style="font-size:12px;color:#7c3aed;font-weight:600;margin-top:2px">Pour : ${hintTxt}</div>`:''}
+            ${hintTxt?`<div style="font-size:12px;color:#7c3aed;font-weight:600;margin-top:2px">Pour : ${hintTxt}${f(s,'Contact_Client')?` <span style="font-weight:500">· demandé par ${String(f(s,'Contact_Client')).replace(/</g,'&lt;')}</span>`:''}</div>`
+              :(f(s,'Contact_Client')?`<div style="font-size:12px;color:#7c3aed;font-weight:600;margin-top:2px">Demandé par ${String(f(s,'Contact_Client')).replace(/</g,'&lt;')}</div>`:'')}
+            <div style="font-size:11.5px;color:var(--text-muted);margin-top:2px">Vendeur : <strong>${f(s,'Vendeur_Emetteur')||'client en direct / non indiqué'}</strong></div>
             <div style="font-size:11.5px;color:var(--text-muted);margin-top:2px">Préparé par : <strong>${mag}</strong> · commencé le ${dateHeureGP(dateCreation(s))} · <span style="${urgent?'color:var(--red);font-weight:700':'font-weight:600;color:var(--text-secondary)'}">il y a ${depuisTexte(dateCreation(s))}${urgent?' ⚠️':''}</span></div>
           </div>
           <div style="display:flex;gap:6px;flex-wrap:wrap">
@@ -4797,7 +4816,7 @@ function renderPreparations(){
       return`<tr style="${sv.rowStyle}cursor:pointer" onclick="openSessionPanel(${s.ID})">
         <td class="ref" style="color:var(--blue)">${iconBLFC(f(s,'Numero_BL'))} ${f(s,'Numero_BL')||'—'}${hp}</td>
         <td>${sv.tag}</td>
-        <td class="cname">${isLiv?(f(s,'Client')||'—'):'—'}</td>
+        <td class="cname">${isLiv||(f(s,'Type_Operation')||'').toLowerCase()==='préparation matériel'?(clientIndiquePrep(s)||'—'):'—'}</td>
         <td><span class="ctag ${isLiv?'o':'a'}">${type}</span></td>
         <td>${f(s,'Vendeur_Emetteur')||'—'}</td>
         <td class="mono" style="font-size:11px;white-space:nowrap">${dateHeureGP(dateCreation(s))}</td>
@@ -5129,7 +5148,7 @@ function renderLivres(){
     const sv=statutVisuel(s);
     return`<tr style="cursor:pointer;${hp?'background:#fef2f2;box-shadow:inset 4px 0 0 #b91c1c':sv.rowStyle}" onclick="openSessionPanel(${s.ID})">
       <td class="ref" style="color:var(--blue)">${f(s,'Numero_BL')||'—'}${badgeHP}</td>
-      <td class="cname">${isLiv?(f(s,'Client')||'—'):'—'}</td>
+      <td class="cname">${isLiv||(f(s,'Type_Operation')||'').toLowerCase()==='préparation matériel'?(clientIndiquePrep(s)||'—'):'—'}</td>
       <td><span class="ctag ${isLiv?'o':'a'}">${type}</span></td>
       <td>${f(s,'Vendeur_Emetteur')||'—'}</td>
       <td>${f(s,'Magasinier')||'—'}</td>
@@ -5277,9 +5296,10 @@ function openSessionPanel(id){
     <div style="margin-bottom:16px">
       ${origineBanner}
       ${infoLine('N° BL ou FC',iconBLFC(f(s,'Numero_BL'))+' '+(f(s,'Numero_BL')||'—'))}
-      ${isLiv?clientLineView(id,f(s,'Client')):''}
+      ${isLiv?clientLineView(id,clientIndiquePrep(s)):''}
+      ${f(s,'Contact_Client')?infoLine('Demandé par (client)',String(f(s,'Contact_Client')).replace(/</g,'&lt;')):''}
       ${infoLine('Type',type)}
-      ${infoLine('Vendeur',f(s,'Vendeur_Emetteur')||'—')}
+      ${infoLine(type.toLowerCase()==='préparation matériel'?'Demandé par (vendeur)':'Vendeur',f(s,'Vendeur_Emetteur')||'—')}
       ${infoLine('Magasinier',f(s,'Magasinier')||'—')}
       ${f(s,'Repris_Par')?infoLine('Repris par',f(s,'Repris_Par')+' <span style="font-weight:400;color:var(--text-muted);font-size:11px">(client absent au retour du magasinier initial)</span>'):''}
       ${infoLine('Émis le',fmtDate(f(s,'Date_Emission')))}
@@ -6907,7 +6927,7 @@ function openPrendreEnChargePrepLibre(sessionId){
       <div style="font-size:11px;color:var(--text-muted);margin-top:4px">Article manquant dans la préparation ? Ajoute-le ici : il sera à scanner par le magasinier lors de la livraison.</div>
     </div>`;
   openModal(`✅ Prendre en charge — ${refPrep}`,`
-    <div style="font-size:12px;color:var(--text-muted);margin-bottom:10px">Préparé par ${f(sess,'Magasinier')||'—'} · ${lignes.length} référence${lignes.length>1?'s':''} scannée${lignes.length>1?'s':''}${clientIndiquePrep(sess)?` · <strong style="color:#7c3aed">Pour : ${clientIndiquePrep(sess).replace(/</g,'&lt;')}</strong>`:''}</div>
+    <div style="font-size:12px;color:var(--text-muted);margin-bottom:10px">Préparé par ${f(sess,'Magasinier')||'—'} · ${lignes.length} référence${lignes.length>1?'s':''} scannée${lignes.length>1?'s':''}${clientIndiquePrep(sess)?` · <strong style="color:#7c3aed">Pour : ${clientIndiquePrep(sess).replace(/</g,'&lt;')}</strong>`:''}${f(sess,'Contact_Client')?` · demandé par <strong>${String(f(sess,'Contact_Client')).replace(/</g,'&lt;')}</strong>`:''}${f(sess,'Vendeur_Emetteur')?` · vendeur <strong>${f(sess,'Vendeur_Emetteur')}</strong>`:''}</div>
     ${lignesHtml}
     ${ajoutHtml}
     <div class="mf"><label>Client</label>
