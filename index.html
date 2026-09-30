@@ -1704,7 +1704,7 @@ async function loadAll(){
       chargerCatalogue(),
       // Sessions_Scan — portail scan BL (préparations, livraisons, inventaires)
       spFetch('sites/BondeCommande','Sessions_Scan',
-        '$select=ID,Title,Numero_BL,Client,Type_Operation,Vendeur_Emetteur,Magasinier,Date_Emission,Date_Scan,Statut,Nb_Articles_Scannes,Nb_Ecarts,Preparation_Avance,BL_Racine,Date_Livraison_Prevue,Repris_Par&$orderby=ID desc&$top=2000'),
+        '$select=ID,Title,Numero_BL,Client,Type_Operation,Vendeur_Emetteur,Magasinier,Date_Emission,Date_Scan,Statut,Nb_Articles_Scannes,Nb_Ecarts,Preparation_Avance,BL_Racine,Date_Livraison_Prevue,Repris_Par,Origine&$orderby=ID desc&$top=2000'),
       // Lignes_Scan — détail des articles scannés par session
       spFetch('sites/BondeCommande','Lignes_Scan',
         '$select=ID,Title,Session_ScanId,Session_Scan/Id,Reference_Article,Designation,Quantite_Attendue,Quantite_Scannee&$expand=Session_Scan&$orderby=ID asc&$top=5000'),
@@ -2369,6 +2369,59 @@ async function soldeInlineOui(id,numBC){
   }catch(e){toast('❌ '+e.message);}
 }
 
+// ═══ LIVRAISONS HORS PROCÉDURE ═══
+// Déclarées par un magasinier depuis le portail quand un BL/FC papier est remis
+// au client sans avoir été saisi au bureau. Origine='Hors procédure' tant qu'un
+// vendeur n'a pas régularisé :
+//   - BL (8xxxxx) : régularisé quand un BC porte ce N° BL (Traiter) — automatique
+//     à l'enregistrement dans Traiter, ou bouton si le lien existe déjà.
+//   - FC (1xxxxx) : pas de BC (client divers, stock uniquement) — validation vendeur.
+// La valeur passe à 'Régularisée' (jamais effacée) pour garder la trace.
+function estHorsProc(s){return String(f(s,'Origine')||'').trim()==='Hors procédure';}
+function estRegularisee(s){return String(f(s,'Origine')||'').trim()==='Régularisée';}
+function estNumeroFC(num){return /^1/.test(String(num||'').trim());}
+// BC dont le champ N° BL contient ce numéro (le champ peut en lister plusieurs)
+function bcLiePourBL(num){
+  const n=String(num||'').trim().toLowerCase();
+  if(!n)return null;
+  return (DATA.suivi||[]).find(i=>String(f(i,'N_x00b0_BL')||'').toLowerCase().split(/[^0-9a-z-]+/).includes(n))||null;
+}
+function getHorsProcedure(){
+  return (DATA.sessionsScan||[]).filter(estHorsProc)
+    .sort((a,b)=>new Date(f(a,'Date_Emission')||0)-new Date(f(b,'Date_Emission')||0));
+}
+async function regulariserHorsProc(sessionId){
+  const s=(DATA.sessionsScan||[]).find(x=>x.ID===sessionId);
+  if(!s)return;
+  const num=f(s,'Numero_BL')||'';
+  const fc=estNumeroFC(num);
+  const bc=fc?null:bcLiePourBL(num);
+  if(!fc&&!bc){toast('🔴 BL sans BC lié — saisis ce N° BL dans Traiter sur le BC du client.','ko');return;}
+  const ok=await showConfirm('✔ Régulariser cette livraison ?',
+    fc?`FC <strong>${num}</strong> — ${f(s,'Client')||'client divers'}. Tu confirmes avoir vérifié la sortie de stock déclarée par ${f(s,'Magasinier')||'le magasinier'}.`
+      :`BL <strong>${num}</strong> lié au BC <strong>${f(bc,'Title')||('BC-'+bc.ID)}</strong>. La livraison sort du bloc « hors procédure » (la trace est conservée).`,
+    '✔ Régulariser','submit');
+  if(!ok)return;
+  try{
+    await spPatch('sites/BondeCommande','Sessions_Scan',sessionId,{Origine:'Régularisée'});
+    s.Origine='Régularisée';
+    toast(`✅ ${num} régularisé`);
+    renderBandeauPriorite();
+    if(document.getElementById('livres-details')?.open)renderLivres();
+  }catch(e){toast('🔴 '+e.message,'ko');}
+}
+// Photo du BL papier prise par le magasinier = pièce jointe de la session
+async function voirPhotoBL(sessionId){
+  try{
+    const url=`${C.spRoot}/sites/BondeCommande/_api/web/lists/getbytitle('Sessions_Scan')/items(${sessionId})/AttachmentFiles`;
+    const r=await fetch(url,{headers:{'Authorization':`Bearer ${getToken()}`,'Accept':'application/json;odata=nometadata'}});
+    if(!r.ok)throw new Error('SP '+r.status);
+    const files=(await r.json()).value||[];
+    if(!files.length){toast('📭 Aucune photo jointe à cette livraison.','ko');return;}
+    files.forEach(fl=>window.open(C.spRoot+encodeURI(fl.ServerRelativeUrl),'_blank'));
+  }catch(e){toast('🔴 Photo inaccessible : '+e.message,'ko');}
+}
+
 function renderBandeauPriorite(){
   const aFact=getBLAFacturer(),aComp=getBCACompleter(),sansBL=getBCSansBL(),retrait=getRetraitDepasse(),aSolder=getBCASolder();
   const host=document.getElementById('bandeau-priorite');
@@ -2381,6 +2434,7 @@ function renderBandeauPriorite(){
     // Le bloc jaune est informatif (rien à faire dans l'immédiat) : replié par défaut.
     const parDefaut=(id==='nobl')?'0':'1';
     let ouvert=(localStorage.getItem('rp_bp_'+id)??parDefaut)!=='0';
+    if(id==='hp')ouvert=true; // hors procédure : jamais replié, tant que ce n'est pas régularisé
     if(!ouvert&&id==='fact'){
       const nRepli=parseInt(localStorage.getItem('rp_bp_fact_n')||'0',10);
       if(n>nRepli){ouvert=true;try{localStorage.setItem('rp_bp_fact','1');}catch(e){}}
@@ -2527,7 +2581,40 @@ function renderBandeauPriorite(){
       </tr>`;}).join('')}</tbody></table></div>
     ${aSolder.length>40?`<div style="font-size:11px;color:var(--text-muted);margin-top:6px">Les 40 plus anciens sur ${aSolder.length}.</div>`:''}`;
 
+  // 🚨 Bloc 0 : livraisons sorties sans BL saisi — déclarées par le magasinier
+  const horsProc=getHorsProcedure();
+  const hpParV={};
+  horsProc.forEach(s=>{const v=f(s,'Vendeur_Emetteur')||'Non indiqué';hpParV[v]=(hpParV[v]||0)+1;});
+  const htmlHP=`
+    <div style="font-size:11.5px;color:#7f1d1d;margin-bottom:8px">Marchandise sortie sans BL saisi au bureau. <strong>BL</strong> : saisis le N° dans Traiter sur le BC du client (régularisation automatique). <strong>FC</strong> : vérifie puis ✔ Régulariser.</div>
+    <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:9px">${Object.entries(hpParV).sort((a,b)=>b[1]-a[1]).map(([v,n])=>`<span style="background:#fff;border:1px solid #b91c1c;border-radius:11px;padding:3px 10px;font-size:11.5px;color:#b91c1c;font-weight:600">${v} : ${n}</span>`).join(' ')}</div>
+    <div class="tc" style="max-height:290px;overflow-y:auto"><table><thead><tr>
+      <th>Depuis</th><th>N° BL / FC</th><th>Client</th><th>Autorisé par</th><th>Déclaré par</th><th>Scan</th><th style="min-width:250px;text-align:center">Régularisation</th>
+    </tr></thead><tbody>${horsProc.map(s=>{
+      const num=f(s,'Numero_BL')||'—';
+      const fc=estNumeroFC(num);
+      const bc=fc?null:bcLiePourBL(num);
+      const action=fc
+        ?`<button class="btn green" style="height:26px" onclick="regulariserHorsProc(${s.ID})">✔ Régulariser (FC)</button>`
+        :bc
+          ?`<button class="btn green" style="height:26px" onclick="regulariserHorsProc(${s.ID})">✔ Régulariser — BC ${f(bc,'Title')||bc.ID}</button>`
+          :`<span style="font-size:11.5px;color:#b91c1c;font-weight:600">📝 BC à traiter avec ce N° BL</span>`;
+      return`<tr style="background:#fff5f5">
+        <td>${agePillHtml(f(s,'Date_Emission'))}</td>
+        <td style="font-family:var(--font-mono);font-weight:700">${fc?'🧾':'📦'} ${num}</td>
+        <td>${f(s,'Client')||'—'}</td>
+        <td style="font-weight:600">${f(s,'Vendeur_Emetteur')||'—'}</td>
+        <td style="font-size:11.5px">${f(s,'Magasinier')||'—'}</td>
+        <td style="font-size:11.5px">${f(s,'Statut')||'—'}</td>
+        <td style="text-align:center;white-space:nowrap">
+          <button class="btn" style="height:26px" title="Voir les articles scannés" onclick="openSessionPanel(${s.ID})">👁</button>
+          <button class="btn" style="height:26px;margin-left:4px" title="Photo du BL papier" onclick="voirPhotoBL(${s.ID})">📷</button>
+          <span style="margin-left:6px">${action}</span>
+        </td>
+      </tr>`;}).join('')}</tbody></table></div>`;
+
   const contenu=
+    bloc('hp','#b91c1c','#fef2f2','#fecaca','🚨 Livraisons hors procédure — à régulariser','BL/FC remis au client sans saisie au bureau',horsProc.length,null,htmlHP)+
     bloc('fact','var(--red)','#ffebee','#ffcdd2','💰 BL livrés à facturer',`Depuis plus de ${SEUIL_FACTURATION} jours`,aFact.length,totalMontant(aFact),htmlFact)+
     bloc('solde','var(--green)','var(--green-light)','#b7dfc0','✅ BC livrés — à confirmer soldé','Reste à livrer = 0, facturation à confirmer',aSolder.length,totalMontant(aSolder),htmlSolde)+
     bloc('retrait','#c2410c','#fff1e6','#fdba8c','📞 Retrait client en retard','Date de livraison dépassée, à relancer',retrait.length,totalMontant(retrait),htmlRetrait)+
@@ -4978,8 +5065,11 @@ function renderLivres(){
     const type=f(s,'Type_Operation')||'—';
     const isLiv=type.toLowerCase()==='livraison client';
     const nbArt=f(s,'Nb_Articles_Scannes')??'—';
-    return`<tr style="cursor:pointer" onclick="openSessionPanel(${s.ID})">
-      <td class="ref" style="color:var(--blue)">${f(s,'Numero_BL')||'—'}</td>
+    const hp=estHorsProc(s),reg=estRegularisee(s);
+    const badgeHP=hp?' <span title="Livré sans BL saisi — à régulariser" style="background:#b91c1c;color:#fff;border-radius:9px;padding:1px 7px;font-size:10.5px;font-weight:700;white-space:nowrap">🚨 Hors procédure</span>'
+      :reg?' <span title="Livraison hors procédure régularisée" style="background:#fff;color:#b91c1c;border:1px solid #fca5a5;border-radius:9px;padding:0 6px;font-size:10px;white-space:nowrap">régularisé</span>':'';
+    return`<tr style="cursor:pointer${hp?';background:#fef2f2;box-shadow:inset 4px 0 0 #b91c1c':''}" onclick="openSessionPanel(${s.ID})">
+      <td class="ref" style="color:var(--blue)">${f(s,'Numero_BL')||'—'}${badgeHP}</td>
       <td class="cname">${isLiv?(f(s,'Client')||'—'):'—'}</td>
       <td><span class="ctag ${isLiv?'o':'a'}">${type}</span></td>
       <td>${f(s,'Vendeur_Emetteur')||'—'}</td>
@@ -8692,7 +8782,7 @@ async function refetchSessionByBL(blNum){
   const target=String(blNum).trim().toLowerCase();
   try{
     const res=await spFetch('sites/BondeCommande','Sessions_Scan',
-      '$select=ID,Title,Numero_BL,Client,Type_Operation,Vendeur_Emetteur,Magasinier,Date_Emission,Date_Scan,Statut,Nb_Articles_Scannes,Nb_Ecarts,Preparation_Avance,BL_Racine,Date_Livraison_Prevue,Repris_Par&$orderby=ID desc&$top=150');
+      '$select=ID,Title,Numero_BL,Client,Type_Operation,Vendeur_Emetteur,Magasinier,Date_Emission,Date_Scan,Statut,Nb_Articles_Scannes,Nb_Ecarts,Preparation_Avance,BL_Racine,Date_Livraison_Prevue,Repris_Par,Origine&$orderby=ID desc&$top=150');
     const sess=(res||[]).find(s=>String(f(s,'Numero_BL')||'').trim().toLowerCase()===target);
     if(sess)DATA.sessionsScan=[...(DATA.sessionsScan||[]).filter(s2=>s2.ID!==sess.ID),sess];
     return sess||null;
@@ -8722,10 +8812,17 @@ async function findOrCreateSessionForBL(blNum,client,vendeur,prep,dateLiv){
     const complement={};
     if(vendeur&&!String(f(sess,'Vendeur_Emetteur')||'').trim())complement.Vendeur_Emetteur=vendeur;
     if(client&&!String(f(sess,'Client')||'').trim())complement.Client=client;
+    // Livraison déclarée hors procédure par un magasinier : le vendeur vient de
+    // lier ce N° BL à un BC dans Traiter = régularisation.
+    if(String(f(sess,'Origine')||'').trim()==='Hors procédure')complement.Origine='Régularisée';
     if(Object.keys(complement).length){
       try{
         await spPatch('sites/BondeCommande','Sessions_Scan',sess.ID??sess.Id,complement);
         Object.assign(sess,complement);
+        if(complement.Origine==='Régularisée'){
+          toast(`✅ Livraison hors procédure ${blNum} régularisée par ce BC`);
+          try{renderBandeauPriorite();}catch(e){}
+        }
       }catch(e){console.warn('[findOrCreateSessionForBL] complément vendeur/client',e.message);}
     }
     return{sess,created:false};
