@@ -6779,6 +6779,19 @@ function openPrendreEnChargePrepLibre(sessionId){
         okNew++;
       }catch(e){koNew++;console.warn('[openPrendreEnChargePrepLibre] ajout article',n,e.message);}
     }
+    // Un article ajouté n'est pas encore scanné = un écart. Sans ça, Nb_Ecarts
+    // reste à 0 (valeur de la clôture de préparation) et le portail propose
+    // « 🚚 Prendre en charge et livrer », qui clôture SANS scan : l'article
+    // ajouté ne serait jamais vérifié. Avec Nb_Ecarts>0, seul « Vérifier &
+    // terminer » reste disponible côté magasinier.
+    if(okNew){
+      const targetSess=(DATA.sessionsScan||[]).find(s=>s.ID===targetId);
+      const nbEcarts=Number(f(targetSess||{},'Nb_Ecarts')||0)+okNew;
+      try{
+        await spPatch('sites/BondeCommande','Sessions_Scan',targetId,{Nb_Ecarts:nbEcarts});
+        if(targetSess)targetSess.Nb_Ecarts=nbEcarts;
+      }catch(e){console.warn('[openPrendreEnChargePrepLibre] Nb_Ecarts',e.message);toast('⚠️ Articles ajoutés, mais le compteur d\'écarts n\'a pas été mis à jour — dis au magasinier d\'utiliser « Vérifier & terminer ».','ko');}
+    }
     renderPreparations();updateBadges();
     const suffixeAjout=okNew?` + ${okNew} article(s) ajouté(s) à scanner.`:'';
     if(koNew)toast(`⚠️ ${koNew} article(s) ajouté(s) n'ont pas pu être enregistrés — ajoute-les depuis « Voir » sur le BL ${numBL}.`,'ko');
