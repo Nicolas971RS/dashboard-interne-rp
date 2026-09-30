@@ -97,6 +97,8 @@
   .ctag.r{background:var(--red);}
   .ctag.a{background:var(--amber);}
   .ctag.o{background:var(--orange);}
+  .stl-leg{border:1px solid;border-radius:11px;padding:2px 9px;font-weight:700;white-space:nowrap}
+  .stl-tag{display:inline-block;border:1px solid;border-radius:11px;padding:2px 9px;font-size:11.5px;font-weight:800;white-space:nowrap}
 
   /* ══ KPI CARDS ══ */
   .kpi-row{display:grid;gap:12px;margin-bottom:14px;}
@@ -851,10 +853,10 @@
       <div style="background:var(--navy);border-radius:var(--radius);padding:14px 18px;margin-bottom:14px">
         <div style="display:flex;align-items:center;gap:12px;margin-bottom:10px">
           <span style="font-size:20px">🔍</span>
-          <input type="text" id="search-prep" placeholder="Recherche rapide — N° BL, client..."
-            style="flex:1;background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.2);border-radius:var(--radius-sm);padding:9px 14px;font-size:13.5px;color:white;font-family:var(--font-body);outline:none"
-            oninput="renderPreparations()">
-          <button class="btn" style="border-color:rgba(255,255,255,.3);color:rgba(255,255,255,.7);background:none;white-space:nowrap" onclick="document.getElementById('search-prep').value='';renderPreparations()">✕ Effacer</button>
+          <input type="text" id="search-prep" placeholder="Chercher un N° BL / FC ou un client — cherche partout : à livrer, en préparation, livrés..."
+            style="flex:1;background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.2);border-radius:var(--radius-sm);padding:11px 14px;font-size:14.5px;color:white;font-family:var(--font-body);outline:none"
+            oninput="renderPreparations();if(document.getElementById('livres-details')?.open)renderLivres();if(typeof renderPartielles==='function')renderPartielles()">
+          <button class="btn" style="border-color:rgba(255,255,255,.3);color:rgba(255,255,255,.7);background:none;white-space:nowrap" onclick="document.getElementById('search-prep').value='';renderPreparations();if(document.getElementById('livres-details')?.open)renderLivres();if(typeof renderPartielles==='function')renderPartielles()">✕ Effacer</button>
         </div>
         <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:2px">
           <select class="fs" id="filter-vendeur-prep" onchange="renderPreparations()"><option value="all">Tous les vendeurs</option></select>
@@ -866,11 +868,19 @@
         </div>
       </div>
 
-      <div id="prep-search-result" style="display:none;margin-bottom:14px"></div>
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:8px">
+        <div id="prep-table-title" style="font-weight:800;font-size:14.5px;color:var(--navy)">⏳ BL en attente de prise en charge</div>
+        <div style="display:flex;gap:6px;flex-wrap:wrap;font-size:11.5px">
+          <span class="stl-leg" style="background:#fee2e2;color:#b91c1c;border-color:#fca5a5">🔴 À livrer</span>
+          <span class="stl-leg" style="background:#dbeafe;color:#1d4ed8;border-color:#93c5fd">🔵 En préparation</span>
+          <span class="stl-leg" style="background:#ffedd5;color:#c2410c;border-color:#fdba74">🟠 Partiel / écart</span>
+          <span class="stl-leg" style="background:#dcfce7;color:#15803d;border-color:#86efac">🟢 Livré</span>
+        </div>
+      </div>
 
       <div class="tc"><table>
-        <thead><tr><th>N° BL ou FC</th><th>Client</th><th>Type</th><th>Vendeur</th><th>Émis le</th><th>En attente depuis</th><th>Préparation</th></tr></thead>
-        <tbody id="prep-attente-body"><tr class="empty-row"><td colspan="7">Chargement...</td></tr></tbody>
+        <thead><tr><th>N° BL ou FC</th><th>Statut</th><th>Client</th><th>Type</th><th>Vendeur</th><th>Émis le</th><th>Attente / Livré le</th><th>Préparation</th></tr></thead>
+        <tbody id="prep-attente-body"><tr class="empty-row"><td colspan="8">Chargement...</td></tr></tbody>
       </table></div>
 
       <details id="livres-details" style="margin-top:18px;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius)">
@@ -880,13 +890,7 @@
         </summary>
         <div style="padding:0 14px 14px">
           <div style="background:var(--navy);border-radius:var(--radius);padding:14px 18px;margin-bottom:14px;margin-top:10px">
-            <div style="display:flex;align-items:center;gap:12px;margin-bottom:10px">
-              <span style="font-size:20px">🔍</span>
-              <input type="text" id="search-livres" placeholder="Recherche rapide — N° BL, client..."
-                style="flex:1;background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.2);border-radius:var(--radius-sm);padding:9px 14px;font-size:13.5px;color:white;font-family:var(--font-body);outline:none"
-                oninput="renderLivres()">
-              <button class="btn" style="border-color:rgba(255,255,255,.3);color:rgba(255,255,255,.7);background:none;white-space:nowrap" onclick="document.getElementById('search-livres').value='';renderLivres()">✕ Effacer</button>
-            </div>
+            <div style="font-size:12px;color:rgba(255,255,255,.75);margin-bottom:8px">🔍 Pour chercher un BL, utilise la barre de recherche en haut de la page — elle cherche aussi dans les BL livrés.</div>
             <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:2px">
               <select class="fs" id="filter-vendeur-livres" onchange="renderLivres()"><option value="all">Tous les vendeurs</option></select>
               <select class="fs" id="filter-statut-livres" onchange="renderLivres()"><option value="all">Tous les statuts</option></select>
@@ -939,13 +943,7 @@
 
       <div class="sd" style="margin-top:18px"><h2>✂️ Livraisons partielles de BL — suivi des reports</h2><span class="site-tag rp">Reports de bons de livraison (distinct de l'onglet Livraisons Partielles = BC)</span><div class="sd-line"></div></div>
       <div style="background:var(--navy);border-radius:var(--radius);padding:14px 18px;margin-bottom:14px">
-        <div style="display:flex;align-items:center;gap:12px;margin-bottom:10px">
-          <span style="font-size:20px">🔍</span>
-          <input type="text" id="search-part" placeholder="Recherche rapide — BL d'origine, BL, client..."
-            style="flex:1;background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.2);border-radius:var(--radius-sm);padding:9px 14px;font-size:13.5px;color:white;font-family:var(--font-body);outline:none"
-            oninput="renderPartielles()">
-          <button class="btn" style="border-color:rgba(255,255,255,.3);color:rgba(255,255,255,.7);background:none;white-space:nowrap" onclick="document.getElementById('search-part').value='';renderPartielles()">✕ Effacer</button>
-        </div>
+        <div style="font-size:12px;color:rgba(255,255,255,.75);margin-bottom:8px">🔍 Pour chercher un BL ou un client, utilise la barre de recherche en haut de la page — elle filtre aussi cette liste.</div>
         <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:2px">
           <select id="filter-client-part" onchange="renderPartielles()" class="fs"><option value="all">Tous les clients</option></select>
           <select id="filter-statut-part" onchange="renderPartielles()" class="fs"><option value="all">Tous les statuts</option></select>
@@ -4517,6 +4515,35 @@ function renderRALTable(){
 }
 
 // ═══ PRÉPARATIONS SCAN — BL confiés à l'avance (portail-scan-rp) ═══
+// Statut lisible et coloré, identique dans tout l'onglet Livraison Magasin :
+// 🔴 à livrer · 🔵 en préparation · 🟠 partiel / écart · 🟢 livré.
+function statutVisuel(s){
+  const st=String(f(s,'Statut')||'').trim();
+  const low=st.toLowerCase();
+  const type=String(f(s,'Type_Operation')||'').toLowerCase();
+  const num=String(f(s,'Numero_BL')||'');
+  const R={fg:'#b91c1c',bg:'#fef2f2',bd:'#fca5a5'},B={fg:'#1d4ed8',bg:'#eff6ff',bd:'#93c5fd'},
+        O={fg:'#c2410c',bg:'#fff7ed',bd:'#fdba74'},G={fg:'#15803d',bg:'#f0fdf4',bd:'#86efac'},
+        V={fg:'#6d28d9',bg:'#f5f3ff',bd:'#c4b5fd'},N={fg:'#475569',bg:'#f8fafc',bd:'#cbd5e1'};
+  let v,label;
+  if(low==='bl émis'||low==='bl emis'){v=R;label='🔴 BL à livrer';}
+  else if(low==='prête à livrer'||low==='prete a livrer'){v=R;label='🔴 Prête — client attendu';}
+  else if(low.includes('partiel')){v=O;label='🟠 Livré partiel';}
+  else if(low.includes('écart')||low.includes('ecart')){
+    if(type==='préparation matériel'&&num.startsWith('PREP-')){v=V;label='🟣 À affecter';}
+    else{v=O;label='🟠 Livré avec écart';}
+  }
+  else if(low==='terminée'||low==='terminee'){
+    if(type==='inventaire physique'){v=N;label='Inventaire terminé';}
+    else if(num.startsWith('PREP-')){v=V;label='🟣 À affecter';}
+    else{v=G;label='🟢 BL livré';}
+  }
+  else if(low){v=B;label='🔵 En préparation';}
+  else{v=N;label='—';}
+  return{...v,label,tag:`<span class="stl-tag" style="color:${v.fg};background:${v.bg};border-color:${v.bd}" title="Statut SharePoint : ${st||'—'}">${label}</span>`,
+    rowStyle:`background:${v.bg};box-shadow:inset 4px 0 0 ${v.fg};`};
+}
+
 function renderPreparations(){
   const isPrep=s=>s.Preparation_Avance===true||s.Preparation_Avance==='Yes'||s.Preparation_Avance==='1';
   const all=DATA.sessionsScan||[];
@@ -4550,41 +4577,6 @@ function renderPreparations(){
     if(j>=2)return '<span class="ctag o">'+j+' j</span>';
     return '<span style="color:var(--text-muted);font-size:11px">'+j+' j</span>';
   };
-
-  // ── Carte résultat recherche comptoir : cherche sur TOUT l'historique scan ──
-  const searchEl=document.getElementById('prep-search-result');
-  if(searchEl){
-    if(q){
-      const matches=all.filter(s=>{
-        const bl=(f(s,'Numero_BL')||'').toLowerCase();
-        const cl=(f(s,'Client')||'').toLowerCase();
-        return bl.includes(q)||cl.includes(q);
-      }).sort((a,b)=>new Date(f(b,'Date_Emission'))-new Date(f(a,'Date_Emission'))).slice(0,6);
-      if(matches.length){
-        searchEl.style.display='';
-        searchEl.innerHTML='<div style="font-size:11px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px">Résultat — où en est ce BL ?</div>'+matches.map(s=>{
-          const st=f(s,'Statut')||'—';const low=st.toLowerCase();
-          const cls=low==='bl émis'?'o':low.includes('partiellement')?'a':(low.includes('écart')||low.includes('ecart'))?'r':(low==='terminée'||low==='terminee')?'g':'b';
-          const jours=daysSince(f(s,'Date_Emission'));
-          const mag=f(s,'Magasinier');
-          const ligne2=isPending(s)
-            ? ('⏳ Pas encore pris en charge · en attente depuis '+jours+' j')
-            : (isFinal(s)
-                ? ('✅ Livré le '+fmtDate(f(s,'Date_Scan')||f(s,'Date_Emission'))+(mag?' · par '+mag:''))
-                : ('🔧 En préparation'+(mag?' par '+mag:'')));
-          return '<div onclick="openSessionPanel('+s.ID+')" style="cursor:pointer;background:var(--surface);border:1px solid var(--border);border-left:4px solid var(--blue);border-radius:var(--radius);padding:12px 16px;margin-bottom:8px;display:flex;justify-content:space-between;align-items:center;gap:12px">'
-            +'<div><div style="font-size:16px;font-weight:800;color:var(--blue)">'+iconBLFC(f(s,'Numero_BL'))+' '+(f(s,'Numero_BL')||'—')+' <span style="font-weight:600;color:var(--text-secondary);font-size:13px">· '+(f(s,'Client')||'—')+'</span></div>'
-            +'<div style="font-size:12px;color:var(--text-secondary);margin-top:3px">'+ligne2+'</div></div>'
-            +'<span class="ctag '+cls+'">'+st+'</span></div>';
-        }).join('');
-      }else{
-        searchEl.style.display='';
-        searchEl.innerHTML='<div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:14px 16px;font-size:13px;color:var(--text-muted)">Aucun BL trouvé pour « '+q+' »</div>';
-      }
-    }else{
-      searchEl.style.display='none';searchEl.innerHTML='';
-    }
-  }
 
   // ── KPI (respectent la bascule DATE_DEBUT_PROCESS) ──
   const totalAttente=all.filter(s=>isPending(s)&&afterCutoff(f(s,'Date_Emission')));
@@ -4716,36 +4708,58 @@ function renderPreparations(){
   const rks=document.getElementById('ks-prep-retard');
   if(rks)rks.textContent=prepShowRetardOnly?'✕ Filtre actif — cliquer pour tout revoir':'Cliquer pour filtrer la liste';
 
-  // ── File d'attente (tableau opérationnel) ──
-  let pending=all.filter(s=>isPending(s)&&afterCutoff(f(s,'Date_Emission')));
-  if(prepShowRetardOnly)pending=pending.filter(s=>daysSince(f(s,'Date_Emission'))>2);
-  if(fV!=='all')pending=pending.filter(s=>f(s,'Vendeur_Emetteur')===fV);
-  if(fT!=='all')pending=pending.filter(s=>(f(s,'Type_Operation')||'').toLowerCase()===fT.toLowerCase());
-  if(q)pending=pending.filter(s=>{
+  // ── Tableau unique ──
+  // Sans recherche : la file d'attente (BL pas encore pris en charge).
+  // Avec recherche : TOUS les BL qui correspondent, quel que soit le statut —
+  // une seule barre, un seul endroit où regarder.
+  const matchQ=s=>{
     const bl=(f(s,'Numero_BL')||'').toLowerCase();
     const cl=(f(s,'Client')||'').toLowerCase();
     return bl.includes(q)||cl.includes(q);
-  });
-  pending.sort((a,b)=>new Date(f(a,'Date_Emission'))-new Date(f(b,'Date_Emission')));
+  };
+  let rows,titre,LIMITE=60;
+  if(q){
+    rows=all.filter(matchQ);
+    if(fV!=='all')rows=rows.filter(s=>f(s,'Vendeur_Emetteur')===fV);
+    if(fT!=='all')rows=rows.filter(s=>(f(s,'Type_Operation')||'').toLowerCase()===fT.toLowerCase());
+    rows.sort((a,b)=>new Date(f(b,'Date_Emission'))-new Date(f(a,'Date_Emission')));
+    titre=`🔍 Résultats pour « ${q.replace(/[<>&"]/g,'')} » — tous statuts (${rows.length})`;
+  }else{
+    rows=all.filter(s=>isPending(s)&&afterCutoff(f(s,'Date_Emission')));
+    if(prepShowRetardOnly)rows=rows.filter(s=>daysSince(f(s,'Date_Emission'))>2);
+    if(fV!=='all')rows=rows.filter(s=>f(s,'Vendeur_Emetteur')===fV);
+    if(fT!=='all')rows=rows.filter(s=>(f(s,'Type_Operation')||'').toLowerCase()===fT.toLowerCase());
+    rows.sort((a,b)=>new Date(f(a,'Date_Emission'))-new Date(f(b,'Date_Emission')));
+    titre=`⏳ BL en attente de prise en charge (${rows.length})`+(prepShowRetardOnly?' — en retard uniquement':'');
+  }
+  const titreEl=document.getElementById('prep-table-title');
+  if(titreEl)titreEl.textContent=titre;
 
   const body=document.getElementById('prep-attente-body');
   if(body){
-    body.innerHTML=pending.length?pending.map(s=>{
+    const aff=rows.slice(0,LIMITE);
+    body.innerHTML=aff.length?aff.map(s=>{
+      const sv=statutVisuel(s);
       const jours=daysSince(f(s,'Date_Emission'));
-      const rowBg=jours>4?'background:rgba(198,40,40,.06);':(jours>=2?'background:rgba(191,54,12,.05);':'');
       const type=f(s,'Type_Operation')||'—';
       const isLiv=type.toLowerCase()==='livraison client';
       const prep=isPrep(s);
-      return`<tr style="${rowBg}cursor:pointer" onclick="openSessionPanel(${s.ID})">
-        <td class="ref" style="color:var(--blue)">${iconBLFC(f(s,'Numero_BL'))} ${f(s,'Numero_BL')||'—'}</td>
+      const colAttente=isPending(s)?delaiPill(jours)
+        :isFinal(s)?`<span class="mono" style="font-size:11px">${fmtDate(f(s,'Date_Scan')||f(s,'Date_Emission'))}</span>`
+        :'<span style="color:var(--text-muted);font-size:11px">—</span>';
+      const hp=(typeof estHorsProc==='function'&&estHorsProc(s))?' <span title="Livré sans BL saisi — à régulariser" style="background:#b91c1c;color:#fff;border-radius:9px;padding:1px 7px;font-size:10.5px;font-weight:700">🚨 Hors procédure</span>':'';
+      return`<tr style="${sv.rowStyle}cursor:pointer" onclick="openSessionPanel(${s.ID})">
+        <td class="ref" style="color:var(--blue)">${iconBLFC(f(s,'Numero_BL'))} ${f(s,'Numero_BL')||'—'}${hp}</td>
+        <td>${sv.tag}</td>
         <td class="cname">${isLiv?(f(s,'Client')||'—'):'—'}</td>
         <td><span class="ctag ${isLiv?'o':'a'}">${type}</span></td>
         <td>${f(s,'Vendeur_Emetteur')||'—'}</td>
         <td class="mono" style="font-size:11px">${fmtDate(f(s,'Date_Emission'))}</td>
-        <td>${delaiPill(jours)}</td>
+        <td>${colAttente}</td>
         <td>${prep?'<span class="ctag o">À préparer</span>':'<span style="color:var(--text-muted);font-size:11px">Standard</span>'}</td>
       </tr>`;
-    }).join(''):('<tr class="empty-row"><td colspan="7">'+(prepShowRetardOnly?'✅ Aucun BL en retard':'✅ Aucun BL en attente')+'</td></tr>');
+    }).join('')+(rows.length>LIMITE?`<tr class="empty-row"><td colspan="8">${LIMITE} premiers sur ${rows.length} — précise la recherche (N° complet ou nom du client)</td></tr>`:'')
+    :('<tr class="empty-row"><td colspan="8">'+(q?'Aucun BL ou client trouvé pour « '+q.replace(/[<>&"]/g,'')+' »':prepShowRetardOnly?'✅ Aucun BL en retard':'✅ Aucun BL en attente')+'</td></tr>');
   }
 
   // Par vendeur — volume confié (tous types, tous statuts)
@@ -4868,7 +4882,7 @@ function renderPartielles(){
 
   const racines=[...new Set(familleInit.map(trouverRacineVraie))];
 
-  const q=(document.getElementById('search-part')?.value||'').toLowerCase();
+  const q=(document.getElementById('search-prep')?.value||'').toLowerCase(); // barre unique de l'onglet
   const fC=document.getElementById('filter-client-part')?.value||'all';
   const fS=document.getElementById('filter-statut-part')?.value||'all';
 
@@ -5039,7 +5053,7 @@ function renderLivres(){
   };
   let livres=all.filter(isLivre);
 
-  const q=(document.getElementById('search-livres')?.value||'').toLowerCase();
+  const q=(document.getElementById('search-prep')?.value||'').toLowerCase(); // barre unique de l'onglet
   const fV=document.getElementById('filter-vendeur-livres')?.value||'all';
   const fS=document.getElementById('filter-statut-livres')?.value||'all';
   const du=document.getElementById('filter-livres-du')?.value||'';
@@ -5068,14 +5082,15 @@ function renderLivres(){
     const hp=estHorsProc(s),reg=estRegularisee(s);
     const badgeHP=hp?' <span title="Livré sans BL saisi — à régulariser" style="background:#b91c1c;color:#fff;border-radius:9px;padding:1px 7px;font-size:10.5px;font-weight:700;white-space:nowrap">🚨 Hors procédure</span>'
       :reg?' <span title="Livraison hors procédure régularisée" style="background:#fff;color:#b91c1c;border:1px solid #fca5a5;border-radius:9px;padding:0 6px;font-size:10px;white-space:nowrap">régularisé</span>':'';
-    return`<tr style="cursor:pointer${hp?';background:#fef2f2;box-shadow:inset 4px 0 0 #b91c1c':''}" onclick="openSessionPanel(${s.ID})">
+    const sv=statutVisuel(s);
+    return`<tr style="cursor:pointer;${hp?'background:#fef2f2;box-shadow:inset 4px 0 0 #b91c1c':sv.rowStyle}" onclick="openSessionPanel(${s.ID})">
       <td class="ref" style="color:var(--blue)">${f(s,'Numero_BL')||'—'}${badgeHP}</td>
       <td class="cname">${isLiv?(f(s,'Client')||'—'):'—'}</td>
       <td><span class="ctag ${isLiv?'o':'a'}">${type}</span></td>
       <td>${f(s,'Vendeur_Emetteur')||'—'}</td>
       <td>${f(s,'Magasinier')||'—'}</td>
       <td class="mono" style="font-size:11px">${fmtDate(f(s,'Date_Scan')||f(s,'Date_Emission'))}</td>
-      <td>${tag(f(s,'Statut'))}</td>
+      <td>${sv.tag}</td>
       <td style="text-align:center">${nbArt}</td>
     </tr>`;
   }).join(''):'<tr class="empty-row"><td colspan="8">Aucun BL livré pour le moment</td></tr>';
