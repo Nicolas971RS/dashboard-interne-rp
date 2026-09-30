@@ -5271,9 +5271,64 @@ function openSessionPanel(id){
     </table></div>
     <div id="sp-save-wrap-${id}" style="margin-top:10px">
       ${lignes.length?`<button id="sp-save-btn-${id}" class="btn" style="height:26px;font-size:11px" onclick="sessionPanelSaveAll(${id})">💾 Enregistrer les modifications</button>`:''}
-    </div>`;
+    </div>
+    ${blocSuppressionSession(s)}`;
 
   openPanel(iconBLFC(f(s,'Numero_BL'))+' '+(f(s,'Numero_BL')||'BL'),html);
+}
+
+// ── Suppression d'une session créée par erreur ──
+// Autorisée seulement tant qu'aucune sortie de stock n'a été enregistrée :
+//   - BL/FC pas encore pris en charge (BL Émis)
+//   - scan de livraison en cours (en livraison, les lignes ne partent qu'à la clôture)
+//   - préparation PREP- (même règle que « Sans suite » dans « À affecter »)
+// Une livraison clôturée a déjà fait bouger le stock : on ne supprime pas,
+// on passe par « Retour marchandise » pour garder une trace juste.
+function peutSupprimerSession(s){
+  const st=String(f(s,'Statut')||'').trim().toLowerCase();
+  const type=String(f(s,'Type_Operation')||'').toLowerCase();
+  if(String(f(s,'Numero_BL')||'').startsWith('PREP-'))return true;
+  if(st==='bl émis'||st==='bl emis')return true;
+  if(st==='en cours de scan'&&type!=='inventaire physique')return true;
+  return false;
+}
+function blocSuppressionSession(s){
+  if(peutSupprimerSession(s)){
+    return`<div style="margin-top:18px;padding:12px 14px;border:1px dashed #fca5a5;border-radius:var(--radius-sm);background:#fff5f5">
+      <div style="font-size:12px;color:#7f1d1d;margin-bottom:8px">Session créée par erreur (préparation lancée par inadvertance, mauvais N°...) ? Aucune sortie de stock n'a encore été enregistrée : tu peux la supprimer.</div>
+      <button class="btn btn-supprimer" style="height:30px;font-size:12px" onclick="supprimerSessionScan(${s.ID})">🗑 Supprimer cette session</button>
+    </div>`;
+  }
+  return`<div style="margin-top:18px;font-size:11.5px;color:var(--text-muted)">🔒 Livraison déjà clôturée : le stock a bougé, elle ne peut pas être supprimée. Pour corriger, utilise « Retour marchandise ».</div>`;
+}
+async function supprimerSessionScan(id){
+  const s=(DATA.sessionsScan||[]).find(x=>x.ID===id);
+  if(!s)return;
+  if(!peutSupprimerSession(s)){toast('🔒 Livraison déjà clôturée — utilise « Retour marchandise ».','ko');return;}
+  const num=f(s,'Numero_BL')||('session '+id);
+  const lignes=(DATA.lignesScan||[]).filter(l=>String(lineSessionId(l))===String(id));
+  const st=String(f(s,'Statut')||'');
+  const enCours=st.toLowerCase()==='en cours de scan';
+  const bc=(typeof bcLiePourBL==='function')?bcLiePourBL(num):null;
+  const ok=await showConfirm('🗑 Supprimer cette session ?',
+    `<strong>${num}</strong>${f(s,'Client')?' — '+f(s,'Client'):''} · statut « ${st||'—'} » · ${lignes.length} article(s).<br><br>`
+    +(enCours?`⚠️ <strong>Un magasinier est peut-être en train de la scanner</strong> (${f(s,'Magasinier')||'?'}) — vérifie avec lui avant.<br><br>`:'')
+    +(bc?`Le BC <strong>${f(bc,'Title')||bc.ID}</strong> porte ce N° BL : il n'est pas modifié. Si le N° est bon, la session sera recréée à la prochaine saisie dans Traiter.<br><br>`:'')
+    +'Suppression définitive (session et articles).','🗑 Supprimer','delete');
+  if(!ok)return;
+  try{
+    for(const l of lignes){
+      try{await spDelete('sites/BondeCommande','Lignes_Scan',l.ID);}catch(e){console.warn('[supprimerSessionScan] ligne',l.ID,e.message);}
+    }
+    await spDelete('sites/BondeCommande','Sessions_Scan',id);
+    DATA.sessionsScan=(DATA.sessionsScan||[]).filter(x=>x.ID!==id);
+    DATA.lignesScan=(DATA.lignesScan||[]).filter(l=>String(lineSessionId(l))!==String(id));
+    closePanel();
+    renderPreparations();updateBadges();
+    if(document.getElementById('livres-details')?.open)renderLivres();
+    try{renderBandeauPriorite();}catch(e){}
+    toast(`🗑 ${num} supprimé`);
+  }catch(e){toast('🔴 Suppression impossible : '+e.message,'ko');}
 }
 
 // ── Gestion des articles depuis le panneau session ──
