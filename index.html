@@ -6943,19 +6943,40 @@ function openPrendreEnChargePrepLibre(sessionId){
         ${VENDEURS_FIXES.map(v=>`<option value="${v}"${v===vendeurDefaut?' selected':''}>${v}</option>`).join('')}
       </select>
     </div>
-    <div class="mf"><label>N° BL ou FC *</label>
-      <input id="pl-numbl" placeholder="Ex : 820950 (BL) ou 156413 (FC)">
+    <div class="mf"><label>Livrer sur *</label>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <label class="pl-mode-opt" style="flex:1;min-width:190px;display:flex;gap:8px;align-items:flex-start;border:1.5px solid var(--border);border-radius:var(--radius-sm);padding:9px 11px;cursor:pointer;text-transform:none;letter-spacing:0;font-size:12.5px;color:var(--text-primary)">
+          <input type="radio" name="pl-mode" value="new" checked onchange="plMajMode(${sessionId})" style="margin-top:2px">
+          <span><strong>🆕 Un nouveau BL / FC</strong><br><span style="color:var(--text-muted);font-weight:400">Le client aura un BL à part</span></span>
+        </label>
+        <label class="pl-mode-opt" style="flex:1;min-width:190px;display:flex;gap:8px;align-items:flex-start;border:1.5px solid var(--border);border-radius:var(--radius-sm);padding:9px 11px;cursor:pointer;text-transform:none;letter-spacing:0;font-size:12.5px;color:var(--text-primary)">
+          <input type="radio" name="pl-mode" value="exist" onchange="plMajMode(${sessionId})" style="margin-top:2px">
+          <span><strong>➕ Un BL déjà existant du client</strong><br><span style="color:var(--text-muted);font-weight:400">Client sans BC qui revient compléter</span></span>
+        </label>
+      </div>
     </div>
-    <div style="font-size:11.5px;color:var(--text-muted)">Cette préparation apparaîtra dans "Prêtes à livrer" avec ce N° BL/FC, prête pour le client.</div>`,
+    <div id="pl-bloc-new">
+      <div class="mf"><label>N° BL ou FC *</label>
+        <input id="pl-numbl" placeholder="Ex : 820950 (BL) ou 156413 (FC)">
+      </div>
+      <div style="font-size:11.5px;color:var(--text-muted)">Cette préparation apparaîtra dans "Prêtes à livrer" avec ce N° BL/FC, prête pour le client.</div>
+    </div>
+    <div id="pl-bloc-exist" style="display:none">
+      <div style="font-size:11.5px;color:var(--text-muted);margin-bottom:6px">BL de ce client (les plus récents d'abord). Les articles déjà livrés seront verrouillés, les articles préparés s'ajoutent au BL, qui repasse en « Prête à livrer ».</div>
+      <div id="pl-bl-cibles" style="max-height:230px;overflow-y:auto;border:1px solid var(--border);border-radius:var(--radius-sm)"></div>
+    </div>`,
   async()=>{
     const clientVal=document.getElementById('pl-client-search').value.trim();
-    const numBL=document.getElementById('pl-numbl').value.trim();
+    const modeExist=document.querySelector('input[name="pl-mode"]:checked')?.value==='exist';
+    const numBL=modeExist?'':document.getElementById('pl-numbl').value.trim();
     if(!clientVal){document.getElementById('pl-client-search').classList.add('err');throw new Error('Le client est obligatoire.');}
-    if(!numBL){document.getElementById('pl-numbl').classList.add('err');throw new Error('Le N° BL ou FC est obligatoire.');}
+    if(!modeExist&&!numBL){document.getElementById('pl-numbl').classList.add('err');throw new Error('Le N° BL ou FC est obligatoire.');}
     const vendeurVal=document.getElementById('pl-vendeur').value.trim();
     if(!vendeurVal){document.getElementById('pl-vendeur').classList.add('err');throw new Error('Le vendeur est obligatoire.');}
-    const doublon=(DATA.sessionsScan||[]).find(s=>s.ID!==sessionId&&String(f(s,'Numero_BL')||'').trim().toLowerCase()===numBL.toLowerCase());
-    if(doublon)throw new Error(`Ce N° BL/FC existe déjà (session ${doublon.ID}) — choisis-en un autre.`);
+    if(!modeExist){
+      const doublon=(DATA.sessionsScan||[]).find(s=>s.ID!==sessionId&&String(f(s,'Numero_BL')||'').trim().toLowerCase()===numBL.toLowerCase());
+      if(doublon)throw new Error(`Ce N° BL/FC existe déjà (session ${doublon.ID}) — choisis « Un BL déjà existant du client » pour ajouter à ce BL.`);
+    }
 
     const lignesActuelles=(DATA.lignesScan||[]).filter(l=>String(lineSessionId(l))===String(sessionId));
     const checkedIds=[...document.querySelectorAll('.pl-art-check:checked')].map(cb=>parseInt(cb.dataset.lid));
@@ -6979,6 +7000,8 @@ function openPrendreEnChargePrepLibre(sessionId){
     });
     if(errNew)throw new Error('Quantité obligatoire pour chaque article ajouté.');
     if(!lignesActuelles.length&&!nouvelles.length)throw new Error('Aucun article à prendre en charge — ajoute au moins un article.');
+
+    if(modeExist)return await plAjouterABLExistant(sessionId,coches,nonCoches,nouvelles,clientVal,vendeurVal);
 
     let targetId=sessionId;
     if(nonCoches.length===0){
@@ -7048,13 +7071,15 @@ function openPrendreEnChargePrepLibre(sessionId){
     const suffixeAjout=okNew?` + ${okNew} article(s) ajouté(s) à scanner.`:'';
     if(koNew)toast(`⚠️ ${koNew} article(s) ajouté(s) n'ont pas pu être enregistrés — ajoute-les depuis « Voir » sur le BL ${numBL}.`,'ko');
     return nonCoches.length===0
-      ? `✅ ${refPrep} affecté à ${clientVal} — BL ${numBL}, visible dans "Prêtes à livrer"${suffixeAjout}`
-      : `✅ ${coches.length} article(s) affecté(s) à ${clientVal} — BL ${numBL}${suffixeAjout} ${nonCoches.length} article(s) reste(nt) disponible(s) dans "À affecter".`;
+      ? `${refPrep} affecté à ${clientVal} — BL ${numBL}, visible dans "Prêtes à livrer"${suffixeAjout}`
+      : `${coches.length} article(s) affecté(s) à ${clientVal} — BL ${numBL}${suffixeAjout} ${nonCoches.length} article(s) reste(nt) disponible(s) dans "À affecter".`;
   });
   setTimeout(()=>{
     const clientData=Object.entries(DATA.clients||{}).map(([cid,cname])=>({id:cid,name:cname}));
-    setupAC('pl-client-search','pl-client-id','pl-client-drop',clientData);
+    setupAC('pl-client-search','pl-client-id','pl-client-drop',clientData,()=>setTimeout(()=>plRenderCibles(sessionId),0));
     setupRequiredSelect(document.getElementById('pl-vendeur'));
+    const _inpC=document.getElementById('pl-client-search');
+    if(_inpC){_inpC.addEventListener('input',()=>plRenderCibles(sessionId));_inpC.addEventListener('change',()=>plRenderCibles(sessionId));}
     // Client indiqué par le magasinier : pré-rempli, le vendeur peut le changer
     const clientPre=clientIndiquePrep(sess);
     const inpC=document.getElementById('pl-client-search');
@@ -7065,6 +7090,159 @@ function openPrendreEnChargePrepLibre(sessionId){
       if(match&&hid)hid.value=match.id;
     }
   },50);
+}
+
+// ═══ AJOUT À UN BL EXISTANT (client sans BC qui revient compléter) ═══
+// Le client n'émet pas de BC pour chaque petit enlèvement : on garde un seul
+// BL ouvert dans Image et on y ajoute les rajouts. Côté scan :
+//  1. les articles déjà livrés du BL sont verrouillés (Verrouille=true) —
+//     plus jamais modifiés ni renvoyés par le portail ni par le flux ;
+//  2. les articles préparés rejoignent le BL (fusion si la référence y existe
+//     déjà sur une ligne non verrouillée, sinon ligne à part) ;
+//  3. le BL repasse « Prête à livrer » → le magasinier fait « Vérifier & terminer ».
+// La clôture met à jour le mouvement de stock BL+référence avec la SOMME des
+// lignes (flux Scan_ClotureSession) : pas de double comptage.
+const _isVerrL=l=>{const v=f(l,'Verrouille');return v===true||v==='Oui'||v==='1'||v===1;};
+const _normTxt=x=>String(x||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').trim().toLowerCase();
+function _estStatutFinal(s){const st=_normTxt(f(s,'Statut'));return st==='terminee'||st.includes('partiel')||st.includes('ecart');}
+
+function plMajMode(prepId){
+  const exist=document.querySelector('input[name="pl-mode"]:checked')?.value==='exist';
+  const bn=document.getElementById('pl-bloc-new'),be=document.getElementById('pl-bloc-exist');
+  if(bn)bn.style.display=exist?'none':'';
+  if(be)be.style.display=exist?'':'none';
+  document.querySelectorAll('.pl-mode-opt').forEach(l=>{
+    const on=l.querySelector('input')?.checked;
+    l.style.borderColor=on?'#7c3aed':'var(--border)';l.style.background=on?'#f5f3ff':'';
+  });
+  if(exist)plRenderCibles(prepId);
+}
+
+function plCandidatsBL(prepId,clientTxt){
+  const c=_normTxt(clientTxt);
+  if(c.length<2)return null;
+  return (DATA.sessionsScan||[]).filter(s=>{
+    if(s.ID===prepId)return false;
+    const num=String(f(s,'Numero_BL')||'');
+    if(!num||num.startsWith('PREP-'))return false;
+    if(_normTxt(f(s,'Type_Operation'))!=='livraison client')return false;
+    const cs=_normTxt(f(s,'Client'));
+    return !!cs&&(cs===c||cs.includes(c)||c.includes(cs));
+  }).sort((a,b)=>new Date(f(b,'Date_Scan')||dateCreation(b))-new Date(f(a,'Date_Scan')||dateCreation(a))).slice(0,15);
+}
+
+function plRenderCibles(prepId){
+  const host=document.getElementById('pl-bl-cibles');
+  if(!host||document.getElementById('pl-bloc-exist')?.style.display==='none')return;
+  const choisi=document.querySelector('input[name="pl-bl-cible"]:checked')?.value;
+  const liste=plCandidatsBL(prepId,document.getElementById('pl-client-search')?.value);
+  if(liste===null){host.innerHTML='<div style="padding:12px;font-size:12.5px;color:var(--text-muted)">Choisis d\'abord le client ci-dessus.</div>';return;}
+  if(!liste.length){host.innerHTML='<div style="padding:12px;font-size:12.5px;color:var(--text-muted)">Aucun BL trouvé pour ce client — vérifie l\'orthographe, ou choisis « Un nouveau BL / FC ».</div>';return;}
+  host.innerHTML=liste.map(s=>{
+    const num=f(s,'Numero_BL');
+    const sv=statutVisuel(s);
+    const enScan=_normTxt(f(s,'Statut'))==='en cours de scan';
+    const nbArt=(DATA.lignesScan||[]).filter(l=>String(lineSessionId(l))===String(s.ID)).length;
+    const bc=(typeof bcLiePourBL==='function')?bcLiePourBL(num):null;
+    const age=daysSince(dateCreation(s));
+    const bcTxt=bc?`<span style="color:var(--green);font-weight:600">BC ${f(bc,'Title')||bc.ID}</span>`
+      :`<span style="color:${age>30?'var(--red)':'#b45309'};font-weight:700" title="Aucun BC ne porte ce N° BL">sans BC depuis ${age} j${age>30?' ⚠️':''}</span>`;
+    return`<label style="display:flex;gap:10px;align-items:flex-start;padding:9px 11px;border-bottom:1px solid var(--border-light);cursor:${enScan?'not-allowed':'pointer'};${enScan?'opacity:.55;':''}text-transform:none;letter-spacing:0;font-size:12.5px;color:var(--text-primary)">
+      <input type="radio" name="pl-bl-cible" value="${s.ID}" ${enScan?'disabled':''} ${String(s.ID)===choisi?'checked':''} style="margin-top:3px">
+      <span style="flex:1;min-width:0">
+        <span style="display:flex;gap:8px;align-items:center;flex-wrap:wrap"><strong class="mono">${iconBLFC(num)} ${num}</strong>${sv.tag}${enScan?'<span style="font-size:11px;color:var(--red)">scan en cours — indisponible</span>':''}</span>
+        <span style="display:block;font-size:11.5px;color:var(--text-muted);margin-top:2px">${f(s,'Client')||'—'} · 1er enlèvement le ${fmtDate(dateCreation(s))}${f(s,'Date_Scan')?' · dernière livraison le '+fmtDate(f(s,'Date_Scan')):''} · ${nbArt} article${nbArt>1?'s':''} · ${bcTxt}</span>
+      </span>
+    </label>`;
+  }).join('');
+}
+
+async function plAjouterABLExistant(prepId,coches,nonCoches,nouvelles,clientVal,vendeurVal){
+  const cibleId=parseInt(document.querySelector('input[name="pl-bl-cible"]:checked')?.value||'0',10);
+  if(!cibleId)throw new Error('Choisis le BL existant auquel ajouter ces articles.');
+  let cible=(DATA.sessionsScan||[]).find(s=>s.ID===cibleId);
+  if(!cible)throw new Error('BL introuvable — actualise la page.');
+  const numCible=f(cible,'Numero_BL');
+  // État réel juste avant d'écrire : un magasinier a pu ouvrir ce BL entre-temps
+  const frais=await refetchSessionByBL(numCible);
+  if(frais)cible=frais;
+  if(_normTxt(f(cible,'Statut'))==='en cours de scan')
+    throw new Error(`Le BL ${numCible} est en cours de scan${f(cible,'Magasinier')?' par '+f(cible,'Magasinier'):''} — attends la fin de la livraison.`);
+  const prep=(DATA.sessionsScan||[]).find(s=>s.ID===prepId)||{};
+  const etaitFinal=_estStatutFinal(cible);
+  const lignesDe=id=>(DATA.lignesScan||[]).filter(l=>String(lineSessionId(l))===String(id));
+  const memeRef=(a,b)=>{const ra=_normTxt(a),rb=_normTxt(b);return !!ra&&ra===rb;};
+
+  // 1) Verrouiller ce qui a déjà été livré (BL clôturé uniquement — sur un BL
+  //    pas encore livré, les quantités scannées sont une préparation, pas une sortie)
+  let nbVerr=0;
+  if(etaitFinal){
+    for(const l of lignesDe(cibleId)){
+      if(_isVerrL(l)||Number(f(l,'Quantite_Scannee')||0)<=0)continue;
+      await spPatch('sites/BondeCommande','Lignes_Scan',l.ID,{Verrouille:true});
+      l.Verrouille=true;nbVerr++;
+    }
+  }
+  // 2) Articles préparés → BL cible
+  let nbFusion=0,nbDeplace=0;
+  for(const l of coches){
+    const homologue=lignesDe(cibleId).find(x=>!_isVerrL(x)&&memeRef(f(x,'Reference_Article'),f(l,'Reference_Article')));
+    const sc=Number(f(l,'Quantite_Scannee')||0),att=Number(f(l,'Quantite_Attendue')||0)||sc;
+    if(homologue){
+      const body={Quantite_Attendue:Number(f(homologue,'Quantite_Attendue')||0)+att,Quantite_Scannee:Number(f(homologue,'Quantite_Scannee')||0)+sc};
+      await spPatch('sites/BondeCommande','Lignes_Scan',homologue.ID,body);
+      Object.assign(homologue,body);
+      await spDelete('sites/BondeCommande','Lignes_Scan',l.ID);
+      DATA.lignesScan=(DATA.lignesScan||[]).filter(x=>x.ID!==l.ID);
+      nbFusion++;
+    }else{
+      await spPatch('sites/BondeCommande','Lignes_Scan',l.ID,{Session_ScanId:cibleId});
+      l.Session_ScanId=cibleId;if(l.Session_Scan)l.Session_Scan={Id:cibleId};
+      nbDeplace++;
+    }
+  }
+  // 3) Articles ajoutés par le vendeur (non préparés → à scanner)
+  let okNew=0,koNew=0;
+  for(const n of nouvelles){
+    try{
+      const homologue=lignesDe(cibleId).find(x=>!_isVerrL(x)&&memeRef(f(x,'Reference_Article'),n.ref));
+      if(homologue){
+        const body={Quantite_Attendue:Number(f(homologue,'Quantite_Attendue')||0)+n.qte};
+        await spPatch('sites/BondeCommande','Lignes_Scan',homologue.ID,body);
+        Object.assign(homologue,body);
+      }else{
+        const created=await spPost('sites/BondeCommande','Lignes_Scan',{Session_ScanId:cibleId,Reference_Article:n.ref,Designation:n.design,Quantite_Attendue:n.qte,Quantite_Scannee:0});
+        if(created)DATA.lignesScan=[...(DATA.lignesScan||[]),{...created,ID:created.ID??created.Id,Session_ScanId:cibleId}];
+      }
+      okNew++;
+    }catch(e){koNew++;console.warn('[plAjouterABLExistant] ajout',n,e.message);}
+  }
+  // 4) Le BL repasse « Prête à livrer » (un BL encore « BL Émis » garde son statut)
+  const apres=lignesDe(cibleId);
+  const nbScan=apres.filter(l=>Number(f(l,'Quantite_Scannee')||0)>0).length;
+  const nbEcarts=apres.filter(l=>!_isVerrL(l)&&Number(f(l,'Quantite_Scannee')||0)!==Number(f(l,'Quantite_Attendue')||0)).length;
+  const bodyS={Nb_Articles_Scannes:nbScan,Nb_Ecarts:nbEcarts};
+  const stCible=_normTxt(f(cible,'Statut'));
+  if(stCible!=='bl emis'){bodyS.Statut='Prête à livrer';bodyS.Date_Scan=null;if(f(prep,'Magasinier'))bodyS.Magasinier=f(prep,'Magasinier');}
+  if(!String(f(cible,'Vendeur_Emetteur')||'').trim())bodyS.Vendeur_Emetteur=vendeurVal;
+  if(!String(f(cible,'Client')||'').trim())bodyS.Client=clientVal;
+  await spPatch('sites/BondeCommande','Sessions_Scan',cibleId,bodyS);
+  Object.assign(cible,bodyS);
+  // 5) La préparation : supprimée si tout est parti, sinon garde le reste
+  if(nonCoches.length===0){
+    await spDelete('sites/BondeCommande','Sessions_Scan',prepId);
+    DATA.sessionsScan=(DATA.sessionsScan||[]).filter(s=>s.ID!==prepId);
+  }else{
+    await spPatch('sites/BondeCommande','Sessions_Scan',prepId,{Nb_Articles_Scannes:nonCoches.length});
+    prep.Nb_Articles_Scannes=nonCoches.length;
+  }
+  renderPreparations();updateBadges();
+  if(koNew)toast(`⚠️ ${koNew} article(s) ajouté(s) n'ont pas pu être enregistrés — ajoute-les depuis « Voir » sur le BL ${numCible}.`,'ko');
+  const nbArts=nbFusion+nbDeplace;
+  return `${nbArts} article(s) préparé(s)${okNew?` + ${okNew} à scanner`:''} ajouté(s) au BL ${numCible}`
+    +(nbVerr?` · ${nbVerr} article(s) déjà livré(s) verrouillé(s)`:'')
+    +(stCible!=='bl emis'?' — visible dans « Prêtes à livrer »':'')
+    +(nonCoches.length?`. ${nonCoches.length} article(s) reste(nt) dans « À affecter ».`:'.');
 }
 
 // Ajout d'un article oublié depuis la fenêtre "Prendre en charge" — même logique
