@@ -5476,8 +5476,47 @@ function sessionPanelAddLigne(sessionId){
   }
 }
 
+// Bouton « Enregistrer les modifications » : verrou anti double-clic + retour
+// visuel. Sans ça, chaque clic relançait tout l'enregistrement et les articles
+// ajoutés étaient créés autant de fois qu'on avait cliqué.
+const _spSaveEnCours={};
 async function sessionPanelSaveAll(sessionId){
+  if(_spSaveEnCours[sessionId])return;
+  _spSaveEnCours[sessionId]=true;
+  const btnDe=()=>document.getElementById('sp-save-btn-'+sessionId);
+  const etat=(txt)=>{const b=btnDe();if(!b)return;b.disabled=true;b.dataset.label='1';b.textContent=txt;
+    b.style.background='var(--amber-light)';b.style.borderColor='var(--amber)';b.style.color='#8a5a00';b.style.cursor='wait';};
+  etat('⏳ Enregistrement en cours…');
+  let ok=false;
+  try{
+    ok=await _sessionPanelSaveAllCore(sessionId,(fait,total)=>etat(`⏳ Enregistrement… ${fait}/${total}`));
+  }catch(e){
+    toast('🔴 Enregistrement interrompu : '+e.message,'ko');
+  }finally{
+    _spSaveEnCours[sessionId]=false;
+    const b=btnDe();
+    if(b&&!ok){ // échec : le bouton reste dans le panneau → on le réactive
+      b.disabled=false;b.style.background='';b.style.borderColor='';b.style.color='';b.style.cursor='';
+      b.textContent='💾 Enregistrer les modifications';
+    }
+  }
+  if(ok){
+    // Le panneau a été redessiné : confirmation visible à côté du bouton
+    const wrap=document.getElementById('sp-save-wrap-'+sessionId);
+    if(wrap){
+      const conf=document.createElement('span');
+      conf.textContent='✅ Modifications enregistrées à '+new Date().toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'});
+      conf.style.cssText='margin-left:10px;font-size:12px;font-weight:700;color:var(--green);transition:opacity .6s';
+      wrap.appendChild(conf);
+      setTimeout(()=>{conf.style.opacity='0';setTimeout(()=>conf.remove(),700);},5000);
+    }
+  }
+}
+async function _sessionPanelSaveAllCore(sessionId,progres){
   let saved=0,errors=0,lastErr='';
+  const _total=document.querySelectorAll(`#sp-lignes-edit-${sessionId} .sp-ligne-edit`).length
+    +[...document.querySelectorAll(`#sp-lignes-new-${sessionId} .sp-ligne-new`)].filter(r=>(r.querySelector('.sp-ref-new')?.value.trim()||r.querySelector('.sp-design-new')?.value.trim())).length;
+  let _fait=0;const _tick=()=>{_fait++;if(progres)progres(Math.min(_fait,_total),_total);};
   // Sauvegarder lignes existantes modifiées
   const existingRows=document.querySelectorAll(`#sp-lignes-edit-${sessionId} .sp-ligne-edit`);
   for(const row of existingRows){
@@ -5492,6 +5531,7 @@ async function sessionPanelSaveAll(sessionId){
       if(l){l.Reference_Article=ref;l.Designation=design;l.Quantite_Attendue=qte;l.Verrouille=verr;}
       saved++;
     }catch(e){errors++;lastErr=e.message;console.warn('[sessionPanelSaveAll patch]',lid,e.message);}
+    _tick();
   }
   // Sauvegarder nouvelles lignes
   const newRows=document.querySelectorAll(`#sp-lignes-new-${sessionId} .sp-ligne-new`);
@@ -5507,8 +5547,10 @@ async function sessionPanelSaveAll(sessionId){
       if(created){const cn={...created,ID:created.ID??created.Id};DATA.lignesScan=[...(DATA.lignesScan||[]),cn];}
       saved++;
     }catch(e){errors++;lastErr=e.message;console.warn('[sessionPanelSaveAll post]',e.message);}
+    _tick();
   }
-  if(errors>0){toast(`⚠️ ${saved} enregistré(s), ${errors} échec(s) — ${lastErr}`);return;}
+  if(errors>0){toast(`⚠️ ${saved} enregistré(s), ${errors} échec(s) — ${lastErr}`);return false;}
+  if(progres)progres(_total,_total);
 
   // Statut_Ligne (Ok/Écart) est un champ par ligne, distinct du Statut global de
   // la session — on le recalcule ligne par ligne dès qu'une quantité a été
@@ -5560,6 +5602,7 @@ async function sessionPanelSaveAll(sessionId){
   openSessionPanel(sessionId);
   renderPreparations();updateBadges();
   if(document.getElementById('livres-details')?.open)renderLivres();
+  return true;
 }
 
 async function sessionPanelDeleteLigne(lineId, sessionId){
