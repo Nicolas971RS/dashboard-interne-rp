@@ -8118,6 +8118,26 @@ async function openTraiterModal(id,numBC,client){
       </div>
     </div>
 
+    <div class="sec${(currentItem.Attachments===true||currentItem['A_des_Pi_x00e8_ces_Jointes']===true)?'':' open'}" id="m-sec-bcpj">
+      <div class="sec-hd" onclick="toggleSec(this.parentElement,event)">
+        <div class="sec-hd-l"><span class="sec-icon">📎</span><span class="sec-title">Bon de commande (pièce jointe)</span><span class="sec-sub" id="m-bcpj-sub">— chargement…</span></div>
+        <span class="sec-arrow">▼</span>
+      </div>
+      <div class="sec-body">
+        <div id="m-bcpj-list" style="margin-bottom:8px;font-size:12px;color:var(--text-muted)">⏳ Vérification des pièces jointes…</div>
+        <div style="font-size:11.5px;color:var(--text-muted);margin-bottom:6px;line-height:1.5">
+          Client qui commande <strong>par mail</strong> ? Enregistre le mail en PDF (Outlook : <em>Fichier → Imprimer → Microsoft Print to PDF</em>) ou fais une capture d'écran, puis dépose-le ici. Il servira de BC à la facturation (Docuware).
+        </div>
+        <input type="file" id="m-bcpj-file" multiple accept=".pdf,.png,.jpg,.jpeg,.msg,.eml,application/pdf,image/png,image/jpeg"
+          onchange="mBcPjApercu()" style="width:100%;padding:14px;border:2px dashed var(--border);border-radius:var(--radius-sm);background:var(--grey-xlight);font-size:12.5px;cursor:pointer;box-sizing:border-box">
+        <div id="m-bcpj-apercu" style="font-size:12px;margin-top:6px"></div>
+        <label id="m-bcpj-remplacer-wrap" style="display:none;align-items:flex-start;gap:8px;margin-top:8px;font-size:12.5px;cursor:pointer;text-transform:none;letter-spacing:0;color:var(--text-primary)">
+          <input type="checkbox" id="m-bcpj-remplacer" style="width:16px;height:16px;margin-top:1px">
+          <span>Remplacer la/les pièce(s) jointe(s) actuelle(s) <span style="color:var(--text-muted)">— Docuware n'en accepte qu'une seule</span></span>
+        </label>
+      </div>
+    </div>
+
     <div class="sec${secArt}">
       <div class="sec-hd" onclick="toggleSec(this.parentElement,event)">
         <div class="sec-hd-l"><span class="sec-icon">📝</span><span class="sec-title">Articles</span>${articlesVide?badgeVide:'<span class="sec-sub">— '+lignesExistantes.length+' ligne'+(lignesExistantes.length>1?'s':'')+'</span>'}</div>
@@ -8168,6 +8188,7 @@ async function openTraiterModal(id,numBC,client){
     </div>`,
   async()=>{
     const body={};
+    const _bcPjFichiers=mBcPjValider(); // contrôle AVANT toute écriture
     const titre=document.getElementById('m-titre').value.trim();
     if(titre&&titre!==curTitre)body['Title']=titre;
     const numDevis=document.getElementById('m-numdevis').value.trim();
@@ -8350,6 +8371,18 @@ async function openTraiterModal(id,numBC,client){
       }
     }
 
+    // Pièce jointe « BC » (mail du client) : après l'enregistrement principal,
+    // sans bloquer — un échec ici ne doit pas faire ressaisir tout le Traiter.
+    if(_bcPjFichiers.length){
+      try{
+        const nbPj=await mBcPjEnvoyer(id,titre||numBC,_bcPjFichiers);
+        toast(`📎 BC joint au dossier${nbPj.remplaces?` (${nbPj.remplaces} ancienne(s) PJ remplacée(s))`:''}`);
+      }catch(e){
+        console.warn('[Traiter] PJ BC',e);
+        toast('🔴 Le BC n\'a pas pu être joint : '+e.message+' — réessaie depuis Traiter.','ko');
+      }
+    }
+
     // Libellés lisibles des champs modifiés — affichés dans la confirmation
     const LBL={Title:'N° BC','N_x00b0_Devis':'N° Devis',ClientId:'Client',ProjetId:'Chantier',
       'N_x00b0_BL':'N° BL',DateBL:'Date BL',Datepriseencharge:'Date prise en charge',
@@ -8384,6 +8417,7 @@ async function openTraiterModal(id,numBC,client){
     // Client autocomplete depuis cache DATA.clients
     const clientData=Object.entries(DATA.clients||{}).map(([cid,cname])=>({id:cid,name:cname}));
     setupAC('m-client-search','m-client-id','m-client-drop',clientData,()=>checkDoublonBC(document.getElementById('m-titre').value,id));
+    mBcPjCharger(id);
     // Champs obligatoires rouge/vert
     setupRequiredField(document.getElementById('m-bl'));
     setupRequiredField(document.getElementById('m-client-search'));
@@ -8409,6 +8443,76 @@ async function openTraiterModal(id,numBC,client){
       if(clr)clr.onclick=()=>{chInput.value='';document.getElementById('m-chantier-id').value='__clear__';};
     }catch(e){chInput.placeholder='Erreur chargement';console.warn('[Chantiers]',e);}
   },120);
+}
+
+// ═══ TRAITER — BC reçu par mail : pièce jointe servant de BC ═══
+// Le « BC » d'un dossier = la pièce jointe de l'élément Suivi_BC : c'est elle
+// que « Voir BC » affiche et que le flux Docuware envoie à la facturation
+// (une seule PJ acceptée). Plusieurs fichiers déposés → fusionnés en un PDF.
+let _mBcPjExistantes=[];
+const _BCPJ_FUSIONNABLE=/\.(pdf|png|jpe?g)$/i;
+const _BCPJ_ACCEPTE=/\.(pdf|png|jpe?g|msg|eml)$/i;
+async function mBcPjCharger(id){
+  const list=document.getElementById('m-bcpj-list'),sub=document.getElementById('m-bcpj-sub');
+  if(!list)return;
+  _mBcPjExistantes=await getAttachments('sites/RseauxPlus','Suivi_BC',id);
+  const n=_mBcPjExistantes.length;
+  if(sub)sub.textContent=n?`— ${n} pièce${n>1?'s':''} jointe${n>1?'s':''}`:'— aucun BC joint';
+  if(sub&&!n){sub.style.color='var(--red)';sub.style.fontWeight='700';}
+  list.innerHTML=n
+    ?_mBcPjExistantes.map(a=>`<div style="display:flex;align-items:center;gap:8px;padding:5px 9px;border:1px solid var(--border);border-radius:6px;margin-bottom:5px;color:var(--text-primary)">📎 <a href="#" onclick="event.preventDefault();openAttachment('${String(a.ServerRelativeUrl||'').replace(/'/g,"\\'")}')" style="color:var(--blue)">${a.FileName}</a></div>`).join('')
+      +(n>1?'<div style="color:#b45309;font-weight:600">⚠️ Plusieurs pièces jointes : Docuware n\'en accepte qu\'une.</div>':'')
+    :'<div style="color:var(--red);font-weight:600">Aucun BC joint à ce dossier.</div>';
+  mBcPjApercu();
+}
+function mBcPjApercu(){
+  const inp=document.getElementById('m-bcpj-file'),ap=document.getElementById('m-bcpj-apercu');
+  const wrap=document.getElementById('m-bcpj-remplacer-wrap');
+  if(!inp||!ap)return;
+  const files=[...(inp.files||[])];
+  if(wrap)wrap.style.display=(files.length&&_mBcPjExistantes.length)?'flex':'none';
+  if(!files.length){ap.innerHTML='';return;}
+  const refus=files.filter(f=>!_BCPJ_ACCEPTE.test(f.name));
+  const nonFusion=files.filter(f=>!_BCPJ_FUSIONNABLE.test(f.name));
+  if(refus.length){ap.innerHTML=`<span style="color:var(--red);font-weight:600">Format non accepté : ${refus.map(f=>f.name).join(', ')} — PDF, PNG, JPG (ou un mail .msg/.eml seul).</span>`;return;}
+  if(files.length>1&&nonFusion.length){ap.innerHTML=`<span style="color:var(--red);font-weight:600">Un mail .msg/.eml doit être déposé seul. Pour plusieurs fichiers : PDF ou images uniquement.</span>`;return;}
+  const tailleMo=files.reduce((a,f)=>a+f.size,0)/1048576;
+  ap.innerHTML=`<span style="color:var(--green);font-weight:600">✓ ${files.length>1?files.length+' fichiers → fusionnés en un seul PDF':files[0].name}</span> <span style="color:var(--text-muted)">(${tailleMo.toFixed(1)} Mo) — joint à l'enregistrement</span>`
+    +(tailleMo>15?' <span style="color:#b45309;font-weight:600">· fichier lourd, l\'envoi peut être long</span>':'');
+}
+function mBcPjValider(){
+  const inp=document.getElementById('m-bcpj-file');
+  const files=[...(inp?.files||[])];
+  if(!files.length)return[];
+  const refus=files.filter(f=>!_BCPJ_ACCEPTE.test(f.name));
+  if(refus.length)throw new Error(`Pièce jointe BC : format non accepté (${refus.map(f=>f.name).join(', ')}). PDF, PNG, JPG, ou un mail .msg/.eml seul.`);
+  if(files.length>1&&files.some(f=>!_BCPJ_FUSIONNABLE.test(f.name)))throw new Error('Pièce jointe BC : un mail .msg/.eml doit être déposé seul.');
+  if(files.length>1&&typeof PDFLib==='undefined')throw new Error('Pièce jointe BC : fusion PDF indisponible — dépose un seul fichier.');
+  return files;
+}
+async function mBcPjEnvoyer(id,numBC,files){
+  const horo=new Date().toLocaleString('fr-CA',{timeZone:'America/Guadeloupe',hour12:false}).replace(/[^0-9]/g,'').slice(0,12);
+  const base=('BC-mail_'+String(numBC||id)).replace(/[\\/:*?"<>|#%&~{}+]/g,'_').replace(/\s+/g,'_').slice(0,80);
+  let nom,contenu;
+  if(files.length>1){
+    contenu=await mergerPiecesJointes(files);
+    nom=`${base}_${horo}.pdf`;
+  }else{
+    const ext=(files[0].name.split('.').pop()||'pdf').toLowerCase();
+    contenu=await files[0].arrayBuffer();
+    nom=`${base}_${horo}.${ext}`;
+  }
+  let remplaces=0;
+  if(document.getElementById('m-bcpj-remplacer')?.checked&&_mBcPjExistantes.length){
+    for(const a of _mBcPjExistantes){
+      try{await spDeleteAttachment('sites/RseauxPlus','Suivi_BC',id,a.FileName);remplaces++;}
+      catch(e){console.warn('[BC PJ] suppression',a.FileName,e.message);}
+    }
+  }
+  await spAddAttachment('sites/RseauxPlus','Suivi_BC',id,nom,contenu);
+  const it=(DATA.suivi||[]).find(x=>x.ID===id);
+  if(it){it.Attachments=true;it['A_des_Pi_x00e8_ces_Jointes']=true;}
+  return{nom,remplaces};
 }
 
 // ── Création de chantier sans quitter le modal Traiter ──
