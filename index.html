@@ -966,6 +966,7 @@
           <button class="btn-refresh" onclick="loadAll()">🔄 Actualiser</button>
         </div>
       </div>
+      <div id="dbc-rattachement" style="display:none"></div>
       <div class="kpi-row c3">
         <div class="kc r"><div class="kl">💰 Risque financier total</div><div class="kv" id="kpi-risque-total">—</div><div class="ks">HT sans BC reçu</div></div>
         <div class="kc o"><div class="kl">🔴 Sans réponse +5 jours</div><div class="kv" id="kpi-dbc-urgents">—</div><div class="ks">Relance ou escalade</div></div>
@@ -4067,6 +4068,7 @@ function dbcRowFull(i){
 }
 
 function renderDBCTable(){
+  try{renderDBCRattachement();}catch(e){console.warn('[DBC rattachement]',e);}
   let items=[...DATA.dbc];
   const fV=document.getElementById('filter-vendeur-dbc')?.value||'all';
   const fS=document.getElementById('filter-statut-dbc')?.value||'all';
@@ -8051,6 +8053,8 @@ async function openTraiterModal(id,numBC,client){
         <input id="m-numdevis" value="${curNumDevis}" placeholder="ex: DEV-105">
       </div>
     </div>
+    <div id="m-dbc-lien" style="display:none;margin:-4px 0 10px">
+    </div>
 
     <div class="sec open">
       <div class="sec-hd" onclick="toggleSec(this.parentElement,event)">
@@ -8425,6 +8429,10 @@ async function openTraiterModal(id,numBC,client){
     // Import auto des lignes déjà scannées quand le N° BL est saisi/modifié
     const blInput=document.getElementById('m-bl');
     if(blInput)blInput.addEventListener('blur',importerLignesDepuisScan);
+    // Demande BC sur ce N° BL ? → reprendre son N° devis (le flux la passera en « BC reçu »)
+    if(blInput){blInput.addEventListener('blur',()=>mVerifierDemandeBC(id));blInput.addEventListener('change',()=>mVerifierDemandeBC(id));}
+    document.getElementById('m-numdevis')?.addEventListener('change',()=>mVerifierDemandeBC(id,false));
+    mVerifierDemandeBC(id);
     // Cas où le BL est déjà rempli à l'ouverture (BC déjà pris en charge
     // avant, réouvert pour complément) — même logique appliquée une fois.
     if(blInput&&blInput.value.trim())importerLignesDepuisScan();
@@ -8443,6 +8451,140 @@ async function openTraiterModal(id,numBC,client){
       if(clr)clr.onclick=()=>{chInput.value='';document.getElementById('m-chantier-id').value='__clear__';};
     }catch(e){chInput.placeholder='Erreur chargement';console.warn('[Chantiers]',e);}
   },120);
+}
+
+// ═══ DEMANDES BC ↔ BC : rapprochement par N° BL ═══
+// Une Demande BC (enlèvement sans BC) passe en « BC reçu » via le flux quand un
+// BC (Suivi_BC) porte son N° devis. Les vendeurs oublient souvent de saisir ce
+// N° devis dans Traiter : on le retrouve par le N° BL, commun aux deux.
+function _blTokens(v){
+  return String(v||'').toUpperCase().split(/[^0-9A-Z-]+/).map(x=>x.trim()).filter(x=>x.length>=4);
+}
+function _dbcOuverte(d){return _normTxt(f(d,'Statut'))!=='bc recu';}
+function demandesBCPourBL(blTxt){
+  const toks=new Set(_blTokens(blTxt));
+  if(!toks.size)return[];
+  return (DATA.dbc||[]).filter(d=>_dbcOuverte(d)&&_blTokens(f(d,'N_x00b0_BL')).some(t=>toks.has(t)));
+}
+// auto=true : appel depuis le N° BL (ou l'ouverture) → peut remplir le N° devis.
+// auto=false : simple mise à jour du message (N° devis modifié à la main).
+function mVerifierDemandeBC(bcId,auto=true){
+  const box=document.getElementById('m-dbc-lien');
+  const inpBL=document.getElementById('m-bl'),inpDev=document.getElementById('m-numdevis');
+  if(!box||!inpBL||!inpDev)return;
+  const autoPrec=box.dataset.auto||'';
+  const dbcs=demandesBCPourBL(inpBL.value);
+  if(!dbcs.length){
+    // Le BL a changé : on retire le N° devis qu'on avait nous-mêmes repris
+    if(auto&&autoPrec&&inpDev.value.trim()===autoPrec){inpDev.value='';inpDev.style.background='';}
+    box.dataset.auto='';box.style.display='none';box.innerHTML='';return;
+  }
+  const devActuel=inpDev.value.trim();
+  const style='border-radius:var(--radius-sm);padding:9px 12px;font-size:12.5px;line-height:1.5;';
+  const lib=d=>`<strong>DBC-${d.ID}</strong> · ${f(d,'NomClient')||f(d,'Title')||'—'} · BL ${f(d,'N_x00b0_BL')||'—'}`;
+  const avecDevis=dbcs.filter(d=>String(f(d,'ID_Devis')||'').trim());
+  const sansDevis=dbcs.filter(d=>!String(f(d,'ID_Devis')||'').trim());
+  let html='';
+  if(avecDevis.length===1){
+    const d=avecDevis[0],dev=String(f(d,'ID_Devis')).trim();
+    if(auto&&(!devActuel||(autoPrec&&devActuel===autoPrec&&devActuel!==dev))){
+      inpDev.value=dev;box.dataset.auto=dev;
+      inpDev.style.background='#f0fdf4';
+      html=`<div style="${style}background:#f0fdf4;border:1px solid #86efac;color:#14532d">🔗 Demande BC trouvée pour ce BL : ${lib(d)}.<br>N° devis <strong>${dev}</strong> repris automatiquement — à l'enregistrement, la demande passera en <strong>« BC reçu »</strong>.</div>`;
+    }else if(!devActuel){
+      html=`<div style="${style}background:#fff7ed;border:1px solid #fdba74;color:#7c2d12">⚠️ Ce BL correspond à ${lib(d)} — N° devis <strong>${dev}</strong>.
+        <button type="button" class="btn" style="height:24px;font-size:11px;margin-left:6px" onmousedown="event.preventDefault()" onclick="document.getElementById('m-numdevis').value='${dev.replace(/'/g,"\\'")}';mVerifierDemandeBC(${bcId},false)">Utiliser ${dev}</button></div>`;
+    }else if(devActuel.toUpperCase()===dev.toUpperCase()){
+      html=`<div style="${style}background:#f0fdf4;border:1px solid #86efac;color:#14532d">🔗 ${lib(d)} — N° devis <strong>${dev}</strong> identique : la demande passera en « BC reçu ».</div>`;
+    }else{
+      html=`<div style="${style}background:#fff7ed;border:1px solid #fdba74;color:#7c2d12">⚠️ Ce BL correspond à ${lib(d)}, dont le N° devis est <strong>${dev}</strong> — tu as saisi <strong>${devActuel}</strong>.
+        <button type="button" class="btn" style="height:24px;font-size:11px;margin-left:6px" onmousedown="event.preventDefault()" onclick="document.getElementById('m-numdevis').value='${dev.replace(/'/g,"\\'")}';mVerifierDemandeBC(${bcId},false)">Utiliser ${dev}</button></div>`;
+    }
+  }else if(avecDevis.length>1){
+    html=`<div style="${style}background:#fff7ed;border:1px solid #fdba74;color:#7c2d12">⚠️ Ce BL correspond à ${avecDevis.length} demandes BC — choisis le N° devis :<br>`
+      +avecDevis.map(d=>{const dev=String(f(d,'ID_Devis')).trim();return`<button type="button" class="btn" style="height:24px;font-size:11px;margin:4px 6px 0 0" onmousedown="event.preventDefault()" onclick="document.getElementById('m-numdevis').value='${dev.replace(/'/g,"\\'")}';mVerifierDemandeBC(${bcId},false)">${dev} — DBC-${d.ID}</button>`;}).join('')+'</div>';
+  }
+  if(sansDevis.length){
+    html+=`<div style="${style}background:#fef2f2;border:1px solid #fca5a5;color:#7f1d1d;margin-top:6px">⚠️ ${sansDevis.map(lib).join(' ; ')} : <strong>aucun N° devis</strong> sur la demande — le flux ne pourra pas la passer en « BC reçu ». Complète-la dans l'onglet Demandes BC.</div>`;
+  }
+  box.innerHTML=html;box.style.display=html?'block':'none';
+}
+
+// Rattrapage : demandes encore ouvertes dont le BL est déjà sur un BC traité
+// sans N° devis (cas de fin de mois). Un clic reporte le N° devis sur le BC.
+function dbcARattacher(){
+  const res=[];
+  for(const d of (DATA.dbc||[])){
+    if(!_dbcOuverte(d))continue;
+    const dev=String(f(d,'ID_Devis')||'').trim();
+    const toks=_blTokens(f(d,'N_x00b0_BL'));
+    if(!dev||!toks.length)continue;
+    const bc=(DATA.suivi||[]).find(i=>_blTokens(f(i,'N_x00b0_BL')).some(t=>toks.includes(t)));
+    if(!bc)continue;
+    const devBC=String(f(bc,'N_x00b0_Devis','Num_ro_Devis','NumeroDevis')||'').trim();
+    if(devBC.toUpperCase()===dev.toUpperCase())continue; // déjà renseigné : le flux a dû passer / va passer
+    res.push({d,bc,dev,devBC});
+  }
+  return res;
+}
+function renderDBCRattachement(){
+  const host=document.getElementById('dbc-rattachement');
+  if(!host)return;
+  const liste=dbcARattacher();
+  if(!liste.length){host.style.display='none';host.innerHTML='';return;}
+  host.style.display='block';
+  host.innerHTML=`<div style="background:#eff6ff;border:1px solid #93c5fd;border-left:4px solid #1d4ed8;border-radius:var(--radius-sm);padding:12px 14px;margin-bottom:14px">
+    <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:8px">
+      <div><div style="font-weight:800;color:#1d4ed8;font-size:14px">🔗 ${liste.length} demande${liste.length>1?'s':''} BC déjà couverte${liste.length>1?'s':''} par un BC</div>
+      <div style="font-size:12px;color:#334155">Même N° BL qu'un BC traité, mais le N° devis n'a pas été saisi dans Traiter — la demande reste ouverte à tort.</div></div>
+      <button class="btn" data-label="1" style="background:#1d4ed8;color:#fff;border-color:#1d4ed8;height:30px" onclick="dbcRattacherTout(this)">🔗 Tout rattacher (${liste.length})</button>
+    </div>
+    <div class="tc"><table><thead><tr><th>Demande</th><th>Client</th><th>N° BL</th><th>N° devis (demande)</th><th>BC trouvé</th><th>N° devis (BC)</th><th></th></tr></thead><tbody>
+    ${liste.map(x=>`<tr id="dbc-ratt-${x.d.ID}">
+      <td class="ref">DBC-${x.d.ID}</td>
+      <td class="cname">${f(x.d,'NomClient')||f(x.d,'Title')||'—'}</td>
+      <td class="mono">${f(x.d,'N_x00b0_BL')||'—'}</td>
+      <td class="mono" style="font-weight:700">${x.dev}</td>
+      <td class="mono"><a href="#" onclick="event.preventDefault();openBCPanel(${x.bc.ID})">${f(x.bc,'Title')||('BC-'+x.bc.ID)}</a></td>
+      <td class="mono" style="color:${x.devBC?'#b45309':'var(--red)'}">${x.devBC||'vide'}</td>
+      <td><button class="btn" data-label="1" style="height:26px;font-size:11px" onclick="dbcRattacher(${x.d.ID},${x.bc.ID},this)">🔗 Rattacher</button></td>
+    </tr>`).join('')}
+    </tbody></table></div>
+    <div style="font-size:11px;color:#64748b;margin-top:6px">« Rattacher » écrit le N° devis de la demande sur le BC. Le flux passe ensuite la demande en « BC reçu » (actualise dans une minute).${liste.some(x=>x.devBC)?' En orange : le BC avait déjà un autre N° devis — vérifie avant de remplacer.':''}</div>
+  </div>`;
+}
+async function dbcRattacher(dbcId,bcId,btn){
+  const x=dbcARattacher().find(y=>y.d.ID===dbcId&&y.bc.ID===bcId);
+  if(!x)return;
+  if(x.devBC){
+    const ok=await showConfirm('Remplacer le N° devis du BC ?',`Le BC <strong>${f(x.bc,'Title')||x.bc.ID}</strong> porte déjà le N° devis <strong>${x.devBC}</strong>. Le remplacer par <strong>${x.dev}</strong> (demande DBC-${dbcId}) ?`,'Remplacer','submit');
+    if(!ok)return;
+  }
+  if(btn){btn.disabled=true;btn.textContent='⏳';}
+  try{
+    await spPatch('sites/RseauxPlus','Suivi_BC',bcId,{'N_x00b0_Devis':x.dev});
+    x.bc['N_x00b0_Devis']=x.dev;
+    document.getElementById('dbc-ratt-'+dbcId)?.remove();
+    toast(`🔗 DBC-${dbcId} rattachée — le flux la passera en « BC reçu »`);
+    setTimeout(renderDBCRattachement,300);
+    return true;
+  }catch(e){
+    if(btn){btn.disabled=false;btn.textContent='🔗 Rattacher';}
+    toast('🔴 '+e.message,'ko');return false;
+  }
+}
+async function dbcRattacherTout(btn){
+  const liste=dbcARattacher().filter(x=>!x.devBC); // les conflits restent à trancher un par un
+  const conflits=dbcARattacher().length-liste.length;
+  if(!liste.length){toast('Rien à rattacher automatiquement'+(conflits?` — ${conflits} conflit(s) à vérifier ligne par ligne`:''),'ko');return;}
+  const ok=await showConfirm('Tout rattacher ?',`${liste.length} BC vont recevoir le N° devis de leur demande BC.${conflits?`<br>${conflits} ligne(s) en conflit (N° devis différent déjà présent) ne seront pas touchées.`:''}`,'🔗 Rattacher','submit');
+  if(!ok)return;
+  if(btn){btn.disabled=true;btn.textContent='⏳ En cours…';}
+  let n=0;
+  for(const x of liste){if(await dbcRattacher(x.d.ID,x.bc.ID,null))n++;}
+  toast(`🔗 ${n} demande(s) rattachée(s) — le flux les passe en « BC reçu »`);
+  renderDBCRattachement();
+  setTimeout(()=>loadAll(),60000);
 }
 
 // ═══ TRAITER — BC reçu par mail : pièce jointe servant de BC ═══
