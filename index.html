@@ -945,9 +945,16 @@
         </div>
       </details>
 
-      <div class="sd" style="margin-top:18px"><h2>✂️ Livraisons partielles de BL — suivi des reports</h2><span class="site-tag rp">Reports de bons de livraison (distinct de l'onglet Livraisons Partielles = BC)</span><div class="sd-line"></div></div>
-      <div id="part-count-label" style="font-size:12px;color:var(--text-muted);margin:0 0 8px"></div>
-      <div id="prep-partielles-body"><div class="empty-row" style="padding:14px">Chargement...</div></div>
+      <details id="partielles-details" style="margin-top:12px;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius)">
+        <summary style="cursor:pointer;list-style:none;padding:12px 16px;display:flex;align-items:center;justify-content:space-between;gap:10px">
+          <span style="font-weight:700;font-size:14px">✂️ Livraisons partielles de BL — suivi des reports <span id="part-badge" class="ctag a" style="margin-left:6px;display:none"></span> <span class="site-tag rp" style="margin-left:6px">Reports de BL (distinct de l'onglet Livraisons Partielles = BC)</span></span>
+          <span style="font-size:11px;color:var(--text-muted);white-space:nowrap">Cliquer pour déplier</span>
+        </summary>
+        <div style="padding:0 14px 14px">
+          <div id="part-count-label" style="font-size:12px;color:var(--text-muted);margin:10px 0 8px"></div>
+          <div id="prep-partielles-body"><div class="empty-row" style="padding:14px">Chargement...</div></div>
+        </div>
+      </details>
     </div>
 
     <!-- DEMANDES BC -->
@@ -4997,6 +5004,10 @@ function renderPartielles(){
   });
 
   const lbl=document.getElementById('part-count-label');
+  const _pb=document.getElementById('part-badge');
+  if(_pb){_pb.textContent=groupes.length+(groupes.length>1?' chaînes':' chaîne');_pb.style.display=groupes.length?'inline-block':'none';}
+  // Une recherche qui trouve quelque chose dans les reports ouvre le bloc
+  if(q&&groupes.length){const _d=document.getElementById('partielles-details');if(_d)_d.open=true;}
   if(lbl)lbl.textContent=(groupes.length===nbGroupesTotal)
     ?`${nbGroupesTotal} chaîne${nbGroupesTotal>1?'s':''} — utilise la barre du haut pour chercher ou filtrer`
     :`${groupes.length} chaîne${groupes.length>1?'s':''} sur ${nbGroupesTotal} — filtrées par la barre du haut`;
