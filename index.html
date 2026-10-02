@@ -779,9 +779,10 @@
           <span style="font-size:20px">🔍</span>
           <input type="text" id="search-ral" placeholder="Recherche rapide — N° BC, référence, désignation, chantier..."
             style="flex:1;background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.2);border-radius:var(--radius-sm);padding:9px 14px;font-size:13.5px;color:white;font-family:var(--font-body);outline:none"
-            oninput="renderRALTable()">
-          <button class="btn" style="border-color:rgba(255,255,255,.3);color:rgba(255,255,255,.7);background:none;white-space:nowrap" onclick="document.getElementById('search-ral').value='';renderRALTable()">✕ Effacer</button>
+            oninput="renderRALTable();ralSuggestBC()">
+          <button class="btn" style="border-color:rgba(255,255,255,.3);color:rgba(255,255,255,.7);background:none;white-space:nowrap" onclick="document.getElementById('search-ral').value='';renderRALTable();ralSuggestBC()">✕ Effacer</button>
         </div>
+        <div id="ral-bc-suggest" style="display:none;flex-wrap:wrap;gap:6px;margin:0 0 10px 32px"></div>
         <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:2px">
           <select id="filter-vendeur-ral" onchange="renderRALTable()" class="fs"><option value="all">Tous les vendeurs</option></select>
           <select id="filter-client-ral" onchange="renderRALTable()" class="fs"><option value="all">Tous les clients</option></select>
@@ -789,6 +790,7 @@
           <span id="ral-count-label" style="font-size:11px;color:rgba(255,255,255,.5)"></span>
         </div>
       </div>
+      <div id="ral-dossier" style="display:none;margin-bottom:16px"></div>
       <div id="ral-scrolltop" style="overflow-x:auto;overflow-y:hidden;height:14px" onscroll="document.getElementById('ral-tablewrap').scrollLeft=this.scrollLeft">
         <div id="ral-scrolltop-inner" style="height:1px"></div>
       </div>
@@ -4520,7 +4522,174 @@ async function reouvrirBC(bcId,numBC){
   }catch(e){toast('❌ '+e.message);}
 }
 
+// ═══ DOSSIER BC (Livraisons partielles) ═══
+// Tape un N° BC → suggestions sous la barre → clic = tableau complet du dossier :
+// BC d'origine + BC partiels, état de chaque article, et toutes les livraisons (BL).
+const _escD=v=>String(v??'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/"/g,'&quot;');
+function dossierBCs(racine){
+  const R=String(racine||'').trim().toUpperCase();
+  return (DATA.suivi||[]).filter(i=>bcRacine(f(i,'Title')||'').toUpperCase()===R)
+    .sort((a,b)=>String(f(a,'Title')||'').length-String(f(b,'Title')||'').length);
+}
+const _lignesDuBC=id=>(DATA.lignes||[]).filter(l=>{const b=l.BCId??(l.BC&&l.BC.Id);return b===id||parseInt(b)===id;});
+function dossierResume(racine){
+  const bcs=dossierBCs(racine);
+  const root=bcs.find(b=>String(f(b,'Title')||'').trim().toUpperCase()===String(racine).trim().toUpperCase())||bcs[0];
+  let lignes=root?_lignesDuBC(root.ID):[];
+  if(!lignes.length)lignes=bcs.flatMap(b=>_lignesDuBC(b.ID));
+  const num=k=>l=>parseFloat(f(l,k))||0;
+  const cmd=lignes.reduce((a,l)=>a+num('Quantit_x00e9_command_x00e9_e')(l),0);
+  const liv=lignes.reduce((a,l)=>a+num('Quantit_x00e9_livr_x00e9_e')(l),0);
+  const soldees=lignes.filter(l=>num('Quantit_x00e9_command_x00e9_e')(l)-num('Quantit_x00e9_livr_x00e9_e')(l)<=0).length;
+  const solde=!!(root&&estSolde(root));
+  let etat,coul;
+  if(!lignes.length){etat='Aucune ligne article';coul='#64748b';}
+  else if(soldees===lignes.length){etat='✅ Complètement livré';coul='#15803d';}
+  else if(solde){etat='⛔ Clôturé avec reste à livrer';coul='#b91c1c';}
+  else if(liv>0){etat='🟠 Partiellement livré';coul='#c2410c';}
+  else{etat='🔴 Rien livré';coul='#b91c1c';}
+  return{bcs,root,lignes,cmd,liv,soldees,etat,coul,solde};
+}
+function ralSuggestBC(){
+  const box=document.getElementById('ral-bc-suggest');
+  if(!box)return;
+  const q=(document.getElementById('search-ral')?.value||'').trim().toLowerCase();
+  if(q.length<3){box.style.display='none';box.innerHTML='';return;}
+  const racines=[...new Set((DATA.suivi||[]).map(i=>String(f(i,'Title')||'').trim())
+    .filter(t=>t&&t.toLowerCase().includes(q)).map(t=>bcRacine(t).toUpperCase()))];
+  const res=racines.map(r=>({r,d:dossierResume(r)})).filter(x=>x.d.lignes.length).slice(0,8);
+  if(!res.length){box.style.display='none';box.innerHTML='';return;}
+  box.style.display='flex';
+  box.innerHTML='<span style="font-size:11px;color:rgba(255,255,255,.6);align-self:center">Dossiers BC :</span>'+res.map(({r,d})=>{
+    const nom=f(d.root||{},'Title')||r;
+    return`<button type="button" onclick="openDossierBC('${_escD(nom).replace(/'/g,"\\'")}')" style="background:#fff;border:none;border-left:4px solid ${d.coul};border-radius:6px;padding:5px 10px;cursor:pointer;font-size:12px;text-align:left;font-family:inherit;line-height:1.3">
+      <strong style="font-family:var(--font-mono)">${_escD(nom)}</strong> <span style="color:var(--text-muted)">${_escD(d.root?getClient(d.root):'')}</span><br>
+      <span style="color:${d.coul};font-weight:700;font-size:11px">${d.etat}</span> <span style="color:var(--text-muted);font-size:11px">· ${d.soldees}/${d.lignes.length} lignes soldées${d.bcs.length>1?` · ${d.bcs.length-1} BC partiel${d.bcs.length>2?'s':''}`:''}</span>
+    </button>`;}).join('');
+}
+function fermerDossierBC(){const el=document.getElementById('ral-dossier');if(el){el.style.display='none';el.innerHTML='';el.dataset.racine='';}}
+function openDossierBC(racine,silencieux){
+  const host=document.getElementById('ral-dossier');
+  if(!host)return;
+  const d=dossierResume(racine);
+  const root=d.root||{};
+  const titreRoot=f(root,'Title')||racine;
+  const num=(l,k)=>parseFloat(f(l,k))||0;
+  const dh=iso=>iso?fmtDate(iso):'—';
+  // ── Livraisons (BL) : historique des lignes du BC d'origine + BL des BC partiels ──
+  const livs={};const vus=new Set();
+  const addLiv=(bl,src,ref,qte)=>{
+    bl=String(bl||'').trim();if(!bl)return;
+    const L=livs[bl]=livs[bl]||{bl,src:new Set(),art:[],total:0};
+    if(src)L.src.add(src);
+    if(ref!==undefined){const k=bl+'|'+_normTxt(ref);if(vus.has(k))return;vus.add(k);
+      L.art.push(`${ref}${qte!=null?' ×'+qte:''}`);if(qte)L.total+=qte;}
+  };
+  d.lignes.forEach(l=>parseBLHistorique(f(l,'BLSign_x00e9_')||'').forEach(e=>addLiv(e.bl,'',f(l,'R_x00e9_f_x00e9_rence')||f(l,'Produit_x002f_D_x00e9_signation')||'',e.qte)));
+  if(f(root,'N_x00b0_BL'))addLiv(f(root,'N_x00b0_BL'),titreRoot);
+  d.bcs.filter(b=>b!==d.root).forEach(b=>{
+    const bl=f(b,'N_x00b0_BL');if(!bl)return;
+    addLiv(bl,f(b,'Title'));if(!livs[String(bl).trim()].dRepli)livs[String(bl).trim()].dRepli=f(b,'Created');
+    _lignesDuBC(b.ID).forEach(l=>{const q=num(l,'Quantit_x00e9_livr_x00e9_e');if(q>0)addLiv(bl,'',f(l,'R_x00e9_f_x00e9_rence')||f(l,'Produit_x002f_D_x00e9_signation')||'',q);});
+  });
+  const livList=Object.values(livs).map(L=>{const s=findSessionByBL(L.bl);return{...L,s,date:s?(f(s,'Date_Scan')||f(s,'Date_Emission')):(L.dRepli||null)};})
+    .sort((a,b)=>(Date.parse(a.date||'')||0)-(Date.parse(b.date||'')||0)||a.bl.localeCompare(b.bl));
+  const blLien=bl=>{const s=findSessionByBL(bl);return s?`<a href="javascript:void 0" onclick="openSessionPanel(${s.ID})" style="color:var(--blue);font-weight:700">${_escD(bl)}</a>`:`<strong>${_escD(bl)}</strong>`;};
+
+  // ── Articles du BC d'origine : reste à livrer d'abord ──
+  const lignesTri=[...d.lignes].sort((a,b)=>{
+    const ra=num(a,'Quantit_x00e9_command_x00e9_e')-num(a,'Quantit_x00e9_livr_x00e9_e');
+    const rb=num(b,'Quantit_x00e9_command_x00e9_e')-num(b,'Quantit_x00e9_livr_x00e9_e');
+    return((rb>0)-(ra>0))||((parseInt(f(a,'Title'))||0)-(parseInt(f(b,'Title'))||0));
+  });
+  const etatLigne=(qc,ql)=>{const r=qc-ql;
+    if(r===0)return'<span class="ctag g">Livré</span>';
+    if(r<0)return`<span class="ctag o" title="Livré supérieur au commandé">⚠️ surplus ${-r}</span>`;
+    if(ql===0)return`<span class="ctag r">Rien livré</span>`;
+    return`<span class="ctag o">Reste ${r}</span>`;};
+  const rowsArt=lignesTri.map(l=>{
+    const qc=num(l,'Quantit_x00e9_command_x00e9_e'),ql=num(l,'Quantit_x00e9_livr_x00e9_e'),r=qc-ql;
+    const hist=parseBLHistorique(f(l,'BLSign_x00e9_')||'');
+    const bcId=l.BCId??(l.BC&&l.BC.Id);
+    return`<tr style="${r>0?'background:#fff7ed':''}">
+      <td class="mono" style="text-align:center">${_escD(f(l,'Title')||'—')}</td>
+      <td class="mono">${_escD(f(l,'R_x00e9_f_x00e9_rence')||'—')}</td>
+      <td style="font-size:12px">${_escD(f(l,'Produit_x002f_D_x00e9_signation')||'—')}</td>
+      <td style="text-align:right;font-weight:600">${qc}</td>
+      <td style="text-align:right;color:var(--green);font-weight:600">${ql}</td>
+      <td style="text-align:right;font-weight:700;color:${r>0?'var(--red)':'var(--green)'}">${r}</td>
+      <td>${etatLigne(qc,ql)}</td>
+      <td style="font-size:12px;font-family:var(--font-mono);line-height:1.5">${hist.length?hist.map(e=>`${blLien(e.bl)}${e.qte!=null?` <span style="color:var(--text-muted)">(${e.qte})</span>`:''}`).join('<br>'):'—'}</td>
+      <td style="white-space:nowrap">${r>0?`<button class="btn orange" style="height:24px;font-size:11px;padding:0 7px" onclick="openReceptionnerLigne(${l.ID},${bcId})">🔄 Mettre à jour</button> `:''}<button class="btn" style="height:24px;font-size:11px;padding:0 7px" title="Corriger" onclick="openCorrigerLigneBC(${l.ID},${bcId})">✏️</button></td>
+    </tr>`;}).join('');
+
+  const rowsLiv=livList.map(L=>{
+    const s=L.s;
+    return`<tr>
+      <td>${blLien(L.bl)}</td>
+      <td class="mono" style="font-size:12px">${dh(L.date)}</td>
+      <td>${s?_escD(f(s,'Magasinier')||'—'):'—'}</td>
+      <td>${s?statutVisuel(s).tag:'<span style="font-size:11px;color:var(--text-muted)">pas de session scan</span>'}</td>
+      <td style="font-size:12px">${L.art.length?_escD(L.art.join(', ')):'—'}</td>
+      <td style="font-size:11.5px;color:var(--text-muted)">${[...L.src].map(_escD).join(', ')||'saisie'}</td>
+    </tr>`;}).join('');
+
+  const partiels=d.bcs.filter(b=>b!==d.root);
+  const rowsPart=partiels.map(b=>{
+    const ls=_lignesDuBC(b.ID);
+    const det=ls.map(l=>`${f(l,'R_x00e9_f_x00e9_rence')||f(l,'Produit_x002f_D_x00e9_signation')||'?'} ${num(l,'Quantit_x00e9_livr_x00e9_e')}/${num(l,'Quantit_x00e9_command_x00e9_e')}`).join(', ');
+    return`<tr style="cursor:pointer" onclick="openBCPanel(${b.ID})">
+      <td class="ref" style="color:var(--blue)">${_escD(f(b,'Title'))}</td>
+      <td>${f(b,'N_x00b0_BL')?blLien(f(b,'N_x00b0_BL')):'<span style="color:var(--text-muted)">pas de BL</span>'}</td>
+      <td class="mono" style="font-size:12px">${dh(f(b,'Created'))}</td>
+      <td style="font-size:12px">${det?_escD(det):'<span style="color:var(--text-muted)">aucune ligne</span>'}</td>
+    </tr>`;}).join('');
+
+  const pct=d.cmd>0?Math.round(d.liv/d.cmd*100):0;
+  const kpi=(l,v,c)=>`<div style="flex:1;min-width:110px;background:#fff;border:1px solid var(--border);border-radius:var(--radius-sm);padding:8px 12px"><div style="font-size:11px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.03em">${l}</div><div style="font-size:20px;font-weight:800;color:${c||'var(--navy)'}">${v}</div></div>`;
+  const th=t=>`<th>${t}</th>`;
+  host.dataset.racine=titreRoot;
+  host.innerHTML=`<div style="background:var(--grey-xlight,#f8fafc);border:1px solid var(--border);border-top:4px solid ${d.coul};border-radius:var(--radius);padding:14px 16px">
+    <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap;margin-bottom:12px">
+      <div>
+        <div style="font-size:18px;font-weight:800;font-family:var(--font-mono)">📦 ${_escD(titreRoot)} <span style="font-family:var(--font-body);font-size:14px;color:${d.coul}">${d.etat}</span></div>
+        <div style="font-size:12.5px;color:var(--text-secondary);margin-top:4px;line-height:1.6">
+          <strong>${_escD(getClient(root)||'—')}</strong> · Chantier ${_escD(getChantier(root)||'—')} · Vendeur ${_escD(f(root,'Vendeurencharge')||'—')}<br>
+          BC reçu le ${dh(f(root,'Dateder_x00e9_ception'))}${f(root,'N_x00b0_Devis')?` · Devis ${_escD(f(root,'N_x00b0_Devis'))}`:''}${f(root,'N_x00b0_BL')?` · BL ${blLien(f(root,'N_x00b0_BL'))}`:''}
+        </div>
+      </div>
+      <div style="display:flex;gap:6px">
+        ${d.root?`<button class="btn navy" style="height:28px;font-size:12px" onclick="openBCPanel(${d.root.ID})">Fiche BC</button>`:''}
+        <button class="btn" style="height:28px;font-size:12px" onclick="fermerDossierBC()">✕ Fermer</button>
+      </div>
+    </div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px">
+      ${kpi('Avancement',pct+' %',d.coul)}${kpi('Commandé',d.cmd)}${kpi('Livré',d.liv,'var(--green)')}${kpi('Reste à livrer',Math.max(d.cmd-d.liv,0),d.cmd-d.liv>0?'var(--red)':'var(--green)')}${kpi('Lignes soldées',d.soldees+' / '+d.lignes.length)}${kpi('Livraisons (BL)',livList.length)}
+    </div>
+    <div style="height:8px;background:#e2e8f0;border-radius:4px;overflow:hidden;margin-bottom:14px"><div style="height:100%;width:${Math.min(pct,100)}%;background:${d.coul}"></div></div>
+    <h3 style="font-size:13px;margin:0 0 6px">📋 Articles du BC${d.root?'':' (BC d’origine introuvable — lignes des BC partiels)'}</h3>
+    <div class="tc" style="margin-bottom:14px"><table style="min-width:0">
+      <thead><tr>${['Ligne','Référence','Désignation','Cmd','Livré','RAL','État','Livré par BL',''].map(th).join('')}</tr></thead>
+      <tbody>${rowsArt||'<tr class="empty-row"><td colspan="9">Aucune ligne article</td></tr>'}</tbody>
+    </table></div>
+    <h3 style="font-size:13px;margin:0 0 6px">🚚 Livraisons (${livList.length})</h3>
+    <div class="tc" style="margin-bottom:${partiels.length?14:0}px"><table style="min-width:0">
+      <thead><tr>${['N° BL','Date','Magasinier','Statut','Articles','Origine'].map(th).join('')}</tr></thead>
+      <tbody>${rowsLiv||'<tr class="empty-row"><td colspan="6">Aucune livraison enregistrée</td></tr>'}</tbody>
+    </table></div>
+    ${partiels.length?`<h3 style="font-size:13px;margin:0 0 6px">🔀 BC partiels (${partiels.length})</h3>
+    <div class="tc"><table style="min-width:0">
+      <thead><tr>${['N° BC partiel','N° BL','Créé le','Lignes (livré / cmd)'].map(th).join('')}</tr></thead>
+      <tbody>${rowsPart}</tbody>
+    </table></div>`:''}
+  </div>`;
+  host.style.display='block';
+  const box=document.getElementById('ral-bc-suggest');if(box){box.style.display='none';}
+  if(!silencieux)host.scrollIntoView({behavior:'smooth',block:'start'});
+}
+
 function renderRALTable(){
+  {const _dh=document.getElementById('ral-dossier');if(_dh&&_dh.dataset.racine&&_dh.style.display!=='none')openDossierBC(_dh.dataset.racine,true);}
   const ralData=getRALLignes();
   const fV=document.getElementById('filter-vendeur-ral')?.value||'all';
   const fC=document.getElementById('filter-client-ral')?.value||'all';
