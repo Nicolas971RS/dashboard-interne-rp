@@ -102,6 +102,16 @@
   .hc-x{font-size:11.5px;color:#92400e}
   .sp-passage-row td{background:#fff7ed;color:#92400e;font-size:11.5px;font-weight:700;padding:5px 8px!important;border-top:2px solid #fdba74}
   .sp-passage-row.init td{background:var(--grey-xlight,#f1f5f9);color:var(--text-muted);border-top:none}
+  .sc-badge{display:inline-flex;flex-direction:column;margin-top:3px;font-family:var(--font-body);font-size:11px;font-weight:700;line-height:1.25;padding:2px 8px;border-radius:8px;cursor:pointer;white-space:nowrap;border:1px solid}
+  .sc-badge .sc-who{font-weight:500;font-size:10px;opacity:.8}
+  .sc-ok{background:#ecfdf5;color:#047857;border-color:#6ee7b7}
+  .sc-warn{background:#fff7ed;color:#c2410c;border-color:#fdba74}
+  .sc-du{background:#fef2f2;color:#b91c1c;border-color:#f87171;animation:scPulse 2s ease-in-out infinite}
+  @keyframes scPulse{0%,100%{box-shadow:0 0 0 0 rgba(239,68,68,.35)}50%{box-shadow:0 0 0 4px rgba(239,68,68,0)}}
+  .sc-add{display:inline-block;margin-left:6px;font-size:10.5px;color:var(--text-muted);opacity:.55;cursor:pointer;font-family:var(--font-body)}
+  .sc-add:hover{opacity:1;color:var(--blue)}
+  .sc-alerte{background:#fef2f2;border:1px solid #fca5a5;border-left:4px solid #b91c1c;border-radius:var(--radius-sm);padding:9px 12px;margin-bottom:12px;color:#7f1d1d;font-size:13px}
+  .sc-chip{background:#fff;border:1px solid #fca5a5;color:#991b1b;border-radius:14px;padding:3px 10px;font-size:11.5px;font-weight:600;cursor:pointer;font-family:inherit}
   .ctag{font-size:12px;font-weight:700;padding:2px 9px;border-radius:12px;color:white;letter-spacing:.02em;white-space:nowrap;display:inline-block;}
   .ctag.g{background:var(--green);}
   .ctag.r{background:var(--red);}
@@ -478,6 +488,7 @@
           <button class="btn-refresh" onclick="loadAll()">🔄 Actualiser</button>
         </div>
       </div>
+      <div class="sc-alerte" data-sc-alerte="tab-suivi" style="display:none"></div>
 
       <!-- BANDEAU PRIORITAIRE — actions du jour, avant tout le reste -->
       <div id="bandeau-priorite" style="margin-bottom:14px"></div>
@@ -768,6 +779,7 @@
           <button class="btn-refresh" onclick="loadAll()">🔄 Actualiser</button>
         </div>
       </div>
+      <div class="sc-alerte" data-sc-alerte="tab-ral" style="display:none"></div>
       <div class="kpi-row c3">
         <div class="kc o"><div class="kl">🔀 Lignes avec RAL</div><div class="kv" id="kpi-ral-count">—</div><div class="ks">Toutes commandes</div></div>
         <div class="kc r"><div class="kl">📦 Articles restant à livrer</div><div class="kv" id="kpi-ral-qte">—</div><div class="ks">Somme des RAL</div></div>
@@ -1964,7 +1976,7 @@ function renderDocuware(){
     const fc=f(i,nFCKey())||'—';
     const chantier=getChantier(i);
     const dateRec=fmtDate(f(i,'Dateder_x00e9_ception'));
-    return`<tr class="rr"><td class="ref">${numBC}</td><td class="cname">${client}</td><td style="font-size:12px;color:var(--text-secondary)">${chantier}</td><td class="mono">${bl}</td><td class="mono">${fc}</td><td class="mono">${dateRec}</td><td>${vendeur}</td><td>
+    return`<tr class="rr"><td class="ref">${numBC}${scBadge(i)}</td><td class="cname">${client}</td><td style="font-size:12px;color:var(--text-secondary)">${chantier}</td><td class="mono">${bl}</td><td class="mono">${fc}</td><td class="mono">${dateRec}</td><td>${vendeur}</td><td>
       <div class="btn-grp">
         <button class="btn" onclick="openBCPanel(${i.ID})">Voir BC</button>
         <button class="btn navy" onclick="openTraiterModal(${i.ID})">🔧 Traiter</button>
@@ -1992,7 +2004,7 @@ function renderTermines(){
     const montantFmt=montantRaw?new Intl.NumberFormat('fr-FR',{style:'currency',currency:'EUR',minimumFractionDigits:2,maximumFractionDigits:2}).format(montantRaw):'—';
     const s=getStatut(i),ef=getEtatFact(i);
     return '<tr class="rr">'
-      +'<td class="ref">'+numBC+'</td>'
+      +'<td class="ref">'+numBC+scBadge(i)+'</td>'
       +'<td class="cname">'+client+'</td>'
       +'<td style="font-size:12px;color:var(--text-secondary)">'+chantier+'</td>'
       +'<td class="mono">'+bl+'</td>'
@@ -2026,7 +2038,7 @@ function renderTousRecu(){
     const dateRec=f(i,'Dateder_x00e9_ception');
     const ef=getEtatFact(i);
     return`<tr class="rr" data-bc-id="${i.ID}">
-      <td class="ref">${numBC}</td><td class="cname">${client}</td>
+      <td class="ref">${numBC}${scBadge(i)}</td><td class="cname">${client}</td>
       <td style="font-size:12px;color:var(--text-secondary)">${chantier}</td>
       <td class="mono">${bl}</td>
       <td>${fcPillHtml(fcVal)}</td>
@@ -3219,7 +3231,7 @@ function bcRow(i,showAction=true){
         <button class="btn navy" onclick="openTraiterModal(${i.ID})">🔧 Traiter</button>
     <button class="btn orange" onclick="openLivraisonPartielle(${i.ID})">🔀 Livraison Partielle</button>
   </div></td>`:'';
-  return`<tr class="rr" data-bc-id="${i.ID}"><td class="ref">${numBC}</td><td class="cname">${client}</td><td style="font-size:12px;color:var(--text-secondary)">${chantier}</td><td class="mono" style="color:var(--blue-mid);font-size:11px">${numDev}</td><td class="mono">${dateLiv}</td><td class="mono">${numBL}</td><td class="mono">${numFC!=='—'?`<span style="color:var(--teal)">${numFC}</span>`:numFC}</td><td class="amt" style="font-size:11.5px">${montantFmt}</td><td>${vendeur}</td><td>${bStatut(s)}</td><td>${bFact(ef)}</td>${act}</tr>`;
+  return`<tr class="rr" data-bc-id="${i.ID}"><td class="ref">${numBC}${scBadge(i)}</td><td class="cname">${client}</td><td style="font-size:12px;color:var(--text-secondary)">${chantier}</td><td class="mono" style="color:var(--blue-mid);font-size:11px">${numDev}</td><td class="mono">${dateLiv}</td><td class="mono">${numBL}</td><td class="mono">${numFC!=='—'?`<span style="color:var(--teal)">${numFC}</span>`:numFC}</td><td class="amt" style="font-size:11.5px">${montantFmt}</td><td>${vendeur}</td><td>${bStatut(s)}</td><td>${bFact(ef)}</td>${act}</tr>`;
 }
 
 // ═══ RENDER ALL ═══
@@ -3263,7 +3275,7 @@ function renderAFacturer(){
     const dateRec=f(i,'Dateder_x00e9_ception');
     return`<tr class="rr" data-bc-id="${i.ID}">
       <td>${agePillHtml(dateRec,'Facturer')}</td>
-      <td class="ref">${numBC}</td><td class="cname">${client}</td>
+      <td class="ref">${numBC}${scBadge(i)}</td><td class="cname">${client}</td>
       <td class="mono">${bl}</td>
       <td>${fcPillHtml(fcVal)}</td>
       <td class="amt" style="font-size:11.5px">${montantFmt}</td>
@@ -3312,7 +3324,7 @@ function renderCommandeFournisseur(){
       :`<span style="font-size:11px;padding:2px 8px;border-radius:9px;background:var(--violet-light,#f0efff);color:var(--violet);font-weight:600">📦 J-${Math.abs(jrs)}</span>`;
     return`<tr class="rr" data-bc-id="${i.ID}">
       <td>${badge}</td>
-      <td class="ref">${numBC}</td><td class="cname">${client}</td>
+      <td class="ref">${numBC}${scBadge(i)}</td><td class="cname">${client}</td>
       <td style="font-size:12px;color:var(--text-secondary)">${chantier}</td>
       <td class="mono">${fmtDate(arr)}</td>
       <td class="amt" style="font-size:11.5px">${montantFmt}</td>
@@ -3356,7 +3368,7 @@ function renderBLManquant(){
     const noteSuivi=f(i,'Commentaire_Suivi')||'';
     return`<tr class="rr" data-bc-id="${i.ID}">
       <td>${agePillHtml(dateRec)}</td>
-      <td class="ref">${numBC}${(()=>{
+      <td class="ref">${numBC}${scBadge(i)}${(()=>{
         const arr=f(i,'Date_Arrivage_Attendu');
         if(!arr)return'';
         const jrs=daysSince(arr);
@@ -3429,7 +3441,7 @@ function renderHistorique(){
     const lignes=s==='Partiellement livré'?getLignesForBC(i.ID):[];
     return`<tr class="${urg.row}" data-bc-id="${i.ID}">
       <td><span class="urg ${urg.cls}">${urg.lbl}</span></td>
-      <td class="ref">${numBC}${(()=>{
+      <td class="ref">${numBC}${scBadge(i)}${(()=>{
         const arr=f(i,'Date_Arrivage_Attendu');
         if(!arr)return'';
         const jrs=daysSince(arr);
@@ -4030,8 +4042,119 @@ function setupRequiredSelect(el){
   el.addEventListener('change',check);
 }
 
+// ═══ SUIVI CLIENT (relances / passage prévu) — Suivi_BC.Suivi_Client ═══
+// Journal horodaté visible par tous : une entrée JSON par ligne
+// {t:ISO, u:vendeur, r:résultat, d:'AAAA-MM-JJ' (passage prévu / prochaine relance), c:contact, x:commentaire}
+const SC_RESULTATS={
+  vient:{lib:'Client prévenu — vient récupérer',ico:'📞',dateReq:true},
+  rdv:{lib:'Date de passage / livraison fixée',ico:'📅',dateReq:true},
+  injoignable:{lib:'Injoignable / message laissé',ico:'📵',dateReq:false},
+  reporte:{lib:'Client reporte',ico:'⏳',dateReq:true},
+  autre:{lib:'Autre',ico:'💬',dateReq:false}
+};
+function scLire(bc){
+  return String(f(bc||{},'Suivi_Client')||'').split('\n').map(x=>{try{return JSON.parse(x);}catch(e){return null;}}).filter(Boolean);
+}
+const _scJour=()=>{try{return jourLocal(new Date().toISOString());}catch(e){return new Date().toISOString().slice(0,10);}};
+const _scFmtJ=d=>{if(!d)return'';const[a,m,j]=String(d).split('-');return j&&m?`${j}/${m}`:d;};
+// BC encore « ouvert » : pas soldé et (sans N° BL, ou reste à livrer sur le dossier)
+function scBCOuvert(bc){
+  if(!bc||estSolde(bc)||estIgnore(bc))return false;
+  if(!f(bc,'N_x00b0_BL'))return true;
+  const racine=bcRacine(f(bc,'Title')||'');
+  return dossierResume(racine).lignes.some(l=>(parseFloat(f(l,'Quantit_x00e9_command_x00e9_e'))||0)-(parseFloat(f(l,'Quantit_x00e9_livr_x00e9_e'))||0)>0);
+}
+function scEtat(bc){
+  const h=scLire(bc);
+  if(!h.length)return null;
+  const der=h[h.length-1];
+  const auj=_scJour();
+  const ouvert=scBCOuvert(bc);
+  const du=ouvert&&der.d&&der.d<=auj;
+  const nbInj=h.filter(e=>e.r==='injoignable').length;
+  return{h,der,du,ouvert,nbInj,retard:du&&der.d<auj};
+}
+function scBadge(bcOuId){
+  const bc=typeof bcOuId==='object'?bcOuId:(DATA.suivi||[]).find(x=>x.ID===bcOuId||x.ID===parseInt(bcOuId));
+  if(!bc)return'';
+  const e=scEtat(bc);
+  if(!e)return`<span class="sc-add" title="Noter un suivi client (appel, passage prévu…)" onclick="event.stopPropagation();openSuiviClient(${bc.ID})">📞+</span>`;
+  const R=SC_RESULTATS[e.der.r]||SC_RESULTATS.autre;
+  const tip=e.h.slice().reverse().map(x=>`${dateHeureGP(x.t)} · ${x.u} · ${(SC_RESULTATS[x.r]||SC_RESULTATS.autre).lib}${x.d?' → '+_scFmtJ(x.d):''}${x.c?' · '+x.c:''}${x.x?' — '+x.x:''}`).join('\n').replace(/"/g,'&quot;');
+  let cls='sc-ok',txt;
+  if(e.du){cls='sc-du';txt=`⏰ À relancer · ${_scFmtJ(e.der.d)}`;}
+  else if(e.der.r==='injoignable'){cls='sc-warn';txt=`📵 Injoignable${e.nbInj>1?' ×'+e.nbInj:''}`;}
+  else txt=`${R.ico} ${e.der.d?(e.der.r==='reporte'?'Reporté ':'Passage ')+_scFmtJ(e.der.d):'Suivi '+_scFmtJ(jourLocal(e.der.t))}`;
+  return`<div class="sc-badge ${cls}" title="${tip}" onclick="event.stopPropagation();openSuiviClient(${bc.ID})">${txt}<span class="sc-who">${String(e.der.u||'').replace(/</g,'&lt;')}${e.h.length>1?' · '+e.h.length+' suivis':''}</span></div>`;
+}
+function openSuiviClient(bcId){
+  const bc=(DATA.suivi||[]).find(x=>x.ID===bcId||x.ID===parseInt(bcId));
+  if(!bc){toast('🔴 BC introuvable — actualise','ko');return;}
+  const h=scLire(bc);
+  const esc=v=>String(v??'').replace(/&/g,'&amp;').replace(/</g,'&lt;');
+  const hist=h.length?`<div style="max-height:180px;overflow:auto;border:1px solid var(--border);border-radius:var(--radius-sm);padding:6px 10px;margin-bottom:12px;background:var(--grey-xlight,#f8fafc)">
+    ${h.slice().reverse().map(x=>`<div style="padding:5px 0;border-bottom:1px solid var(--border-light);font-size:12px;line-height:1.45">
+      <strong>${(SC_RESULTATS[x.r]||SC_RESULTATS.autre).ico} ${esc((SC_RESULTATS[x.r]||SC_RESULTATS.autre).lib)}</strong>${x.d?` → <strong>${_scFmtJ(x.d)}</strong>`:''}
+      ${x.c?`<span style="color:var(--text-muted)"> · ${esc(x.c)}</span>`:''}${x.x?`<div>${esc(x.x)}</div>`:''}
+      <div style="font-size:11px;color:var(--text-muted)">${dateHeureGP(x.t)} · ${esc(x.u)}</div></div>`).join('')}
+  </div>`:'';
+  const remarques=f(bc,'Remarques');
+  openModal(`📞 Suivi client — ${esc(f(bc,'Title')||'BC')}`,`
+    <div style="font-size:12px;color:var(--text-muted);margin-bottom:10px">${esc(getClient(bc))} · ${esc(getChantier(bc)||'')} · vendeur ${esc(f(bc,'Vendeurencharge')||'—')}</div>
+    ${remarques?`<div style="font-size:12px;background:#f1f5f9;border-left:3px solid #94a3b8;padding:6px 10px;border-radius:4px;margin-bottom:10px"><strong>Remarques (Traiter) :</strong> ${esc(remarques)}</div>`:''}
+    ${hist}
+    <div class="mf"><label>Résultat *</label>
+      <select id="sc-r" onchange="scMajDate()">${Object.entries(SC_RESULTATS).map(([k,v])=>`<option value="${k}">${v.ico} ${v.lib}</option>`).join('')}</select>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+      <div class="mf"><label id="sc-d-lbl">Passage prévu le *</label><input id="sc-d" type="date"></div>
+      <div class="mf"><label>Contact</label><input id="sc-c" placeholder="Qui a répondu ? (ex : M. Dupont)"></div>
+    </div>
+    <div class="mf"><label>Commentaire</label><textarea id="sc-x" rows="2" placeholder="Ex : passera vendredi matin avec son camion"></textarea></div>
+    <div style="font-size:11.5px;color:var(--text-muted)">Visible par tous les vendeurs dans Suivi BC et Livraisons partielles. À la date indiquée, le BC passe en « ⏰ À relancer » s'il n'est toujours pas récupéré.</div>`,
+  async()=>{
+    const r=document.getElementById('sc-r').value;
+    const d=document.getElementById('sc-d').value;
+    const c=document.getElementById('sc-c').value.trim();
+    const x=document.getElementById('sc-x').value.trim();
+    if(SC_RESULTATS[r].dateReq&&!d){document.getElementById('sc-d').style.borderColor='var(--red)';throw new Error('Indique la date de passage prévue.');}
+    const e={t:new Date().toISOString(),u:sessionStorage.getItem('user_name')||'—',r,...(d?{d}:{}),...(c?{c}:{}),...(x?{x}:{})};
+    const brut=String(f(bc,'Suivi_Client')||'');
+    const val=(brut?brut+'\n':'')+JSON.stringify(e);
+    try{await spPatch('sites/RseauxPlus','Suivi_BC',bc.ID,{Suivi_Client:val});}
+    catch(err){
+      if(/Suivi_Client/i.test(err.message||''))throw new Error("La colonne « Suivi_Client » n'existe pas encore dans Suivi_BC (Plusieurs lignes de texte, texte brut).");
+      throw err;
+    }
+    bc.Suivi_Client=val;
+    toast('📞 Suivi client enregistré','ok');
+    renderAll();
+    if(document.getElementById('tab-ral')?.classList.contains('active'))renderRALTable();
+  });
+  setTimeout(scMajDate,0);
+}
+function scMajDate(){
+  const r=document.getElementById('sc-r')?.value;if(!r)return;
+  const lbl=document.getElementById('sc-d-lbl');
+  const R=SC_RESULTATS[r];
+  if(lbl)lbl.textContent=(r==='injoignable'||r==='autre'?'Prochaine relance le':(r==='reporte'?'Reporté au':'Passage prévu le'))+(R.dateReq?' *':'');
+}
+function renderAlertesSuiviClient(){
+  const dus=(DATA.suivi||[]).map(bc=>({bc,e:scEtat(bc)})).filter(x=>x.e&&x.e.du)
+    .sort((a,b)=>String(a.e.der.d).localeCompare(String(b.e.der.d)));
+  document.querySelectorAll('.sc-alerte').forEach(el=>{
+    if(!dus.length){el.style.display='none';el.innerHTML='';return;}
+    el.style.display='block';
+    el.innerHTML=`<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+      <strong>⏰ ${dus.length} BC à relancer</strong><span style="font-size:12px">— passage prévu dépassé, marchandise pas encore récupérée :</span>
+      ${dus.map(({bc,e})=>`<button type="button" class="sc-chip" onclick="openSuiviClient(${bc.ID})" title="${String(e.der.x||'').replace(/"/g,'&quot;')}">${String(f(bc,'Title')||'').replace(/</g,'&lt;')} · ${String(getClient(bc)).replace(/</g,'&lt;')} · prévu ${_scFmtJ(e.der.d)} (${String(e.der.u||'').replace(/</g,'&lt;')})</button>`).join('')}
+    </div>`;
+  });
+}
+
 function renderAll(){
   buildMapEmailClient();
+  try{renderAlertesSuiviClient();}catch(e){console.warn('[suiviClient]',e);}
   renderBandeauPriorite();
   const fV=getFilterVendeur(),fC=getFilterClient();
   const filterBC=i=>(fV==='all'||f(i,'Vendeurencharge')===fV)&&(fC==='all'||getClient(i)===fC);
@@ -4088,7 +4211,7 @@ function renderAll(){
     const montantFmt=montantRaw?new Intl.NumberFormat('fr-FR',{style:'currency',currency:'EUR',minimumFractionDigits:2,maximumFractionDigits:2}).format(montantRaw):'—';
     const ef=getEtatFact(i);
     return`<tr class="rr" data-bc-id="${i.ID}">
-      <td class="ref">${numBC}</td><td class="cname">${client==='—'?'<span style="background:var(--amber-light);color:var(--amber);font-weight:700;padding:2px 9px;border-radius:10px;font-size:11.5px;white-space:nowrap">⚠️ À compléter</span>':client}</td>
+      <td class="ref">${numBC}${scBadge(i)}</td><td class="cname">${client==='—'?'<span style="background:var(--amber-light);color:var(--amber);font-weight:700;padding:2px 9px;border-radius:10px;font-size:11.5px;white-space:nowrap">⚠️ À compléter</span>':client}</td>
       <td style="font-size:12px;color:var(--text-secondary)">${chantier}</td>
       <td class="mono">${bl!=='—'?bl:'<span style="color:var(--red);font-weight:600">❌ Manquant</span>'}</td>
       <td>${fcPillHtml(fcVal)}</td>
@@ -4117,7 +4240,7 @@ function renderAll(){
     const bl=f(i,'N_x00b0_BL')||'—',dateRec=fmtDate(f(i,'Dateder_x00e9_ception'));
     const vendeur=f(i,'Vendeurencharge')||'—';
     const chantier=getChantier(i);
-    return`<tr class="rr"><td class="ref">${numBC}</td><td class="cname">${client}</td><td style="font-size:12px;color:var(--text-secondary)">${chantier}</td><td class="mono">${bl}</td><td class="mono">${dateRec}</td><td>${vendeur}</td><td>${bStatut(getStatut(i))}</td><td>${bFact(getEtatFact(i))}</td><td><div class="btn-grp">
+    return`<tr class="rr"><td class="ref">${numBC}${scBadge(i)}</td><td class="cname">${client}</td><td style="font-size:12px;color:var(--text-secondary)">${chantier}</td><td class="mono">${bl}</td><td class="mono">${dateRec}</td><td>${vendeur}</td><td>${bStatut(getStatut(i))}</td><td>${bFact(getEtatFact(i))}</td><td><div class="btn-grp">
       <button class="btn green" onclick="openFacturerModal(${i.ID})">💰 Facturer</button>
       <button class="btn" onclick="openBCPanel(${i.ID})">Voir BC</button>
       <button class="btn navy" onclick="openTraiterModal(${i.ID})">🔧 Traiter</button>
@@ -4133,7 +4256,7 @@ function renderAll(){
     const vendeur=f(i,'Vendeurencharge')||'—';
     const chantier=getChantier(i);
     const lignes=getStatut(i)==='Partiellement livré'?getLignesForBC(i.ID):[];
-    return`<tr class="${urg.row}"><td><span class="urg ${urg.cls}">${urg.lbl}</span></td><td class="ref">${numBC}</td><td class="cname">${client}</td><td style="font-size:12px;color:var(--text-secondary)">${chantier}</td><td class="mono" style="color:var(--red)">${fmtDate(dateLiv)}</td><td>${vendeur}</td><td>${bStatut(getStatut(i))}</td><td>${ralBlock(lignes)}</td><td><div class="btn-grp">
+    return`<tr class="${urg.row}"><td><span class="urg ${urg.cls}">${urg.lbl}</span></td><td class="ref">${numBC}${scBadge(i)}</td><td class="cname">${client}</td><td style="font-size:12px;color:var(--text-secondary)">${chantier}</td><td class="mono" style="color:var(--red)">${fmtDate(dateLiv)}</td><td>${vendeur}</td><td>${bStatut(getStatut(i))}</td><td>${ralBlock(lignes)}</td><td><div class="btn-grp">
       <button class="btn" onclick="openBCPanel(${i.ID})">Voir BC</button>
       <button class="btn navy" onclick="openTraiterModal(${i.ID})">🔧 Traiter</button>
     </div></td></tr>`;
@@ -4191,7 +4314,7 @@ function renderSuiviEnCours(){renderHistorique();renderBLManquant();
     const lignes=s==='Partiellement livré'?getLignesForBC(i.ID):[];
     return`<tr class="${urg.row}">
       <td><span class="urg ${urg.cls}">${urg.lbl}</span></td>
-      <td class="ref">${numBC}</td><td class="cname">${client}</td>
+      <td class="ref">${numBC}${scBadge(i)}</td><td class="cname">${client}</td>
       <td style="font-size:12px;color:var(--text-secondary)">${chantier}</td>
       <td class="mono" style="color:var(--blue-mid);font-size:11px">${numDev}</td>
       <td>${fcPillHtml(f(i,nFCKey())||'')}</td>
@@ -4653,13 +4776,14 @@ function openDossierBC(racine,silencieux){
     <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap;margin-bottom:12px">
       <div>
         <div style="font-size:18px;font-weight:800;font-family:var(--font-mono)">📦 ${_escD(titreRoot)} <span style="font-family:var(--font-body);font-size:14px;color:${d.coul}">${d.etat}</span></div>
+        ${d.root?scBadge(d.root):''}
         <div style="font-size:12.5px;color:var(--text-secondary);margin-top:4px;line-height:1.6">
           <strong>${_escD(getClient(root)||'—')}</strong> · Chantier ${_escD(getChantier(root)||'—')} · Vendeur ${_escD(f(root,'Vendeurencharge')||'—')}<br>
           BC reçu le ${dh(f(root,'Dateder_x00e9_ception'))}${f(root,'N_x00b0_Devis')?` · Devis ${_escD(f(root,'N_x00b0_Devis'))}`:''}${f(root,'N_x00b0_BL')?` · BL ${blLien(f(root,'N_x00b0_BL'))}`:''}
         </div>
       </div>
       <div style="display:flex;gap:6px">
-        ${d.root?`<button class="btn navy" style="height:28px;font-size:12px" onclick="openBCPanel(${d.root.ID})">Fiche BC</button>`:''}
+        ${d.root?`<button class="btn" style="height:28px;font-size:12px;color:#047857;border-color:#6ee7b7" onclick="openSuiviClient(${d.root.ID})">📞 Suivi client</button><button class="btn navy" style="height:28px;font-size:12px" onclick="openBCPanel(${d.root.ID})">Fiche BC</button>`:''}
         <button class="btn" style="height:28px;font-size:12px" onclick="fermerDossierBC()">✕ Fermer</button>
       </div>
     </div>
@@ -4728,7 +4852,7 @@ function renderRALTable(){
       const jours=ralAnciennete(x);
       const rowBg=jours===null?'':jours>=30?'background:rgba(254,226,226,.25);':jours>=15?'background:rgba(255,247,237,.35);':'';
       return`<tr style="${rowBg}">
-        <td class="ref" style="cursor:pointer;color:var(--blue)" onclick="closePanel();openBCPanel(${x.info.bcId})">${x.info.numBC}</td>
+        <td class="ref" style="cursor:pointer;color:var(--blue)" onclick="closePanel();openBCPanel(${x.info.bcId})">${x.info.numBC}${scBadge(x.info.bcId)}</td>
         <td class="mono" style="font-size:11px">${fmtDate(x.info.dateBC)}</td>
         <td class="mono" style="text-align:center;font-weight:600">${f(l,'Title')||'—'}</td>
         <td class="cname">${x.info.client}</td>
@@ -4752,6 +4876,7 @@ function renderRALTable(){
           <div style="display:flex;flex-direction:column;gap:5px;align-items:stretch;width:104px">
             <button class="btn orange" style="min-height:26px;height:auto;padding:4px 6px;font-size:11px;white-space:normal;line-height:1.15" onclick="openReceptionnerLigne(${l.ID},${x.info.bcId})">🔄 Mettre à jour</button>
             <button class="btn" style="min-height:26px;height:auto;padding:4px 6px;font-size:11px;white-space:normal;line-height:1.15" title="Corriger une erreur de saisie" onclick="openCorrigerLigneBC(${l.ID},${x.info.bcId})">✏️ Corriger</button>
+            <button class="btn" style="min-height:26px;height:auto;padding:4px 6px;font-size:11px;white-space:normal;line-height:1.15;color:#047857;border-color:#6ee7b7" title="Noter un suivi client (appel, passage prévu…)" onclick="openSuiviClient(${x.info.bcId})">📞 Suivi client</button>
             ${jours>=15?`<button class="btn" style="min-height:26px;height:auto;padding:4px 6px;font-size:11px;white-space:normal;line-height:1.15;color:var(--red);border-color:var(--red)" onclick="cloturerBC(${x.info.bcId},'${String(x.info.numBC).replace(/'/g,"\\'")}')">⛔ Clôturer</button>`:''}
           </div>
         </td>
@@ -4786,7 +4911,7 @@ function renderRALTable(){
       const bl=f(l,'BLSign_x00e9_')||'—';
       const unite=f(l,'Unit_x00e9_')||'';
       return`<tr${groupAttr}>
-        <td class="ref" style="cursor:pointer;color:var(--blue)" onclick="closePanel();openBCPanel(${x.info.bcId})">${x.info.numBC}</td>
+        <td class="ref" style="cursor:pointer;color:var(--blue)" onclick="closePanel();openBCPanel(${x.info.bcId})">${x.info.numBC}${scBadge(x.info.bcId)}</td>
         <td class="mono" style="font-size:11px">${fmtDate(x.info.dateBC)}</td>
         <td class="mono" style="text-align:center;font-weight:600">${f(l,'Title')||'—'}</td>
         <td class="cname">${x.info.client}</td>
@@ -4864,7 +4989,7 @@ function renderRALTable(){
       const bl=f(l,'BLSign_x00e9_')||'—';
       const unite=f(l,'Unit_x00e9_')||'';
       return`<tr>
-        <td class="ref" style="cursor:pointer;color:var(--blue)" onclick="closePanel();openBCPanel(${x.info.bcId})">${x.info.numBC}</td>
+        <td class="ref" style="cursor:pointer;color:var(--blue)" onclick="closePanel();openBCPanel(${x.info.bcId})">${x.info.numBC}${scBadge(x.info.bcId)}</td>
         <td class="mono" style="font-size:11px">${fmtDate(x.info.dateBC)}</td>
         <td class="mono" style="text-align:center;font-weight:600">${f(l,'Title')||'—'}</td>
         <td class="cname">${x.info.client}</td>
@@ -9594,7 +9719,7 @@ function rechercheGlobalBC(){
       const dateRec=fmtDate(f(i,'Dateder_x00e9_ception'));
       const docBadge=bDocuware(i);
       return`<tr style="cursor:pointer" onclick="openBCPanel(${i.ID})">
-        <td class="ref"><span style="color:${couleurRef};font-weight:${poids}">${hl(numBC)}${icone}${iconeTermine}</span></td>
+        <td class="ref"><span style="color:${couleurRef};font-weight:${poids}">${hl(numBC)}${icone}${iconeTermine}</span>${scBadge(i)}</td>
         <td class="cname">${hl(client)}</td>
         <td style="font-size:12px;color:var(--text-secondary)">${hl(chantier)}</td>
         <td class="mono" style="color:var(--blue-mid);font-size:11px">${hl(numDev)}</td>
@@ -10932,6 +11057,7 @@ async function openBCPanel(id){
     html+=`<div class="pactions">
       <button class="pbtn green" onclick="closePanel();openFacturerModal(${id})">💰 Facturer</button>
       <button class="pbtn blue" onclick="closePanel();openTraiterModal(${id})">🔧 Traiter</button>
+      <button class="pbtn" style="background:#ecfdf5;color:#047857;border:1px solid #6ee7b7" onclick="closePanel();openSuiviClient(${id})">📞 Suivi client</button>
       <button class="pbtn" style="background:#7c3aed;color:white" onclick="openRetourModal(${id},'${String(numBC).replace(/'/g,"\\'")}')">↩️ Retour marchandise</button>
       <button class="pbtn grey" onclick="closePanel()">Fermer</button>
     </div>
