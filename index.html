@@ -2416,9 +2416,11 @@ async function regulariserHorsProc(sessionId){
   const num=f(s,'Numero_BL')||'';
   const fc=estNumeroFC(num);
   const bc=fc?null:bcLiePourBL(num);
-  if(!fc&&!bc){toast('🔴 BL sans BC lié — saisis ce N° BL dans Traiter sur le BC du client.','ko');return;}
+  const dbc=(fc||bc)?null:dbcPourBL(num);
+  if(!fc&&!bc&&!dbc){openRegulHorsProc(sessionId);return;}
   const ok=await showConfirm('✔ Régulariser cette livraison ?',
     fc?`FC <strong>${num}</strong> — ${f(s,'Client')||'client divers'}. Tu confirmes avoir vérifié la sortie de stock déclarée par ${f(s,'Magasinier')||'le magasinier'}.`
+      :dbc?`BL <strong>${num}</strong> suivi par la Demande BC <strong>DBC-${dbc.ID}</strong> (le BC du client sera réclamé par les relances). La livraison sort du bloc « hors procédure ».`
       :`BL <strong>${num}</strong> lié au BC <strong>${f(bc,'Title')||('BC-'+bc.ID)}</strong>. La livraison sort du bloc « hors procédure » (la trace est conservée).`,
     '✔ Régulariser','submit');
   if(!ok)return;
@@ -2430,6 +2432,116 @@ async function regulariserHorsProc(sessionId){
     if(document.getElementById('livres-details')?.open)renderLivres();
   }catch(e){toast('🔴 '+e.message,'ko');}
 }
+// Demande BC portant ce N° BL (ouverte ou reçue)
+function dbcPourBL(num){
+  const t=String(num||'').trim().toUpperCase();
+  if(!t)return null;
+  return (DATA.dbc||[]).find(d=>String(f(d,'N_x00b0_BL')||'').toUpperCase().split(/[^0-9A-Z-]+/).includes(t))||null;
+}
+// BC candidats pour rattacher une livraison hors procédure : BC du même client,
+// non soldés, ceux sans N° BL d'abord (c'est là qu'il manque le BL).
+function bcCandidatsHorsProc(s){
+  const cli=_normTxt(f(s,'Client'));
+  return (DATA.suivi||[]).filter(i=>{
+    if(typeof estSolde==='function'&&estSolde(i))return false;
+    const c=_normTxt(getClient(i));
+    return cli&&c&&(c===cli||c.includes(cli)||cli.includes(c));
+  }).sort((a,b)=>{
+    const ba=String(f(a,'N_x00b0_BL')||'').trim()?1:0,bb=String(f(b,'N_x00b0_BL')||'').trim()?1:0;
+    if(ba!==bb)return ba-bb;
+    return new Date(f(b,'Created')||0)-new Date(f(a,'Created')||0);
+  }).slice(0,12);
+}
+function openRegulHorsProc(sessionId){
+  const s=(DATA.sessionsScan||[]).find(x=>x.ID===sessionId);
+  if(!s)return;
+  const num=f(s,'Numero_BL')||'';
+  const fc=estNumeroFC(num);
+  if(fc){regulariserHorsProc(sessionId);return;}
+  const bcLie=bcLiePourBL(num),dbc=dbcPourBL(num);
+  if(bcLie||dbc){regulariserHorsProc(sessionId);return;}
+  const lignes=lignesDeSession(sessionId);
+  const cands=bcCandidatsHorsProc(s);
+  const ligneBC=i=>{
+    const bl=String(f(i,'N_x00b0_BL')||'').trim();
+    return`<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;padding:8px 10px;border-bottom:1px solid var(--border-light)">
+      <div style="min-width:0"><div style="font-weight:700;font-family:var(--font-mono)">${f(i,'Title')||('BC-'+i.ID)}</div>
+        <div style="font-size:11.5px;color:var(--text-muted)">${getClient(i)} · ${f(i,'Vendeurencharge')||'—'} · reçu le ${fmtDate(f(i,'Dateder_x00e9_ception')||f(i,'Created'))}${bl?` · <span style="color:#b45309;font-weight:600">a déjà le BL ${bl}</span>`:' · <span style="color:var(--green);font-weight:600">sans BL</span>'}</div></div>
+      <button class="btn navy" data-label="1" style="height:28px;font-size:11.5px;white-space:nowrap" onclick="regulHPOuvrirTraiter(${i.ID},${sessionId})">🔧 Traiter avec BL ${num}</button>
+    </div>`;
+  };
+  openModal(`🚨 Régulariser la livraison ${num}`,`
+    <div style="background:#fef2f2;border:1px solid #fecaca;border-radius:var(--radius-sm);padding:10px 12px;font-size:12.5px;color:#7f1d1d;margin-bottom:12px;line-height:1.55">
+      <strong>${f(s,'Client')||'—'}</strong> est reparti avec la marchandise du BL <strong>${num}</strong> sans saisie au bureau.<br>
+      Autorisé par <strong>${f(s,'Vendeur_Emetteur')||'—'}</strong> · déclaré par ${f(s,'Magasinier')||'—'} le ${fmtDate(f(s,'Date_Emission'))}
+      ${lignes.length?`<div style="margin-top:6px;color:#334155">${lignes.map(l=>`• ${f(l,'Reference_Article')||''} ${f(l,'Designation')||''} — <strong>${f(l,'Quantite_Scannee')||0}</strong>`).join('<br>')}</div>`:''}
+    </div>
+    <div style="font-weight:800;font-size:13px;color:var(--navy);margin-bottom:4px">1️⃣ Le client a un BC → rattacher le BL</div>
+    <div style="font-size:11.5px;color:var(--text-muted);margin-bottom:6px">Choisis le BC : Traiter s'ouvre avec le N° BL déjà rempli. Enregistre → la livraison est régularisée automatiquement.</div>
+    <div style="border:1px solid var(--border);border-radius:var(--radius-sm);max-height:220px;overflow-y:auto;margin-bottom:6px">
+      ${cands.length?cands.map(ligneBC).join(''):`<div style="padding:12px;font-size:12.5px;color:var(--text-muted)">Aucun BC en cours trouvé pour « ${f(s,'Client')||'—'} ».</div>`}
+    </div>
+    <div style="display:flex;gap:6px;align-items:center;margin-bottom:16px">
+      <input id="hp-bc-search" placeholder="Autre BC : N° BC ou client…" style="flex:1;padding:7px 10px;border:1px solid var(--border);border-radius:var(--radius-sm);font-size:12.5px" oninput="regulHPChercherBC(${sessionId})">
+    </div>
+    <div id="hp-bc-res" style="margin:-10px 0 16px"></div>
+    <div style="font-weight:800;font-size:13px;color:var(--navy);margin-bottom:4px">2️⃣ Pas de BC → créer la Demande BC</div>
+    <div style="font-size:11.5px;color:var(--text-muted);margin-bottom:6px">Le client sera relancé pour envoyer son BC. Le formulaire est pré-rempli avec ce BL.</div>
+    <button class="btn" data-label="1" style="height:30px;background:var(--green);color:#fff;border-color:var(--green)" onclick="regulHPCreerDBC(${sessionId})">🆕 Créer la Demande BC pour ${num}</button>
+  `,null);
+  const sub=document.getElementById('modal-submit');if(sub)sub.style.display='none';
+}
+function regulHPChercherBC(sessionId){
+  const q=_normTxt(document.getElementById('hp-bc-search')?.value);
+  const host=document.getElementById('hp-bc-res');
+  if(!host)return;
+  if(q.length<3){host.innerHTML='';return;}
+  const s=(DATA.sessionsScan||[]).find(x=>x.ID===sessionId);
+  const num=f(s,'Numero_BL');
+  const res=(DATA.suivi||[]).filter(i=>_normTxt(f(i,'Title')).includes(q)||_normTxt(getClient(i)).includes(q)).slice(0,8);
+  host.innerHTML=res.length?`<div style="border:1px solid var(--border);border-radius:var(--radius-sm)">${res.map(i=>`<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;padding:6px 10px;border-bottom:1px solid var(--border-light);font-size:12px"><span><strong class="mono">${f(i,'Title')||('BC-'+i.ID)}</strong> · ${getClient(i)}${String(f(i,'N_x00b0_BL')||'').trim()?` · <span style="color:#b45309">BL ${f(i,'N_x00b0_BL')}</span>`:''}</span><button class="btn navy" style="height:26px;font-size:11px" onclick="regulHPOuvrirTraiter(${i.ID},${sessionId})">🔧 Traiter avec BL ${num}</button></div>`).join('')}</div>`
+    :'<div style="font-size:12px;color:var(--text-muted)">Aucun BC trouvé.</div>';
+}
+async function regulHPOuvrirTraiter(bcId,sessionId){
+  const s=(DATA.sessionsScan||[]).find(x=>x.ID===sessionId);
+  const num=String(f(s,'Numero_BL')||'').trim();
+  const bc=(DATA.suivi||[]).find(i=>i.ID===bcId);
+  const blExistant=String(f(bc,'N_x00b0_BL')||'').trim();
+  closeModal();
+  const sub=document.getElementById('modal-submit');if(sub)sub.style.display='';
+  await openTraiterModal(bcId);
+  setTimeout(()=>{
+    const inp=document.getElementById('m-bl');
+    if(!inp)return;
+    if(!blExistant){
+      inp.value=num;
+      inp.dispatchEvent(new Event('input'));inp.dispatchEvent(new Event('blur'));
+      inp.style.background='#fef2f2';
+      toast(`📝 BL ${num} pré-rempli — vérifie puis Valider pour régulariser`);
+    }else if(blExistant.toUpperCase()!==num.toUpperCase()){
+      toast(`⚠️ Ce BC a déjà le BL ${blExistant}. Si ${num} est un complément, passe par « Livraison partielle » ou remplace le N° BL.`,'ko');
+    }
+  },350);
+}
+function regulHPCreerDBC(sessionId){
+  const s=(DATA.sessionsScan||[]).find(x=>x.ID===sessionId);
+  if(!s)return;
+  const lignes=lignesDeSession(sessionId);
+  closeModal();
+  const sub=document.getElementById('modal-submit');if(sub)sub.style.display='';
+  openNouveauDBCModal();
+  setTimeout(()=>{
+    const set=(id,v)=>{const e=document.getElementById(id);if(e&&v!=null&&v!==''){e.value=v;e.dispatchEvent(new Event('input'));e.dispatchEvent(new Event('change'));}};
+    set('d-client',f(s,'Client'));
+    set('d-numbl',f(s,'Numero_BL'));
+    set('d-vendeur',f(s,'Vendeur_Emetteur'));
+    set('d-dateenlev',jourLocal(f(s,'Date_Scan')||dateCreation(s)));
+    set('d-articles',lignes.map(l=>`${f(l,'Reference_Article')||''} ${f(l,'Designation')||''} x${f(l,'Quantite_Scannee')||0}`.trim()).join('\n'));
+    const d=document.getElementById('d-client');if(d)document.getElementById('d-client-drop')&&(document.getElementById('d-client-drop').style.display='none');
+    toast('📝 Demande BC pré-remplie depuis la livraison hors procédure — complète les champs restants');
+  },180);
+}
+
 // Photo du BL papier prise par le magasinier = pièce jointe de la session
 async function voirPhotoBL(sessionId){
   try{
@@ -2606,7 +2718,7 @@ function renderBandeauPriorite(){
   const hpParV={};
   horsProc.forEach(s=>{const v=f(s,'Vendeur_Emetteur')||'Non indiqué';hpParV[v]=(hpParV[v]||0)+1;});
   const htmlHP=`
-    <div style="font-size:11.5px;color:#7f1d1d;margin-bottom:8px">Marchandise sortie sans BL saisi au bureau. <strong>BL</strong> : saisis le N° dans Traiter sur le BC du client (régularisation automatique). <strong>FC</strong> : vérifie puis ✔ Régulariser.</div>
+    <div style="font-size:11.5px;color:#7f1d1d;margin-bottom:8px">Marchandise sortie sans BL saisi au bureau. <strong>Clique sur la ligne</strong> : rattacher le BL au BC du client (ou créer la Demande BC s'il n'y a pas de BC). <strong>FC</strong> : vérifie puis ✔ Régulariser.</div>
     <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:9px">${Object.entries(hpParV).sort((a,b)=>b[1]-a[1]).map(([v,n])=>`<span style="background:#fff;border:1px solid #b91c1c;border-radius:11px;padding:3px 10px;font-size:11.5px;color:#b91c1c;font-weight:600">${v} : ${n}</span>`).join(' ')}</div>
     <div class="tc" style="max-height:290px;overflow-y:auto"><table><thead><tr>
       <th>Depuis</th><th>N° BL / FC</th><th>Client</th><th>Autorisé par</th><th>Déclaré par</th><th>Scan</th><th style="min-width:250px;text-align:center">Régularisation</th>
@@ -2614,12 +2726,15 @@ function renderBandeauPriorite(){
       const num=f(s,'Numero_BL')||'—';
       const fc=estNumeroFC(num);
       const bc=fc?null:bcLiePourBL(num);
+      const dbc=fc||bc?null:dbcPourBL(num);
       const action=fc
-        ?`<button class="btn green" style="height:26px" onclick="regulariserHorsProc(${s.ID})">✔ Régulariser (FC)</button>`
+        ?`<button class="btn green" style="height:26px" onclick="event.stopPropagation();regulariserHorsProc(${s.ID})">✔ Régulariser (FC)</button>`
         :bc
-          ?`<button class="btn green" style="height:26px" onclick="regulariserHorsProc(${s.ID})">✔ Régulariser — BC ${f(bc,'Title')||bc.ID}</button>`
-          :`<span style="font-size:11.5px;color:#b91c1c;font-weight:600">📝 BC à traiter avec ce N° BL</span>`;
-      return`<tr style="background:#fff5f5">
+          ?`<button class="btn green" style="height:26px" onclick="event.stopPropagation();regulariserHorsProc(${s.ID})">✔ Régulariser — BC ${f(bc,'Title')||bc.ID}</button>`
+          :dbc
+            ?`<button class="btn green" style="height:26px" onclick="event.stopPropagation();regulariserHorsProc(${s.ID})">✔ Régulariser — Demande BC DBC-${dbc.ID}</button>`
+            :`<button class="btn" style="height:26px;background:#b91c1c;color:#fff;border-color:#b91c1c" onclick="event.stopPropagation();openRegulHorsProc(${s.ID})">🔧 Régulariser…</button>`;
+      return`<tr style="background:#fff5f5;cursor:pointer" title="Cliquer pour régulariser" onclick="openRegulHorsProc(${s.ID})">
         <td>${agePillHtml(f(s,'Date_Emission'))}</td>
         <td style="font-family:var(--font-mono);font-weight:700">${fc?'🧾':'📦'} ${num}</td>
         <td>${f(s,'Client')||'—'}</td>
@@ -2627,8 +2742,8 @@ function renderBandeauPriorite(){
         <td style="font-size:11.5px">${f(s,'Magasinier')||'—'}</td>
         <td style="font-size:11.5px">${f(s,'Statut')||'—'}</td>
         <td style="text-align:center;white-space:nowrap">
-          <button class="btn" style="height:26px" title="Voir les articles scannés" onclick="openSessionPanel(${s.ID})">👁</button>
-          <button class="btn" style="height:26px;margin-left:4px" title="Photo du BL papier" onclick="voirPhotoBL(${s.ID})">📷</button>
+          <button class="btn" style="height:26px" title="Voir les articles scannés" onclick="event.stopPropagation();openSessionPanel(${s.ID})">👁</button>
+          <button class="btn" style="height:26px;margin-left:4px" title="Photo du BL papier" onclick="event.stopPropagation();voirPhotoBL(${s.ID})">📷</button>
           <span style="margin-left:6px">${action}</span>
         </td>
       </tr>`;}).join('')}</tbody></table></div>`;
@@ -6613,6 +6728,7 @@ function openModal(title,html,onSubmit){
   document.getElementById('modal-body').innerHTML=html+'<div class="modal-msg" id="modal-msg"></div>';
   const btn=document.getElementById('modal-submit');
   btn.disabled=false;btn.textContent='Valider';
+  btn.style.display=''; // une fenêtre « choix seulement » peut l'avoir masqué
   document.getElementById('modal-ov').classList.add('open');
   _onSubmit=onSubmit;
   _modalSnap=snapFields(document.getElementById('modal-body'));
