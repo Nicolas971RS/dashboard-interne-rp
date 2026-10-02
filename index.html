@@ -5762,6 +5762,26 @@ async function _sessionPanelSaveAllCore(sessionId,progres){
     const qte=parseFloat(row.querySelector('.sp-qte-new')?.value)||0;
     if(!design&&!ref)continue;
     try{
+      // Même référence déjà sur le BL, ligne non verrouillée ?
+      //  - déjà livrée (scannée > 0) sur un BL clôturé → on la verrouille : le
+      //    rajout devient une ligne à part, l'historique n'est plus touché ;
+      //  - pas encore livrée → on ajoute la quantité à cette ligne (pas de doublon).
+      const _nr=x=>String(x||'').replace(/\s+/g,'').toUpperCase();
+      const _sess=(DATA.sessionsScan||[]).find(x=>x.ID===sessionId);
+      const _final=(()=>{const st=_normTxt(f(_sess||{},'Statut'));return st==='terminee'||st.includes('ecart')||st.includes('partiel');})();
+      const _isV=l=>{const v=f(l,'Verrouille');return v===true||v==='Oui'||v==='1'||v===1;};
+      const homologue=ref?(DATA.lignesScan||[]).find(l=>String(lineSessionId(l))===String(sessionId)&&!_isV(l)&&_nr(f(l,'Reference_Article'))===_nr(ref)):null;
+      if(homologue&&Number(f(homologue,'Quantite_Scannee')||0)>0&&_final){
+        await spPatch('sites/BondeCommande','Lignes_Scan',homologue.ID,{Verrouille:true});
+        homologue.Verrouille=true;
+        toast(`🔒 ${ref} déjà livré (${f(homologue,'Quantite_Scannee')}) : ligne verrouillée, le rajout de ${qte} est une ligne à part`);
+      }else if(homologue){
+        const nq=Number(f(homologue,'Quantite_Attendue')||0)+qte;
+        await spPatch('sites/BondeCommande','Lignes_Scan',homologue.ID,{Quantite_Attendue:nq});
+        homologue.Quantite_Attendue=nq;
+        saved++;_tick();
+        continue;
+      }
       const created=await spPost('sites/BondeCommande','Lignes_Scan',{
         Session_ScanId:sessionId,Reference_Article:ref,Designation:design,Quantite_Attendue:qte,Quantite_Scannee:0
       });
@@ -5839,6 +5859,22 @@ async function sessionPanelDeleteLigne(lineId, sessionId){
 
 // ── Réouverture d'une session clôturée pour correction ──
 async function reoouvrirSession(sessionId, numBL){
+  // Les cases 🔒 cochées dans le panneau mais pas encore enregistrées étaient
+  // ignorées : la ligne « déjà livrée » était remise à 0 et le rajout se
+  // mélangeait avec elle (cas 111100 : 2 livrés + 3 ajoutés). On enregistre
+  // d'abord l'état des cases tel qu'il est affiché.
+  const _rows=[...document.querySelectorAll(`#sp-lignes-edit-${sessionId} .sp-ligne-edit`)];
+  for(const row of _rows){
+    const lid=parseInt(row.dataset.lid);
+    const cb=row.querySelector('.sp-verr');
+    const l=(DATA.lignesScan||[]).find(x=>x.ID===lid);
+    if(!cb||!l)continue;
+    const vSP=(()=>{const v=f(l,'Verrouille');return v===true||v==='Oui'||v==='1'||v===1;})();
+    if(cb.checked!==vSP){
+      try{await spPatch('sites/BondeCommande','Lignes_Scan',lid,{Verrouille:cb.checked});l.Verrouille=cb.checked;}
+      catch(e){toast('🔴 Verrouillage non enregistré : '+e.message,'ko');return;}
+    }
+  }
   const lignesAvant=(DATA.lignesScan||[]).filter(l=>String(lineSessionId(l))===String(sessionId));
   const nbVerr=lignesAvant.filter(l=>{const v=f(l,'Verrouille');return v===true||v==='Oui'||v==='1'||v===1;}).length;
   const msgVerr=nbVerr>0?` ${nbVerr} ligne(s) verrouillée(s) conserveront leur quantité déjà scannée.`:'';
