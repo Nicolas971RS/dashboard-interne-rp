@@ -105,6 +105,9 @@
   .scl-com{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:260px;cursor:help;color:var(--text-secondary)}
   .scl-com:hover{color:var(--blue)}
   #scl-tip{position:fixed;z-index:10000;display:none;background:#fff;color:#1e293b;border:1px solid var(--border);border-radius:8px;box-shadow:0 10px 30px rgba(15,23,42,.18);padding:12px 14px;font-size:12.5px;line-height:1.55;white-space:pre-wrap;max-height:60vh;overflow:auto;font-family:var(--font-body)}
+  .dv-auto{display:inline-block;margin-left:6px;font-family:var(--font-body);font-size:10.5px;font-weight:700;color:#c2410c;background:#fff7ed;border:1px solid #fdba74;border-radius:9px;padding:0 6px;white-space:nowrap}
+  .dv-auto-banner{display:flex;align-items:center;gap:8px;flex-wrap:wrap;background:#fff7ed;border:1px solid #fdba74;border-left:4px solid #ea580c;border-radius:var(--radius-sm);padding:9px 12px;margin-bottom:12px;color:#7c2d12;font-size:13px}
+  .dv-chip{background:#fff;border:1px solid #fdba74;color:#9a3412;border-radius:14px;padding:3px 10px;font-size:11.5px;font-weight:600;cursor:pointer;font-family:inherit}
   .sc-badge{display:inline-flex;flex-direction:column;margin-top:3px;font-family:var(--font-body);font-size:11px;font-weight:700;line-height:1.25;padding:2px 8px;border-radius:8px;cursor:pointer;white-space:nowrap;border:1px solid}
   .sc-badge .sc-who{font-weight:500;font-size:10px;opacity:.8}
   .sc-ok{background:#ecfdf5;color:#047857;border-color:#6ee7b7}
@@ -432,7 +435,7 @@
     <button class="tab" onclick="showTab('ral',this);renderRALTable()">🔀 Livraisons Partielles <span class="tab-badge a" id="badge-ral">0</span></button>
     <button class="tab" onclick="showTab('prepscan',this);renderPreparations()">📦 Livraison Magasin <span class="tab-badge a" id="badge-prepscan">0</span></button>
     <button class="tab" onclick="showTab('dbc',this)">🧾 Demandes BC <span class="tab-badge r" id="badge-dbc">0</span></button>
-    <button class="tab" onclick="showTab('devis',this)">📄 Devis <span class="tab-badge a" id="badge-devis">0</span></button>
+    <button class="tab" onclick="showTab('devis',this)">📄 Devis <span class="tab-badge a" id="badge-devis">0</span><span class="tab-badge r" id="badge-devis-auto" style="display:none" title="Devis créés automatiquement depuis un email — à compléter"></span></button>
     <button class="tab" onclick="showTab('analytics',this);renderAnalytics()">📈 Analytics</button>
     <button class="tab" onclick="showTab('suivicli',this);renderSuivisClients()">📞 Suivis clients <span class="tab-badge r" id="badge-suivicli" style="display:none">0</span></button>
     <button class="tab" onclick="showTab('journal',this);loadJournal()">📜 Journal d'Audit</button>
@@ -1064,6 +1067,7 @@
           <button class="btn-refresh" onclick="loadAll()">🔄 Actualiser</button>
         </div>
       </div>
+      <div id="devis-auto-alerte" style="display:none"></div>
       <div class="kpi-row c4">
         <div class="kc b"><div class="kl">📄 En cours de traitement</div><div class="kv" id="kpi-devis-cours">—</div><div class="ks">Action requise</div></div>
         <div class="kc t"><div class="kl">✉️ Devis envoyés</div><div class="kv" id="kpi-devis-envoye">—</div><div class="ks">Ce mois</div></div>
@@ -4475,7 +4479,7 @@ function renderAll(){
   const devisNouv_items=getMatinDevisNouvelle();
   const devisHtml=devisNouv_items.length?devisNouv_items.map(i=>{
     const nd=f(i,'Num_x00e9_ro_Devis','Numero_Devis','Title')||`DEV-${i.ID}`;
-    return`<tr class="rr" style="cursor:pointer" onclick="openDevisPanel(${i.ID})"><td class="ref">${nd}</td><td class="cname">${f(i,'Client')||'—'}</td><td>${getChantier(i)}</td><td class="mono">${fmtDate(f(i,'Date_Devis'))}</td><td>${f(i,'Vendeur_Assign_x00e9_')||'<span style="color:var(--red);font-size:12px;font-weight:700;">⚠️ Non assigné</span>'}</td><td onclick="event.stopPropagation()">
+    return`<tr class="rr" style="cursor:pointer" onclick="openDevisPanel(${i.ID})"><td class="ref">${nd}${devisAutoBadge(i)}</td><td class="cname">${f(i,'Client')||'—'}</td><td>${getChantier(i)}</td><td class="mono">${fmtDate(f(i,'Date_Devis'))}</td><td>${f(i,'Vendeur_Assign_x00e9_')||'<span style="color:var(--red);font-size:12px;font-weight:700;">⚠️ Non assigné</span>'}</td><td onclick="event.stopPropagation()">
       <button class="btn blue" onclick="passerEnCours(${i.ID})">📋 Prendre en charge</button>
     </td></tr>`;
   }).join(''):'<tr class="empty-row"><td colspan="6">✅ Aucun devis en attente de prise en charge</td></tr>';
@@ -4671,7 +4675,7 @@ function devisRowFull(i){
   else if(st==='En cours')btns=`<button class="btn teal" onclick="event.stopPropagation();envoyerDevisFlow(${i.ID})">📨 Envoyer</button>`;
   const rowStyle=isTerminal?'cursor:pointer;opacity:.65':'cursor:pointer';
   return`<tr class="${rowCls}" style="${rowStyle}" onclick="openDevisPanel(${i.ID})">
-    <td class="ref">${nd}</td>
+    <td class="ref">${nd}${devisAutoBadge(i)}</td>
     <td class="cname">${f(i,'Client')||'—'}</td>
     <td>${getChantier(i)}</td>
     <td class="mono">${fmtDate(f(i,'Date_Devis'))}</td>
@@ -4684,7 +4688,84 @@ function devisRowFull(i){
     </div></td></tr>`;
 }
 
+// ═══ DEVIS CRÉÉS AUTOMATIQUEMENT DEPUIS UN EMAIL (flux « DEVIS - N° - Client ») ═══
+// Le flux écrit « [AUTO] » au début de Notes_Internes. Tant que ce marqueur est là,
+// le devis est signalé « 🤖 À compléter ». « Marquer comme complété » le remplace
+// par « [AUTO ✓ …] » (trace conservée).
+const devisAutoEnAttente=i=>/\[AUTO\]/.test(String(f(i,'Notes_Internes')||''));
+function devisManquants(i){
+  const m=[];
+  const cli=String(f(i,'Client')||'').trim();
+  if(!cli||cli.includes('@'))m.push('Client');
+  if(!String(f(i,'Client_Contact')||'').trim())m.push('Contact');
+  if(!String(f(i,'Client_T_x00e9_l_x00e9_phone')||'').trim())m.push('Téléphone');
+  if(!String(f(i,'Client_Email')||'').trim())m.push('Email');
+  const ch=getChantier(i);if(!ch||ch==='—')m.push('Chantier');
+  return m;
+}
+function devisAutoBadge(i){
+  if(!devisAutoEnAttente(i))return'';
+  const m=devisManquants(i);
+  return` <span class="dv-auto" title="Créé automatiquement depuis l'email de Fabrice${m.length?' — manque : '+m.join(', '):''}">🤖 À compléter</span>`;
+}
+function renderDevisAutoAlerte(){
+  const list=(DATA.devis||[]).filter(devisAutoEnAttente);
+  const bdg=document.getElementById('badge-devis-auto');
+  if(bdg){bdg.textContent=list.length?'🤖 '+list.length:'';bdg.style.display=list.length?'':'none';}
+  const el=document.getElementById('devis-auto-alerte');
+  if(!el)return;
+  if(!list.length){el.style.display='none';el.innerHTML='';return;}
+  el.style.display='block';
+  el.innerHTML=`<div class="dv-auto-banner"><strong>🤖 ${list.length} devis créé${list.length>1?'s':''} automatiquement à compléter</strong>
+    <span style="font-size:12px">— reçu${list.length>1?'s':''} par email, vérifie les infos client / chantier :</span>
+    ${list.map(i=>{const m=devisManquants(i);return`<button type="button" class="dv-chip" onclick="openCompleterDevis(${i.ID})" title="${m.length?'Manque : '+m.join(', '):'Infos présentes — à valider'}">${_escD(f(i,'Devis_RS')||f(i,'Num_x00e9_ro_Devis')||'DEV-'+i.ID)} · ${_escD(String(f(i,'Client')||'?'))}${m.length?' · '+m.length+' champ'+(m.length>1?'s':''):''}</button>`;}).join('')}
+  </div>`;
+}
+function openCompleterDevis(id){
+  const i=(DATA.devis||[]).find(x=>x.ID===id);
+  if(!i){toast('🔴 Devis introuvable — actualise','ko');return;}
+  const v=k=>_escD(String(f(i,k)||''));
+  const email=String(f(i,'Client_Email')||'').trim().toLowerCase();
+  const sugg=(typeof _mapEmailClient!=='undefined'&&_mapEmailClient&&_mapEmailClient[email]&&_mapEmailClient[email].nom)||'';
+  const cli=String(f(i,'Client')||'');
+  const cliVal=cli.includes('@')&&sugg?sugg:cli;
+  const ch=getChantier(i);
+  openModal(`🤖 Compléter le devis ${_escD(f(i,'Devis_RS')||'DEV-'+id)}`,`
+    <div style="font-size:12px;color:var(--text-muted);margin-bottom:10px">Créé automatiquement depuis l'email de Fabrice. Complète ce que l'email ne donnait pas, puis valide.</div>
+    ${sugg&&sugg!==cli?`<div style="font-size:12px;background:#eff6ff;border-left:3px solid #3b82f6;padding:6px 10px;border-radius:4px;margin-bottom:10px">💡 Cet email correspond au client <strong>${_escD(sugg)}</strong> dans vos BC.</div>`:''}
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+      <div class="mf"><label>N° devis Fabrice</label><input id="cd-rs" value="${v('Devis_RS')}" style="font-family:var(--font-mono)"></div>
+      <div class="mf"><label>Client *</label><input id="cd-client" value="${_escD(cliVal)}"></div>
+      <div class="mf"><label>Contact</label><input id="cd-contact" value="${v('Client_Contact')}" placeholder="Nom du contact"></div>
+      <div class="mf"><label>Téléphone</label><input id="cd-tel" value="${v('Client_T_x00e9_l_x00e9_phone')}" placeholder="0690 00 00 00"></div>
+      <div class="mf"><label>Email client</label><input id="cd-email" type="email" value="${v('Client_Email')}"></div>
+      <div class="mf"><label>Chantier</label><input id="cd-chantier" value="${ch&&ch!=='—'?_escD(ch):''}" placeholder="ex: CCMG ZAE GRAND ANSE"></div>
+    </div>
+    <div class="mf"><label>Commentaires client</label><textarea id="cd-com" rows="2">${v('Commentaires_Client')}</textarea></div>
+    <label style="display:flex;gap:6px;align-items:center;font-size:12.5px;margin-top:4px"><input type="checkbox" id="cd-ok" checked> Marquer comme complété (retire l'alerte 🤖)</label>
+    <div style="font-size:11.5px;color:var(--text-muted);margin-top:6px">Les lignes articles restent dans le PDF joint — ajoute-les depuis la fiche du devis si besoin.</div>`,
+  async()=>{
+    const g=id2=>document.getElementById(id2).value.trim();
+    if(!g('cd-client')){document.getElementById('cd-client').style.borderColor='var(--red)';throw new Error('Le client est obligatoire.');}
+    const em=g('cd-email');
+    if(em&&!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(em)){document.getElementById('cd-email').style.borderColor='var(--red)';throw new Error('Email invalide.');}
+    const body={Client:g('cd-client'),Client_Contact:g('cd-contact')||null,Client_T_x00e9_l_x00e9_phone:g('cd-tel')||null,Client_Email:em||null,Commentaires_Client:g('cd-com')||null};
+    if(g('cd-rs'))body.Devis_RS=g('cd-rs');
+    if(g('cd-chantier'))body.Chantier=g('cd-chantier');
+    if(document.getElementById('cd-ok').checked){
+      const qui=sessionStorage.getItem('user_name')||'—';
+      const quand=new Date().toLocaleDateString('fr-FR',{timeZone:'America/Guadeloupe'});
+      body.Notes_Internes=String(f(i,'Notes_Internes')||'').replace('[AUTO]',`[AUTO ✓ complété le ${quand} par ${qui}]`);
+    }
+    await spPatch('sites/BondeCommande','Demandes_Devis',id,body);
+    Object.assign(i,body);
+    toast('✅ Devis complété','ok');
+    renderDevisTable();renderDevisAutoAlerte();
+  });
+}
+
 function renderDevisTable(){
+  try{renderDevisAutoAlerte();}catch(e){console.warn('[devisAuto]',e);}
   let items=[...DATA.devis];
   const fV=document.getElementById('filter-vendeur-devis')?.value||'all';
   const fS=document.getElementById('filter-statut-devis')?.value||'all';
@@ -11335,7 +11416,12 @@ async function openDevisPanel(id){
       }).catch(e=>{console.error('[LIGNES] Erreur fetch:',e);return[];}),
       getAttachments('sites/BondeCommande','Demandes_Devis',id)
     ]);
+    const _mq=devisAutoEnAttente(item)?devisManquants(item):null;
     let html=`
+      ${_mq?`<div style="background:#fff7ed;border:1px solid #fdba74;border-left:4px solid #ea580c;border-radius:var(--radius-sm);padding:10px 12px;margin-bottom:12px;font-size:12.5px;color:#7c2d12">
+        🤖 <strong>Créé automatiquement depuis un email</strong>${_mq.length?` — manque : <strong>${_mq.join(', ')}</strong>`:' — infos à valider'}
+        <div style="margin-top:8px"><button class="btn" style="height:28px;font-size:12px;background:#ea580c;color:#fff;border-color:#ea580c" onclick="closePanel();openCompleterDevis(${id})">✏️ Compléter le devis</button></div>
+      </div>`:''}
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:0">
         <div class="pf"><div class="pf-lbl">N° Devis</div><div class="pf-val mono">${nd}</div></div>
       </div>
