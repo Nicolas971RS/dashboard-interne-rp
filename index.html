@@ -4049,6 +4049,7 @@ const SC_RESULTATS={
   vient:{lib:'Client prévenu — vient récupérer',ico:'📞',dateReq:true},
   rdv:{lib:'Date de passage / livraison fixée',ico:'📅',dateReq:true},
   injoignable:{lib:'Injoignable / message laissé',ico:'📵',dateReq:false},
+  email:{lib:'Email envoyé',ico:'✉️',dateReq:false},
   reporte:{lib:'Client reporte',ico:'⏳',dateReq:true},
   autre:{lib:'Autre',ico:'💬',dateReq:false}
 };
@@ -4080,9 +4081,10 @@ function scBadge(bcOuId){
   const e=scEtat(bc);
   if(!e)return`<span class="sc-add" title="Noter un suivi client (appel, passage prévu…)" onclick="event.stopPropagation();openSuiviClient(${bc.ID})">📞+</span>`;
   const R=SC_RESULTATS[e.der.r]||SC_RESULTATS.autre;
-  const tip=e.h.slice().reverse().map(x=>`${dateHeureGP(x.t)} · ${x.u} · ${(SC_RESULTATS[x.r]||SC_RESULTATS.autre).lib}${x.d?' → '+_scFmtJ(x.d):''}${x.c?' · '+x.c:''}${x.x?' — '+x.x:''}`).join('\n').replace(/"/g,'&quot;');
+  const tip=e.h.slice().reverse().map(x=>`${dateHeureGP(x.t)} · ${x.u} · ${(SC_RESULTATS[x.r]||SC_RESULTATS.autre).lib}${x.em?' à '+(x.en?x.en+' ':'')+'<'+x.em+'>':''}${x.d?' → '+_scFmtJ(x.d):''}${x.c?' · '+x.c:''}${x.x?' — '+x.x:''}`).join('\n').replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
   let cls='sc-ok',txt;
   if(e.du){cls='sc-du';txt=`⏰ À relancer · ${_scFmtJ(e.der.d)}`;}
+  else if(e.der.r==='email'&&!e.der.d){txt=`✉️ Email envoyé ${_scFmtJ(jourLocal(e.der.t))}`;}
   else if(e.der.r==='injoignable'){cls='sc-warn';txt=`📵 Injoignable${e.nbInj>1?' ×'+e.nbInj:''}`;}
   else txt=`${R.ico} ${e.der.d?(e.der.r==='reporte'?'Reporté ':'Passage ')+_scFmtJ(e.der.d):'Suivi '+_scFmtJ(jourLocal(e.der.t))}`;
   return`<div class="sc-badge ${cls}" title="${tip}" onclick="event.stopPropagation();openSuiviClient(${bc.ID})">${txt}<span class="sc-who">${String(e.der.u||'').replace(/</g,'&lt;')}${e.h.length>1?' · '+e.h.length+' suivis':''}</span></div>`;
@@ -4095,10 +4097,14 @@ function openSuiviClient(bcId){
   const hist=h.length?`<div style="max-height:180px;overflow:auto;border:1px solid var(--border);border-radius:var(--radius-sm);padding:6px 10px;margin-bottom:12px;background:var(--grey-xlight,#f8fafc)">
     ${h.slice().reverse().map(x=>`<div style="padding:5px 0;border-bottom:1px solid var(--border-light);font-size:12px;line-height:1.45">
       <strong>${(SC_RESULTATS[x.r]||SC_RESULTATS.autre).ico} ${esc((SC_RESULTATS[x.r]||SC_RESULTATS.autre).lib)}</strong>${x.d?` → <strong>${_scFmtJ(x.d)}</strong>`:''}
+      ${x.em?`<div>à ${x.en?esc(x.en)+' ':''}<a href="mailto:${esc(x.em)}" style="color:var(--blue)">${esc(x.em)}</a></div>`:''}
       ${x.c?`<span style="color:var(--text-muted)"> · ${esc(x.c)}</span>`:''}${x.x?`<div>${esc(x.x)}</div>`:''}
       <div style="font-size:11px;color:var(--text-muted)">${dateHeureGP(x.t)} · ${esc(x.u)}</div></div>`).join('')}
   </div>`:'';
   const remarques=f(bc,'Remarques');
+  // Pré-remplissage : dernier destinataire email utilisé sur ce BC, sinon l'email client du BC
+  const _dm=h.slice().reverse().find(x=>x.em);
+  var _scDernierMail={en:_dm?.en||'',em:_dm?.em||String(f(bc,'Email_Client')||'').trim()};
   openModal(`📞 Suivi client — ${esc(f(bc,'Title')||'BC')}`,`
     <div style="font-size:12px;color:var(--text-muted);margin-bottom:10px">${esc(getClient(bc))} · ${esc(getChantier(bc)||'')} · vendeur ${esc(f(bc,'Vendeurencharge')||'—')}</div>
     ${remarques?`<div style="font-size:12px;background:#f1f5f9;border-left:3px solid #94a3b8;padding:6px 10px;border-radius:4px;margin-bottom:10px"><strong>Remarques (Traiter) :</strong> ${esc(remarques)}</div>`:''}
@@ -4106,9 +4112,13 @@ function openSuiviClient(bcId){
     <div class="mf"><label>Résultat *</label>
       <select id="sc-r" onchange="scMajDate()">${Object.entries(SC_RESULTATS).map(([k,v])=>`<option value="${k}">${v.ico} ${v.lib}</option>`).join('')}</select>
     </div>
+    <div id="sc-mail" style="display:none;grid-template-columns:1fr 1fr;gap:10px">
+      <div class="mf"><label>Nom du destinataire *</label><input id="sc-en" value="${esc(_scDernierMail.en)}" placeholder="Ex : M. Louis"></div>
+      <div class="mf"><label>Email du destinataire *</label><input id="sc-em" type="email" value="${esc(_scDernierMail.em)}" placeholder="client@exemple.com"></div>
+    </div>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
       <div class="mf"><label id="sc-d-lbl">Passage prévu le *</label><input id="sc-d" type="date"></div>
-      <div class="mf"><label>Contact</label><input id="sc-c" placeholder="Qui a répondu ? (ex : M. Dupont)"></div>
+      <div class="mf" id="sc-c-wrap"><label>Contact</label><input id="sc-c" placeholder="Qui a répondu ? (ex : M. Dupont)"></div>
     </div>
     <div class="mf"><label>Commentaire</label><textarea id="sc-x" rows="2" placeholder="Ex : passera vendredi matin avec son camion"></textarea></div>
     <div style="font-size:11.5px;color:var(--text-muted)">Visible par tous les vendeurs dans Suivi BC et Livraisons partielles. À la date indiquée, le BC passe en « ⏰ À relancer » s'il n'est toujours pas récupéré.</div>`,
@@ -4117,8 +4127,15 @@ function openSuiviClient(bcId){
     const d=document.getElementById('sc-d').value;
     const c=document.getElementById('sc-c').value.trim();
     const x=document.getElementById('sc-x').value.trim();
+    let en='',em='';
+    if(r==='email'){
+      en=document.getElementById('sc-en').value.trim();
+      em=document.getElementById('sc-em').value.trim();
+      if(!en){document.getElementById('sc-en').style.borderColor='var(--red)';throw new Error('Indique le nom du destinataire.');}
+      if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(em)){document.getElementById('sc-em').style.borderColor='var(--red)';throw new Error('Adresse email invalide.');}
+    }
     if(SC_RESULTATS[r].dateReq&&!d){document.getElementById('sc-d').style.borderColor='var(--red)';throw new Error('Indique la date de passage prévue.');}
-    const e={t:new Date().toISOString(),u:sessionStorage.getItem('user_name')||'—',r,...(d?{d}:{}),...(c?{c}:{}),...(x?{x}:{})};
+    const e={t:new Date().toISOString(),u:sessionStorage.getItem('user_name')||'—',r,...(d?{d}:{}),...(c&&r!=='email'?{c}:{}),...(en?{en}:{}),...(em?{em}:{}),...(x?{x}:{})};
     const brut=String(f(bc,'Suivi_Client')||'');
     const val=(brut?brut+'\n':'')+JSON.stringify(e);
     try{await spPatch('sites/RseauxPlus','Suivi_BC',bc.ID,{Suivi_Client:val});}
@@ -4137,7 +4154,9 @@ function scMajDate(){
   const r=document.getElementById('sc-r')?.value;if(!r)return;
   const lbl=document.getElementById('sc-d-lbl');
   const R=SC_RESULTATS[r];
-  if(lbl)lbl.textContent=(r==='injoignable'||r==='autre'?'Prochaine relance le':(r==='reporte'?'Reporté au':'Passage prévu le'))+(R.dateReq?' *':'');
+  if(lbl)lbl.textContent=(r==='injoignable'||r==='autre'||r==='email'?'Prochaine relance le':(r==='reporte'?'Reporté au':'Passage prévu le'))+(R.dateReq?' *':'');
+  const mail=document.getElementById('sc-mail');if(mail)mail.style.display=r==='email'?'grid':'none';
+  const cw=document.getElementById('sc-c-wrap');if(cw)cw.style.visibility=r==='email'?'hidden':'visible';
 }
 function renderAlertesSuiviClient(){
   const dus=(DATA.suivi||[]).map(bc=>({bc,e:scEtat(bc)})).filter(x=>x.e&&x.e.du)
