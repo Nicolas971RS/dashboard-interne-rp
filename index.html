@@ -10982,7 +10982,16 @@ function openAjouterLigneArticle(bcId,numBC){
           const q=bcInp.value.trim().toLowerCase();
           bcDrop.innerHTML='';bcHidden.value='';
           if(q.length<3)return;
-          const matches=(DATA.suivi||[]).filter(i=>(f(i,'Title')||'').toLowerCase().includes(q)).slice(0,10);
+          // Uniquement les BC d'origine : les BC secondaires (-A, -A-A…) créés par les
+          // livraisons partielles ne portent pas les lignes articles. Un secondaire
+          // n'est proposé que si son BC d'origine est introuvable (repli).
+          const titresSuivi=new Set((DATA.suivi||[]).map(i=>String(f(i,'Title')||'').trim().toUpperCase()));
+          const matches=(DATA.suivi||[]).filter(i=>{
+            const t=String(f(i,'Title')||'').trim();
+            if(!t.toLowerCase().includes(q))return false;
+            const r=bcRacine(t);
+            return r===t||!titresSuivi.has(r.toUpperCase());
+          }).slice(0,10);
           if(!matches.length){bcDrop.innerHTML='<div style="padding:6px 10px;font-size:12px;color:var(--text-muted)">Aucun résultat</div>';return;}
           const ul=document.createElement('ul');
           Object.assign(ul.style,{listStyle:'none',margin:0,padding:'4px 0',background:'white',border:'1px solid var(--border)',borderRadius:'6px',boxShadow:'0 4px 12px rgba(0,0,0,.12)',position:'absolute',width:'100%',zIndex:'9999',maxHeight:'200px',overflowY:'auto'});
