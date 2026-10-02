@@ -92,6 +92,16 @@
   .site-tag.bc{background:var(--blue-xlight);color:var(--navy-light);}
 
   /* ══ STATUS TAGS ══ */
+  .hc-wrap{border:1px solid var(--border);border-radius:var(--radius-sm);padding:8px 12px;margin-bottom:14px;background:var(--bg,#f8fafc)}
+  .hc-wrap>summary{cursor:pointer;font-size:12.5px;font-weight:700;color:var(--navy)}
+  .hc-list{list-style:none;margin:10px 0 2px;padding:0 0 0 6px;border-left:2px solid var(--border)}
+  .hc-list li{display:flex;gap:8px;align-items:flex-start;padding:4px 0 6px 6px;font-size:12px;line-height:1.4;position:relative}
+  .hc-list li.hc-reouv{background:#fff7ed;border-radius:6px;margin:4px 0}
+  .hc-ic{width:18px;flex-shrink:0;text-align:center}
+  .hc-d{font-size:11px;color:var(--text-muted)}
+  .hc-x{font-size:11.5px;color:#92400e}
+  .sp-passage-row td{background:#fff7ed;color:#92400e;font-size:11.5px;font-weight:700;padding:5px 8px!important;border-top:2px solid #fdba74}
+  .sp-passage-row.init td{background:var(--grey-xlight,#f1f5f9);color:var(--text-muted);border-top:none}
   .ctag{font-size:12px;font-weight:700;padding:2px 9px;border-radius:12px;color:white;letter-spacing:.02em;white-space:nowrap;display:inline-block;}
   .ctag.g{background:var(--green);}
   .ctag.r{background:var(--red);}
@@ -1374,17 +1384,36 @@ function toggleGrandFormat(){
 // l'onglet Livraison Magasin.
 const SESS_SELECT_BASE='ID,Title,Numero_BL,Client,Type_Operation,Vendeur_Emetteur,Magasinier,Date_Emission,Date_Scan,Statut,Nb_Articles_Scannes,Nb_Ecarts,Preparation_Avance,BL_Racine,Date_Livraison_Prevue,Repris_Par,Origine,Created';
 let _contactClientDispo=true;
+// Colonnes optionnelles de Sessions_Scan : si l'une n'existe pas encore dans
+// SharePoint, on la retire de la requête au lieu de faire échouer le chargement.
+const SESS_COLS_OPT={Contact_Client:true,Historique:true};
+let _historiqueDispo=true;
 async function fetchSessionsScan(){
   const qs=sel=>`$select=${sel}&$orderby=ID desc&$top=2000`;
-  if(_contactClientDispo){
-    try{return await spFetch('sites/BondeCommande','Sessions_Scan',qs(SESS_SELECT_BASE+',Contact_Client'));}
-    catch(e){
-      if(!/Contact_Client/i.test(e.message||''))throw e;
-      _contactClientDispo=false;
-      console.warn('[Sessions_Scan] colonne Contact_Client absente — chargement sans elle.');
+  for(let essai=0;essai<4;essai++){
+    const opt=Object.keys(SESS_COLS_OPT).filter(k=>SESS_COLS_OPT[k]);
+    try{
+      const r=await spFetch('sites/BondeCommande','Sessions_Scan',qs([SESS_SELECT_BASE,...opt].join(',')));
+      _contactClientDispo=!!SESS_COLS_OPT.Contact_Client;_historiqueDispo=!!SESS_COLS_OPT.Historique;
+      return r;
+    }catch(e){
+      const manque=opt.find(k=>new RegExp(k,'i').test(e.message||''));
+      if(!manque)throw e;
+      SESS_COLS_OPT[manque]=false;
+      console.warn(`[Sessions_Scan] colonne ${manque} absente — chargement sans elle.`);
     }
   }
+  _contactClientDispo=false;_historiqueDispo=false;
   return spFetch('sites/BondeCommande','Sessions_Scan',qs(SESS_SELECT_BASE));
+}
+// Lignes_Scan : Verrouille / Statut_Ligne / Created étaient absents du $select —
+// l'état 🔒 ne s'affichait donc jamais après rechargement, et « Enregistrer »
+// renvoyait Verrouille=false sur toutes les lignes (déverrouillage involontaire).
+async function fetchLignesScan(){
+  const base='ID,Title,Session_ScanId,Session_Scan/Id,Reference_Article,Designation,Quantite_Attendue,Quantite_Scannee';
+  const qs=sel=>`$select=${sel}&$expand=Session_Scan&$orderby=ID asc&$top=5000`;
+  try{return await spFetch('sites/BondeCommande','Lignes_Scan',qs(base+',Verrouille,Statut_Ligne,Created'));}
+  catch(e){console.warn('[Lignes_Scan] repli sans colonnes étendues —',e.message);return spFetch('sites/BondeCommande','Lignes_Scan',qs(base+',Created'));}
 }
 
 // ═══ SHAREPOINT FETCH ═══
@@ -1738,8 +1767,7 @@ async function loadAll(){
       // Sessions_Scan — portail scan BL (préparations, livraisons, inventaires)
       fetchSessionsScan(),
       // Lignes_Scan — détail des articles scannés par session
-      spFetch('sites/BondeCommande','Lignes_Scan',
-        '$select=ID,Title,Session_ScanId,Session_Scan/Id,Reference_Article,Designation,Quantite_Attendue,Quantite_Scannee&$expand=Session_Scan&$orderby=ID asc&$top=5000'),
+      fetchLignesScan(),
       // Annonces — bandeau d'alerte partagé entre vendeurs
       spFetch('sites/BondeCommande','Annonces','$select=ID,Message,Auteur,Created&$orderby=ID desc&$top=20')
     ]);
@@ -4831,7 +4859,9 @@ function statutVisuel(s){
   else if(low){v=B;cat='encours';label='🔵 En préparation';}
   else{v=N;cat='autre';label='—';}
   const _inc=statutIncoherent(s);
-  return{...v,cat,label,tag:`<span class="stl-tag" style="color:${v.fg};background:${v.bg};border-color:${v.bd}" title="Statut SharePoint : ${st||'—'}${_inc?' — '+_inc.txt+' (à corriger)':''}">${label}${_inc?' <span style="font-size:10px">⚠</span>':''}</span>`,
+  const _nbR=histoLire(s).filter(e=>e.k==='reouverture').length;
+  const _badgeR=_nbR?` <span title="BL réouvert ${_nbR} fois — voir la chaîne de modifications" style="font-size:10.5px;font-weight:700;color:#b45309;background:#fff7ed;border:1px solid #fdba74;border-radius:9px;padding:0 6px;white-space:nowrap">🔁${_nbR>1?'×'+_nbR:''} réouvert</span>`:'';
+  return{...v,cat,label,tag:`<span class="stl-tag" style="color:${v.fg};background:${v.bg};border-color:${v.bd}" title="Statut SharePoint : ${st||'—'}${_inc?' — '+_inc.txt+' (à corriger)':''}">${label}${_inc?' <span style="font-size:10px">⚠</span>':''}</span>${_badgeR}`,
     rowStyle:`background:${v.bg};box-shadow:inset 4px 0 0 ${v.fg};`};
 }
 
@@ -5451,11 +5481,29 @@ function openSessionPanel(id){
     const scan=Number(f(l,'Quantite_Scannee')||0);
     const ecart=scan-att;
     if(ecart===0)return'<span class="ctag g">Complet</span>';
+    // BL rouvert / pas encore clôturé : ce qui reste n'est pas un manque, c'est à scanner
+    if(ecart<0&&!/termin|écart|ecart|partiel/i.test(statut))return'<span style="font-size:11px;font-weight:700;color:var(--text-muted)">à scanner '+Math.abs(ecart)+'</span>';
     if(ecart<0)return'<span class="ctag r">manque '+Math.abs(ecart)+'</span>';
     return'<span class="ctag o">surplus '+ecart+'</span>';
   };
 
-  const rowsExist=lignes.map(l=>{
+  // Lignes groupées par passage (BL initial, puis ajouts après chaque réouverture)
+  const _passages=histoPassagesLignes(s,lignes);
+  const _reouvH=histoLire(s).filter(e=>e.k==='reouverture');
+  const _multiP=lignes.some(l=>_passages[l.ID]>1);
+  const _lignesTri=[...lignes].sort((a,b)=>(_passages[a.ID]-_passages[b.ID])||(a.ID-b.ID));
+  let _pPrec=0;
+  const _sepPassage=p=>{
+    if(!_multiP)return'';
+    if(p===1)return`<tr class="sp-passage-row init"><td colspan="7">📄 BL initial</td></tr>`;
+    const r=_reouvH.find(e=>e.p===p);
+    return`<tr class="sp-passage-row"><td colspan="7">🔁 Ajouts après réouverture n°${p-1}${r?` — ${dateHeureGP(r.t)} par ${String(r.u||'—').replace(/</g,'&lt;')}`:''}</td></tr>`;
+  };
+  const rowsExist=_lignesTri.map(l=>{
+    const _p=_passages[l.ID];const _sep=_p!==_pPrec?_sepPassage(_p):'';_pPrec=_p;
+    return _sep+_rowLigne(l);
+  }).join('');
+  function _rowLigne(l){
     const scan=Number(f(l,'Quantite_Scannee')||0);
     const verr=f(l,'Verrouille');
     const isVerr=verr===true||verr==='Oui'||verr==='1'||verr===1;
@@ -5468,7 +5516,7 @@ function openSessionPanel(id){
       <td style="text-align:center"><input type="checkbox" class="sp-verr" ${isVerr?'checked':''} title="Verrouiller — le magasinier ne pourra pas modifier cette ligne à la réouverture" style="width:16px;height:16px;cursor:pointer"></td>
       <td style="text-align:center"><button onclick="sessionPanelDeleteLigne(${l.ID},${id})" title="Supprimer" style="background:none;border:none;color:var(--red);font-size:14px;cursor:pointer;padding:2px">🗑</button></td>
     </tr>`;
-  }).join('');
+  }
 
   const canReopen=low.includes('terminée')||low.includes('terminee')||low.includes('écart')||low.includes('ecart')||low==='prête à livrer';
 
@@ -5537,6 +5585,7 @@ function openSessionPanel(id){
       ${infoLine('Statut','<span class="ctag '+stCls+'">'+statut+'</span>')}
       ${blRacineVal?infoLine('BL d’origine',blRacineVal):''}
     </div>
+    ${isLiv?histoBlocHTML(s):''}
     ${canReopen?`
     <div style="background:#fff7ed;border:1px solid #fed7aa;border-radius:var(--radius-sm);padding:10px 14px;margin-bottom:14px;display:flex;justify-content:space-between;align-items:center;gap:12px">
       <div style="font-size:12px;color:#92400e">
@@ -5751,6 +5800,8 @@ async function _sessionPanelSaveAllCore(sessionId,progres){
   const _total=document.querySelectorAll(`#sp-lignes-edit-${sessionId} .sp-ligne-edit`).length
     +[...document.querySelectorAll(`#sp-lignes-new-${sessionId} .sp-ligne-new`)].filter(r=>(r.querySelector('.sp-ref-new')?.value.trim()||r.querySelector('.sp-design-new')?.value.trim())).length;
   let _fait=0;const _tick=()=>{_fait++;if(progres)progres(Math.min(_fait,_total),_total);};
+  const _sessH=(DATA.sessionsScan||[]).find(x=>x.ID===sessionId);
+  const _histo=[];
   // Sauvegarder lignes existantes modifiées
   const existingRows=document.querySelectorAll(`#sp-lignes-edit-${sessionId} .sp-ligne-edit`);
   for(const row of existingRows){
@@ -5760,10 +5811,25 @@ async function _sessionPanelSaveAllCore(sessionId,progres){
     const qte=parseFloat(row.querySelector('.sp-qte')?.value)||0;
     const verr=row.querySelector('.sp-verr')?.checked||false;
     try{
-      await spPatch('sites/BondeCommande','Lignes_Scan',lid,{Reference_Article:ref,Designation:design,Quantite_Attendue:qte,Verrouille:verr});
       const l=(DATA.lignesScan||[]).find(x=>x.ID===lid);
-      if(l){l.Reference_Article=ref;l.Designation=design;l.Quantite_Attendue=qte;l.Verrouille=verr;}
-      saved++;
+      // N'envoie que ce qui a changé (évite de réécrire — et de tracer — des lignes intactes)
+      const body={};
+      if(!l||String(f(l,'Reference_Article')||'')!==ref)body.Reference_Article=ref;
+      if(!l||String(f(l,'Designation')||'')!==design)body.Designation=design;
+      if(!l||Number(f(l,'Quantite_Attendue')||0)!==qte)body.Quantite_Attendue=qte;
+      const vAv=l?(()=>{const v=f(l,'Verrouille');return v===true||v==='Oui'||v==='1'||v===1;})():null;
+      if(vAv!==verr)body.Verrouille=verr;
+      if(Object.keys(body).length){
+        await spPatch('sites/BondeCommande','Lignes_Scan',lid,body);
+        if(l){
+          const lib=ref||design||('#'+lid);
+          if(body.Quantite_Attendue!==undefined)_histo.push(histoEntree(_sessH,'modif',`Modif ${lib} · attendu ${Number(f(l,'Quantite_Attendue')||0)} → ${qte}`,[lid]));
+          if(body.Reference_Article!==undefined&&f(l,'Reference_Article'))_histo.push(histoEntree(_sessH,'modif',`Modif référence · ${f(l,'Reference_Article')} → ${ref}`,[lid]));
+          if(body.Verrouille!==undefined)_histo.push(histoEntree(_sessH,'verrou',`${verr?'Verrouillage':'Déverrouillage'} ${lib}`,[lid]));
+          Object.assign(l,body);
+        }
+        saved++;
+      }
     }catch(e){errors++;lastErr=e.message;console.warn('[sessionPanelSaveAll patch]',lid,e.message);}
     _tick();
   }
@@ -5787,22 +5853,27 @@ async function _sessionPanelSaveAllCore(sessionId,progres){
       if(homologue&&Number(f(homologue,'Quantite_Scannee')||0)>0&&_final){
         await spPatch('sites/BondeCommande','Lignes_Scan',homologue.ID,{Verrouille:true});
         homologue.Verrouille=true;
+        _histo.push(histoEntree(_sessH,'verrou',`Verrouillage auto ${ref} · déjà livré ${f(homologue,'Quantite_Scannee')}`,[homologue.ID]));
         toast(`🔒 ${ref} déjà livré (${f(homologue,'Quantite_Scannee')}) : ligne verrouillée, le rajout de ${qte} est une ligne à part`);
       }else if(homologue){
-        const nq=Number(f(homologue,'Quantite_Attendue')||0)+qte;
+        const av=Number(f(homologue,'Quantite_Attendue')||0);
+        const nq=av+qte;
         await spPatch('sites/BondeCommande','Lignes_Scan',homologue.ID,{Quantite_Attendue:nq});
         homologue.Quantite_Attendue=nq;
+        _histo.push(histoEntree(_sessH,'fusion',`Ajout ${ref} +${qte} · sur la ligne existante (${av} → ${nq})`));
         saved++;_tick();
         continue;
       }
       const created=await spPost('sites/BondeCommande','Lignes_Scan',{
         Session_ScanId:sessionId,Reference_Article:ref,Designation:design,Quantite_Attendue:qte,Quantite_Scannee:0
       });
-      if(created){const cn={...created,ID:created.ID??created.Id};DATA.lignesScan=[...(DATA.lignesScan||[]),cn];}
+      if(created){const cn={...created,ID:created.ID??created.Id};DATA.lignesScan=[...(DATA.lignesScan||[]),cn];
+        _histo.push(histoEntree(_sessH,'ajout',`Ajout ${ref||design} ×${qte}${ref&&design?' · '+design:''}`,[cn.ID]));}
       saved++;
     }catch(e){errors++;lastErr=e.message;console.warn('[sessionPanelSaveAll post]',e.message);}
     _tick();
   }
+  await histoAjouter(sessionId,_histo);
   if(errors>0){toast(`⚠️ ${saved} enregistré(s), ${errors} échec(s) — ${lastErr}`);return false;}
   if(progres)progres(_total,_total);
 
@@ -5863,11 +5934,81 @@ async function sessionPanelDeleteLigne(lineId, sessionId){
   const ok=await showConfirm('🗑️ Supprimer cet article ?','Cette ligne sera supprimée de la session.','Supprimer','delete');
   if(!ok)return;
   try{
+    const _lS=(DATA.lignesScan||[]).find(l=>l.ID===lineId);
     await spDelete('sites/BondeCommande','Lignes_Scan',lineId);
     DATA.lignesScan=(DATA.lignesScan||[]).filter(l=>l.ID!==lineId);
     document.querySelector(`#sp-lignes-edit-${sessionId} [data-lid="${lineId}"]`)?.remove();
+    if(_lS){const _sD=(DATA.sessionsScan||[]).find(x=>x.ID===sessionId);
+      await histoAjouter(sessionId,[histoEntree(_sD,'suppr',`Suppression ${f(_lS,'Reference_Article')||f(_lS,'Designation')||''} · attendu ${f(_lS,'Quantite_Attendue')||0}, scanné ${f(_lS,'Quantite_Scannee')||0}`)]);}
     toast('✅ Article supprimé');
   }catch(e){toast('❌ '+e.message);}
+}
+
+// ═══ CHAÎNE DE MODIFICATIONS D'UN BL (Sessions_Scan.Historique) ═══
+// Une entrée JSON par ligne : {t:ISO, u:utilisateur, k:type, x:texte, p:passage, ids:[ID lignes]}
+// Passage 1 = BL initial ; chaque réouverture ouvre le passage suivant. Les lignes
+// ajoutées pendant un passage sont rattachées à ce passage (comme Image, qui
+// empile les entrées successives d'une même référence dans l'ordre).
+function histoLire(s){
+  const brut=String(f(s||{},'Historique')||'');
+  return brut.split('\n').map(x=>{try{return JSON.parse(x);}catch(e){return null;}}).filter(Boolean);
+}
+function histoPassageCourant(s){return 1+histoLire(s).filter(e=>e.k==='reouverture').length;}
+function histoEntree(s,k,x,ids){
+  return {t:new Date().toISOString(),u:sessionStorage.getItem('user_name')||'—',k,x,p:histoPassageCourant(s)+(k==='reouverture'?1:0),...(ids&&ids.length?{ids}:{})};
+}
+// Concatène des entrées à l'historique (à envoyer dans le même PATCH que la modif si possible)
+function histoCorps(s,entrees){
+  if(!_historiqueDispo||!entrees.length)return {};
+  const brut=String(f(s||{},'Historique')||'');
+  return {Historique:(brut?brut+'\n':'')+entrees.map(e=>JSON.stringify(e)).join('\n')};
+}
+async function histoAjouter(sessionId,entrees){
+  if(!_historiqueDispo||!entrees||!entrees.length)return;
+  const s=(DATA.sessionsScan||[]).find(x=>x.ID===sessionId);
+  if(!s)return;
+  const body=histoCorps(s,entrees);
+  try{await spPatch('sites/BondeCommande','Sessions_Scan',sessionId,body);s.Historique=body.Historique;}
+  catch(e){console.warn('[histoAjouter]',e.message);}
+}
+// Passage de chaque ligne : celui de l'événement qui la cite, sinon d'après sa date
+// de création par rapport aux réouvertures, sinon 1.
+function histoPassagesLignes(s,lignes){
+  const h=histoLire(s);
+  const reouv=h.filter(e=>e.k==='reouverture').map(e=>({t:Date.parse(e.t),p:e.p}));
+  const parId={};
+  h.forEach(e=>(e.ids||[]).forEach(id=>{if(parId[id]===undefined)parId[id]=e.p;}));
+  const res={};
+  lignes.forEach(l=>{
+    if(parId[l.ID]!==undefined){res[l.ID]=parId[l.ID];return;}
+    const c=Date.parse(f(l,'Created')||'');
+    let p=1;
+    if(!isNaN(c))reouv.forEach(r=>{if(r.t<c&&r.p>p)p=r.p;});
+    res[l.ID]=p;
+  });
+  return res;
+}
+function histoBlocHTML(s){
+  const h=histoLire(s);
+  const esc=v=>String(v??'').replace(/&/g,'&amp;').replace(/</g,'&lt;');
+  const dh=iso=>{try{return dateHeureGP(iso);}catch(e){return fmtDate(iso);}};
+  const ico={reouverture:'🔓',ajout:'➕',fusion:'➕',modif:'✏️',suppr:'🗑️',prep:'📦',verrou:'🔒'};
+  const items=[];
+  items.push(`<li><span class="hc-ic">📄</span><div><strong>BL émis</strong>${f(s,'Vendeur_Emetteur')?' par '+esc(f(s,'Vendeur_Emetteur')):''}<div class="hc-d">${fmtDate(f(s,'Date_Emission')||f(s,'Created'))}</div></div></li>`);
+  h.forEach(e=>{
+    const titre=e.k==='reouverture'?`<strong>Réouverture n°${e.p-1}</strong>`:esc(e.x).replace(/^([^·]+)/,'<strong>$1</strong>');
+    const detail=e.k==='reouverture'&&e.x?`<div class="hc-x">${esc(e.x)}</div>`:'';
+    items.push(`<li${e.k==='reouverture'?' class="hc-reouv"':''}><span class="hc-ic">${ico[e.k]||'•'}</span><div>${titre}${detail}<div class="hc-d">${dh(e.t)} · ${esc(e.u)}${e.p>1&&e.k!=='reouverture'?` · passage ${e.p}`:''}</div></div></li>`);
+  });
+  const st=f(s,'Statut')||'';
+  if(f(s,'Date_Scan'))items.push(`<li><span class="hc-ic">✅</span><div><strong>Livré</strong> par ${esc(f(s,'Magasinier')||'—')} — ${esc(st)}<div class="hc-d">${fmtDate(f(s,'Date_Scan'))}</div></div></li>`);
+  else items.push(`<li><span class="hc-ic">⏳</span><div><strong>${esc(st||'En attente')}</strong><div class="hc-d">en attente du magasinier</div></div></li>`);
+  const nbReouv=h.filter(e=>e.k==='reouverture').length;
+  return `<details class="hc-wrap"${nbReouv?' open':''}>
+    <summary>🔗 Chaîne de modifications${nbReouv?` · <span style="color:#b45309">${nbReouv} réouverture${nbReouv>1?'s':''}</span>`:''}${h.length?` · ${h.length} événement${h.length>1?'s':''}`:''}</summary>
+    ${_historiqueDispo?'':'<div style="font-size:11.5px;color:#b45309;margin:6px 0">⚠️ Colonne <code>Historique</code> absente de Sessions_Scan — les modifications ne sont pas tracées.</div>'}
+    <ol class="hc-list">${items.join('')}</ol>
+  </details>`;
 }
 
 // ── Réouverture d'une session clôturée pour correction ──
@@ -5905,13 +6046,20 @@ async function reoouvrirSession(sessionId, numBL){
       const v=f(l,'Verrouille');
       return (v===true||v==='Oui'||v==='1'||v===1)&&Number(f(l,'Quantite_Scannee')||0)>0;
     }).length;
+    const _sR=(DATA.sessionsScan||[]).find(x=>x.ID===sessionId);
+    const _prec=_sR&&f(_sR,'Date_Scan')?`Clôture précédente : ${fmtDate(f(_sR,'Date_Scan'))} par ${f(_sR,'Magasinier')||'—'} (${f(_sR,'Statut')||'—'})`:`Statut précédent : ${f(_sR||{},'Statut')||'—'}`;
+    const _verrNoms=lignesAvant.filter(l=>{const v=f(l,'Verrouille');return v===true||v==='Oui'||v==='1'||v===1;}).length;
+    const _aRemettre=lignesAvant.length-_verrNoms;
+    const _hR=histoCorps(_sR,[histoEntree(_sR,'reouverture',`${_prec} · ${_verrNoms} ligne(s) verrouillée(s) conservée(s), ${_aRemettre} remise(s) à zéro`)]);
     await spPatch('sites/BondeCommande','Sessions_Scan',sessionId,{
       Statut:'BL Émis',
       Date_Scan:null,
       Magasinier:'',
       Nb_Articles_Scannes:nbDejaScan,
-      Nb_Ecarts:0
+      Nb_Ecarts:0,
+      ..._hR
     });
+    if(_sR&&_hR.Historique)_sR.Historique=_hR.Historique;
 
     // 2. Remettre à zéro uniquement les lignes NON verrouillées
     for(const l of lignesAvant){
@@ -7503,6 +7651,10 @@ async function plAjouterABLExistant(prepId,coches,nonCoches,nouvelles,clientVal,
   // 1) Verrouiller ce qui a déjà été livré (BL clôturé uniquement — sur un BL
   //    pas encore livré, les quantités scannées sont une préparation, pas une sortie)
   let nbVerr=0;
+  const _hx=[];
+  if(etaitFinal)_hx.push(histoEntree(cible,'reouverture',`Via préparation ${f(prep,'Numero_BL')||''} · clôture précédente : ${fmtDate(f(cible,'Date_Scan'))} par ${f(cible,'Magasinier')||'—'} (${f(cible,'Statut')||'—'})`));
+  const _pH=histoPassageCourant(cible)+(etaitFinal?1:0);
+  const _eH=(k,x,ids)=>({...histoEntree(cible,k,x,ids),p:_pH});
   if(etaitFinal){
     for(const l of lignesDe(cibleId)){
       if(_isVerrL(l)||Number(f(l,'Quantite_Scannee')||0)<=0)continue;
@@ -7519,12 +7671,14 @@ async function plAjouterABLExistant(prepId,coches,nonCoches,nouvelles,clientVal,
       const body={Quantite_Attendue:Number(f(homologue,'Quantite_Attendue')||0)+att,Quantite_Scannee:Number(f(homologue,'Quantite_Scannee')||0)+sc};
       await spPatch('sites/BondeCommande','Lignes_Scan',homologue.ID,body);
       Object.assign(homologue,body);
+      _hx.push(_eH('prep',`Préparé ${f(l,'Reference_Article')||f(l,'Designation')||''} +${att} · ajouté à la ligne existante`));
       await spDelete('sites/BondeCommande','Lignes_Scan',l.ID);
       DATA.lignesScan=(DATA.lignesScan||[]).filter(x=>x.ID!==l.ID);
       nbFusion++;
     }else{
       await spPatch('sites/BondeCommande','Lignes_Scan',l.ID,{Session_ScanId:cibleId});
       l.Session_ScanId=cibleId;if(l.Session_Scan)l.Session_Scan={Id:cibleId};
+      _hx.push(_eH('prep',`Préparé ${f(l,'Reference_Article')||f(l,'Designation')||''} ×${att} · déjà scanné ${sc}`,[l.ID]));
       nbDeplace++;
     }
   }
@@ -7537,9 +7691,11 @@ async function plAjouterABLExistant(prepId,coches,nonCoches,nouvelles,clientVal,
         const body={Quantite_Attendue:Number(f(homologue,'Quantite_Attendue')||0)+n.qte};
         await spPatch('sites/BondeCommande','Lignes_Scan',homologue.ID,body);
         Object.assign(homologue,body);
+        _hx.push(_eH('fusion',`Ajout ${n.ref||n.design} +${n.qte} · sur la ligne existante`));
       }else{
         const created=await spPost('sites/BondeCommande','Lignes_Scan',{Session_ScanId:cibleId,Reference_Article:n.ref,Designation:n.design,Quantite_Attendue:n.qte,Quantite_Scannee:0});
-        if(created)DATA.lignesScan=[...(DATA.lignesScan||[]),{...created,ID:created.ID??created.Id,Session_ScanId:cibleId}];
+        if(created){const _nid=created.ID??created.Id;DATA.lignesScan=[...(DATA.lignesScan||[]),{...created,ID:_nid,Session_ScanId:cibleId}];
+          _hx.push(_eH('ajout',`Ajout ${n.ref||n.design} ×${n.qte}`,[_nid]));}
       }
       okNew++;
     }catch(e){koNew++;console.warn('[plAjouterABLExistant] ajout',n,e.message);}
@@ -7553,6 +7709,7 @@ async function plAjouterABLExistant(prepId,coches,nonCoches,nouvelles,clientVal,
   if(stCible!=='bl emis'){bodyS.Statut='Prête à livrer';bodyS.Date_Scan=null;if(f(prep,'Magasinier'))bodyS.Magasinier=f(prep,'Magasinier');}
   if(!String(f(cible,'Vendeur_Emetteur')||'').trim())bodyS.Vendeur_Emetteur=vendeurVal;
   if(!String(f(cible,'Client')||'').trim())bodyS.Client=clientVal;
+  Object.assign(bodyS,histoCorps(cible,_hx));
   await spPatch('sites/BondeCommande','Sessions_Scan',cibleId,bodyS);
   Object.assign(cible,bodyS);
   // 5) La préparation : supprimée si tout est parti, sinon garde le reste
