@@ -430,6 +430,7 @@
     <button class="tab" onclick="showTab('dbc',this)">🧾 Demandes BC <span class="tab-badge r" id="badge-dbc">0</span></button>
     <button class="tab" onclick="showTab('devis',this)">📄 Devis <span class="tab-badge a" id="badge-devis">0</span></button>
     <button class="tab" onclick="showTab('analytics',this);renderAnalytics()">📈 Analytics</button>
+    <button class="tab" onclick="showTab('suivicli',this);renderSuivisClients()">📞 Suivis clients <span class="tab-badge r" id="badge-suivicli" style="display:none">0</span></button>
     <button class="tab" onclick="showTab('journal',this);loadJournal()">📜 Journal d'Audit</button>
     <button class="tab" onclick="showTab('retours',this);loadRetours()">↩️ Retours</button>
   </div>
@@ -1211,6 +1212,42 @@
     </div>
 
     <!-- JOURNAL D'AUDIT -->
+    <div id="tab-suivicli" class="section-bloc">
+      <div class="page-header">
+        <div><h1>Suivis clients</h1><div class="sub">Tous les appels, emails et passages prévus notés sur les BC · Suivi_BC.Suivi_Client</div></div>
+        <div style="display:flex;gap:8px">
+          <button class="btn-refresh" onclick="loadAll()">🔄 Actualiser</button>
+        </div>
+      </div>
+      <div class="sc-alerte" data-sc-alerte="tab-suivicli" style="display:none"></div>
+      <div class="kpi-row c3" style="grid-template-columns:repeat(4,1fr)">
+        <div class="kc t"><div class="kl">📞 Suivis sur la période</div><div class="kv" id="kpi-scl-total">—</div><div class="ks" id="kpi-scl-total-sub">—</div></div>
+        <div class="kc t"><div class="kl">📦 BC suivis</div><div class="kv" id="kpi-scl-bc">—</div><div class="ks">Distincts</div></div>
+        <div class="kc r"><div class="kl">⏰ À relancer</div><div class="kv" id="kpi-scl-du">—</div><div class="ks">Date prévue dépassée</div></div>
+        <div class="kc o"><div class="kl">📵 Injoignables</div><div class="kv" id="kpi-scl-inj">—</div><div class="ks">Sur la période</div></div>
+      </div>
+      <div style="background:var(--navy);border-radius:var(--radius);padding:14px 18px;margin-bottom:14px">
+        <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+          <input type="text" id="scl-q" placeholder="🔍 N° BC, client, contact, commentaire..." oninput="renderSuivisClients()" style="flex:1;min-width:220px;background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.2);border-radius:var(--radius-sm);padding:8px 12px;font-size:13px;color:white;font-family:var(--font-body);outline:none">
+          <select id="scl-vendeur" class="fs" onchange="renderSuivisClients()"><option value="all">Tous les vendeurs</option></select>
+          <select id="scl-resultat" class="fs" onchange="renderSuivisClients()"><option value="all">Tous les résultats</option></select>
+          <select id="scl-etat" class="fs" onchange="renderSuivisClients()">
+            <option value="all">Tous les BC</option><option value="attente">Toujours en attente</option><option value="du">À relancer</option><option value="recupere">Récupérés / soldés</option>
+          </select>
+          <label style="color:rgba(255,255,255,.7);font-size:12px">Du <input type="date" id="scl-du" onchange="renderSuivisClients()" class="fs" style="padding:5px 6px"></label>
+          <label style="color:rgba(255,255,255,.7);font-size:12px">Au <input type="date" id="scl-au" onchange="renderSuivisClients()" class="fs" style="padding:5px 6px"></label>
+          <label style="color:rgba(255,255,255,.8);font-size:12px;display:flex;align-items:center;gap:4px"><input type="checkbox" id="scl-dernier" onchange="renderSuivisClients()"> Dernier suivi par BC</label>
+          <button class="btn" style="border-color:rgba(255,255,255,.3);color:rgba(255,255,255,.75);background:none" onclick="sclReinitialiser()">Réinitialiser</button>
+          <button class="btn" style="border-color:rgba(255,255,255,.3);color:rgba(255,255,255,.75);background:none" onclick="exportSuivisClientsCSV()">⬇ CSV</button>
+          <span id="scl-count" style="font-size:11px;color:rgba(255,255,255,.55)"></span>
+        </div>
+      </div>
+      <div class="tc"><table style="min-width:0">
+        <thead><tr><th>Date</th><th>Vendeur</th><th>N° BC</th><th>Client</th><th>Résultat</th><th>Prévu le</th><th>Contact / destinataire</th><th>Commentaire</th><th>État du BC</th></tr></thead>
+        <tbody id="scl-body"><tr class="empty-row"><td colspan="9">Chargement...</td></tr></tbody>
+      </table></div>
+    </div>
+
     <div id="tab-journal" class="section-bloc">
       <div class="page-header">
         <div><h1>Journal d'Audit</h1><div class="sub">/sites/BondeCommande · Journal_Actions · 500 entrées les plus récentes</div></div>
@@ -4158,9 +4195,104 @@ function scMajDate(){
   const mail=document.getElementById('sc-mail');if(mail)mail.style.display=r==='email'?'grid':'none';
   const cw=document.getElementById('sc-c-wrap');if(cw)cw.style.visibility=r==='email'?'hidden':'visible';
 }
+const _sclJ=d=>String(d||'').split('-').reverse().join('/');
+// ── Vue d'ensemble « Suivis clients » ──
+function sclToutes(){
+  const rows=[];
+  (DATA.suivi||[]).forEach(bc=>{
+    const h=scLire(bc);if(!h.length)return;
+    const etat=scEtat(bc);
+    h.forEach((e,idx)=>rows.push({bc,e,dernier:idx===h.length-1,etat}));
+  });
+  return rows.sort((a,b)=>String(b.e.t).localeCompare(String(a.e.t)));
+}
+function sclReinitialiser(){
+  ['scl-q','scl-du','scl-au'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});
+  ['scl-vendeur','scl-resultat','scl-etat'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='all';});
+  const d=document.getElementById('scl-dernier');if(d)d.checked=false;
+  renderSuivisClients();
+}
+function sclFiltrees(){
+  const v=id=>document.getElementById(id)?.value||'';
+  const q=v('scl-q').trim().toLowerCase(),fV=v('scl-vendeur')||'all',fR=v('scl-resultat')||'all',fE=v('scl-etat')||'all';
+  const du=v('scl-du'),au=v('scl-au'),dernier=!!document.getElementById('scl-dernier')?.checked;
+  return sclToutes().filter(x=>{
+    const j=jourLocal(x.e.t);
+    if(du&&j<du)return false;
+    if(au&&j>au)return false;
+    if(fV!=='all'&&x.e.u!==fV)return false;
+    if(fR!=='all'&&x.e.r!==fR)return false;
+    if(dernier&&!x.dernier)return false;
+    if(fE==='attente'&&!x.etat.ouvert)return false;
+    if(fE==='du'&&!x.etat.du)return false;
+    if(fE==='recupere'&&x.etat.ouvert)return false;
+    if(q){
+      const txt=[f(x.bc,'Title'),getClient(x.bc),x.e.c,x.e.en,x.e.em,x.e.x,x.e.u].join(' ').toLowerCase();
+      if(!txt.includes(q))return false;
+    }
+    return true;
+  });
+}
+function renderSuivisClients(){
+  const tout=sclToutes();
+  // Filtres alimentés à partir des données
+  const selV=document.getElementById('scl-vendeur');
+  if(selV){const cur=selV.value;const vs=[...new Set(tout.map(x=>x.e.u).filter(Boolean))].sort();
+    selV.innerHTML='<option value="all">Tous les vendeurs</option>'+vs.map(u=>`<option value="${_escD(u)}">${_escD(u)}</option>`).join('');selV.value=vs.includes(cur)?cur:'all';}
+  const selR=document.getElementById('scl-resultat');
+  if(selR&&selR.options.length===1)selR.innerHTML+=Object.entries(SC_RESULTATS).map(([k,r])=>`<option value="${k}">${r.ico} ${r.lib}</option>`).join('');
+  const rows=sclFiltrees();
+  const bcDus=new Set(tout.filter(x=>x.etat.du).map(x=>x.bc.ID));
+  const set=(id,v)=>{const el=document.getElementById(id);if(el)el.textContent=v;};
+  set('kpi-scl-total',rows.length);
+  const du=document.getElementById('scl-du')?.value,au=document.getElementById('scl-au')?.value;
+  set('kpi-scl-total-sub',du||au?`${du?_sclJ(du):'…'} → ${au?_sclJ(au):'aujourd’hui'}`:'Tout l’historique');
+  set('kpi-scl-bc',new Set(rows.map(x=>x.bc.ID)).size);
+  set('kpi-scl-du',bcDus.size);
+  set('kpi-scl-inj',rows.filter(x=>x.e.r==='injoignable').length);
+  set('scl-count',rows.length+' suivi'+(rows.length>1?'s':''));
+  const b=document.getElementById('scl-body');
+  if(!b)return;
+  if(!tout.length){b.innerHTML='<tr class="empty-row"><td colspan="9">Aucun suivi client enregistré pour l’instant — utilise « 📞 Suivi client » sur un BC.</td></tr>';return;}
+  if(!rows.length){b.innerHTML='<tr class="empty-row"><td colspan="9">Aucun suivi ne correspond aux filtres</td></tr>';return;}
+  b.innerHTML=rows.map(x=>{
+    const R=SC_RESULTATS[x.e.r]||SC_RESULTATS.autre;
+    const etatTxt=x.etat.du?'<span class="ctag r">⏰ À relancer</span>':x.etat.ouvert?'<span class="ctag o">En attente</span>':'<span class="ctag g">Récupéré / soldé</span>';
+    const dest=x.e.em?`${x.e.en?_escD(x.e.en)+'<br>':''}<a href="mailto:${_escD(x.e.em)}" style="color:var(--blue);font-size:11.5px">${_escD(x.e.em)}</a>`:_escD(x.e.c||'—');
+    return`<tr style="${x.dernier?'':'opacity:.72'}">
+      <td class="mono" style="font-size:11.5px;white-space:nowrap">${dateHeureGP(x.e.t)}</td>
+      <td>${_escD(x.e.u||'—')}</td>
+      <td class="ref" style="cursor:pointer;color:var(--blue)" onclick="openBCPanel(${x.bc.ID})">${_escD(f(x.bc,'Title')||'')}${x.dernier?'':' <span style="font-size:10px;color:var(--text-muted)">(ancien)</span>'}</td>
+      <td class="cname">${_escD(getClient(x.bc))}</td>
+      <td style="white-space:nowrap">${R.ico} ${_escD(R.lib)}</td>
+      <td class="mono" style="${x.dernier&&x.etat.du?'color:var(--red);font-weight:700':''}">${x.e.d?_sclJ(x.e.d):'—'}</td>
+      <td style="font-size:12px">${dest}</td>
+      <td style="font-size:12px;max-width:260px">${_escD(x.e.x||'')}</td>
+      <td>${x.dernier?etatTxt:''} <button class="btn" style="height:22px;font-size:11px;padding:0 6px;margin-left:4px" title="Ajouter un suivi" onclick="openSuiviClient(${x.bc.ID})">📞+</button></td>
+    </tr>`;}).join('');
+}
+function exportSuivisClientsCSV(){
+  exportCSV(sclFiltrees(),[
+    {label:'Date',fn:x=>dateHeureGP(x.e.t)},
+    {label:'Vendeur',fn:x=>x.e.u||''},
+    {label:'N° BC',fn:x=>f(x.bc,'Title')||''},
+    {label:'Client',fn:x=>getClient(x.bc)},
+    {label:'Résultat',fn:x=>(SC_RESULTATS[x.e.r]||SC_RESULTATS.autre).lib},
+    {label:'Prévu le',fn:x=>x.e.d?_sclJ(x.e.d):''},
+    {label:'Contact',fn:x=>x.e.c||x.e.en||''},
+    {label:'Email',fn:x=>x.e.em||''},
+    {label:'Commentaire',fn:x=>x.e.x||''},
+    {label:'État du BC',fn:x=>x.etat.du?'À relancer':x.etat.ouvert?'En attente':'Récupéré / soldé'},
+    {label:'Dernier suivi du BC',fn:x=>x.dernier?'Oui':'Non'}
+  ],'suivis_clients_'+_scJour()+'.csv');
+}
+
 function renderAlertesSuiviClient(){
   const dus=(DATA.suivi||[]).map(bc=>({bc,e:scEtat(bc)})).filter(x=>x.e&&x.e.du)
     .sort((a,b)=>String(a.e.der.d).localeCompare(String(b.e.der.d)));
+  const bdg=document.getElementById('badge-suivicli');
+  if(bdg){bdg.textContent=dus.length;bdg.style.display=dus.length?'':'none';}
+  if(document.getElementById('tab-suivicli')?.classList.contains('active'))try{renderSuivisClients();}catch(e){}
   document.querySelectorAll('.sc-alerte').forEach(el=>{
     if(!dus.length){el.style.display='none';el.innerHTML='';return;}
     el.style.display='block';
