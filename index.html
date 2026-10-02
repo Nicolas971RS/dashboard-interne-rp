@@ -2440,17 +2440,26 @@ function dbcPourBL(num){
 }
 // BC candidats pour rattacher une livraison hors procédure : BC du même client,
 // non soldés, ceux sans N° BL d'abord (c'est là qu'il manque le BL).
-function bcCandidatsHorsProc(s){
+// Règle : 1 livraison = 1 BL = 1 BC. Un BC qui porte déjà un AUTRE BL n'est
+// jamais proposé (on écraserait ou mélangerait deux livraisons). Pour un reste
+// à livrer, c'est la copie -A / -A-A créée par « Clôturer » (sans BL) qui sert.
+function _blCompatible(i,num){
+  const bl=String(f(i,'N_x00b0_BL')||'').trim();
+  if(!bl)return true;
+  return _blTokens(bl).includes(String(num||'').trim().toUpperCase());
+}
+function _bcDuClient(s){
   const cli=_normTxt(f(s,'Client'));
   return (DATA.suivi||[]).filter(i=>{
     if(typeof estSolde==='function'&&estSolde(i))return false;
     const c=_normTxt(getClient(i));
     return cli&&c&&(c===cli||c.includes(cli)||cli.includes(c));
-  }).sort((a,b)=>{
-    const ba=String(f(a,'N_x00b0_BL')||'').trim()?1:0,bb=String(f(b,'N_x00b0_BL')||'').trim()?1:0;
-    if(ba!==bb)return ba-bb;
-    return new Date(f(b,'Created')||0)-new Date(f(a,'Created')||0);
-  }).slice(0,12);
+  });
+}
+function bcCandidatsHorsProc(s){
+  const num=f(s,'Numero_BL');
+  return _bcDuClient(s).filter(i=>_blCompatible(i,num))
+    .sort((a,b)=>new Date(f(b,'Created')||0)-new Date(f(a,'Created')||0)).slice(0,12);
 }
 function openRegulHorsProc(sessionId){
   const s=(DATA.sessionsScan||[]).find(x=>x.ID===sessionId);
@@ -2466,7 +2475,7 @@ function openRegulHorsProc(sessionId){
     const bl=String(f(i,'N_x00b0_BL')||'').trim();
     return`<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;padding:8px 10px;border-bottom:1px solid var(--border-light)">
       <div style="min-width:0"><div style="font-weight:700;font-family:var(--font-mono)">${f(i,'Title')||('BC-'+i.ID)}</div>
-        <div style="font-size:11.5px;color:var(--text-muted)">${getClient(i)} · ${f(i,'Vendeurencharge')||'—'} · reçu le ${fmtDate(f(i,'Dateder_x00e9_ception')||f(i,'Created'))}${bl?` · <span style="color:#b45309;font-weight:600">a déjà le BL ${bl}</span>`:' · <span style="color:var(--green);font-weight:600">sans BL</span>'}</div></div>
+        <div style="font-size:11.5px;color:var(--text-muted)">${getClient(i)} · ${f(i,'Vendeurencharge')||'—'} · reçu le ${fmtDate(f(i,'Dateder_x00e9_ception')||f(i,'Created'))}${/-[A-Z]$/i.test(String(f(i,'Title')||'').trim())?' · <span style="color:var(--violet,#7c3aed);font-weight:600">reste à livrer d\'un BC partiel</span>':''} · <span style="color:var(--green);font-weight:600">${bl?'BL '+bl:'sans BL'}</span></div></div>
       <button class="btn navy" data-label="1" style="height:28px;font-size:11.5px;white-space:nowrap" onclick="regulHPOuvrirTraiter(${i.ID},${sessionId})">🔧 Traiter avec BL ${num}</button>
     </div>`;
   };
@@ -2479,8 +2488,10 @@ function openRegulHorsProc(sessionId){
     <div style="font-weight:800;font-size:13px;color:var(--navy);margin-bottom:4px">1️⃣ Le client a un BC → rattacher le BL</div>
     <div style="font-size:11.5px;color:var(--text-muted);margin-bottom:6px">Choisis le BC : Traiter s'ouvre avec le N° BL déjà rempli. Enregistre → la livraison est régularisée automatiquement.</div>
     <div style="border:1px solid var(--border);border-radius:var(--radius-sm);max-height:220px;overflow-y:auto;margin-bottom:6px">
-      ${cands.length?cands.map(ligneBC).join(''):`<div style="padding:12px;font-size:12.5px;color:var(--text-muted)">Aucun BC en cours trouvé pour « ${f(s,'Client')||'—'} ».</div>`}
+      ${cands.length?cands.map(ligneBC).join(''):`<div style="padding:12px;font-size:12.5px;color:var(--text-muted)">Aucun BC disponible (sans BL) pour « ${f(s,'Client')||'—'} ».</div>`}
     </div>
+    ${(()=>{const n=_bcDuClient(s).length-_bcDuClient(s).filter(i=>_blCompatible(i,num)).length;
+      return n?`<div style="font-size:11.5px;color:#7c2d12;background:#fff7ed;border:1px solid #fdba74;border-radius:var(--radius-sm);padding:7px 10px;margin-bottom:8px">🔒 ${n} BC de ce client masqué${n>1?'s':''} : ${n>1?'ils ont':'il a'} déjà un autre BL (un BC = un BL). Si ce BL est le <strong>reste</strong> d'un de ces BC, fais d'abord « Clôturer » (livraison partielle) sur ce BC : sa copie <strong>-A</strong> apparaîtra ici.</div>`:'';})()}
     <div style="display:flex;gap:6px;align-items:center;margin-bottom:16px">
       <input id="hp-bc-search" placeholder="Autre BC : N° BC ou client…" style="flex:1;padding:7px 10px;border:1px solid var(--border);border-radius:var(--radius-sm);font-size:12.5px" oninput="regulHPChercherBC(${sessionId})">
     </div>
@@ -2499,7 +2510,7 @@ function regulHPChercherBC(sessionId){
   const s=(DATA.sessionsScan||[]).find(x=>x.ID===sessionId);
   const num=f(s,'Numero_BL');
   const res=(DATA.suivi||[]).filter(i=>_normTxt(f(i,'Title')).includes(q)||_normTxt(getClient(i)).includes(q)).slice(0,8);
-  host.innerHTML=res.length?`<div style="border:1px solid var(--border);border-radius:var(--radius-sm)">${res.map(i=>`<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;padding:6px 10px;border-bottom:1px solid var(--border-light);font-size:12px"><span><strong class="mono">${f(i,'Title')||('BC-'+i.ID)}</strong> · ${getClient(i)}${String(f(i,'N_x00b0_BL')||'').trim()?` · <span style="color:#b45309">BL ${f(i,'N_x00b0_BL')}</span>`:''}</span><button class="btn navy" style="height:26px;font-size:11px" onclick="regulHPOuvrirTraiter(${i.ID},${sessionId})">🔧 Traiter avec BL ${num}</button></div>`).join('')}</div>`
+  host.innerHTML=res.length?`<div style="border:1px solid var(--border);border-radius:var(--radius-sm)">${res.map(i=>{const ok=_blCompatible(i,num);return`<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;padding:6px 10px;border-bottom:1px solid var(--border-light);font-size:12px;${ok?'':'opacity:.6'}"><span><strong class="mono">${f(i,'Title')||('BC-'+i.ID)}</strong> · ${getClient(i)}${String(f(i,'N_x00b0_BL')||'').trim()?` · <span style="color:${ok?'var(--green)':'#b45309'}">BL ${f(i,'N_x00b0_BL')}</span>`:''}</span>${ok?`<button class="btn navy" style="height:26px;font-size:11px" onclick="regulHPOuvrirTraiter(${i.ID},${sessionId})">🔧 Traiter avec BL ${num}</button>`:'<span style="font-size:11px;color:#b45309;white-space:nowrap">🔒 autre BL</span>'}</div>`;}).join('')}</div>`
     :'<div style="font-size:12px;color:var(--text-muted)">Aucun BC trouvé.</div>';
 }
 async function regulHPOuvrirTraiter(bcId,sessionId){
@@ -2507,6 +2518,7 @@ async function regulHPOuvrirTraiter(bcId,sessionId){
   const num=String(f(s,'Numero_BL')||'').trim();
   const bc=(DATA.suivi||[]).find(i=>i.ID===bcId);
   const blExistant=String(f(bc,'N_x00b0_BL')||'').trim();
+  if(bc&&!_blCompatible(bc,num)){toast(`🔒 ${f(bc,'Title')} a déjà le BL ${blExistant} — un BC ne peut porter qu'un BL. Passe par « Clôturer » pour créer sa copie -A.`,'ko');return;}
   closeModal();
   const sub=document.getElementById('modal-submit');if(sub)sub.style.display='';
   await openTraiterModal(bcId);
@@ -2518,8 +2530,6 @@ async function regulHPOuvrirTraiter(bcId,sessionId){
       inp.dispatchEvent(new Event('input'));inp.dispatchEvent(new Event('blur'));
       inp.style.background='#fef2f2';
       toast(`📝 BL ${num} pré-rempli — vérifie puis Valider pour régulariser`);
-    }else if(blExistant.toUpperCase()!==num.toUpperCase()){
-      toast(`⚠️ Ce BC a déjà le BL ${blExistant}. Si ${num} est un complément, passe par « Livraison partielle » ou remplace le N° BL.`,'ko');
     }
   },350);
 }
