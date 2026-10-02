@@ -4593,6 +4593,65 @@ function lmReinitialiser(){
   lmRenderAll();
 }
 
+// ═══ ÉCART RÉEL vs STATUT ENREGISTRÉ ═══
+// Le statut « Écarts détectés » est posé par le flux à la clôture. Il ne se
+// recalcule pas quand une quantité est corrigée après coup (Traiter, panneau…),
+// et un scan perdu peut à l'inverse laisser « Terminée » sur un BL incomplet.
+// Les lignes font foi : on compare ligne par ligne (lignes verrouillées exclues,
+// comme dans « Enregistrer les modifications »).
+let _lignesIdx=null,_lignesIdxSrc=null;
+function lignesDeSession(id){
+  if(_lignesIdxSrc!==DATA.lignesScan){
+    _lignesIdx={};_lignesIdxSrc=DATA.lignesScan;
+    (DATA.lignesScan||[]).forEach(l=>{const k=String(lineSessionId(l));(_lignesIdx[k]=_lignesIdx[k]||[]).push(l);});
+  }
+  return _lignesIdx[String(id)]||[];
+}
+function ecartsReels(s){
+  const ls=lignesDeSession(s.ID);
+  if(!ls.length)return null; // lignes inconnues : on ne conclut rien
+  const verr=l=>{const v=f(l,'Verrouille');return v===true||v==='Oui'||v==='1'||v===1;};
+  return ls.filter(l=>!verr(l)&&Number(f(l,'Quantite_Scannee')||0)!==Number(f(l,'Quantite_Attendue')||0)).length;
+}
+// Statut enregistré incohérent avec les lignes ? (livraisons clôturées seulement)
+function statutIncoherent(s){
+  if(_normTxt(f(s,'Type_Operation'))!=='livraison client')return null;
+  const st=_normTxt(f(s,'Statut'));
+  const enEcart=st.includes('ecart'),termine=st==='terminee';
+  if(!enEcart&&!termine)return null;
+  const n=ecartsReels(s);
+  if(n===null)return null;
+  if(enEcart&&n===0)return{cible:'Terminée',nb:0,txt:'Statut « écart » mais toutes les lignes sont complètes'};
+  if(termine&&n>0)return{cible:'Écarts détectés',nb:n,txt:`Statut « livré » mais ${n} ligne${n>1?'s':''} en écart`};
+  return null;
+}
+async function corrigerStatutSession(id,silencieux){
+  const s=(DATA.sessionsScan||[]).find(x=>x.ID===id);
+  const inc=s&&statutIncoherent(s);
+  if(!inc)return false;
+  await spPatch('sites/BondeCommande','Sessions_Scan',id,{Statut:inc.cible,Nb_Ecarts:inc.nb});
+  s.Statut=inc.cible;s.Nb_Ecarts=inc.nb;
+  if(!silencieux){
+    toast(`✅ ${f(s,'Numero_BL')} : statut corrigé → ${inc.cible}`);
+    if(document.getElementById('panel-ov')?.classList.contains('open'))openSessionPanel(id);
+    lmRenderAll();
+  }
+  return true;
+}
+async function corrigerTousStatuts(btn){
+  const liste=(DATA.sessionsScan||[]).filter(s=>statutIncoherent(s));
+  if(!liste.length){toast('Aucun statut à corriger');return;}
+  const ok=await showConfirm('Corriger les statuts ?',`${liste.length} BL ont un statut qui ne correspond pas à leurs lignes :<br>`
+    +liste.slice(0,12).map(s=>`• <strong>${f(s,'Numero_BL')}</strong> — ${statutIncoherent(s).txt}`).join('<br>')
+    +(liste.length>12?`<br>… et ${liste.length-12} autre(s)`:''),'Corriger','submit');
+  if(!ok)return;
+  if(btn){btn.disabled=true;btn.textContent='⏳ Correction…';}
+  let n=0;
+  for(const s of liste){try{if(await corrigerStatutSession(s.ID,true))n++;}catch(e){console.warn('[corrigerTousStatuts]',s.ID,e.message);}}
+  toast(`✅ ${n} statut(s) corrigé(s)`);
+  lmRenderAll();
+}
+
 // Statut lisible et coloré, identique dans tout l'onglet Livraison Magasin :
 // 🔴 à livrer · 🔵 en préparation · 🟠 partiel / écart · 🟢 livré.
 function statutVisuel(s){
@@ -4609,16 +4668,19 @@ function statutVisuel(s){
   else if(low.includes('partiel')){v=O;cat='partiel';label='🟠 Livré partiel';}
   else if(low.includes('écart')||low.includes('ecart')){
     if(type==='préparation matériel'&&num.startsWith('PREP-')){v=V;cat='affecter';label='🟣 À affecter';}
+    else if(statutIncoherent(s)){v=G;cat='livre';label='🟢 BL livré';}
     else{v=O;cat='partiel';label='🟠 Livré avec écart';}
   }
   else if(low==='terminée'||low==='terminee'){
     if(type==='inventaire physique'){v=N;cat='inventaire';label='Inventaire terminé';}
     else if(num.startsWith('PREP-')){v=V;cat='affecter';label='🟣 À affecter';}
+    else if(statutIncoherent(s)){v=O;cat='partiel';label='🟠 Livré avec écart';}
     else{v=G;cat='livre';label='🟢 BL livré';}
   }
   else if(low){v=B;cat='encours';label='🔵 En préparation';}
   else{v=N;cat='autre';label='—';}
-  return{...v,cat,label,tag:`<span class="stl-tag" style="color:${v.fg};background:${v.bg};border-color:${v.bd}" title="Statut SharePoint : ${st||'—'}">${label}</span>`,
+  const _inc=statutIncoherent(s);
+  return{...v,cat,label,tag:`<span class="stl-tag" style="color:${v.fg};background:${v.bg};border-color:${v.bd}" title="Statut SharePoint : ${st||'—'}${_inc?' — '+_inc.txt+' (à corriger)':''}">${label}${_inc?' <span style="font-size:10px">⚠</span>':''}</span>`,
     rowStyle:`background:${v.bg};box-shadow:inset 4px 0 0 ${v.fg};`};
 }
 
@@ -5141,9 +5203,13 @@ function renderLivres(){
   livres.sort((a,b)=>new Date(f(b,'Date_Scan')||f(b,'Date_Emission'))-new Date(f(a,'Date_Scan')||f(a,'Date_Emission')));
 
   const lbl=document.getElementById('livres-count-label');
-  if(lbl)lbl.textContent=filtreActif
-    ?`${livres.length} BL livré${livres.length>1?'s':''} sur ${totalLivres} — filtrés par la barre du haut`
-    :`${totalLivres} BL livré${totalLivres>1?'s':''} — utilise la barre du haut pour chercher ou filtrer par date`;
+  if(lbl){
+    const nbInc=(DATA.sessionsScan||[]).filter(s=>statutIncoherent(s)).length;
+    lbl.innerHTML=(filtreActif
+      ?`${livres.length} BL livré${livres.length>1?'s':''} sur ${totalLivres} — filtrés par la barre du haut`
+      :`${totalLivres} BL livré${totalLivres>1?'s':''} — utilise la barre du haut pour chercher ou filtrer par date`)
+      +(nbInc?` · <button class="btn" data-label="1" style="height:24px;font-size:11px;margin-left:6px;border-color:#c2410c;color:#c2410c" onclick="corrigerTousStatuts(this)">⚠ ${nbInc} statut${nbInc>1?'s':''} à corriger</button>`:'');
+  }
 
   const tag=statut=>{
     const low=(statut||'').toLowerCase();
@@ -5354,8 +5420,13 @@ function openSessionPanel(id){
       ${lignes.length?`<button id="sp-save-btn-${id}" class="btn" style="height:26px;font-size:11px" onclick="sessionPanelSaveAll(${id})">💾 Enregistrer les modifications</button>`:''}
     </div>
     ${blocSuppressionSession(s)}`;
+  const _inc=statutIncoherent(s);
+  const _bandeauInc=_inc?`<div style="background:#fff7ed;border:1px solid #fdba74;border-left:4px solid #c2410c;border-radius:var(--radius-sm);padding:10px 12px;margin-bottom:12px;font-size:12.5px;color:#7c2d12;display:flex;gap:10px;align-items:center;justify-content:space-between;flex-wrap:wrap">
+      <span>⚠️ <strong>${_inc.txt}.</strong> Le statut enregistré ne correspond pas aux quantités ci-dessous.</span>
+      <button class="btn" data-label="1" style="height:28px;font-size:11.5px;background:#c2410c;color:#fff;border-color:#c2410c" onclick="this.disabled=true;corrigerStatutSession(${id})">Corriger → ${_inc.cible}</button>
+    </div>`:'';
 
-  openPanel(iconBLFC(f(s,'Numero_BL'))+' '+(f(s,'Numero_BL')||'BL'),html);
+  openPanel(iconBLFC(f(s,'Numero_BL'))+' '+(f(s,'Numero_BL')||'BL'),_bandeauInc+html);
 }
 
 // ── Suppression d'une session créée par erreur ──
