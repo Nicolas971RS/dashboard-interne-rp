@@ -2533,24 +2533,37 @@ async function regulHPOuvrirTraiter(bcId,sessionId){
     }
   },350);
 }
-function regulHPCreerDBC(sessionId){
+// Demande BC créée à partir d'un BL déjà livré : tout ce qui est connu est
+// pré-rempli (client, BL, vendeur, date, articles, et l'email / chef de chantier
+// de la dernière demande de ce client). Il reste montant, N° devis, PJ.
+function dbcDepuisSession(sessionId){
   const s=(DATA.sessionsScan||[]).find(x=>x.ID===sessionId);
   if(!s)return;
-  const lignes=lignesDeSession(sessionId);
-  closeModal();
-  const sub=document.getElementById('modal-submit');if(sub)sub.style.display='';
+  const lignes=lignesDeSession(sessionId).filter(l=>Number(f(l,'Quantite_Scannee')||0)>0);
+  const cli=_normTxt(f(s,'Client'));
+  const precedente=(DATA.dbc||[]).filter(d=>cli&&_normTxt(f(d,'NomClient')||f(d,'Title'))===cli)
+    .sort((a,b)=>(b.ID||0)-(a.ID||0))[0];
+  closeModal();closePanel&&closePanel();
   openNouveauDBCModal();
   setTimeout(()=>{
-    const set=(id,v)=>{const e=document.getElementById(id);if(e&&v!=null&&v!==''){e.value=v;e.dispatchEvent(new Event('input'));e.dispatchEvent(new Event('change'));}};
-    set('d-client',f(s,'Client'));
-    set('d-numbl',f(s,'Numero_BL'));
-    set('d-vendeur',f(s,'Vendeur_Emetteur'));
-    set('d-dateenlev',jourLocal(f(s,'Date_Scan')||dateCreation(s)));
-    set('d-articles',lignes.map(l=>`${f(l,'Reference_Article')||''} ${f(l,'Designation')||''} x${f(l,'Quantite_Scannee')||0}`.trim()).join('\n'));
-    const d=document.getElementById('d-client');if(d)document.getElementById('d-client-drop')&&(document.getElementById('d-client-drop').style.display='none');
-    toast('📝 Demande BC pré-remplie depuis la livraison hors procédure — complète les champs restants');
+    const rempli=[];
+    const set=(id,v,lib,forcer)=>{const e=document.getElementById(id);if(e&&v!=null&&String(v).trim()!==''&&(forcer||!e.value)){e.value=v;e.dispatchEvent(new Event('input'));e.dispatchEvent(new Event('change'));e.style.background='#f0fdf4';if(lib)rempli.push(lib);}};
+    set('d-client',f(s,'Client'),'client');
+    set('d-numbl',f(s,'Numero_BL'),'N° BL');
+    set('d-vendeur',f(s,'Vendeur_Emetteur'),'vendeur');
+    set('d-dateenlev',jourLocal(f(s,'Date_Scan')||dateCreation(s)),'date de livraison',true);
+    set('d-articles',lignes.map(l=>`${f(l,'Reference_Article')||''} ${f(l,'Designation')||''} x${f(l,'Quantite_Scannee')||0}`.trim()).join('\n'),'articles');
+    set('d-employe',f(s,'Contact_Client'),'employé');
+    if(precedente){
+      set('d-email',f(precedente,'Email_Client'),'email');
+      set('d-chef',f(precedente,'Chefdechantier'),'chef de chantier');
+    }
+    const drop=document.getElementById('d-client-drop');if(drop)drop.style.display='none';
+    if(typeof dbcLivePreview==='function')dbcLivePreview();
+    toast(`📝 Pré-rempli depuis le BL ${f(s,'Numero_BL')} : ${rempli.join(', ')}${precedente?' (email/chef repris de DBC-'+precedente.ID+' — à vérifier)':''}`);
   },180);
 }
+function regulHPCreerDBC(sessionId){dbcDepuisSession(sessionId);}
 
 // Photo du BL papier prise par le magasinier = pièce jointe de la session
 async function voirPhotoBL(sessionId){
@@ -5545,13 +5558,25 @@ function openSessionPanel(id){
       ${lignes.length?`<button id="sp-save-btn-${id}" class="btn" style="height:26px;font-size:11px" onclick="sessionPanelSaveAll(${id})">💾 Enregistrer les modifications</button>`:''}
     </div>
     ${blocSuppressionSession(s)}`;
+  const _numS=String(f(s,'Numero_BL')||'').trim();
+  const _livreFinal=_normTxt(f(s,'Type_Operation'))==='livraison client'&&(()=>{const st=_normTxt(f(s,'Statut'));return st==='terminee'||st.includes('ecart')||st.includes('partiel');})();
+  const _bcDuBL=_numS?bcLiePourBL(_numS):null;
+  const _dbcDuBL=_numS?dbcPourBL(_numS):null;
+  let _blocDBC='';
+  if(_livreFinal&&_numS&&!estNumeroFC(_numS)&&!_numS.startsWith('PREP-')){
+    if(_dbcDuBL)_blocDBC=`<div style="background:#eff6ff;border:1px solid #93c5fd;border-radius:var(--radius-sm);padding:8px 12px;margin-bottom:12px;font-size:12.5px;color:#1e3a8a">📨 Demande BC <strong>DBC-${_dbcDuBL.ID}</strong> en cours pour ce BL (${f(_dbcDuBL,'Statut')||'—'}).</div>`;
+    else if(!_bcDuBL)_blocDBC=`<div style="background:#f0fdf4;border:1px solid #86efac;border-radius:var(--radius-sm);padding:9px 12px;margin-bottom:12px;font-size:12.5px;color:#14532d;display:flex;gap:10px;align-items:center;justify-content:space-between;flex-wrap:wrap">
+      <span>📨 <strong>Aucun BC</strong> ne porte ce BL. Le client doit-il envoyer un BC ?</span>
+      <button class="btn" data-label="1" style="height:28px;font-size:11.5px;background:var(--green);color:#fff;border-color:var(--green)" onclick="dbcDepuisSession(${id})">🆕 Demande BC depuis ce BL</button>
+    </div>`;
+  }
   const _inc=statutIncoherent(s);
   const _bandeauInc=_inc?`<div style="background:#fff7ed;border:1px solid #fdba74;border-left:4px solid #c2410c;border-radius:var(--radius-sm);padding:10px 12px;margin-bottom:12px;font-size:12.5px;color:#7c2d12;display:flex;gap:10px;align-items:center;justify-content:space-between;flex-wrap:wrap">
       <span>⚠️ <strong>${_inc.txt}.</strong> Le statut enregistré ne correspond pas aux quantités ci-dessous.</span>
       <button class="btn" data-label="1" style="height:28px;font-size:11.5px;background:#c2410c;color:#fff;border-color:#c2410c" onclick="this.disabled=true;corrigerStatutSession(${id})">Corriger → ${_inc.cible}</button>
     </div>`:'';
 
-  openPanel(iconBLFC(f(s,'Numero_BL'))+' '+(f(s,'Numero_BL')||'BL'),_bandeauInc+html);
+  openPanel(iconBLFC(f(s,'Numero_BL'))+' '+(f(s,'Numero_BL')||'BL'),_bandeauInc+_blocDBC+html);
 }
 
 // ── Suppression d'une session créée par erreur ──
