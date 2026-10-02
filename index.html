@@ -102,6 +102,9 @@
   .hc-x{font-size:11.5px;color:#92400e}
   .sp-passage-row td{background:#fff7ed;color:#92400e;font-size:11.5px;font-weight:700;padding:5px 8px!important;border-top:2px solid #fdba74}
   .sp-passage-row.init td{background:var(--grey-xlight,#f1f5f9);color:var(--text-muted);border-top:none}
+  .scl-com{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:260px;cursor:help;color:var(--text-secondary)}
+  .scl-com:hover{color:var(--blue)}
+  #scl-tip{position:fixed;z-index:10000;display:none;background:#fff;color:#1e293b;border:1px solid var(--border);border-radius:8px;box-shadow:0 10px 30px rgba(15,23,42,.18);padding:12px 14px;font-size:12.5px;line-height:1.55;white-space:pre-wrap;max-height:60vh;overflow:auto;font-family:var(--font-body)}
   .sc-badge{display:inline-flex;flex-direction:column;margin-top:3px;font-family:var(--font-body);font-size:11px;font-weight:700;line-height:1.25;padding:2px 8px;border-radius:8px;cursor:pointer;white-space:nowrap;border:1px solid}
   .sc-badge .sc-who{font-weight:500;font-size:10px;opacity:.8}
   .sc-ok{background:#ecfdf5;color:#047857;border-color:#6ee7b7}
@@ -4090,8 +4093,20 @@ const SC_RESULTATS={
   reporte:{lib:'Client reporte',ico:'⏳',dateReq:true},
   autre:{lib:'Autre',ico:'💬',dateReq:false}
 };
-function scLire(bc){
+function scLireBrut(bc){
   return String(f(bc||{},'Suivi_Client')||'').split('\n').map(x=>{try{return JSON.parse(x);}catch(e){return null;}}).filter(Boolean);
+}
+// Le suivi client concerne le dossier : BC d'origine + BC partiels (-A, -A-A…)
+function scOrigine(bc){
+  if(!bc)return bc;
+  const r=bcRacine(f(bc,'Title')||'');
+  return (DATA.suivi||[]).find(x=>String(f(x,'Title')||'').trim().toUpperCase()===r.toUpperCase())||bc;
+}
+function scLire(bc){
+  if(!bc)return[];
+  const r=bcRacine(f(bc,'Title')||'').toUpperCase();
+  const bcs=r?(DATA.suivi||[]).filter(x=>bcRacine(f(x,'Title')||'').toUpperCase()===r):[bc];
+  return (bcs.length?bcs:[bc]).flatMap(scLireBrut).sort((a,b)=>String(a.t).localeCompare(String(b.t)));
 }
 const _scJour=()=>{try{return jourLocal(new Date().toISOString());}catch(e){return new Date().toISOString().slice(0,10);}};
 const _scFmtJ=d=>{if(!d)return'';const[a,m,j]=String(d).split('-');return j&&m?`${j}/${m}`:d;};
@@ -4127,7 +4142,7 @@ function scBadge(bcOuId){
   return`<div class="sc-badge ${cls}" title="${tip}" onclick="event.stopPropagation();openSuiviClient(${bc.ID})">${txt}<span class="sc-who">${String(e.der.u||'').replace(/</g,'&lt;')}${e.h.length>1?' · '+e.h.length+' suivis':''}</span></div>`;
 }
 function openSuiviClient(bcId){
-  const bc=(DATA.suivi||[]).find(x=>x.ID===bcId||x.ID===parseInt(bcId));
+  const bc=scOrigine((DATA.suivi||[]).find(x=>x.ID===bcId||x.ID===parseInt(bcId)));
   if(!bc){toast('🔴 BC introuvable — actualise','ko');return;}
   const h=scLire(bc);
   const esc=v=>String(v??'').replace(/&/g,'&amp;').replace(/</g,'&lt;');
@@ -4135,7 +4150,7 @@ function openSuiviClient(bcId){
     ${h.slice().reverse().map(x=>`<div style="padding:5px 0;border-bottom:1px solid var(--border-light);font-size:12px;line-height:1.45">
       <strong>${(SC_RESULTATS[x.r]||SC_RESULTATS.autre).ico} ${esc((SC_RESULTATS[x.r]||SC_RESULTATS.autre).lib)}</strong>${x.d?` → <strong>${_scFmtJ(x.d)}</strong>`:''}
       ${x.em?`<div>à ${x.en?esc(x.en)+' ':''}<a href="mailto:${esc(x.em)}" style="color:var(--blue)">${esc(x.em)}</a></div>`:''}
-      ${x.c?`<span style="color:var(--text-muted)"> · ${esc(x.c)}</span>`:''}${x.x?`<div>${esc(x.x)}</div>`:''}
+      ${x.c?`<span style="color:var(--text-muted)"> · ${esc(x.c)}</span>`:''}${x.x?`<div class="scl-com" style="max-width:none" data-com="${esc(x.x).replace(/"/g,'&quot;')}" onmouseenter="sclTip(this)" onmouseleave="sclTipOff()" onclick="sclTip(this,true)">💬 ${esc(x.x.replace(/\s+/g,' ').slice(0,90))}${x.x.length>90?'…':''}</div>`:''}
       <div style="font-size:11px;color:var(--text-muted)">${dateHeureGP(x.t)} · ${esc(x.u)}</div></div>`).join('')}
   </div>`:'';
   const remarques=f(bc,'Remarques');
@@ -4199,10 +4214,11 @@ const _sclJ=d=>String(d||'').split('-').reverse().join('/');
 // ── Vue d'ensemble « Suivis clients » ──
 function sclToutes(){
   const rows=[];
-  (DATA.suivi||[]).forEach(bc=>{
-    const h=scLire(bc);if(!h.length)return;
-    const etat=scEtat(bc);
-    h.forEach((e,idx)=>rows.push({bc,e,dernier:idx===h.length-1,etat}));
+  (DATA.suivi||[]).forEach(bcBrut=>{
+    const brut=scLireBrut(bcBrut);if(!brut.length)return;
+    const bc=scOrigine(bcBrut);
+    const h=scLire(bc);const etat=scEtat(bc);const der=h[h.length-1];
+    brut.forEach(e=>rows.push({bc,e,dernier:der&&der.t===e.t&&der.u===e.u,etat}));
   });
   return rows.sort((a,b)=>String(b.e.t).localeCompare(String(a.e.t)));
 }
@@ -4233,6 +4249,29 @@ function sclFiltrees(){
     return true;
   });
 }
+// Infobulle du commentaire (texte long, ex. email copié) — affichée au survol / au clic
+function sclTip(el,fixe){
+  let tip=document.getElementById('scl-tip');
+  if(!tip){tip=document.createElement('div');tip.id='scl-tip';document.body.appendChild(tip);
+    tip.addEventListener('mouseenter',()=>clearTimeout(tip._t));tip.addEventListener('mouseleave',()=>sclTipOff());}
+  clearTimeout(tip._t);
+  tip.textContent=el.dataset.com||'';
+  tip.style.display='block';
+  const r=el.getBoundingClientRect(),w=Math.min(460,window.innerWidth-24);
+  tip.style.width=w+'px';
+  let left=Math.min(r.left,window.innerWidth-w-12);left=Math.max(12,left);
+  tip.style.left=left+'px';
+  const h=tip.offsetHeight;
+  let top=r.bottom+6;if(top+h>window.innerHeight-8)top=Math.max(8,r.top-h-6);
+  tip.style.top=top+'px';
+  tip.dataset.fixe=fixe?'1':'';
+}
+function sclTipOff(){
+  const tip=document.getElementById('scl-tip');if(!tip)return;
+  tip._t=setTimeout(()=>{tip.style.display='none';},200);
+}
+document.addEventListener('scroll',()=>{const t=document.getElementById('scl-tip');if(t)t.style.display='none';},true);
+
 function renderSuivisClients(){
   const tout=sclToutes();
   // Filtres alimentés à partir des données
@@ -4267,7 +4306,7 @@ function renderSuivisClients(){
       <td style="white-space:nowrap">${R.ico} ${_escD(R.lib)}</td>
       <td class="mono" style="${x.dernier&&x.etat.du?'color:var(--red);font-weight:700':''}">${x.e.d?_sclJ(x.e.d):'—'}</td>
       <td style="font-size:12px">${dest}</td>
-      <td style="font-size:12px;max-width:260px">${_escD(x.e.x||'')}</td>
+      <td style="font-size:12px;max-width:260px">${x.e.x?`<div class="scl-com" data-com="${_escD(x.e.x)}" onmouseenter="sclTip(this)" onmouseleave="sclTipOff()" onclick="sclTip(this,true)">💬 ${_escD(x.e.x.replace(/\s+/g,' ').slice(0,60))}${x.e.x.length>60?'…':''}</div>`:''}</td>
       <td>${x.dernier?etatTxt:''} <button class="btn" style="height:22px;font-size:11px;padding:0 6px;margin-left:4px" title="Ajouter un suivi" onclick="openSuiviClient(${x.bc.ID})">📞+</button></td>
     </tr>`;}).join('');
 }
@@ -4288,7 +4327,8 @@ function exportSuivisClientsCSV(){
 }
 
 function renderAlertesSuiviClient(){
-  const dus=(DATA.suivi||[]).map(bc=>({bc,e:scEtat(bc)})).filter(x=>x.e&&x.e.du)
+  const _vus=new Set();
+  const dus=(DATA.suivi||[]).map(scOrigine).filter(bc=>{if(_vus.has(bc.ID))return false;_vus.add(bc.ID);return true;}).map(bc=>({bc,e:scEtat(bc)})).filter(x=>x.e&&x.e.du)
     .sort((a,b)=>String(a.e.der.d).localeCompare(String(b.e.der.d)));
   const bdg=document.getElementById('badge-suivicli');
   if(bdg){bdg.textContent=dus.length;bdg.style.display=dus.length?'':'none';}
