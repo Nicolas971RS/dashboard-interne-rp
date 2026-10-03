@@ -9227,7 +9227,7 @@ async function openTraiterModal(id,numBC,client){
 
   const lignesExistantes=(DATA.lignes||[]).filter(l=>l.BCId===id||parseInt(l.BCId)===id);
   _traiterCurBL=curBL;
-  const curSess=curBL?findSessionByBL(curBL):null;
+  const curSess=curBL?findSessionByBL(curBL):(currentItem&&currentItem.ID?sessionPrepBC(currentItem):null);
   const curSessPrep=curSess?(curSess.Preparation_Avance===true||curSess.Preparation_Avance==='Yes'||curSess.Preparation_Avance==='1'):false;
   const curSessDateLiv=curSess&&f(curSess,'Date_Livraison_Prevue')?f(curSess,'Date_Livraison_Prevue').slice(0,10):today;
   const mLigneRowHtml=l=>{
@@ -9321,7 +9321,7 @@ async function openTraiterModal(id,numBC,client){
             <input type="date" id="m-date-livraison-prep" value="${curSessDateLiv}"
               style="padding:6px 10px;border:1px solid var(--border);border-radius:var(--radius-sm);font-size:13px;font-family:var(--font-body)">
           </div>
-          <div style="font-size:11px;color:var(--text-muted);margin-top:6px">Nécessite un N° BL ou FC renseigné ci-dessus — crée ou met à jour la session de scan correspondante.</div>
+          <div style="font-size:11px;color:var(--text-muted);margin-top:6px;line-height:1.45"><strong>Avec un N° BL/FC</strong> : crée ou met à jour la session de scan du BL.<br><strong>Sans N° BL</strong> : le magasin prépare les articles restant à livrer sous la référence provisoire <span style="font-family:var(--font-mono)">PREP-BC-…</span> et signale ce qui manque. La préparation sera rattachée au BL dès que tu le saisiras ici.</div>
         </div>
       </div>
     </div>
@@ -9516,12 +9516,14 @@ async function openTraiterModal(id,numBC,client){
       sessionLiee=r.sess;sessionCreee=r.created;
     }
     const rowsExist=document.querySelectorAll('#m-lignes-list .m-ligne-existing');
+    const _lignesPrep=[];
     for(const row of rowsExist){
       const lid=parseInt(row.dataset.lineId);
       const ref=row.querySelector('.m-l-ref')?.value.trim()||'';
       const design=row.querySelector('.m-l-design')?.value.trim()||'';
       const qc=parseFloat(row.querySelector('.m-l-qc')?.value)||0;
       const ql=parseFloat(row.querySelector('.m-l-ql')?.value)||0;
+      if(design&&qc-ql>0)_lignesPrep.push({ref,design,ral:qc-ql});
       try{
         await spPatch('sites/RseauxPlus','Lignes_BC',lid,{
           R_x00e9_f_x00e9_rence:ref,
@@ -9576,6 +9578,7 @@ async function openTraiterModal(id,numBC,client){
         const qc=parseFloat(row.querySelector('.m-l-qc-new')?.value)||0;
         const ql=parseFloat(row.querySelector('.m-l-ql-new')?.value)||0;
         if(!design||qc<=0)continue;
+        if(qc-ql>0)_lignesPrep.push({ref,design,ral:qc-ql});
         maxLigne++;
         try{
           await spPost('sites/RseauxPlus','Lignes_BC',{
@@ -9591,6 +9594,22 @@ async function openTraiterModal(id,numBC,client){
           if(sessionLiee)await syncLigneToScan(sessionLiee,ref,design,qc,ql);
         }catch(e){console.warn('[Lignes_BC post]',e.message);}
       }
+    }
+
+    // Préparation à l'avance SANS N° BL : session provisoire PREP-BC-<N° BC>
+    let _prepMsg='';
+    if(!blEffectif&&prepCheck){
+      try{
+        const _bcPrep=DATA.suivi.find(i=>i.ID===id)||currentItem;
+        const _ex=sessionPrepBC(_bcPrep);
+        if(_ex){
+          for(const x of _lignesPrep)await syncLigneToScan(_ex,x.ref,x.design,x.ral,0);
+          _prepMsg=`📦 préparation ${f(_ex,'Numero_BL')} mise à jour`;
+        }else if(_lignesPrep.length){
+          const r=await creerSessionPrepBC(_bcPrep,_lignesPrep,prepDateLiv);
+          _prepMsg=`📦 ${r.ref} envoyé au magasin (${r.n} article${r.n>1?'s':''} à préparer)`;
+        }else toast('📦 Préparation non créée : aucun article restant à livrer','ko');
+      }catch(e){toast('🔴 Préparation non créée : '+e.message,'ko');}
     }
 
     // Pièce jointe « BC » (mail du client) : après l'enregistrement principal,
@@ -9617,7 +9636,7 @@ async function openTraiterModal(id,numBC,client){
       const dArr=fmtDate(body.Date_Arrivage_Attendu);
       return `${titre||numBC} — 📦 marqué en commande, sort du bloc jaune jusqu'au ${dArr}`;
     }
-    const suffixeLignes=lignesTouchees?` · ${lignesTouchees} article(s) enregistré(s)${sessionLiee?' (+ synchronisé côté Livraison Magasin)':' (échec de synchronisation Livraison Magasin — voir console)'}`
+    const suffixeLignes=lignesTouchees?` · ${lignesTouchees} article(s) enregistré(s)${_prepMsg?' · '+_prepMsg:(sessionLiee?' (+ synchronisé côté Livraison Magasin)':(blEffectif?' (échec de synchronisation Livraison Magasin — voir console)':''))}`
       :(sessionCreee?' · BL ajouté à Livraison Magasin':'');
 
     // Alerte "BC entièrement livré ?" — déclenchée juste après la fermeture de la
@@ -11422,32 +11441,35 @@ async function faireBCPreparer(bcId){
     '📦 Envoyer au magasin','submit');
   if(!ok)return;
   try{
-    const created=await spPost('sites/BondeCommande','Sessions_Scan',{
-      Title:`${ref} - ${client}`.trim(),
-      Type_Operation:'Livraison client',
-      Numero_BL:ref,
-      Client:client,
-      Vendeur_Emetteur:f(bc,'Vendeurencharge')||'',
-      Date_Emission:new Date().toISOString().slice(0,10)+'T12:00:00Z',
-      Statut:'BL Émis',
-      Preparation_Avance:true
-    });
-    const sess={...created,ID:created.ID??created.Id};
-    DATA.sessionsScan=[...(DATA.sessionsScan||[]),sess];
-    let n=0;
-    for(const x of ral){
-      const r=await spPost('sites/BondeCommande','Lignes_Scan',{
-        Session_ScanId:sess.ID,
-        Reference_Article:f(x.l,'R_x00e9_f_x00e9_rence')||'',
-        Designation:f(x.l,'Produit_x002f_D_x00e9_signation')||'',
-        Quantite_Attendue:x.ral,Quantite_Scannee:0
-      });
-      if(r){DATA.lignesScan=[...(DATA.lignesScan||[]),{...r,ID:r.ID??r.Id,Session_ScanId:sess.ID}];n++;}
-    }
+    const {n}=await creerSessionPrepBC(bc,ral.map(x=>({ref:f(x.l,'R_x00e9_f_x00e9_rence')||'',design:f(x.l,'Produit_x002f_D_x00e9_signation')||'',ral:x.ral})),'');
     toast(`📦 ${ref} envoyé au magasin — ${n} article${n>1?'s':''} à préparer`,'ok');
     try{renderPreparations();updateBadges();}catch(e){}
     openBCPanel(bcId);
   }catch(e){toast('🔴 Création impossible : '+e.message,'ko');}
+}
+async function creerSessionPrepBC(bc,lignes,dateLiv){
+  const ref=refPrepBC(bc);
+  const client=getClient(bc)||'';
+  const created=await spPost('sites/BondeCommande','Sessions_Scan',{
+    Title:`${ref} - ${client}`.trim(),
+    Type_Operation:'Livraison client',
+    Numero_BL:ref,
+    Client:client,
+    Vendeur_Emetteur:f(bc,'Vendeurencharge')||'',
+    Date_Emission:new Date().toISOString().slice(0,10)+'T12:00:00Z',
+    Statut:'BL Émis',
+    Preparation_Avance:true,
+    ...(dateLiv?{Date_Livraison_Prevue:dateLiv+'T12:00:00Z'}:{})
+  });
+  const sess={...created,ID:created.ID??created.Id};
+  DATA.sessionsScan=[...(DATA.sessionsScan||[]),sess];
+  let n=0;
+  for(const x of lignes){
+    const r=await spPost('sites/BondeCommande','Lignes_Scan',{Session_ScanId:sess.ID,Reference_Article:x.ref||'',Designation:x.design||'',Quantite_Attendue:x.ral,Quantite_Scannee:0});
+    if(r){DATA.lignesScan=[...(DATA.lignesScan||[]),{...r,ID:r.ID??r.Id,Session_ScanId:sess.ID}];n++;}
+  }
+  try{renderPreparations();updateBadges();}catch(e){}
+  return{ref,n,sess};
 }
 // Appelé par Traiter quand un N° BL est saisi : la préparation provisoire
 // devient la session du BL (renommage, scans conservés).
