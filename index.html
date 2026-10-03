@@ -5583,7 +5583,12 @@ function statutVisuel(s){
         O={fg:'#c2410c',bg:'#fff7ed',bd:'#fdba74'},G={fg:'#15803d',bg:'#f0fdf4',bd:'#86efac'},
         V={fg:'#6d28d9',bg:'#f5f3ff',bd:'#c4b5fd'},N={fg:'#475569',bg:'#f8fafc',bd:'#cbd5e1'};
   let v,label,cat;
-  if(low==='bl émis'||low==='bl emis'){v=R;cat='alivrer';label='🔴 BL à livrer';}
+  if(num.startsWith('PREP-BC-')&&!/termin|ecart|écart|partiel/.test(low)){
+    // Préparation demandée depuis un BC, BL pas encore émis
+    v=V;cat=/pr[eê]te/.test(low)?'prete':'encours';
+    label=/pr[eê]te/.test(low)?'🟣 Préparée — BL à émettre':'🟣 À préparer (sans BL)';
+  }
+  else if(low==='bl émis'||low==='bl emis'){v=R;cat='alivrer';label='🔴 BL à livrer';}
   else if(low==='prête à livrer'||low==='prete a livrer'){v=R;cat='prete';label='🔴 Prête — client attendu';}
   else if(low.includes('partiel')){v=O;cat='partiel';label='🟠 Livré partiel';}
   else if(low.includes('écart')||low.includes('ecart')){
@@ -9505,6 +9510,7 @@ async function openTraiterModal(id,numBC,client){
     const prepCheck=document.getElementById('m-prep')?.checked||false;
     const prepDateLiv=document.getElementById('m-date-livraison-prep')?.value||'';
     if(blEffectif){
+      try{await rattacherPrepBC(currentItem,blEffectif);}catch(e){console.warn('[rattacherPrepBC]',e.message);}
       const clientNom=DATA.clients?.[clientId||currentItem.ClientId]||f(currentItem,'ClientId')||'';
       const r=await findOrCreateSessionForBL(blEffectif,clientNom,vendeur||f(currentItem,'Vendeurencharge'),prepCheck,prepDateLiv);
       sessionLiee=r.sess;sessionCreee=r.created;
@@ -11364,6 +11370,103 @@ async function escaladerDBC(id){
 // ═══════════════════════════════════════════════════════════
 // ═══ PANEL DÉTAIL BC ═══
 // ═══════════════════════════════════════════════════════════
+// ═══ PRÉPARATION MAGASIN AVANT ÉMISSION DU BL ═══
+// Un BC reçu, articles saisis, mais pas encore de BL dans Image : on demande
+// au magasin de préparer (et de signaler ce qui manque) AVANT d'émettre le BL.
+// La session porte une référence provisoire « PREP-BC-<N° BC> » (Livraison
+// client + Préparation à l'avance). Le magasinier ne peut que préparer
+// (« Commande prête ») : pas de clôture tant qu'il n'y a pas de vrai BL.
+// Quand le N° BL est saisi dans Traiter, la session est renommée avec ce BL
+// (scans conservés) — jamais de seconde session ni de double sortie de stock.
+const refPrepBC=bc=>'PREP-BC-'+String(f(bc,'Title')||bc.ID).trim();
+function sessionPrepBC(bc){
+  const r=refPrepBC(bc).toLowerCase();
+  return (DATA.sessionsScan||[]).find(s=>String(f(s,'Numero_BL')||'').trim().toLowerCase()===r)||null;
+}
+function lignesRALduBC(bc){
+  return _lignesDuBC(bc.ID).map(l=>({l,ral:(parseFloat(f(l,'Quantit_x00e9_command_x00e9_e'))||0)-(parseFloat(f(l,'Quantit_x00e9_livr_x00e9_e'))||0)})).filter(x=>x.ral>0);
+}
+function blocPrepBC(bc){
+  const sess=sessionPrepBC(bc);
+  if(sess){
+    const lignes=(DATA.lignesScan||[]).filter(l=>String(lineSessionId(l))===String(sess.ID));
+    const manques=lignes.filter(l=>Number(f(l,'Quantite_Scannee')||0)<Number(f(l,'Quantite_Attendue')||0));
+    const st=_normTxt(f(sess,'Statut'));
+    const prete=st.includes('prete')||st.includes('termin')||st.includes('ecart');
+    return `<div style="background:#f5f3ff;border:1px solid #c4b5fd;border-left:4px solid #7c3aed;border-radius:var(--radius-sm);padding:10px 12px;margin:10px 0;font-size:12.5px;color:#4c1d95">
+      📦 <strong>Préparation magasin ${_escD(f(sess,'Numero_BL'))}</strong> — ${statutVisuel(sess).tag}
+      ${prete?(manques.length?`<div style="margin-top:6px;color:#b91c1c">⚠️ Manque : ${manques.map(l=>`${_escD(f(l,'Reference_Article')||f(l,'Designation'))} (${f(l,'Quantite_Scannee')||0}/${f(l,'Quantite_Attendue')||0})`).join(', ')}</div>`:'<div style="margin-top:6px;color:#047857">✅ Tout est préparé — tu peux émettre le BL dans Image puis le saisir dans Traiter.</div>'):'<div style="margin-top:6px">En attente du magasinier.</div>'}
+      <div style="margin-top:8px"><button class="btn" style="height:26px;font-size:11.5px" onclick="closePanel();openSessionPanel(${sess.ID})">Voir la préparation</button></div>
+    </div>`;
+  }
+  if(String(f(bc,'N_x00b0_BL')||'').trim())return'';
+  const ral=lignesRALduBC(bc);
+  if(!ral.length)return'';
+  return `<div style="background:#f5f3ff;border:1px dashed #c4b5fd;border-radius:var(--radius-sm);padding:10px 12px;margin:10px 0;font-size:12.5px;color:#4c1d95;display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap">
+    <span>📦 Pas encore de BL. Faire préparer les ${ral.length} article${ral.length>1?'s':''} par le magasin pour vérifier le stock avant d'émettre le BL ?</span>
+    <button class="btn" style="height:28px;font-size:12px;background:#7c3aed;color:#fff;border-color:#7c3aed" onclick="faireBCPreparer(${bc.ID})">📦 Faire préparer (sans BL)</button>
+  </div>`;
+}
+async function faireBCPreparer(bcId){
+  const bc=(DATA.suivi||[]).find(x=>x.ID===bcId);
+  if(!bc){toast('🔴 BC introuvable — actualise','ko');return;}
+  if(sessionPrepBC(bc)){toast('Une préparation existe déjà pour ce BC');return;}
+  const ral=lignesRALduBC(bc);
+  if(!ral.length){toast('Aucun article restant à livrer sur ce BC','ko');return;}
+  const ref=refPrepBC(bc);
+  const client=getClient(bc)||'';
+  const ok=await showConfirm('📦 Faire préparer sans BL',
+    `Le magasin va préparer <strong>${ral.length} article${ral.length>1?'s':''}</strong> du BC <strong>${_escD(f(bc,'Title'))}</strong> (${_escD(client)}) sous la référence provisoire <strong>${_escD(ref)}</strong> :<br><br>`+
+    ral.slice(0,12).map(x=>`• ${_escD(f(x.l,'R_x00e9_f_x00e9_rence')||'')} ${_escD(f(x.l,'Produit_x002f_D_x00e9_signation')||'')} × <strong>${x.ral}</strong>`).join('<br>')+(ral.length>12?`<br>… et ${ral.length-12} autre(s)`:'')+
+    `<br><br>Le magasinier prépare et signale ce qui manque. Pas de sortie de stock tant que le BL n'est pas émis et saisi dans Traiter.`,
+    '📦 Envoyer au magasin','submit');
+  if(!ok)return;
+  try{
+    const created=await spPost('sites/BondeCommande','Sessions_Scan',{
+      Title:`${ref} - ${client}`.trim(),
+      Type_Operation:'Livraison client',
+      Numero_BL:ref,
+      Client:client,
+      Vendeur_Emetteur:f(bc,'Vendeurencharge')||'',
+      Date_Emission:new Date().toISOString().slice(0,10)+'T12:00:00Z',
+      Statut:'BL Émis',
+      Preparation_Avance:true
+    });
+    const sess={...created,ID:created.ID??created.Id};
+    DATA.sessionsScan=[...(DATA.sessionsScan||[]),sess];
+    let n=0;
+    for(const x of ral){
+      const r=await spPost('sites/BondeCommande','Lignes_Scan',{
+        Session_ScanId:sess.ID,
+        Reference_Article:f(x.l,'R_x00e9_f_x00e9_rence')||'',
+        Designation:f(x.l,'Produit_x002f_D_x00e9_signation')||'',
+        Quantite_Attendue:x.ral,Quantite_Scannee:0
+      });
+      if(r){DATA.lignesScan=[...(DATA.lignesScan||[]),{...r,ID:r.ID??r.Id,Session_ScanId:sess.ID}];n++;}
+    }
+    toast(`📦 ${ref} envoyé au magasin — ${n} article${n>1?'s':''} à préparer`,'ok');
+    try{renderPreparations();updateBadges();}catch(e){}
+    openBCPanel(bcId);
+  }catch(e){toast('🔴 Création impossible : '+e.message,'ko');}
+}
+// Appelé par Traiter quand un N° BL est saisi : la préparation provisoire
+// devient la session du BL (renommage, scans conservés).
+async function rattacherPrepBC(bc,numBL){
+  if(!bc||!numBL)return;
+  const prep=sessionPrepBC(bc);
+  if(!prep)return;
+  let dejaBL=findSessionByBL(numBL);
+  if(!dejaBL)dejaBL=await refetchSessionByBL(numBL);
+  if(dejaBL&&dejaBL.ID!==prep.ID){
+    toast(`⚠️ Le BL ${numBL} a déjà une session : la préparation ${f(prep,'Numero_BL')} n'a pas été rattachée — utilise « Ajouter à un BL existant » dans Livraison Magasin`,'ko');
+    return;
+  }
+  const body={Numero_BL:String(numBL).trim(),Title:`${String(numBL).trim()} - ${f(prep,'Client')||''}`.trim()};
+  await spPatch('sites/BondeCommande','Sessions_Scan',prep.ID,body);
+  Object.assign(prep,body);
+  toast(`📦 Préparation rattachée au BL ${numBL} — les quantités préparées sont conservées`,'ok');
+}
+
 async function openBCPanel(id){
   openPanel(`📦 BC — chargement...`,'<div class="pspin">⏳ Chargement des données...</div>');
   try{
@@ -11499,6 +11602,9 @@ async function openBCPanel(id){
       </div>`;
     }
     html+=`</div>`;
+
+    // ── Préparation magasin sans BL ──
+    html+=blocPrepBC(item);
 
     // ── Actions ──
     html+=`<div class="pactions">
