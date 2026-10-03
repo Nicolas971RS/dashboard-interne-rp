@@ -108,6 +108,25 @@
   .dv-auto{display:inline-block;margin-left:6px;font-family:var(--font-body);font-size:10.5px;font-weight:700;color:#c2410c;background:#fff7ed;border:1px solid #fdba74;border-radius:9px;padding:0 6px;white-space:nowrap}
   .dv-auto-banner{display:flex;align-items:center;gap:8px;flex-wrap:wrap;background:#fff7ed;border:1px solid #fdba74;border-left:4px solid #ea580c;border-radius:var(--radius-sm);padding:9px 12px;margin-bottom:12px;color:#7c2d12;font-size:13px}
   .dv-chip{background:#fff;border:1px solid #fdba74;color:#9a3412;border-radius:14px;padding:3px 10px;font-size:11.5px;font-weight:600;cursor:pointer;font-family:inherit}
+  .pd-kpis{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:10px;margin-bottom:16px}
+  @media(max-width:1100px){.pd-kpis{grid-template-columns:repeat(3,minmax(0,1fr))}}
+  .pd-kpi{border:1px solid var(--border-light);border-radius:var(--radius-sm);padding:10px 12px;background:var(--surface)}
+  .pd-kpi .l{font-size:11px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;color:var(--text-muted)}
+  .pd-kpi .v{font-size:24px;font-weight:800;color:var(--navy);line-height:1.2;margin-top:4px;font-variant-numeric:tabular-nums}
+  .pd-kpi .s{font-size:11.5px;color:var(--text-secondary)}
+  .pd-grid{display:grid;grid-template-columns:3fr 2fr;gap:18px}
+  @media(max-width:1000px){.pd-grid{grid-template-columns:1fr}}
+  .pd-h3{font-size:12.5px;font-weight:700;color:var(--navy);margin-bottom:8px}
+  .pd-chart{display:flex;align-items:flex-end;gap:10px;height:190px;padding:0 4px;border-bottom:1px solid var(--border);position:relative}
+  .pd-mois{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;height:100%;min-width:0}
+  .pd-bars{display:flex;align-items:flex-end;gap:2px;width:100%;justify-content:center;flex:1}
+  .pd-bar{width:42%;max-width:22px;border-radius:4px 4px 0 0;position:relative;cursor:default}
+  .pd-bar:hover{filter:brightness(1.12)}
+  .pd-val{position:absolute;top:-15px;left:50%;transform:translateX(-50%);font-size:10.5px;font-weight:700;color:var(--text-secondary);font-variant-numeric:tabular-nums}
+  .pd-lbl{font-size:11px;color:var(--text-muted);padding-top:5px;white-space:nowrap}
+  .pd-leg{display:flex;gap:16px;font-size:12px;color:var(--text-secondary);margin-top:8px}
+  .pd-leg i{display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:5px;vertical-align:-1px}
+  .pd-taux{display:inline-block;height:6px;border-radius:3px;background:#00a08a;vertical-align:middle;margin-right:6px}
   .sc-badge{display:inline-flex;flex-direction:column;margin-top:3px;font-family:var(--font-body);font-size:11px;font-weight:700;line-height:1.25;padding:2px 8px;border-radius:8px;cursor:pointer;white-space:nowrap;border:1px solid}
   .sc-badge .sc-who{font-weight:500;font-size:10px;opacity:.8}
   .sc-ok{background:#ecfdf5;color:#047857;border-color:#6ee7b7}
@@ -1144,6 +1163,28 @@
           </select>
           <button class="btn-refresh" onclick="renderAnalytics()">🔄 Recalculer</button>
         </div>
+      </div>
+
+      <!-- PILOTAGE DES DEVIS — vue direction -->
+      <div class="tc" style="padding:16px 18px;margin-bottom:14px">
+        <div class="sd" style="margin-bottom:12px">
+          <h2>📄 Pilotage des devis — résultat et suivi</h2>
+          <div class="sd-line"></div>
+          <span id="pd-periode" style="font-size:11.5px;color:var(--text-muted)"></span>
+        </div>
+        <div id="pd-kpis" class="pd-kpis"></div>
+        <div class="pd-grid">
+          <div>
+            <div class="pd-h3">Devis émis et transformés en BC, par mois</div>
+            <div id="pd-chart"></div>
+          </div>
+          <div>
+            <div class="pd-h3">Par vendeur</div>
+            <div id="pd-vendeurs"></div>
+          </div>
+        </div>
+        <div class="pd-h3" style="margin-top:16px">⏰ Devis sans réponse depuis plus de 15 jours <span id="pd-relance-count" style="color:var(--text-muted);font-weight:500"></span></div>
+        <div id="pd-relance"></div>
       </div>
 
       <!-- FACTURATION PAR VENDEUR — suivi du non-facturé -->
@@ -3669,7 +3710,121 @@ function renderFacturationVendeurs(){
     </div>`;
 }
 
+// ═══ PILOTAGE DES DEVIS (Analytics) — vue direction ═══
+// Transformé = un BC du Suivi_BC porte ce N° de devis (Devis RS ou DEV-xxx),
+// ou le devis est au statut Accepté / Converti en BC.
+const PD_C={emis:'#5b7fc4',bc:'#00a08a'}; // palette validée (validate_palette.js : PASS)
+function pdDateDevis(i){return f(i,'Date__x00c9_mission_Devis')||f(i,'Date__x00C9_mission_Devis')||f(i,'Date_Devis')||f(i,'Created');}
+function pdIndexBC(){
+  const idx={};
+  (DATA.suivi||[]).forEach(bc=>{
+    const nd=String(f(bc,'N_x00b0_Devis','Num_ro_Devis','NumeroDevis')||'').trim().toUpperCase();
+    if(!nd)return;
+    nd.split(/[\s,;\/]+/).filter(Boolean).forEach(k=>{(idx[k]=idx[k]||[]).push(bc);});
+  });
+  return idx;
+}
+function pdAnalyse(devis,idx){
+  const st=f(devis,'Statut')||'';
+  const keys=[f(devis,'Devis_RS'),f(devis,'Num_x00e9_ro_Devis','Numero_Devis')].map(x=>String(x||'').trim().toUpperCase()).filter(Boolean);
+  const bcs=[...new Set(keys.flatMap(k=>idx[k]||[]))];
+  const emis=!['Nouvelle','En cours'].includes(st);
+  const transforme=bcs.length>0||['Accepté','Converti en BC'].includes(st);
+  const perdu=!transforme&&['Refusé','Expiré'].includes(st);
+  const archive=!transforme&&st==='Archivé';
+  const enAttente=emis&&!transforme&&!perdu&&!archive;
+  const d=pdDateDevis(devis);
+  const age=d?daysSince(d):null;
+  const ca=bcs.reduce((a,b)=>a+(parseFloat(f(b,'MontantHT','Montant_HT','MontantHTTotal'))||0),0);
+  let delai=null;
+  if(bcs.length&&d){
+    const dbc=bcs.map(b=>f(b,'Dateder_x00e9_ception')||f(b,'Created')).filter(Boolean).sort()[0];
+    if(dbc){const j=Math.round((new Date(dbc)-new Date(d))/86400000);if(j>=0)delai=j;}
+  }
+  return{devis,st,bcs,emis,transforme,perdu,enAttente,date:d,age,ca,delai};
+}
+function renderPilotageDevis(){
+  const host=document.getElementById('pd-kpis');
+  if(!host)return;
+  const fV=document.getElementById('analytics-vendeur')?.value||'all';
+  const fP=parseInt(document.getElementById('analytics-periode')?.value||'12');
+  const now=new Date();
+  const debut=new Date(now);
+  if(fP===0){debut.setDate(1);debut.setHours(0,0,0,0);}else debut.setMonth(debut.getMonth()-fP);
+  const idx=pdIndexBC();
+  const tous=(DATA.devis||[]).map(d=>pdAnalyse(d,idx));
+  const rows=tous.filter(x=>{
+    if(fV!=='all'&&f(x.devis,'Vendeur_Assign_x00e9_')!==fV)return false;
+    return x.date&&new Date(x.date)>=debut;
+  });
+  const emis=rows.filter(x=>x.emis);
+  const tr=emis.filter(x=>x.transforme);
+  const att=emis.filter(x=>x.enAttente);
+  const relance=att.filter(x=>x.age!==null&&x.age>15).sort((a,b)=>b.age-a.age);
+  const perdus=emis.filter(x=>x.perdu);
+  const taux=emis.length?Math.round(tr.length/emis.length*100):0;
+  const ca=tr.reduce((a,x)=>a+x.ca,0);
+  const delais=tr.map(x=>x.delai).filter(x=>x!==null);
+  const delaiMoy=delais.length?Math.round(delais.reduce((a,b)=>a+b,0)/delais.length):null;
+  const eur=v=>new Intl.NumberFormat('fr-FR',{style:'currency',currency:'EUR',maximumFractionDigits:0}).format(v);
+  const pl=document.getElementById('pd-periode');
+  if(pl)pl.textContent=(fP===0?'Mois en cours':`${fP} derniers mois`)+(fV!=='all'?` · ${fV}`:' · tous vendeurs');
+  const k=(l,v,s,c)=>`<div class="pd-kpi"><div class="l">${l}</div><div class="v"${c?` style="color:${c}"`:''}>${v}</div><div class="s">${s}</div></div>`;
+  host.innerHTML=
+    k('Devis émis',emis.length,`${rows.length-emis.length} en préparation`)+
+    k('Transformés en BC',tr.length,`taux ${taux} %`,'#00796b')+
+    k('CA des BC obtenus',eur(ca),'montant HT des BC liés')+
+    k('En attente client',att.length,'ni BC, ni refus')+
+    k('Sans réponse +15 j',relance.length,'à relancer',relance.length?'var(--red)':'')+
+    k('Délai devis → BC',delaiMoy===null?'—':delaiMoy+' j',`moyenne sur ${delais.length} BC`);
+
+  // ── Graphique mensuel : émis vs transformés (6 mois mini) ──
+  const nbM=Math.max(6,Math.min(fP||6,12));
+  const mois=[];
+  for(let m=nbM-1;m>=0;m--){const d=new Date(now.getFullYear(),now.getMonth()-m,1);mois.push({k:d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0'),lbl:d.toLocaleDateString('fr-FR',{month:'short'}).replace('.',''),e:0,t:0});}
+  tous.filter(x=>x.emis&&x.date&&(fV==='all'||f(x.devis,'Vendeur_Assign_x00e9_')===fV)).forEach(x=>{
+    const dk=String(jourLocal(x.date)||'').slice(0,7);
+    const m=mois.find(z=>z.k===dk);if(!m)return;
+    m.e++;if(x.transforme)m.t++;
+  });
+  const max=Math.max(1,...mois.map(m=>m.e));
+  const ch=document.getElementById('pd-chart');
+  if(ch)ch.innerHTML=`<div class="pd-chart" role="img" aria-label="Devis émis et transformés en BC par mois">${mois.map(m=>`
+    <div class="pd-mois">
+      <div class="pd-bars">
+        <div class="pd-bar" style="height:${m.e?Math.max(4,m.e/max*150):0}px;background:${PD_C.emis}" title="${m.lbl} : ${m.e} devis émis">${m.e?`<span class="pd-val">${m.e}</span>`:''}</div>
+        <div class="pd-bar" style="height:${m.t?Math.max(4,m.t/max*150):0}px;background:${PD_C.bc}" title="${m.lbl} : ${m.t} transformé${m.t>1?'s':''} en BC${m.e?' ('+Math.round(m.t/m.e*100)+' %)':''}">${m.t?`<span class="pd-val">${m.t}</span>`:''}</div>
+      </div>
+      <div class="pd-lbl">${m.lbl}</div>
+    </div>`).join('')}</div>
+    <div class="pd-leg"><span><i style="background:${PD_C.emis}"></i>Devis émis</span><span><i style="background:${PD_C.bc}"></i>Transformés en BC</span></div>`;
+
+  // ── Tableau par vendeur ──
+  const parV={};
+  emis.forEach(x=>{const v=f(x.devis,'Vendeur_Assign_x00e9_')||'—';const o=parV[v]=parV[v]||{e:0,t:0,a:0,r:0,ca:0};o.e++;if(x.transforme){o.t++;o.ca+=x.ca;}if(x.enAttente){o.a++;if(x.age>15)o.r++;}});
+  const pv=document.getElementById('pd-vendeurs');
+  const lignesV=Object.entries(parV).sort((a,b)=>b[1].e-a[1].e);
+  if(pv)pv.innerHTML=lignesV.length?`<table style="min-width:0;width:100%"><thead><tr><th>Vendeur</th><th style="text-align:right">Émis</th><th style="text-align:right">BC</th><th>Taux</th><th style="text-align:right">En attente</th><th style="text-align:right">CA BC</th></tr></thead><tbody>${lignesV.map(([v,o])=>{const t=o.e?Math.round(o.t/o.e*100):0;return`<tr>
+      <td class="cname">${_escD(v)}</td><td class="mono" style="text-align:right">${o.e}</td><td class="mono" style="text-align:right">${o.t}</td>
+      <td style="white-space:nowrap"><span class="pd-taux" style="width:${Math.max(2,t*0.6)}px"></span><span class="mono">${t} %</span></td>
+      <td class="mono" style="text-align:right">${o.a}${o.r?` <span style="color:var(--red);font-size:11px">(${o.r} +15 j)</span>`:''}</td>
+      <td class="mono" style="text-align:right">${eur(o.ca)}</td></tr>`;}).join('')}</tbody></table>`
+    :'<div style="color:var(--text-muted);font-size:12.5px;padding:8px 0">Aucun devis émis sur la période</div>';
+
+  // ── Devis à relancer ──
+  const rc=document.getElementById('pd-relance-count');if(rc)rc.textContent=relance.length?`(${relance.length})`:'';
+  const pr=document.getElementById('pd-relance');
+  if(pr)pr.innerHTML=relance.length?`<div style="max-height:330px;overflow-y:auto;border:1px solid var(--border-light);border-radius:var(--radius-sm)"><table style="min-width:0;width:100%"><thead><tr><th>N° devis</th><th>Devis RS</th><th>Client</th><th>Vendeur</th><th>Émis le</th><th style="text-align:right">Sans réponse</th><th></th></tr></thead><tbody>${relance.slice(0,25).map(x=>{const i=x.devis;return`<tr style="cursor:pointer" onclick="openDevisPanel(${i.ID})">
+      <td class="ref" style="color:var(--blue)">${_escD(f(i,'Num_x00e9_ro_Devis','Numero_Devis')||'DEV-'+i.ID)}</td>
+      <td class="mono">${_escD(f(i,'Devis_RS')||'—')}</td><td class="cname">${_escD(f(i,'Client')||'—')}</td>
+      <td>${_escD(f(i,'Vendeur_Assign_x00e9_')||'—')}</td><td class="mono">${fmtDate(x.date)}</td>
+      <td class="mono" style="text-align:right;font-weight:700;color:${x.age>30?'var(--red)':'#c2410c'}">${x.age} j</td>
+      <td><button class="btn" style="height:24px;font-size:11px" onclick="event.stopPropagation();openDevisPanel(${i.ID})">Voir</button></td></tr>`;}).join('')}</tbody></table></div>${relance.length>25?`<div style="font-size:11.5px;color:var(--text-muted);margin-top:4px">… et ${relance.length-25} autre(s)</div>`:''}`
+    :'<div style="color:#047857;font-size:12.5px;padding:6px 0">✅ Aucun devis sans réponse depuis plus de 15 jours</div>';
+}
+
 function renderAnalytics(){
+  try{renderPilotageDevis();}catch(e){console.warn('[pilotageDevis]',e);}
   renderFacturationVendeurs();
   renderDelaiFacturation();
   const suivi=DATA.suivi||[];
@@ -4672,7 +4827,7 @@ function devisRowFull(i){
   else if(isNew)rowCls='rr';
   let btns='';
   if(isNew)btns=`<button class="btn blue" onclick="event.stopPropagation();passerEnCours(${i.ID})">📋 Prendre en charge</button>`;
-  else if(st==='En cours')btns=`<button class="btn teal" onclick="event.stopPropagation();envoyerDevisFlow(${i.ID})">📨 Envoyer</button>`;
+  else if(st==='En cours'&&!devisRecuParEmail(i))btns=`<button class="btn teal" onclick="event.stopPropagation();envoyerDevisFlow(${i.ID})">📨 Envoyer</button>`;
   const rowStyle=isTerminal?'cursor:pointer;opacity:.65':'cursor:pointer';
   return`<tr class="${rowCls}" style="${rowStyle}" onclick="openDevisPanel(${i.ID})">
     <td class="ref">${nd}${devisAutoBadge(i)}</td>
@@ -4692,6 +4847,8 @@ function devisRowFull(i){
 // Le flux écrit « [AUTO] » au début de Notes_Internes. Tant que ce marqueur est là,
 // le devis est signalé « 🤖 À compléter ». « Marquer comme complété » le remplace
 // par « [AUTO ✓ …] » (trace conservée).
+// Devis arrivé par le flux email (complété ou non) : déjà envoyé au client par son émetteur
+const devisRecuParEmail=i=>/\[AUTO/.test(String(f(i,'Notes_Internes')||''));
 const devisAutoEnAttente=i=>/\[AUTO\]/.test(String(f(i,'Notes_Internes')||''));
 function devisManquants(i){
   const m=[];
@@ -11503,14 +11660,17 @@ async function openDevisPanel(id){
     </div>
     <div id="devis-pdf-msg" style="font-size:11px;margin-top:4px"></div>
     </div><div class="pactions">`;
-    if(st!=='En cours de traitement'&&st!=='Devis envoyé'){
+    const _dejaEnvoye=devisRecuParEmail(item);
+    if(st!=='En cours de traitement'&&st!=='Devis envoyé'&&!_dejaEnvoye){
       html+=`<button class="pbtn blue" onclick="passerEnCours(${id},true)">📋 Prendre en charge</button>`;
     }
     if(st==='Converti en BC'||st==='Accepté'){
       const devisRS=f(item,'Devis_RS')||'';
       html+=`<button class="pbtn grey" style="background:var(--teal-light);color:var(--teal);border:1px solid var(--teal)" onclick="closePanel();trouverBCDepuisDevis('${nd}','${devisRS}')">🔗 Trouver BC associé</button>`;
     }
-    html+=`<button class="pbtn green" onclick="envoyerDevisFlow(${id})">📨 Envoyer devis</button>
+    html+=(_dejaEnvoye
+        ?`<span style="font-size:12px;color:#047857;background:#ecfdf5;border:1px solid #6ee7b7;border-radius:6px;padding:6px 10px">✉️ Déjà envoyé au client par l'émetteur (reçu par email)</span>`
+        :`<button class="pbtn green" onclick="envoyerDevisFlow(${id})">📨 Envoyer devis</button>`)+`
       <button class="pbtn grey" onclick="closePanel()">Fermer</button>
     </div>`;
     document.getElementById('panel-body').innerHTML=html;
@@ -11536,6 +11696,8 @@ async function passerEnCours(id,fromPanel=false){
 
 // ── Envoyer devis — Flow PA (Passe 2) ──
 async function envoyerDevisFlow(id){
+  const _it=(DATA.devis||[]).find(x=>x.ID===id);
+  if(_it&&devisRecuParEmail(_it)){toast('✉️ Ce devis a déjà été envoyé au client par email — pas de renvoi depuis le dashboard','ko');return;}
   const ok=await showConfirm('📨 Envoyer le devis',`Le flow va récupérer le PDF joint au devis <strong>DEV-${id}</strong> et envoyer l'email au client automatiquement.<br><br>Confirmer l'envoi ?`,'📨 Envoyer','submit');
   if(!ok)return;
   const btn=document.querySelector(`#panel-body .pbtn.green`);
