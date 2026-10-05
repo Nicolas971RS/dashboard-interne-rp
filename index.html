@@ -1912,7 +1912,6 @@ async function loadAll(){
     await syncLivraisonVersRacine();
 
     // Debug: log first suivi item to help identify field names
-    if(suivi.length>0){console.log('DEBUG Suivi_BC[0] keys:',Object.keys(suivi[0]).sort().join(', '));}
 
     _lastLoad=Date.now();updateTimer();
     buildFilters();renderAll();updateBadges();buildSGVendeurs();renderAnnonces();
@@ -9334,7 +9333,7 @@ async function openTraiterModal(id,numBC,client){
     const item=(DATA.suivi||[]).find(x=>x.ID===id||x.ID===parseInt(id));
     if(item){numBC=numBC||f(item,'Title')||('BC-'+id);client=client||getClient(item);}
   }
-  const today=new Date().toISOString().slice(0,10);
+  const today=new Date().toLocaleDateString('sv-SE',{timeZone:'America/Guadeloupe'}); // date locale (pas UTC : après 20h on basculait au lendemain)
   const currentItem=DATA.suivi.find(i=>i.ID===id)||{};
   const currentV=f(currentItem,'Vendeurencharge')||'';
   const currentStat=getStatut(currentItem);
@@ -9350,7 +9349,7 @@ async function openTraiterModal(id,numBC,client){
   const curMontant=f(currentItem,'MontantHT','Montant_HT','MontantHTTotal')||'';
   const curRem=f(currentItem,'Remarques')||'';
   const curDateBL=f(currentItem,'DateBL')||'';
-  const curDatePEC=f(currentItem,'Datepriseencharge')||today;
+  const curDatePEC=f(currentItem,'Datepriseencharge')||'';
   const curETA=f(currentItem,'DateLivraisonpr_x00e9_vue')||'';
   const curArrivage=f(currentItem,'Date_Arrivage_Attendu')||'';
   // Nettoyer HTML Outlook du Contenu_Email et extraire lien portail
@@ -9441,8 +9440,8 @@ async function openTraiterModal(id,numBC,client){
           <div class="mf"><label>Statut BC</label><select id="m-statut">${stOpts}</select></div>
         </div>
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
-          <div class="mf"><label>Date BL</label><input id="m-datebl" type="date" value="${curDateBL?curDateBL.slice(0,10):today}"></div>
-          <div class="mf"><label>Date prise en charge</label><input id="m-datepec" type="date" value="${curDatePEC?curDatePEC.slice(0,10):today}"></div>
+          <div class="mf"><label>Date BL</label><input id="m-datebl" type="date" value="${curDateBL?curDateBL.slice(0,10):''}" title="Remplie automatiquement (date du jour) dès qu'un N° BL est saisi"></div>
+          <div class="mf"><label>Date prise en charge</label><input id="m-datepec" type="date" value="${curDatePEC?curDatePEC.slice(0,10):''}" title="Remplie automatiquement (date du jour) dès qu'un N° BL est saisi"></div>
         </div>
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
           <div class="mf"><label>Date de livraison <span style="font-weight:400;color:var(--text-muted)">(retrait client)</span></label><input id="m-eta" type="date" value="${curETA?curETA.slice(0,10):''}"></div>
@@ -9562,8 +9561,16 @@ async function openTraiterModal(id,numBC,client){
     const datebl=document.getElementById('m-datebl').value;
     const datepec=document.getElementById('m-datepec').value;
     const eta=document.getElementById('m-eta').value;
-    if(datebl)body['DateBL']=datebl+'T00:00:00Z';
-    if(datepec)body['Datepriseencharge']=datepec+'T00:00:00Z';
+    // Dates BL / prise en charge : elles n'ont de sens qu'avec un BL. Sans N° BL,
+    // on n'écrit rien (sauf date saisie volontairement) ; avec un BL, une date
+    // vide prend la date du jour. On n'écrit que ce qui change.
+    {
+      const aBL=!!(bl||String(f(currentItem,'N_x00b0_BL')||'').trim());
+      const dBL=datebl||(aBL&&!curDateBL?today:'');
+      const dPEC=datepec||(aBL&&!curDatePEC?today:'');
+      if(dBL&&dBL!==(curDateBL?curDateBL.slice(0,10):''))body['DateBL']=dBL+'T00:00:00Z';
+      if(dPEC&&dPEC!==(curDatePEC?curDatePEC.slice(0,10):''))body['Datepriseencharge']=dPEC+'T00:00:00Z';
+    }
     if(eta)body['DateLivraisonpr_x00e9_vue']=eta+'T00:00:00Z';
     const arrivage=document.getElementById('m-arrivage')?.value;
     // Colonne optionnelle : on écrit dessus si elle existe, sinon on l'ignore
@@ -9811,6 +9818,11 @@ async function openTraiterModal(id,numBC,client){
     // Import auto des lignes déjà scannées quand le N° BL est saisi/modifié
     const blInput=document.getElementById('m-bl');
     if(blInput)blInput.addEventListener('blur',importerLignesDepuisScan);
+    // Dès qu'un N° BL est saisi, les dates vides prennent la date du jour (visible, modifiable)
+    if(blInput)blInput.addEventListener('input',()=>{
+      if(!blInput.value.trim())return;
+      ['m-datebl','m-datepec'].forEach(k=>{const d=document.getElementById(k);if(d&&!d.value)d.value=today;});
+    });
     // Demande BC sur ce N° BL ? → reprendre son N° devis (le flux la passera en « BC reçu »)
     if(blInput){blInput.addEventListener('blur',()=>mVerifierDemandeBC(id));blInput.addEventListener('change',()=>mVerifierDemandeBC(id));}
     document.getElementById('m-numdevis')?.addEventListener('change',()=>mVerifierDemandeBC(id,false));
