@@ -107,6 +107,11 @@
   #scl-tip{position:fixed;z-index:10000;display:none;background:#fff;color:#1e293b;border:1px solid var(--border);border-radius:8px;box-shadow:0 10px 30px rgba(15,23,42,.18);padding:12px 14px;font-size:12.5px;line-height:1.55;white-space:pre-wrap;max-height:60vh;overflow:auto;font-family:var(--font-body)}
   .dv-auto{display:inline-block;margin-left:6px;font-family:var(--font-body);font-size:10.5px;font-weight:700;color:#c2410c;background:#fff7ed;border:1px solid #fdba74;border-radius:9px;padding:0 6px;white-space:nowrap}
   .dv-auto-banner{display:flex;align-items:center;gap:8px;flex-wrap:wrap;background:#fff7ed;border:1px solid #fdba74;border-left:4px solid #ea580c;border-radius:var(--radius-sm);padding:9px 12px;margin-bottom:12px;color:#7c2d12;font-size:13px}
+  .bpa-banner{background:#f0fdf4;border:1px solid #86efac;border-left:4px solid #16a34a;border-radius:var(--radius-sm);padding:10px 12px;margin-bottom:12px;color:#14532d;font-size:13px}
+  .bpa-banner.retard{background:#fef2f2;border-color:#fca5a5;border-left-color:#dc2626;color:#7f1d1d}
+  .bpa-row{display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:6px 0;border-top:1px dashed rgba(0,0,0,.08)}
+  .bpa-row:first-of-type{border-top:none}
+  .bc-prov{display:inline-block;margin-left:6px;font-family:var(--font-body);font-size:10.5px;font-weight:700;color:#7c3aed;background:#f5f3ff;border:1px solid #c4b5fd;border-radius:9px;padding:0 6px;white-space:nowrap;cursor:help}
   .dv-chip{background:#fff;border:1px solid #fdba74;color:#9a3412;border-radius:14px;padding:3px 10px;font-size:11.5px;font-weight:600;cursor:pointer;font-family:inherit}
   .pd-kpis{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:10px;margin-bottom:16px}
   @media(max-width:1100px){.pd-kpis{grid-template-columns:repeat(3,minmax(0,1fr))}}
@@ -454,7 +459,7 @@
     <button class="tab" onclick="showTab('ral',this);renderRALTable()">🔀 Livraisons Partielles <span class="tab-badge a" id="badge-ral">0</span></button>
     <button class="tab" onclick="showTab('prepscan',this);renderPreparations()">📦 Livraison Magasin <span class="tab-badge a" id="badge-prepscan">0</span></button>
     <button class="tab" onclick="showTab('dbc',this)">🧾 Demandes BC <span class="tab-badge r" id="badge-dbc">0</span></button>
-    <button class="tab" onclick="showTab('devis',this)">📄 Devis <span class="tab-badge a" id="badge-devis">0</span><span class="tab-badge r" id="badge-devis-auto" style="display:none" title="Devis créés automatiquement depuis un email — à compléter"></span></button>
+    <button class="tab" onclick="showTab('devis',this)">📄 Devis <span class="tab-badge a" id="badge-devis">0</span><span class="tab-badge r" id="badge-devis-auto" style="display:none" title="Devis créés automatiquement depuis un email — à compléter"></span><span class="tab-badge g" id="badge-bpa" style="display:none" title="Bons pour accord reçus — BC à créer"></span></button>
     <button class="tab" onclick="showTab('analytics',this);renderAnalytics()">📈 Analytics</button>
     <button class="tab" onclick="showTab('suivicli',this);renderSuivisClients()">📞 Suivis clients <span class="tab-badge r" id="badge-suivicli" style="display:none">0</span></button>
     <button class="tab" onclick="showTab('journal',this);loadJournal()">📜 Journal d'Audit</button>
@@ -1087,6 +1092,7 @@
         </div>
       </div>
       <div id="devis-auto-alerte" style="display:none"></div>
+      <div id="bpa-alerte" style="display:none"></div>
       <div class="kpi-row c4">
         <div class="kc b"><div class="kl">📄 En cours de traitement</div><div class="kv" id="kpi-devis-cours">—</div><div class="ks">Action requise</div></div>
         <div class="kc t"><div class="kl">✉️ Devis envoyés</div><div class="kv" id="kpi-devis-envoye">—</div><div class="ks">Ce mois</div></div>
@@ -4293,6 +4299,9 @@ function scEtat(bc){
 function scBadge(bcOuId){
   const bc=typeof bcOuId==='object'?bcOuId:(DATA.suivi||[]).find(x=>x.ID===bcOuId||x.ID===parseInt(bcOuId));
   if(!bc)return'';
+  return bcProvBadge(bc)+_scBadgeCore(bc);
+}
+function _scBadgeCore(bc){
   const e=scEtat(bc);
   if(!e)return`<span class="sc-add" title="Noter un suivi client (appel, passage prévu…)" onclick="event.stopPropagation();openSuiviClient(${bc.ID})">📞+</span>`;
   const R=SC_RESULTATS[e.der.r]||SC_RESULTATS.autre;
@@ -4848,7 +4857,7 @@ function devisRowFull(i){
 // le devis est signalé « 🤖 À compléter ». « Marquer comme complété » le remplace
 // par « [AUTO ✓ …] » (trace conservée).
 // Devis arrivé par le flux email (complété ou non) : déjà envoyé au client par son émetteur
-const devisRecuParEmail=i=>/\[AUTO/.test(String(f(i,'Notes_Internes')||''));
+const devisRecuParEmail=i=>/\[AUTO|\[BPA reçu/.test(String(f(i,'Notes_Internes')||'')); // un BPA prouve aussi que le devis a déjà été envoyé au client
 const devisAutoEnAttente=i=>/\[AUTO\]/.test(String(f(i,'Notes_Internes')||''));
 function devisManquants(i){
   const m=[];
@@ -4921,8 +4930,128 @@ function openCompleterDevis(id){
   });
 }
 
+// ═══ BON POUR ACCORD (BPA) — devis signé, BC pas encore créé ═══
+// Le flux « BPA - N° - Client » passe le devis en « Accepté » et ajoute
+// « [BPA reçu le …] » dans Notes_Internes. Tant qu'aucun BC du Suivi_BC ne
+// porte ce N° de devis, le dossier est signalé « BC à créer ».
+// Le BC créé depuis un BPA porte un N° provisoire « BPA-<n° devis> » : remplacé
+// par le vrai N° de BC client dans Traiter quand il arrive (le lien devis reste).
+const BC_PROV_PREFIXE='BPA-';
+const estBCProvisoire=bc=>String(f(bc,'Title')||'').trim().toUpperCase().startsWith(BC_PROV_PREFIXE);
+function bcProvBadge(bc){
+  if(!estBCProvisoire(bc))return'';
+  return`<span class="bc-prov" title="N° de BC provisoire (créé depuis un bon pour accord) — remplace-le par le vrai N° de BC client dans Traiter dès réception, AVANT toute livraison partielle">⏳ BC provisoire</span>`;
+}
+function bpaDate(i){
+  const m=String(f(i,'Notes_Internes')||'').match(/\[BPA reçu le (\d{2})\/(\d{2})\/(\d{4})(?: (\d{2}):(\d{2}))?/);
+  if(!m)return null;
+  return new Date(+m[3],+m[2]-1,+m[1],+(m[4]||12),+(m[5]||0));
+}
+function bpaATraiter(){
+  const idx=pdIndexBC();
+  return (DATA.devis||[]).filter(i=>{
+    if(f(i,'Statut')!=='Accepté')return false;
+    if(!/\[BPA reçu/.test(String(f(i,'Notes_Internes')||'')))return false;
+    const keys=[f(i,'Devis_RS'),f(i,'Num_x00e9_ro_Devis','Numero_Devis')].map(x=>String(x||'').trim().toUpperCase()).filter(Boolean);
+    return !keys.some(k=>(idx[k]||[]).length);
+  });
+}
+function renderBPAAlerte(){
+  const list=bpaATraiter();
+  const bdg=document.getElementById('badge-bpa');
+  if(bdg){bdg.textContent=list.length?'✍️ '+list.length:'';bdg.style.display=list.length?'':'none';}
+  const el=document.getElementById('bpa-alerte');
+  if(!el)return;
+  if(!list.length){el.style.display='none';el.innerHTML='';return;}
+  const heures=i=>{const d=bpaDate(i);return d?(Date.now()-d.getTime())/36e5:null;};
+  const retard=list.some(i=>(heures(i)||0)>24);
+  el.style.display='block';
+  el.innerHTML=`<div class="bpa-banner${retard?' retard':''}">
+    <div style="margin-bottom:4px"><strong>✍️ ${list.length} bon${list.length>1?'s':''} pour accord reçu${list.length>1?'s':''} — BC à créer</strong>
+    <span style="font-size:12px">— le client a signé le devis : crée le BC (provisoire si le client n'a pas encore envoyé le sien) pour lancer le suivi commande fournisseur.</span></div>
+    ${list.map(i=>{
+      const h=heures(i),d=bpaDate(i);
+      const age=h==null?'':(h>24?`<span style="color:#dc2626;font-weight:700">⚠️ depuis ${Math.floor(h/24)} j</span>`:'<span>aujourd\'hui</span>');
+      return`<div class="bpa-row">
+        <span class="mono" style="font-weight:700">${_escD(f(i,'Devis_RS')||f(i,'Num_x00e9_ro_Devis')||'DEV-'+i.ID)}</span>
+        <span>${_escD(String(f(i,'Client')||'?'))}</span>
+        <span style="font-size:12px;opacity:.8">${_escD(getChantier(i)&&getChantier(i)!=='—'?getChantier(i):'')}</span>
+        <span style="font-size:12px">BPA ${d?d.toLocaleDateString('fr-FR'):'—'} ${age}</span>
+        <span style="font-size:12px">· ${_escD(f(i,'Vendeur_Assign_x00e9_')||'—')}</span>
+        <span style="margin-left:auto;display:flex;gap:6px">
+          <button type="button" class="btn" onclick="openDevisPanel(${i.ID})">🔍 Devis + BPA</button>
+          <button type="button" class="btn teal" onclick="openCreerBCDepuisBPA(${i.ID})">➕ Créer le BC</button>
+        </span>
+      </div>`;}).join('')}
+  </div>`;
+}
+function bpaClientId(nom){
+  const n=normNom(nom||'');
+  if(!n)return'';
+  const ents=Object.entries(DATA.clients||{});
+  const exact=ents.find(([,v])=>normNom(v)===n);
+  if(exact)return exact[0];
+  const part=ents.filter(([,v])=>{const x=normNom(v);return x&&(x.includes(n)||n.includes(x));});
+  return part.length===1?part[0][0]:'';
+}
+function openCreerBCDepuisBPA(id){
+  const i=(DATA.devis||[]).find(x=>x.ID===id);
+  if(!i){toast('🔴 Devis introuvable — actualise','ko');return;}
+  const rs=String(f(i,'Devis_RS')||f(i,'Num_x00e9_ro_Devis')||'DEV-'+id).trim();
+  const cid=bpaClientId(f(i,'Client'));
+  const moi=(typeof vendeurConnecte==='function'&&vendeurConnecte())||'';
+  const vendeurs=getAllVendeurs();
+  const vDef=vendeurs.includes(moi)?moi:(f(i,'Vendeur_Assign_x00e9_')||'');
+  const optsClients=Object.entries(DATA.clients||{}).sort((a,b)=>String(a[1]).localeCompare(String(b[1]))).map(([k,v])=>`<option value="${_escD(String(v))}" data-id="${k}"></option>`).join('');
+  openModal(`➕ Créer le BC — BPA ${_escD(rs)}`,`
+    <div style="font-size:12px;color:var(--text-muted);margin-bottom:10px">Le client a signé le devis <strong>${_escD(rs)}</strong>. Le BC est créé avec un <strong>N° provisoire</strong> tant que le client n'a pas envoyé son propre BC : tu le remplaceras dans <em>Traiter</em> à réception (le lien avec le devis est conservé).</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+      <div class="mf"><label>N° BC (provisoire)</label><input id="bpa-num" value="${_escD(BC_PROV_PREFIXE+rs)}" style="font-family:var(--font-mono)"></div>
+      <div class="mf"><label>N° devis lié</label><input id="bpa-dev" value="${_escD(rs)}" style="font-family:var(--font-mono)" readonly></div>
+      <div class="mf"><label>Client *</label><input id="bpa-client" list="bpa-clients" value="${_escD(cid?DATA.clients[cid]:String(f(i,'Client')||''))}" autocomplete="off"><datalist id="bpa-clients">${optsClients}</datalist></div>
+      <div class="mf"><label>Vendeur responsable *</label><select id="bpa-vendeur"><option value="">—</option>${vendeurs.map(v=>`<option${v===vDef?' selected':''}>${_escD(v)}</option>`).join('')}</select></div>
+      <div class="mf"><label>Montant HT (€)</label><input id="bpa-montant" inputmode="decimal" placeholder="ex: 1405,00"></div>
+      <div class="mf"><label>Arrivage fournisseur attendu</label><input id="bpa-arrivage" type="date"><div style="font-size:11px;color:var(--text-muted);margin-top:2px">Date donnée par Patricia — modifiable ensuite dans Traiter</div></div>
+    </div>
+    <div class="mf"><label>Remarque</label><textarea id="bpa-rem" rows="2">BC provisoire créé depuis le BPA du devis ${_escD(rs)} — vrai BC client à récupérer.</textarea></div>`,
+  async()=>{
+    const g=k=>document.getElementById(k).value.trim();
+    const num=g('bpa-num');
+    if(!num){document.getElementById('bpa-num').style.borderColor='var(--red)';throw new Error('Le N° de BC est obligatoire.');}
+    if((DATA.suivi||[]).some(b=>String(f(b,'Title')||'').trim().toUpperCase()===num.toUpperCase()))throw new Error('Un BC « '+num+' » existe déjà dans le suivi.');
+    const nomCli=g('bpa-client');
+    const clientId=bpaClientId(nomCli);
+    if(!clientId){document.getElementById('bpa-client').style.borderColor='var(--red)';throw new Error('Client introuvable dans la liste des clients — choisis-le dans la liste proposée.');}
+    const vendeur=g('bpa-vendeur');
+    if(!vendeur){document.getElementById('bpa-vendeur').style.borderColor='var(--red)';throw new Error('Choisis le vendeur responsable du dossier.');}
+    const mt=g('bpa-montant').replace(/\s/g,'').replace(',','.');
+    if(mt&&isNaN(parseFloat(mt)))throw new Error('Montant invalide.');
+    const today=new Date().toLocaleDateString('sv-SE',{timeZone:'America/Guadeloupe'});
+    const body={Title:num,N_x00b0_Devis:rs,ClientId:parseInt(clientId,10),Vendeurencharge:vendeur,Statut:'Reçu',Dateder_x00e9_ception:today+'T12:00:00Z',Remarques:g('bpa-rem')||null};
+    if(mt)body.MontantHT=parseFloat(mt);
+    const arr=g('bpa-arrivage');
+    if(arr&&_colArrivage!==false)body.Date_Arrivage_Attendu=arr+'T00:00:00Z';
+    let created;
+    try{created=await spPost('sites/RseauxPlus','Suivi_BC',body);}
+    catch(e){
+      if(body.Date_Arrivage_Attendu&&/Date_Arrivage_Attendu/.test(e.message)){delete body.Date_Arrivage_Attendu;created=await spPost('sites/RseauxPlus','Suivi_BC',body);}
+      else throw e;
+    }
+    const qui=sessionStorage.getItem('user_name')||vendeur;
+    const quand=new Date().toLocaleDateString('fr-FR',{timeZone:'America/Guadeloupe'});
+    const notes=String(f(i,'Notes_Internes')||'')+` | [BC ${num} créé le ${quand} par ${qui}]`;
+    try{
+      await spPatch('sites/BondeCommande','Demandes_Devis',id,{Statut:'Converti en BC',Notes_Internes:notes});
+      Object.assign(i,{Statut:'Converti en BC',Notes_Internes:notes});
+    }catch(e){console.warn('[BPA] statut devis',e);toast('⚠️ BC créé, mais le devis n\'a pas pu passer en « Converti en BC » : '+e.message,'ko');}
+    toast(`✅ BC ${num} créé — suivi lancé`,'ok');
+    loadAll();
+  });
+}
+
 function renderDevisTable(){
   try{renderDevisAutoAlerte();}catch(e){console.warn('[devisAuto]',e);}
+  try{renderBPAAlerte();}catch(e){console.warn('[BPA]',e);}
   let items=[...DATA.devis];
   const fV=document.getElementById('filter-vendeur-devis')?.value||'all';
   const fS=document.getElementById('filter-statut-devis')?.value||'all';
@@ -11791,6 +11920,9 @@ async function openDevisPanel(id){
     const _dejaEnvoye=devisRecuParEmail(item);
     if(st!=='En cours de traitement'&&st!=='Devis envoyé'&&!_dejaEnvoye){
       html+=`<button class="pbtn blue" onclick="passerEnCours(${id},true)">📋 Prendre en charge</button>`;
+    }
+    if(st==='Accepté'&&bpaATraiter().some(x=>x.ID===item.ID)){
+      html+=`<button class="pbtn green" onclick="closePanel();openCreerBCDepuisBPA(${id})">➕ Créer le BC (BPA)</button>`;
     }
     if(st==='Converti en BC'||st==='Accepté'){
       const devisRS=f(item,'Devis_RS')||'';
