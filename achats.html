@@ -197,7 +197,7 @@ input,select,textarea{font-family:inherit;font-size:13.5px}
 .f.req label::after{content:" *";color:var(--red)}
 
 /* LINES TABLE */
-.ltable{width:100%;min-width:1020px;border-collapse:separate;border-spacing:0;font-size:13px}
+.ltable{width:100%;min-width:1180px;border-collapse:separate;border-spacing:0;font-size:13px}
 #tbMar input.n{min-width:96px}
 .ltable th{font-size:10.5px;text-transform:uppercase;letter-spacing:.04em;color:var(--text-muted);font-weight:700;text-align:left;padding:6px 6px;border-bottom:1px solid var(--border);background:var(--grey-xlight);position:sticky;top:0}
 .ltable th.r,.ltable td.r{text-align:right}
@@ -205,8 +205,10 @@ input,select,textarea{font-family:inherit;font-size:13.5px}
 .ltable tr.new td{background:#f6fbf0}
 .ltable tr.mod td{background:#fffbea}
 .ltable tr.del td{background:var(--red-light);opacity:.55;text-decoration:line-through}
-.ltable input{width:100%;border:1px solid transparent;border-radius:5px;padding:5px 6px;background:transparent}
-.ltable input:hover{border-color:var(--border)}
+.ltable input{width:100%;border:1px solid #b9c6d6;border-radius:5px;padding:5px 6px;background:#fff}
+.ltable input:hover{border-color:var(--navy-light)}
+.ltable input.req-empty,.f input.req-empty{border:1.5px solid #e53935;background:#fff5f5}
+.ltable input.req-empty::placeholder,.f input.req-empty::placeholder{color:#e53935;opacity:.8}
 .ltable input:focus{border-color:var(--teal-mid);background:#fff;outline:none;box-shadow:0 0 0 2px var(--teal-light)}
 .ltable input.n{text-align:right;font-family:var(--font-mono)}
 .ltable input.bad{border-color:#f0a9a9;background:#fff6f6}
@@ -788,13 +790,13 @@ function renderFiche(){
 function lineRowMar(l){
   const f=l.ID_Fournisseur?frsById(l.ID_Fournisseur):null;
   const ok=!!f;const cls=l._st==='new'?'new':l._st==='mod'?'mod':l._st==='del'?'del':'';
-  const num=fld=>`<input class="n" data-l="${l._k}" data-f="${fld}" value="${esc(fmtN(l[fld]))}" inputmode="decimal">`;
+  const num=(fld,req)=>`<input class="n ${req&&!(n0(l[fld])>0)?'req-empty':''}" data-l="${l._k}" data-f="${fld}" ${req?'data-req="1"':''} value="${esc(fmtN(l[fld]))}" inputmode="decimal" ${req?'placeholder="à saisir"':''}>`;
   return `<tr class="${cls}" data-row="${l._k}">
-    <td><div style="display:flex;align-items:center;gap:4px"><input style="min-width:170px" data-l="${l._k}" data-f="Fournisseur" list="dlFrs" value="${esc(l.Fournisseur||'')}" placeholder="Fournisseur"><span class="${ok?'frs-ok':'frs-ko'}" title="${ok?'Reconnu : '+esc(f.Title)+' ('+esc(f.Code_Image||'')+')':'Fournisseur non reconnu dans la liste'}">${ok?'✓':'⚠'}</span></div></td>
+    <td><div style="display:flex;align-items:center;gap:4px"><input style="min-width:240px" data-l="${l._k}" data-f="Fournisseur" data-req="1" list="dlFrs" value="${esc(l.Fournisseur||'')}" placeholder="à saisir" class="${l.Fournisseur?'':'req-empty'}"><span class="${ok?'frs-ok':'frs-ko'}" title="${ok?'Reconnu : '+esc(f.Title)+' ('+esc(f.Code_Image||'')+')':'Fournisseur non reconnu dans la liste'}">${ok?'✓':'⚠'}</span></div></td>
     <td><input data-l="${l._k}" data-f="N_Commande" value="${esc(l.N_Commande||'')}" style="width:70px" class="mono"></td>
-    <td><input data-l="${l._k}" data-f="N_Facture" value="${esc(l.N_Facture||'')}" class="mono ${l.N_Facture?'':'bad'}" placeholder="à saisir" style="min-width:130px"></td>
-    <td><input data-l="${l._k}" data-f="Produits" value="${esc(l.Produits||'')}" style="min-width:120px"></td>
-    <td>${num('Valeur_Marchandise')}</td><td>${num('Fret')}</td><td>${num('Ajustement')}</td>
+    <td><input data-l="${l._k}" data-f="N_Facture" data-req="1" value="${esc(l.N_Facture||'')}" class="mono ${l.N_Facture?'':'req-empty'}" placeholder="à saisir" style="min-width:130px"></td>
+    <td><input data-l="${l._k}" data-f="Produits" value="${esc(l.Produits||'')}" style="min-width:200px"></td>
+    <td>${num('Valeur_Marchandise',true)}</td><td>${num('Fret')}</td><td>${num('Ajustement')}</td>
     <td class="r mono" data-cif="${l._k}">${fmtN(lineVMnette(l)+n0(l.Fret))}</td>
     <td><input data-l="${l._k}" data-f="Client_Concerne" value="${esc(l.Client_Concerne||'')}" style="width:110px"></td>
     <td><button class="rm" data-rm="${l._k}" title="${l._st==='del'?'Annuler la suppression':'Supprimer la ligne'}">${l._st==='del'?'↺':'🗑'}</button></td></tr>`;
@@ -809,8 +811,8 @@ function renderFrais(){
     const cls=l._st==='new'?'new':l._st==='mod'?'mod':l._st==='del'?'del':'';
     const inp=(fld,lab)=>`<div class="f"><label>${lab}</label><input data-l="${l._k}" data-f="${fld}" value="${esc(fmtN(l[fld]))}" inputmode="decimal"></div>`;
     return `<div class="frais ${cls}" data-row="${l._k}">
-      <div class="frais-h"><div class="f"><label>Transitaire / transporteur</label><input data-l="${l._k}" data-f="Fournisseur" list="dlTrans" value="${esc(l.Fournisseur||'')}"></div>
-        <div class="f" style="max-width:200px"><label>N° facture</label><input data-l="${l._k}" data-f="N_Facture" value="${esc(l.N_Facture||'')}" class="${l.N_Facture?'':'bad'}"></div>
+      <div class="frais-h"><div class="f"><label>Transitaire / transporteur</label><input data-l="${l._k}" data-f="Fournisseur" data-req="1" list="dlTrans" value="${esc(l.Fournisseur||'')}" placeholder="à saisir" class="${l.Fournisseur?'':'req-empty'}"></div>
+        <div class="f" style="max-width:200px"><label>N° facture</label><input data-l="${l._k}" data-f="N_Facture" data-req="1" value="${esc(l.N_Facture||'')}" placeholder="à saisir" class="${l.N_Facture?'':'req-empty'}"></div>
         <button class="rm" data-rm="${l._k}" style="margin-top:14px">${l._st==='del'?'↺':'🗑'}</button></div>
       <div class="frais-g">${inp('Fret','Fret maritime')}${POSTES.map(([k,lab])=>inp(k,lab)).join('')}${inp('Ajustement','Ajustement')}</div>
       <div class="frais-tot">Frais d'approche : <b data-ft="${l._k}">${fmtEur(lineFrais(l))}</b> &nbsp; Total facture : <b data-tt="${l._k}">${fmtEur(lineTotal(l))}</b></div></div>`;}).join('')
@@ -896,7 +898,8 @@ document.addEventListener('input',e=>{
     const l=W.lines.find(x=>x._k===+t.dataset.l);if(!l)return;
     const f=t.dataset.f;
     if(LINE_NUM.includes(f)){const v=parseNum(t.value);t.classList.toggle('bad',v!==null&&isNaN(v));l[f]=isNaN(v)?l[f]:v;l['_bad_'+f]=v!==null&&isNaN(v);}
-    else{l[f]=t.value;if(f==='N_Facture')t.classList.toggle('bad',!t.value);}
+    else{l[f]=t.value;}
+    if(t.dataset.req)t.classList.toggle('req-empty',LINE_NUM.includes(f)?!(n0(l[f])>0):!t.value.trim());
     if(l._st==='')l._st='mod';
     markDirty();refreshComputed();
   }else if(t.dataset.h){
