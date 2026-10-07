@@ -780,7 +780,7 @@ function renderFiche(){
       <div class="card"><div class="card-h"><h3>🏭 Poids des fournisseurs</h3></div><div class="card-b bars" id="barsFrs"></div></div>
     </div>
   </div>
-  <div class="savebar" id="savebar"><div class="msg" id="saveMsg"></div>
+  <div class="savebar" id="savebar"><button class="btn danger sm" id="btnDel" onclick="deleteDossier()" title="Supprime le dossier, ses lignes et ses documents">🗑 Supprimer le dossier</button><div class="msg" id="saveMsg"></div>
     <span class="muted" style="font-size:12px"><span class="kbd">Ctrl</span> + <span class="kbd">S</span></span>
     <button class="btn ghost" onclick="closeFiche()">Fermer</button>
     <button class="btn green" id="btnSave" onclick="saveFiche()">💾 Enregistrer</button></div>`;
@@ -842,13 +842,13 @@ function refreshComputed(){
   W.lines.forEach(l=>{const e=document.querySelector(`[data-cif="${l._k}"]`);if(e)e.textContent=fmtN(lineVMnette(l)+n0(l.Fret));
     const ft=document.querySelector(`[data-ft="${l._k}"]`);if(ft)ft.textContent=fmtEur(lineFrais(l));const tt=document.querySelector(`[data-tt="${l._k}"]`);if(tt)tt.textContent=fmtEur(lineTotal(l));});
   // coefficient
-  const hist=DATA.arr.filter(x=>x.ID!==W.id&&(x.Categorie||'')===(a.Categorie||'')).map(x=>({x,c:coefOf(x)})).filter(o=>o.c&&o.c>0.9&&o.c<3)
+  const hist=DATA.arr.filter(x=>x.ID!==W.id&&(x.Categorie||'')===(a.Categorie||'')).map(x=>{const L=linesOf(x.ID);if(!L.length)return {x,c:x.Coef_Reel||null};const k=calc(L);return {x,c:(k.frais+k.fretTrans>0)?k.coef:null};}).filter(o=>o.c&&o.c>0.9&&o.c<3)
     .sort((p,q)=>String(dk(q.x,'Date_Entrepot')||dk(q.x,'ETA_Port')).localeCompare(String(dk(p.x,'Date_Entrepot')||dk(p.x,'ETA_Port')))).slice(0,6);
   const avg=hist.length?hist.reduce((s,o)=>s+o.c,0)/hist.length:null;
   const max=Math.max(1.8,(c.coef||1)+0.1,(avg||1)+0.1);
   const pct=v=>Math.max(0,Math.min(100,((v-1)/(max-1))*100));
   let cmp='Saisis les valeurs pour calculer le coefficient.';
-  if(c.coef&&avg){const d=c.coef-avg;cmp=`Moyenne des ${hist.length} derniers dossiers ${esc(a.Categorie||'')} : <b>${fmtCoef(avg)}</b> → ${d>=0?'+':''}${fmtN(d,3)} ${Math.abs(d)<0.02?'· dans la norme ✓':d>0?'· plus élevé que d’habitude':'· plus bas que d’habitude'}`;}
+  if(c.coef&&avg){const d=c.coef-avg;cmp=`${hist.length>1?`Moyenne des ${hist.length} derniers dossiers`:'Dernier dossier'} ${esc(a.Categorie||'')} : <b>${fmtCoef(avg)}</b> → ${d>=0?'+':''}${fmtN(d,3)} ${Math.abs(d)<0.02?'· dans la norme ✓':d>0?'· plus élevé que d’habitude':'· plus bas que d’habitude'}`;}
   else if(c.coef)cmp='Pas encore d’historique comparable dans cette catégorie.';
   $('coefCard').innerHTML=`<div class="lab">Coefficient de revient réel</div><div class="big">${fmtCoef(c.coef)}</div>
     <div class="cmp">${c.coef?(c.frais+c.fretTrans>0?`1 € d'achat revient à <b>${fmtN(c.coef,3)} €</b> une fois rendu à l'entrepôt.`:`⏳ <b>Provisoire</b> : les frais du transitaire ne sont pas encore saisis.`):''}</div>
@@ -1117,6 +1117,34 @@ async function createDossier(){
     await loadAll();closeNew();openFiche(a.ID);
     toast(`✓ Dossier ${title} créé${p?` avec ${p.lines.length} lignes`:''}`,'ok');
   }catch(e){toast('🔴 '+e.message,'ko');btn.disabled=false;btn.textContent='Créer le dossier';}
+}
+
+// ═══ SUPPRESSION DOSSIER ═══
+async function deleteDossier(){
+  if(!W||SAVING)return;
+  const a=DATA.arr.find(x=>x.ID===W.id);if(!a){toast('🔴 Dossier introuvable, actualise la page.','ko');return;}
+  if(['Validé','Clôturé'].includes(a.Statut)){
+    await showConfirm('Suppression impossible',`Le dossier <b>${esc(a.Title||'')}</b> est <b>${esc(a.Statut)}</b> par Fabrice. Un dossier validé ne se supprime pas depuis le portail.`,'Compris');return;}
+  const lig=DATA.lig.filter(l=>l.ID_Arrivage===a.ID);
+  const nM=lig.filter(l=>l.Type_Ligne!=='Frais').length,nF=lig.length-nM,nA=(W.att||[]).length;
+  const ok=await showConfirm('Supprimer le dossier ?',
+    `<b>${esc(a.Title||'')}</b>${a.N_Dossier?` · dossier Image ${esc(a.N_Dossier)}`:''}<br><br>Seront supprimés :<ul style="margin:6px 0 6px 18px"><li>le dossier</li><li>${nM} ligne${nM>1?'s':''} marchandise et ${nF} facture${nF>1?'s':''} de frais</li><li>${nA} document${nA>1?'s':''} joint${nA>1?'s':''}</li></ul>`+
+    `<span class="muted">Les éléments partent dans la corbeille SharePoint du site (récupérables 93 jours). L'action est tracée dans le journal.</span>`,'Supprimer le dossier','danger');
+  if(!ok)return;
+  SAVING=true;const b=$('btnDel');b.disabled=true;b.textContent='Suppression…';
+  let fait=0;
+  try{
+    for(const l of lig){await spDelete('Lignes_Arrivage',l.ID,l);fait++;}
+    await spDelete('Arrivages',a.ID,a);
+    DATA.lig=DATA.lig.filter(l=>l.ID_Arrivage!==a.ID);DATA.arr=DATA.arr.filter(x=>x.ID!==a.ID);
+    SAVING=false;closeFiche(true);renderAll();
+    toast(`✓ Dossier ${a.Title||''} supprimé (${lig.length} ligne${lig.length>1?'s':''}).`,'ok');
+  }catch(e){
+    SAVING=false;
+    toast(`🔴 Suppression interrompue après ${fait}/${lig.length} lignes : ${e.message}`,'ko');
+    try{await loadAll();}catch(_){}
+    if(W){const bb=$('btnDel');if(bb){bb.disabled=false;bb.textContent='🗑 Supprimer le dossier';}}
+  }
 }
 
 // ═══ CONFIRM / TOAST ═══
