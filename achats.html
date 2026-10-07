@@ -340,6 +340,14 @@ input,select,textarea{font-family:inherit;font-size:13.5px}
 #sec-factures.drag .drop-hint{display:flex}
 @media (max-width:1250px){.fac-wrap{grid-template-columns:260px minmax(0,1fr)}.fac-form{grid-column:1/-1;position:static}}
 @media (max-width:800px){.fac-wrap{grid-template-columns:1fr}.fac-list{max-height:300px}}
+
+/* dates JJ/MM/AAAA */
+.dfr-w{position:relative;display:block}
+.dfr-w input[data-dfr="1"]{padding-right:30px;font-variant-numeric:tabular-nums}
+.dfr-btn{position:absolute;right:4px;top:50%;transform:translateY(-50%);border:0;background:transparent;cursor:pointer;font-size:14px;padding:2px 4px;opacity:.7}
+.dfr-btn:hover{opacity:1}
+.dfr-pk{position:absolute;right:0;bottom:0;width:1px;height:1px;opacity:0;pointer-events:none;border:0;padding:0}
+input.dfr-ko{border:1.5px solid #e53935!important;background:#fff5f5!important}
 </style>
 </head>
 <body>
@@ -1274,6 +1282,43 @@ function installFakeSharePoint(){
     return json({error:'non géré'},400);
   };
 }
+
+// ═══ DATES AU FORMAT JJ/MM/AAAA, quel que soit le réglage du navigateur ═══
+// Les <input type="date"> deviennent des champs texte « JJ/MM/AAAA » + bouton 📅.
+// Pour le reste du code, .value renvoie toujours 'AAAA-MM-JJ' (ou '' si vide ou illisible).
+const NATIVE_VAL=Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value');
+function parseDateFR(s){
+  s=String(s||'').trim();if(!s)return '';let m,d,mo,y;
+  if((m=s.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/))){y=+m[1];mo=+m[2];d=+m[3];}
+  else if((m=s.match(/^(\d{1,2})[\/.\-\s](\d{1,2})[\/.\-\s](\d{4}|\d{2})$/))){d=+m[1];mo=+m[2];y=+m[3];}
+  else if((m=s.match(/^(\d{2})(\d{2})(\d{4}|\d{2})$/))){d=+m[1];mo=+m[2];y=+m[3];}
+  else if((m=s.match(/^(\d{1,2})[\/.\-\s](\d{1,2})$/))){d=+m[1];mo=+m[2];y=new Date().getFullYear();}
+  else return null;
+  if(y<100)y+=2000;
+  const dt=new Date(Date.UTC(y,mo-1,d));
+  if(dt.getUTCFullYear()!==y||dt.getUTCMonth()!==mo-1||dt.getUTCDate()!==d)return null;
+  return `${y}-${String(mo).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+}
+function dateFR(inp){
+  if(inp.dataset.dfr)return;
+  const iso=NATIVE_VAL.get.call(inp);
+  inp.dataset.dfr='1';inp.type='text';inp.placeholder='JJ/MM/AAAA';inp.inputMode='numeric';inp.autocomplete='off';inp.maxLength=10;
+  Object.defineProperty(inp,'value',{configurable:true,
+    get(){const p=parseDateFR(NATIVE_VAL.get.call(this));return p||'';},
+    set(v){const p=parseDateFR(v);NATIVE_VAL.set.call(this,p?fmtD(p):'');this.classList.remove('dfr-ko');}});
+  inp.value=iso;
+  const w=document.createElement('span');w.className='dfr-w';inp.parentNode.insertBefore(w,inp);w.appendChild(inp);
+  const pk=document.createElement('input');pk.dataset.dfr='pk';pk.type='date';pk.className='dfr-pk';pk.tabIndex=-1;pk.setAttribute('aria-hidden','true');
+  const b=document.createElement('button');b.type='button';b.className='dfr-btn';b.tabIndex=-1;b.title='Choisir dans le calendrier';b.textContent='📅';
+  w.appendChild(b);w.appendChild(pk);
+  b.addEventListener('click',e=>{e.preventDefault();e.stopPropagation();NATIVE_VAL.set.call(pk,inp.value||'');try{pk.showPicker();}catch(_){pk.focus();}});
+  pk.addEventListener('change',()=>{inp.value=NATIVE_VAL.get.call(pk);inp.dispatchEvent(new Event('input',{bubbles:true}));inp.dispatchEvent(new Event('change',{bubbles:true}));});
+  inp.addEventListener('blur',()=>{const raw=NATIVE_VAL.get.call(inp);const p=parseDateFR(raw);if(p)NATIVE_VAL.set.call(inp,fmtD(p));inp.classList.toggle('dfr-ko',p===null);});
+}
+function datesFR(root){if(!root||!root.querySelectorAll)return;if(root.matches&&root.matches('input[type=date]'))dateFR(root);root.querySelectorAll('input[type=date]').forEach(dateFR);}
+new MutationObserver(ms=>{for(const m of ms)for(const n of m.addedNodes)if(n.nodeType===1)datesFR(n);}).observe(document.body,{childList:true,subtree:true});
+datesFR(document.body);
+
 
 // ═══ LECTURE DES FACTURES PDF (pdf.js, dans le navigateur) ═══
 // Propose n°, dates, montant à partir du texte du PDF. Rien n'est enregistré sans confirmation.
