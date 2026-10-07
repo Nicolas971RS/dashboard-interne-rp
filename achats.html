@@ -1245,6 +1245,7 @@ function installFakeSharePoint(){
     const al=k=>{const v=u.searchParams.get('@'+k);return v==null?null:v.replace(/^'|'$/g,'').replace(/''/g,"'");};
     const ref=(re)=>{const m0=path.match(re);if(!m0)return null;const a=m0[1];return a.startsWith('@')?al(a.slice(1)):q(a.replace(/^decodedurl=/,'').replace(/^'|'$/g,''));};
     const reDos=/GetFolderByServerRelative(?:Path|Url)\(((?:decodedurl=)?(?:'(?:[^']|'')*'|@\w))\)/, reFic=/GetFileByServerRelative(?:Path|Url)\(((?:decodedurl=)?(?:'(?:[^']|'')*'|@\w))\)/;
+    if(reDos.test(path)&&/\/Files$/.test(path)){const p=ref(reDos);return json({value:Object.keys(files).filter(f=>f.startsWith(p+'/')&&!f.slice(p.length+1).includes('/')).map(f=>({Name:f.split('/').pop()}))});}
     if(reDos.test(path)){const p=ref(reDos);const add=path.match(/\/Files\/(?:add\(url=|AddUsingPath\(decodedurl=)((?:'(?:[^']|'')*'|@\w)),overwrite=(\w+)\)$/);
       if(add){const n=add[1].startsWith('@')?al(add[1].slice(1)):q(add[1].replace(/^'|'$/g,''));const fp=p+'/'+n;if(fp in files&&add[2]!=='true')return json({error:'existe'},400);files[fp]=await new Response(opt.body).arrayBuffer();return json({ServerRelativeUrl:fp});}
       return json({Exists:Object.keys(files).some(f=>f.startsWith(p+'/'))||/^\/sites\/RseauxPlus\/commercial\/Shared Documents\/.*Factures Fournisseurs(\/_A_TRAITER)?$/.test(p)});}
@@ -1556,7 +1557,7 @@ async function openFacture(id){
   if(!p){$('facView').innerHTML=`<div class="fac-vide">⚠️ Aucun PDF associé à cette facture.</div>`;return;}
   let buf;
   try{buf=await spFileGet(p);}
-  catch(e){if(FACV.sel===id)$('facView').innerHTML=`<div class="fac-vide">⚠️ ${esc(e.message)}<div class="muted" style="font-size:12px;margin-top:6px">${esc(p)}</div></div>`;return;}
+  catch(e){if(FACV.sel===id)$('facView').innerHTML=`<div class="fac-vide">⚠️ ${/404/.test(e.message)?'Le PDF de cette facture n’est plus dans le dossier (déplacé ou supprimé). Tu peux supprimer la facture avec le bouton 🗑 et redéposer le PDF.':esc(e.message)}<div class="muted" style="font-size:12px;margin-top:6px">${esc(p)}</div></div>`;return;}
   if(FACV.sel!==id)return;
   const url=URL.createObjectURL(new Blob([buf],{type:'application/pdf'}));
   let ana=null,lignes=[];
@@ -1660,7 +1661,7 @@ function renderFacForm(){
     <div id="facDyn">${facDynHtml(v,k)}</div>
     <div class="fac-actions">
       <button class="btn green" id="btnFacOk" ${FACV.busy?'disabled':''}>${done?'💾 Mettre à jour':'✓ Valider'} <span class="kbd">Entrée</span></button>
-      ${done?'':`<button class="btn danger sm" id="btnFacDel" title="Pièce jointe qui n’est pas une facture (CGV, relevé…)">🗑 Pas une facture</button>`}
+      ${done?`<button class="btn danger sm" id="btnFacSuppr" title="Retirer cette facture de la liste (erreur de saisie, test…)">🗑 Supprimer</button>`:`<button class="btn danger sm" id="btnFacDel" title="Pièce jointe qui n’est pas une facture (CGV, relevé…)">🗑 Pas une facture</button>`}
       ${done&&lienPdf(f)?`<a class="btn sm" href="${pdfAbs(lienPdf(f))}" target="_blank" rel="noopener">↗ PDF dans SharePoint</a>`:''}
     </div>
   </div>`;
@@ -1688,13 +1689,16 @@ async function validerFacture(){
   try{
     // 1. renommer et ranger le PDF
     if(src&&src!==dst){
+      const proche=await numeroProche(k.fr,v.numero,src);
+      if(proche){const ok=await showConfirm('Facture peut-être déjà rangée',`Le dossier contient déjà <b class="mono">${esc(proche)}</b>.<br><br>Tu as saisi le n° <b class="mono">${esc(v.numero)}</b> : vérifie qu’il ne manque pas un préfixe (ex. FC, FA) et que ce n’est pas la même facture.`,'Continuer quand même','danger');
+        if(!ok){FACV.busy=false;renderFacForm();return;}}
       let ecraser=false;
       if(await spFileExists(dst)){
         const rep=await showConfirm('Un PDF porte déjà ce nom',`<b class="mono">${esc(k.nom)}</b> existe déjà dans « Factures Fournisseurs » (classé à la main, ou facture reçue deux fois).<br><br>Remplacer l’ancien fichier par celui-ci ?`,'Remplacer','danger');
         if(!rep){FACV.busy=false;renderFacForm();return;}
         ecraser=true;
       }
-      await spFileMove(src,dst,ecraser);lien=dst;
+      await spFileMove(src,dst,ecraser);lien=dst;if(FAC_NOMS){FAC_NOMS=FAC_NOMS.filter(x=>x!==facNom(src)&&x!==facNom(dst));FAC_NOMS.push(facNom(dst));}
     }
     // 2. compléter la facture
     const montant=r2((v.type==='Avoir'?-1:1)*v.montant);
@@ -1729,6 +1733,37 @@ async function supprimerFacture(){
   catch(e){FACV.busy=false;toast('🔴 '+e.message,'ko');}
 }
 
+// Garde-fou : un PDF du même fournisseur dont le n° contient (ou est contenu dans) celui saisi
+let FAC_NOMS=null;
+async function nomsDossier(){
+  if(FAC_NOMS)return FAC_NOMS;
+  try{const r=await spTry('dossier',await facDossierReel(),'/Files','$select=Name&$top=5000',{});if(r.ok){const j=await r.json();FAC_NOMS=(j.value||[]).map(x=>x.Name);}}catch(e){console.warn(e);}
+  return FAC_NOMS||[];
+}
+async function numeroProche(fr,numero,src){
+  const n=lpNorm(numero);if(n.length<4)return null;const pre=nomCourt(fr)+' - ';const P=lpNorm(pre);
+  const noms=await nomsDossier();
+  for(const nm of noms){if(!lpNorm(nm).startsWith(P))continue;if(src&&nm===facNom(src))continue;
+    const x=lpNorm(nm.slice(pre.length).replace(/\.pdf$/i,''));if(!x||x===n)continue;
+    if(x.length>=4&&(x.includes(n)||n.includes(x)))return nm;}
+  return null;
+}
+async function supprimerTraitee(){
+  const f=DATA.fac.find(x=>x.ID===FACV.sel);if(!f||FACV.busy)return;
+  const lignes=DATA.lig.filter(l=>l.ID_Facture===f.ID);const exp=f.Exporte_Echeancier===true||f.Exporte_Echeancier==='Oui';
+  const ok=await showConfirm('Supprimer cette facture ?',`<b>${esc(f.Fournisseur||'')} – ${esc(f.Title||'')}</b> (${fmtEur(f.Montant_TTC)}) sera retirée de la liste des factures.${lignes.length?`<br>Elle sera détachée de ${lignes.length} ligne${lignes.length>1?'s':''} de dossier.`:''}${exp?'<br><br><b style="color:var(--red)">Elle a déjà été envoyée à l’échéancier : supprime aussi sa ligne dans l’Excel.</b>':''}`,'Supprimer','danger');
+  if(!ok)return;
+  const p=lienPdf(f);let pdf=false;
+  if(p&&await spFileExists(p).catch(()=>false))pdf=await showConfirm('Et le PDF ?',`Mettre aussi <b class="mono">${esc(facNom(p))}</b> à la corbeille ?<br><span class="muted">Annuler = le PDF reste rangé dans « Factures Fournisseurs ».</span>`,'Mettre à la corbeille','danger');
+  FACV.busy=true;
+  try{
+    for(const l of lignes){await spPatch('Lignes_Arrivage',l.ID,{ID_Facture:null},l);l.ID_Facture=null;}
+    if(pdf){await spFileRecycle(p);FAC_NOMS=null;}
+    await spDelete('Factures_Frs',f.ID,f);DATA.fac=DATA.fac.filter(x=>x!==f);
+    FACV.busy=false;FACV.sel=null;toast('✓ Facture supprimée'+(pdf?' (PDF à la corbeille)':''),'ok');renderAll();
+  }catch(e){FACV.busy=false;toast('🔴 '+e.message,'ko');}
+}
+
 // ═══ DÉPÔT MANUEL DE PDF ═══
 async function facDeposer(files){
   files=[...files].filter(x=>/\.pdf$/i.test(x.name)||x.type==='application/pdf');
@@ -1756,6 +1791,7 @@ document.addEventListener('click',e=>{
   const ty=e.target.closest('[data-fft]');if(ty&&FACV.form){facLireForm();FACV.form.type=ty.dataset.fft;FACV.form.src.type='';renderFacForm();return;}
   if(e.target.closest('#btnFacOk')){validerFacture();return;}
   if(e.target.closest('#btnFacDel')){supprimerFacture();return;}
+  if(e.target.closest('#btnFacSuppr')){supprimerTraitee();return;}
 });
 document.addEventListener('change',e=>{
   if(e.target.id==='facUpload'){facDeposer(e.target.files);e.target.value='';return;}
