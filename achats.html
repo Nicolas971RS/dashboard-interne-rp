@@ -1739,7 +1739,9 @@ async function facDeposer(files){
       const stamp=new Date().toISOString().replace(/\D/g,'').slice(2,14);
       const nom=`${stamp}_${safeName(file.name.replace(/\.pdf$/i,''))}.pdf`;
       const p=await spFileAdd(dossier,nom,await file.arrayBuffer());
-      const it=await facEcrire(null,{Title:'(à compléter)',Statut_Saisie:FAC_AF,Source:'Saisie manuelle',Lien_PDF:lienBody(p),Exporte_Echeancier:false});
+      let it;
+      try{it=await facEcrire(null,{Title:'(à compléter)',Statut_Saisie:FAC_AF,Source:'Saisie manuelle',Lien_PDF:lienBody(p)});}
+      catch(e){try{await spFileRecycle(p);}catch(_){}throw e;}   // pas de PDF orphelin dans _A_TRAITER
       it.Lien_PDF=p;it.Created=new Date().toISOString();DATA.fac.push(it);n++;if(!premier)premier=it.ID;
     }catch(e){toast(`🔴 ${file.name} : ${e.message}`,'ko');}
   }
