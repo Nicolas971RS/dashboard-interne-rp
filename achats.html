@@ -392,7 +392,7 @@ input,select,textarea{font-family:inherit;font-size:13.5px}
     </section>
     <section class="section" id="sec-factures">
       <div class="page-head"><div><h1>Factures fournisseurs</h1><div class="sub">Vérifie les champs lus dans le PDF, valide : la facture est renommée, rangée dans « Factures Fournisseurs » et rattachée à son dossier.</div></div>
-        <div style="display:flex;gap:8px"><button class="btn" onclick="reloadAll()">↻ Actualiser</button><label class="btn primary">⬆️ Déposer des PDF<input type="file" id="facUpload" accept="application/pdf,.pdf" multiple hidden></label></div></div>
+        <div style="display:flex;gap:8px"><button class="btn" id="btnDiag" style="display:none" onclick="facDiagnostic()">🔧 Diagnostic</button><button class="btn" onclick="reloadAll()">↻ Actualiser</button><label class="btn primary">⬆️ Déposer des PDF<input type="file" id="facUpload" accept="application/pdf,.pdf" multiple hidden></label></div></div>
       <div id="facErr"></div>
       <div class="kpis" id="facKpis"></div>
       <div class="fac-wrap">
@@ -1241,16 +1241,15 @@ function installFakeSharePoint(){
     const method=(opt.method||'GET').toUpperCase();const xm=(opt.headers||{})['X-HTTP-Method'];
     const q=s=>s.replace(/''/g,"'");
     if(/SP\.Web\.GetWebUrlFromPageUrl/.test(path)){const pg=JSON.parse(opt.body).pageFullUrl;const m2=decodeURI(pg).match(/^(.*?)\/Shared Documents/);return json({value:m2?m2[1]:C.spRoot});}
-    const fx=path.match(/GetFolderByServerRelativePath\(decodedurl='((?:[^']|'')*)'\)$/);
-    if(fx){const p=q(fx[1]);return json({Exists:Object.keys(files).some(f=>f.startsWith(p+'/'))||/Factures Fournisseurs(\/_A_TRAITER)?$/.test(p)});}
-    const fo=path.match(/GetFolderByServerRelativePath\(decodedurl='((?:[^']|'')*)'\)\/Files\/AddUsingPath\(decodedurl='((?:[^']|'')*)',overwrite=(\w+)\)/);
-    if(fo){const p=q(fo[1])+'/'+q(fo[2]);if(p in files&&fo[3]!=='true')return json({error:'existe'},400);files[p]=await new Response(opt.body).arrayBuffer();return json({ServerRelativeUrl:p});}
-    const fi=path.match(/GetFileByServerRelativePath\(decodedurl='((?:[^']|'')*)'\)(\/\$value|\/MoveTo\(newurl='((?:[^']|'')*)',flags=(\d)\)|\/recycle\(\))?$/);
-    if(fi){const p=q(fi[1]);if(!(p in files))return json({error:'Fichier introuvable'},404);
-      if(!fi[2])return json({Name:p.split('/').pop()});
-      if(fi[2]==='/$value'){if(files[p]===null){const r=await real('demo/'+encodeURIComponent(p.split('/').pop()));if(!r.ok)return json({error:'PDF de démonstration absent'},404);files[p]=await r.arrayBuffer();}return new Response(files[p].slice(0),{status:200,headers:{'Content-Type':'application/pdf'}});}
-      if(fi[2].startsWith('/MoveTo')){const d=q(fi[3]);if(d in files&&fi[4]!=='1')return json({error:'Un fichier portant ce nom existe déjà'},400);files[d]=files[p];delete files[p];return new Response(null,{status:200});}
-      if(fi[2]==='/recycle()'){delete files[p];return json({value:'ok'});}}
+    const al=k=>{const v=u.searchParams.get('@'+k);return v==null?null:v.replace(/^'|'$/g,'').replace(/''/g,"'");};
+    if(/GetFolderByServerRelativeUrl\(@f\)$/.test(path)){const p=al('f');return json({Exists:Object.keys(files).some(f=>f.startsWith(p+'/'))||/Factures Fournisseurs(\/_A_TRAITER)?$/.test(p)});}
+    if(/GetFolderByServerRelativeUrl\(@f\)\/Files\/add\(url=@n,overwrite=(\w+)\)$/.test(path)){const p=al('f')+'/'+al('n');if(p in files&&!/overwrite=true/.test(path))return json({error:'existe'},400);files[p]=await new Response(opt.body).arrayBuffer();return json({ServerRelativeUrl:p});}
+    const fi=path.match(/GetFileByServerRelativeUrl\(@a\)(\/\$value|\/MoveTo\(newurl=@b,flags=(\d)\)|\/recycle\(\))?$/);
+    if(fi){const p=al('a');if(!(p in files))return new Response('404 FILE NOT FOUND',{status:404});
+      if(!fi[1])return json({Name:p.split('/').pop()});
+      if(fi[1]==='/$value'){if(files[p]===null){const r=await real('demo/'+encodeURIComponent(p.split('/').pop()));if(!r.ok)return json({error:'PDF de démonstration absent'},404);files[p]=await r.arrayBuffer();}return new Response(files[p].slice(0),{status:200,headers:{'Content-Type':'application/pdf'}});}
+      if(fi[1].startsWith('/MoveTo')){const d=al('b');if(d in files&&fi[2]!=='1')return json({error:'Un fichier portant ce nom existe déjà'},400);files[d]=files[p];delete files[p];return new Response(null,{status:200});}
+      if(fi[1]==='/recycle()'){delete files[p];return json({value:'ok'});}}
     const m=path.match(/getbytitle\('([^']+)'\)\/items(?:\((\d+)\))?(\/AttachmentFiles(?:\/add\(FileName='([^']+)'\))?)?/);
     if(!m)return json({error:'route inconnue'},404);
     const [,list,id,attPart,fname]=m;const arr=store[list]||(store[list]=[]);
@@ -1427,16 +1426,18 @@ const facAF=()=>DATA.fac.filter(f=>f.Statut_Saisie!==FAC_OK);
 
 // ── Fichiers SharePoint (bibliothèque du site Commercial) ──
 const H_AUTH=()=>({'Authorization':`Bearer ${getToken()}`,'Accept':'application/json;odata=nometadata'});
-const fileApi=async p=>`${C.spRoot}${await webOf(p)}/_api/web/GetFileByServerRelativePath(decodedurl=${spQ(p)})`;
-async function spFileGet(p){const r=await fetch(`${await fileApi(p)}/$value`,{headers:H_AUTH()});await _check(r,'Lecture du PDF « '+facNom(p)+' »');return r.arrayBuffer();}
-async function spFileExists(p){const r=await fetch(`${await fileApi(p)}?$select=Name`,{headers:H_AUTH()});if(r.status===404)return false;await _check(r,'Vérification du fichier');return true;}
+// Chemins passés en paramètres d'URL (@a, @b) : évite les « / » encodés dans le chemin, refusés par SharePoint en POST
+const qa=(k,v)=>`@${k}=${spQ(v)}`;
+async function spFileUrl(p,suite='',extra=''){return `${C.spRoot}${await webOf(p)}/_api/web/GetFileByServerRelativeUrl(@a)${suite}?${qa('a',p)}${extra}`;}
+async function spFileGet(p){const r=await fetch(await spFileUrl(p,'/$value'),{headers:H_AUTH()});await _check(r,'Lecture du PDF « '+facNom(p)+' »');return r.arrayBuffer();}
+async function spFileExists(p){const r=await fetch(await spFileUrl(p,'','&$select=Name'),{headers:H_AUTH()});if(r.status===404)return false;await _check(r,'Vérification du fichier');return true;}
 async function spFileMove(src,dst,ecraser){
-  const r=await fetch(`${await fileApi(src)}/MoveTo(newurl=${spQ(dst)},flags=${ecraser?1:0})`,{method:'POST',headers:H_AUTH()});
+  const r=await fetch(await spFileUrl(src,`/MoveTo(newurl=@b,flags=${ecraser?1:0})`,'&'+qa('b',dst)),{method:'POST',headers:H_AUTH()});
   await _check(r,'Renommage du PDF');logAction('MOVE','Factures Fournisseurs',facNom(dst),'Fichier',src,dst,'Portail Achats — classement facture','');
 }
-async function spFileRecycle(p){const r=await fetch(`${await fileApi(p)}/recycle()`,{method:'POST',headers:H_AUTH()});if(r.status===404)return;await _check(r,'Suppression du PDF');logAction('DELETE','Factures Fournisseurs',facNom(p),'Fichier',p,'','Portail Achats — mis à la corbeille','');}
+async function spFileRecycle(p){const r=await fetch(await spFileUrl(p,'/recycle()'),{method:'POST',headers:H_AUTH()});if(r.status===404)return;await _check(r,'Suppression du PDF');logAction('DELETE','Factures Fournisseurs',facNom(p),'Fichier',p,'','Portail Achats — mis à la corbeille','');}
 async function spFileAdd(dossier,nom,buf){
-  const r=await fetch(`${C.spRoot}${await webOf(dossier)}/_api/web/GetFolderByServerRelativePath(decodedurl=${spQ(dossier)})/Files/AddUsingPath(decodedurl=${spQ(nom)},overwrite=false)`,{method:'POST',headers:H_AUTH(),body:buf});
+  const r=await fetch(`${C.spRoot}${await webOf(dossier)}/_api/web/GetFolderByServerRelativeUrl(@f)/Files/add(url=@n,overwrite=false)?${qa('f',dossier)}&${qa('n',nom)}`,{method:'POST',headers:H_AUTH(),body:buf});
   await _check(r,'Dépôt du PDF');return `${dossier}/${nom}`;
 }
 // Lien_PDF : texte (multiligne) ou lien hypertexte selon la création de la colonne → on s'adapte
@@ -1452,7 +1453,7 @@ async function facEcrire(id,body,avant){
 }
 
 async function spFolderOk(p){
-  try{const r=await fetch(`${C.spRoot}${await webOf(p)}/_api/web/GetFolderByServerRelativePath(decodedurl=${spQ(p)})?$select=Exists`,{headers:H_AUTH()});
+  try{const r=await fetch(`${C.spRoot}${await webOf(p)}/_api/web/GetFolderByServerRelativeUrl(@f)?${qa('f',p)}&$select=Exists`,{headers:H_AUTH()});
     if(!r.ok)return false;const j=await r.json();return j.Exists!==false;}catch(e){return false;}
 }
 let FAC_DOSSIER_ETAT=null;   // null = pas vérifié, true/false
@@ -1752,6 +1753,22 @@ function pdfLigne(l){
   const p=f&&lienPdf(f);
   return p?`<a class="pdf-a" href="${pdfAbs(p)}" target="_blank" rel="noopener" title="Ouvrir la facture ${esc(f.Title)}">📄</a>`:'';
 }
+
+// ═══ DIAGNOSTIC (achats.html?diag) : teste l'accès au dossier des factures ═══
+async function facDiagnostic(){
+  const out=[];const d=facDossier();const t=d+'/_A_TRAITER';
+  const st=async(lib,url,opt={})=>{try{const r=await fetch(url,{headers:H_AUTH(),...opt});const tx=r.ok?'':(await r.text()).slice(0,160);out.push(`${r.ok?'✅':'❌'} ${lib} : HTTP ${r.status} ${esc(tx)}`);return r;}catch(e){out.push(`❌ ${lib} : ${esc(e.message)}`);}};
+  out.push(`Dossier : <span class="mono">${esc(d)}</span>`);
+  let w='';try{const r=await fetch(`${C.spRoot}/_api/SP.Web.GetWebUrlFromPageUrl`,{method:'POST',headers:H_JSON(),body:JSON.stringify({pageFullUrl:C.spRoot+encodeURI(d)})});const tx=await r.text();out.push(`${r.ok?'✅':'❌'} Site détecté par SharePoint : HTTP ${r.status} ${esc(tx.slice(0,160))}`);}catch(e){out.push('❌ GetWebUrlFromPageUrl : '+esc(e.message));}
+  w=await webOf(d);out.push(`Site utilisé : <span class="mono">${esc(w)}</span>`);
+  await st('Dossier factures',`${C.spRoot}${w}/_api/web/GetFolderByServerRelativeUrl(@f)?${qa('f',d)}&$select=Exists,ItemCount,ServerRelativeUrl`);
+  await st('Dossier _A_TRAITER',`${C.spRoot}${w}/_api/web/GetFolderByServerRelativeUrl(@f)?${qa('f',t)}&$select=Exists,ItemCount`);
+  const nom='test_portail_'+Date.now()+'.txt';
+  const r=await st('Dépôt fichier test',`${C.spRoot}${w}/_api/web/GetFolderByServerRelativeUrl(@f)/Files/add(url=@n,overwrite=true)?${qa('f',t)}&${qa('n',nom)}`,{method:'POST',body:new Blob(['test'])});
+  if(r&&r.ok)await st('Suppression fichier test',await spFileUrl(t+'/'+nom,'/recycle()'),{method:'POST'});
+  await showConfirm('Diagnostic du dossier des factures',`<div style="font-size:12.5px;line-height:1.7">${out.join('<br>')}</div>`,'Fermer');
+}
+if(QS.has('diag')){const b=document.getElementById('btnDiag');if(b)b.style.display='';}
 
 // ═══ DÉMARRAGE ═══
 async function init(){
