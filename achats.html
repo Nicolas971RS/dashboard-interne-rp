@@ -1241,12 +1241,13 @@ function installFakeSharePoint(){
     const method=(opt.method||'GET').toUpperCase();const xm=(opt.headers||{})['X-HTTP-Method'];
     const q=s=>s.replace(/''/g,"'");
     if(/SP\.Web\.GetWebUrlFromPageUrl/.test(path)){const pg=JSON.parse(opt.body).pageFullUrl;const m2=decodeURI(pg).match(/^(.*?)\/Shared Documents/);return json({value:m2?m2[1]:C.spRoot});}
+    if(/\/_api\/web\/lists$/.test(path))return json({value:[{Title:'Documents',BaseTemplate:101,Hidden:false,RootFolder:{ServerRelativeUrl:'/sites/RseauxPlus/commercial/Shared Documents'}}]});
     const al=k=>{const v=u.searchParams.get('@'+k);return v==null?null:v.replace(/^'|'$/g,'').replace(/''/g,"'");};
     const ref=(re)=>{const m0=path.match(re);if(!m0)return null;const a=m0[1];return a.startsWith('@')?al(a.slice(1)):q(a.replace(/^decodedurl=/,'').replace(/^'|'$/g,''));};
     const reDos=/GetFolderByServerRelative(?:Path|Url)\(((?:decodedurl=)?(?:'(?:[^']|'')*'|@\w))\)/, reFic=/GetFileByServerRelative(?:Path|Url)\(((?:decodedurl=)?(?:'(?:[^']|'')*'|@\w))\)/;
     if(reDos.test(path)){const p=ref(reDos);const add=path.match(/\/Files\/(?:add\(url=|AddUsingPath\(decodedurl=)((?:'(?:[^']|'')*'|@\w)),overwrite=(\w+)\)$/);
       if(add){const n=add[1].startsWith('@')?al(add[1].slice(1)):q(add[1].replace(/^'|'$/g,''));const fp=p+'/'+n;if(fp in files&&add[2]!=='true')return json({error:'existe'},400);files[fp]=await new Response(opt.body).arrayBuffer();return json({ServerRelativeUrl:fp});}
-      return json({Exists:Object.keys(files).some(f=>f.startsWith(p+'/'))||/Factures Fournisseurs(\/_A_TRAITER)?$/.test(p)});}
+      return json({Exists:Object.keys(files).some(f=>f.startsWith(p+'/'))||/^\/sites\/RseauxPlus\/commercial\/Shared Documents\/.*Factures Fournisseurs(\/_A_TRAITER)?$/.test(p)});}
     if(reFic.test(path)){const p=ref(reFic);const suite=path.slice(path.match(reFic).index+path.match(reFic)[0].length);
       if(!(p in files))return new Response('404 FILE NOT FOUND',{status:404});
       if(!suite)return json({Name:p.split('/').pop()});
@@ -1474,12 +1475,27 @@ async function facEcrire(id,body,avant){
 async function spFolderOk(p){
   try{const r=await spTry('dossier',p,'','$select=Exists',{});if(!r.ok)return false;const j=await r.json();return j.Exists!==false;}catch(e){return false;}
 }
+// Chemin réel du dossier : celui du paramètre s'il existe, sinon recherché dans les bibliothèques du site
+let DOSSIER_REEL=null,BIBLIOS=[];
+async function bibliotheques(web){
+  try{const r=await fetch(`${C.spRoot}${web}/_api/web/lists?$select=Title,BaseTemplate,Hidden,RootFolder/ServerRelativeUrl&$expand=RootFolder&$filter=BaseTemplate eq 101`,{headers:H_AUTH()});
+    if(!r.ok)return [];const j=await r.json();return (j.value||[]).filter(l=>!l.Hidden).map(l=>({titre:l.Title,url:l.RootFolder&&l.RootFolder.ServerRelativeUrl}));}catch(e){return [];}
+}
+async function facDossierReel(){
+  if(DOSSIER_REEL)return DOSSIER_REEL;
+  const p=facDossier();
+  if(await spFolderOk(p)){DOSSIER_REEL=p;return p;}
+  let web=await webOf(p);if(!web||!p.startsWith(web+'/'))web=webDeduit(p);BIBLIOS=await bibliotheques(web);
+  const reste=p.slice(web.length).replace(/^\/[^\/]+/,'');           // « /Dossier partage/Factures Fournisseurs »
+  for(const b of BIBLIOS){if(!b.url)continue;const c=b.url.replace(/\/$/,'')+reste;if(await spFolderOk(c)){DOSSIER_REEL=c;return c;}}
+  return p;
+}
 let FAC_DOSSIER_ETAT=null;   // null = pas vérifié, true/false
 async function verifDossier(){
   if(FAC_DOSSIER_ETAT!==null)return;FAC_DOSSIER_ETAT='…';
-  const [a,b]=await Promise.all([spFolderOk(facDossier()),spFolderOk(facDossier()+'/_A_TRAITER')]);
+  const D=await facDossierReel();const [a,b]=await Promise.all([spFolderOk(D),spFolderOk(D+'/_A_TRAITER')]);
   FAC_DOSSIER_ETAT=a&&b;
-  FAC_DOSSIER_MSG=FAC_DOSSIER_ETAT?'':`<div class="warn-ribbon" style="border-radius:8px;margin-bottom:12px">⚠️ Dossier ${a?'« _A_TRAITER »':'des factures'} introuvable dans SharePoint : <span class="mono">${esc(a?facDossier()+'/_A_TRAITER':facDossier())}</span>. Vérifie la clé <b>FACTURES_DOSSIER</b> dans Parametres_Achats (colle l’adresse du dossier ouvert dans le navigateur).</div>`;
+  FAC_DOSSIER_MSG=FAC_DOSSIER_ETAT?'':`<div class="warn-ribbon" style="border-radius:8px;margin-bottom:12px">⚠️ Dossier ${a?'« _A_TRAITER »':'des factures'} introuvable dans SharePoint : <span class="mono">${esc(a?D+'/_A_TRAITER':D)}</span>. Vérifie la clé <b>FACTURES_DOSSIER</b> dans Parametres_Achats (colle l’adresse du dossier ouvert dans le navigateur).</div>`;
   if(FAC_DOSSIER_MSG&&$('facErr'))$('facErr').insertAdjacentHTML('beforeend',FAC_DOSSIER_MSG);
 }
 let FAC_DOSSIER_MSG='';
@@ -1668,7 +1684,7 @@ async function validerFacture(){
   const k=facCtx(v);
   if(k.doublon){const ok=await showConfirm('Doublon probable',`La facture <b>${esc(v.numero)}</b> de <b>${esc(k.fr.Title)}</b> est déjà traitée.<br><br>Si c’est le même document reçu deux fois, utilise plutôt « Pas une facture » pour le retirer.`,'Enregistrer quand même','danger');if(!ok)return;}
   FACV.busy=true;renderFacForm();
-  const src=lienPdf(f);const dst=`${facDossier()}/${k.nom}`;let lien=src;
+  const src=lienPdf(f);const dst=`${await facDossierReel()}/${k.nom}`;let lien=src;
   try{
     // 1. renommer et ranger le PDF
     if(src&&src!==dst){
@@ -1717,7 +1733,7 @@ async function supprimerFacture(){
 async function facDeposer(files){
   files=[...files].filter(x=>/\.pdf$/i.test(x.name)||x.type==='application/pdf');
   if(!files.length){toast('⚠️ Seuls les PDF sont acceptés','wa');return;}
-  const dossier=facDossier()+'/_A_TRAITER';let n=0,premier=null;
+  const dossier=(await facDossierReel())+'/_A_TRAITER';let n=0,premier=null;
   for(const file of files){
     try{
       const stamp=new Date().toISOString().replace(/\D/g,'').slice(2,14);
@@ -1774,13 +1790,16 @@ function pdfLigne(l){
 
 // ═══ DIAGNOSTIC : teste chaque syntaxe d'accès au dossier des factures ═══
 async function facDiagnostic(){
-  const out=[];const d=facDossier();const t=d+'/_A_TRAITER';
+  const out=[];const d=facDossier();let t='';
   const row=async(lib,url,opt={})=>{try{const r=await fetch(url,{headers:H_AUTH(),...opt});const tx=r.ok?'':(await r.text()).replace(/\s+/g,' ').slice(0,140);out.push(`${r.ok?'✅':'❌'} ${lib} : ${r.status} ${esc(tx)}`);return r;}catch(e){out.push(`❌ ${lib} : ${esc(e.message)}`);}};
-  out.push(`<b>Dossier</b> : <span class="mono">${esc(d)}</span>`);
+  out.push(`<b>Dossier paramétré</b> : <span class="mono">${esc(d)}</span>`);
   try{const r=await fetch(`${C.spRoot}/_api/SP.Web.GetWebUrlFromPageUrl`,{method:'POST',headers:H_JSON(),body:JSON.stringify({pageFullUrl:C.spRoot+encodeURI(d)})});out.push(`${r.ok?'✅':'❌'} Site selon SharePoint : ${r.status} ${esc((await r.text()).slice(0,140))}`);}catch(e){out.push('❌ Site selon SharePoint : '+esc(e.message));}
   const w=await webOf(d);out.push(`<b>Site utilisé</b> : <span class="mono">${esc(w)}</span>`);
+  const bl=await bibliotheques(w);out.push(`<b>Bibliothèques du site</b> : ${bl.length?bl.map(b=>`${esc(b.titre)} → <span class="mono">${esc(b.url)}</span>`).join(' · '):'aucune lue'}`);
+  DOSSIER_REEL=null;const reel=await facDossierReel();const okR=await spFolderOk(reel);out.push(`${okR?'✅':'❌'} <b>Dossier retenu</b> : <span class="mono">${esc(reel)}</span>${okR?'':' — introuvable dans toutes les bibliothèques'}`);
   const base=`${C.spRoot}${w}/_api/web/`;
-  for(const [i,f] of DOS.entries()){const x=f(d);await row(`Dossier (syntaxe ${i+1})`,`${base}${x.s}?${[x.q,'$select=Exists,ItemCount'].filter(Boolean).join('&')}`);}
+  for(const [i,f] of DOS.entries()){const x=f(reel);await row(`Dossier (syntaxe ${i+1})`,`${base}${x.s}?${[x.q,'$select=Exists,ItemCount'].filter(Boolean).join('&')}`);}
+  t=reel+'/_A_TRAITER';
   for(const [i,f] of DOS.entries()){const x=f(t);await row(`_A_TRAITER (syntaxe ${i+1})`,`${base}${x.s}?${[x.q,'$select=Exists,ItemCount'].filter(Boolean).join('&')}`);}
   const nom='test_portail_'+Date.now()+'.txt';let ok=null;
   for(const [i,f] of DOS.entries()){if(ok)break;for(const [j,g] of AJOUT.entries()){const x=f(t),y=g(nom);
