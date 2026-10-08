@@ -400,7 +400,7 @@ input.dfr-ko{border:1.5px solid #e53935!important;background:#fff5f5!important}
     </section>
     <section class="section" id="sec-factures">
       <div class="page-head"><div><h1>Factures fournisseurs</h1><div class="sub">Vérifie les champs lus dans le PDF, valide : la facture est renommée, rangée dans « Factures Fournisseurs » et rattachée à son dossier.</div></div>
-        <div style="display:flex;gap:8px"><button class="btn" id="btnDiag" onclick="facDiagnostic()">🔧 Diagnostic</button><button class="btn" onclick="reloadAll()">↻ Actualiser</button><label class="btn primary">⬆️ Déposer des PDF<input type="file" id="facUpload" accept="application/pdf,.pdf" multiple hidden></label></div></div>
+        <div style="display:flex;gap:8px"><button class="btn" id="btnDiag" onclick="facDiagnostic()">🔧 Diagnostic</button><button class="btn" onclick="reloadAll()">↻ Actualiser</button><button class="btn" id="btnSansPdf">📝 ＋ Pièce sans PDF</button><label class="btn primary">⬆️ Déposer des PDF<input type="file" id="facUpload" accept="application/pdf,.pdf" multiple hidden></label></div></div>
       <div id="facErr"></div>
       <div class="kpis" id="facKpis"></div>
       <div class="fac-wrap">
@@ -1473,6 +1473,7 @@ function nomCourt(f){
   return String(f.Title||'').trim();
 }
 const facAF=()=>DATA.fac.filter(f=>f.Statut_Saisie!==FAC_OK);
+const facCur=()=>FACV.sel===-1?FACV.nouveau:DATA.fac.find(x=>x.ID===FACV.sel);
 
 // ── Fichiers SharePoint (bibliothèque du site Commercial) ──
 const H_AUTH=()=>({'Authorization':`Bearer ${getToken()}`,'Accept':'application/json;odata=nometadata'});
@@ -1588,7 +1589,7 @@ function renderFacListe(){
     const sous=f.Statut_Saisie===FAC_OK?`${fmtD(dk(f,'Date_Facture'))} · <b>${fmtEur(f.Montant_TTC)}</b>`:`${src(f)} ${esc(facNom(lienPdf(f))).slice(0,46)}`;
     return `<div class="fac-i ${FACV.sel===f.ID?'on':''}" data-fac="${f.ID}"><div class="t">${titre}</div><div class="s">${sous}</div><div class="d">${relDay(dkey(f.Created||f.Modified||''))}</div></div>`;
   }).join(''):`<div class="todo-none" style="padding:26px 10px">${FACV.filtre==='af'?'✓ Aucune facture en attente.<br><span class="muted" style="font-size:12px">Les factures reçues par mail arrivent ici automatiquement. Tu peux aussi glisser des PDF sur cette page.</span>':'Aucune facture trouvée.'}</div>`;
-  if(FACV.sel&&!DATA.fac.some(f=>f.ID===FACV.sel)){FACV.sel=null;}
+  if(FACV.sel&&FACV.sel!==-1&&!DATA.fac.some(f=>f.ID===FACV.sel)){FACV.sel=null;}
   if(!FACV.sel){$('facView').innerHTML=`<div class="fac-vide"><div style="font-size:42px">🧾</div><div>Choisis une facture dans la liste${facAF().length?'':' ou dépose des PDF'}.</div></div>`;$('facForm').innerHTML='';}
 }
 
@@ -1599,7 +1600,7 @@ async function openFacture(id){
   const p=lienPdf(f);
   $('facView').innerHTML=`<div class="fac-vide"><div class="spinner"></div><div>Ouverture du PDF…</div></div>`;
   FACV.form=facFormInit(f,null);renderFacForm();
-  if(!p){$('facView').innerHTML=`<div class="fac-vide">⚠️ Aucun PDF associé à cette facture.</div>`;return;}
+  if(!p){$('facView').innerHTML=`<div class="fac-vide"><div style="font-size:42px">📝</div>Pièce saisie sans PDF (taxe, cotisation…).</div>`;return;}
   let buf;
   try{buf=await spFileGet(p);}
   catch(e){if(FACV.sel===id)$('facView').innerHTML=`<div class="fac-vide">⚠️ ${/404/.test(e.message)?'Le PDF de cette facture n’est plus dans le dossier (déplacé ou supprimé). Tu peux supprimer la facture avec le bouton 🗑 et redéposer le PDF.':esc(e.message)}<div class="muted" style="font-size:12px;margin-top:6px">${esc(p)}</div></div>`;return;}
@@ -1615,7 +1616,7 @@ async function openFacture(id){
       for(const k in (att||{})){const a=att[k];if(/\.xml$/i.test(a.filename||k)){const x=lpFacturX(new TextDecoder().decode(a.content));if(x){ana=x;break;}}}}catch(e){}
     lignes=await pdfLignes(doc);
     await renderPdfPages(doc,url,p);
-  }catch(e){console.warn(e);$('facView').innerHTML=`<div class="fac-vide">Aperçu indisponible (${esc(e.message)}).<br><a class="btn sm" href="${url}" target="_blank">Ouvrir le PDF</a></div>`;}
+  }catch(e){console.warn(e);if(FACV.sel!==id)return;$('facView').innerHTML=`<div class="fac-vide">Aperçu indisponible (${esc(e.message)}).<br><a class="btn sm" href="${url}" target="_blank">Ouvrir le PDF</a></div>`;}
   if(FACV.sel!==id)return;
   if(f.Statut_Saisie!==FAC_OK){FACV.form=facFormInit(f,{ana,lignes});renderFacForm();}
 }
@@ -1664,10 +1665,12 @@ function facFormInit(f,lu){
   return v;
 }
 function facDelai(v){const fr=v.frsId?frsById(v.frsId):null;const d=fr?parseNum(fr.Delai_Paiement_Jours):null;return (d===null||isNaN(d))?null:d;}
-function facEchAuto(v){const d=facDelai(v);if(v.date&&d!==null){v.echeance=addDays(v.date,d);v.src.echeance='calc';}}
+function facEchAuto(v){const d=facDelai(v);
+  if(v.date&&d!==null){v.echeance=addDays(v.date,d);v.src.echeance='calc';}
+  else if(v.date&&v.sansPdf){const [y,m]=v.date.split('-').map(Number);const ny=m===12?y+1:y,nm=m===12?1:m+1;v.echeance=`${ny}-${String(nm).padStart(2,'0')}-10`;v.src.echeance='calc10';}}
 
 // ── Formulaire ──
-function facChip(s){return s==='pdf'?'<span class="lu" title="Lu automatiquement dans le PDF : vérifie">📄 lu</span>':s==='ligne'?'<span class="lu ok" title="Correspond à une ligne d’un dossier d’arrivage">🚢 dossier</span>':s==='calc'?'<span class="lu" title="Calculée avec le délai de paiement du fournisseur">⏱ calculée</span>':'';}
+function facChip(s){return s==='pdf'?'<span class="lu" title="Lu automatiquement dans le PDF : vérifie">📄 lu</span>':s==='ligne'?'<span class="lu ok" title="Correspond à une ligne d’un dossier d’arrivage">🚢 dossier</span>':s==='calc'?'<span class="lu" title="Calculée avec le délai de paiement du fournisseur">⏱ calculée</span>':s==='calc10'?'<span class="lu" title="Par défaut : le 10 du mois suivant">⏱ le 10 du mois suivant</span>':'';}
 function facCtx(v){
   const fr=v.frsId?frsById(v.frsId):null;
   const lignes=fr&&v.numero?DATA.lig.filter(l=>l.ID_Fournisseur===fr.ID&&lpNorm(l.N_Facture)===lpNorm(v.numero)):[];
@@ -1680,25 +1683,25 @@ function facDynHtml(v,k){
   const ratt=k.lignes.map(l=>{const a=DATA.arr.find(x=>x.ID===l.ID_Arrivage);const val=lineVMnette(l)+n0(l.Fret);const ec=v.montant!=null?r2((v.type==='Avoir'?-1:1)*v.montant-val):0;
     return `<div class="fac-box ok">🚢 Rattachée au dossier <b>${esc(a?(a.N_Dossier||a.Title):'?')}</b> <span class="muted">${esc(a&&a.N_Dossier?a.Title:'')}</span><br>Valeur dans le dossier : <b>${fmtEur(val)}</b>${v.montant==null?'':Math.abs(ec)>=0.01?` · <span style="color:var(--amber);font-weight:600">écart ${ec>0?'+':''}${fmtN(ec)} €</span>`:' · montant identique ✓'}</div>`;}).join('');
   const dbl=k.doublon?`<div class="fac-box ko">⚠️ <b>Doublon probable</b> : la facture ${esc(k.doublon.Title)} de ce fournisseur est déjà traitée (${fmtEur(k.doublon.Montant_TTC)}).</div>`:'';
-  const nom=k.nom?`<div class="fac-nom">📁 Rangée sous <b class="mono">${esc(k.nom)}</b></div>`:'';
+  const nom=v.sansPdf?`<div class="fac-nom">📝 Pièce sans PDF : ira directement dans l’échéancier.</div>`:k.nom?`<div class="fac-nom">📁 Rangée sous <b class="mono">${esc(k.nom)}</b></div>`:'';
   return ratt+dbl+nom;
 }
 function facMajDyn(){const v=FACV.form;if(!v)return;const k=facCtx(v);const d=$('facDyn');if(d)d.innerHTML=facDynHtml(v,k);const h=$('facEchHelp');if(h)h.innerHTML=facEchHelp(v);
   document.querySelectorAll('#facForm [data-ff]').forEach(i=>{const x=i.dataset.ff;if(x==='frs')return;const val=x==='montant'?v.montant:v[x];i.classList.toggle('req-empty',val===''||val===null||val===undefined);});}
 function renderFacForm(){
-  const f=DATA.fac.find(x=>x.ID===FACV.sel);const v=FACV.form;if(!f||!v){$('facForm').innerHTML='';return;}
+  const f=facCur();const v=FACV.form;if(!f||!v){$('facForm').innerHTML='';return;}
   const done=f.Statut_Saisie===FAC_OK;const k=facCtx(v);const d=facDelai(v);
   const req=(x)=>x===''||x===null||x===undefined;
-  const srcTag=f.Source==='DocuWare'?'⚡ DocuWare':f.Source==='Saisie manuelle'?'⬆️ Dépôt manuel':'✉️ Reçue par mail';
+  const srcTag=v.sansPdf||(!lienPdf(f)&&f.Source==='Saisie manuelle')?'📝 Sans PDF':f.Source==='DocuWare'?'⚡ DocuWare':f.Source==='Saisie manuelle'?'⬆️ Dépôt manuel':'✉️ Reçue par mail';
   $('facForm').innerHTML=`
-  <div class="card-h"><h3>${done?'✅ Facture traitée':'🧾 À compléter'}</h3><span class="tag">${srcTag}</span></div>
+  <div class="card-h"><h3>${done?'✅ Facture traitée':v.sansPdf?'📝 Nouvelle pièce sans PDF':'🧾 À compléter'}</h3><span class="tag">${srcTag}</span></div>
   <div class="card-b fac-f">
     ${v.image?'<div class="fac-note">🖼️ PDF scanné (image) : rien n’a pu être lu automatiquement, saisis les champs.</div>':v.src.fx?'<div class="fac-note ok">⚡ Facture électronique (Factur-X) : données exactes lues dans le fichier.</div>':v.lu?'<div class="fac-note">📄 Les champs marqués « lu » viennent du PDF : un coup d’œil suffit.</div>':''}
     ${f.Expediteur?`<div class="muted" style="font-size:12px;margin-bottom:8px">De : ${esc(f.Expediteur)}</div>`:''}
     <div class="f req"><label>Fournisseur ${facChip(v.src.frs)}</label><div style="display:flex;gap:6px;align-items:center"><input data-ff="frs" list="dlFrsAll" value="${esc(v.frs)}" class="${v.frsId?'':'req-empty'}" placeholder="tape le nom ou l’alias"><span class="${v.frsId?'frs-ok':'frs-ko'}">${v.frsId?'✓':'⚠'}</span></div>
       <div class="help">${k.fr?`${esc(k.fr.Code_Compta||'sans code compta')} · ${esc(k.fr.Type_Tiers||'')}${d!==null?` · paiement à ${d} j`:''}`:'Fournisseur non reconnu : choisis-le dans la liste.'}</div></div>
     <div class="f"><label>Type ${facChip(v.src.type)}</label><div class="seg"><button data-fft="Facture" class="${v.type==='Facture'?'on':''}">Facture</button><button data-fft="Avoir" class="${v.type==='Avoir'?'on':''}">Avoir</button></div></div>
-    <div class="f req"><label>N° de facture ${facChip(v.src.numero)}</label><input data-ff="numero" class="mono ${req(v.numero)?'req-empty':''}" value="${esc(v.numero)}" placeholder="à saisir"></div>
+    <div class="f req"><label>${v.sansPdf?'N° ou libellé':'N° de facture'} ${facChip(v.src.numero)}</label><input data-ff="numero" class="${v.sansPdf?'':'mono'} ${req(v.numero)?'req-empty':''}" value="${esc(v.numero)}" placeholder="${v.sansPdf?'ex. Cotisation octobre 2026':'à saisir'}"></div>
     <div class="fgrid2"><div class="f req"><label>Date ${facChip(v.src.date)}</label><input data-ff="date" type="date" value="${esc(v.date)}" class="${req(v.date)?'req-empty':''}"></div>
       <div class="f req"><label>Montant TTC ${facChip(v.src.montant)}</label><input data-ff="montant" class="mono r ${req(v.montant)?'req-empty':''}" inputmode="decimal" value="${esc(v.montant!=null?fmtN(v.montant):'')}" placeholder="0,00"></div></div>
     <div class="f req"><label>Échéance ${facChip(v.src.echeance)}</label><input data-ff="echeance" type="date" value="${esc(v.echeance)}" class="${req(v.echeance)?'req-empty':''}">
@@ -1706,7 +1709,7 @@ function renderFacForm(){
     <div id="facDyn">${facDynHtml(v,k)}</div>
     <div class="fac-actions">
       <button class="btn green" id="btnFacOk" ${FACV.busy?'disabled':''}>${done?'💾 Mettre à jour':'✓ Valider'} <span class="kbd">Entrée</span></button>
-      ${done?`<button class="btn danger sm" id="btnFacSuppr" title="Retirer cette facture de la liste (erreur de saisie, test…)">🗑 Supprimer</button>`:`<button class="btn danger sm" id="btnFacDel" title="Pièce jointe qui n’est pas une facture (CGV, relevé…)">🗑 Pas une facture</button>`}
+      ${v.sansPdf?'':done?`<button class="btn danger sm" id="btnFacSuppr" title="Retirer cette facture de la liste (erreur de saisie, test…)">🗑 Supprimer</button>`:`<button class="btn danger sm" id="btnFacDel" title="Pièce jointe qui n’est pas une facture (CGV, relevé…)">🗑 Pas une facture</button>`}
       ${done&&lienPdf(f)?`<a class="btn sm" href="${pdfAbs(lienPdf(f))}" target="_blank" rel="noopener">↗ PDF dans SharePoint</a>`:''}
     </div>
   </div>`;
@@ -1721,16 +1724,28 @@ function facLireForm(){
   });
 }
 
+// ═══ PIÈCE SANS PDF (Trésor public, CGRR, cotisations…) ═══
+function openSansPdf(garde={}){
+  FACV.sel=-1;FACV.doc=null;
+  FACV.nouveau={ID:-1,Statut_Saisie:FAC_AF,Source:'Saisie manuelle'};
+  FACV.form={frsId:null,frs:'',type:'Facture',numero:'',date:garde.date||todayKey(),montant:null,echeance:garde.echeance||'',src:{},lu:false,image:false,echPdf:'',sansPdf:true};
+  if(!FACV.form.echeance)facEchAuto(FACV.form);
+  renderFacListe();
+  $('facView').innerHTML=`<div class="fac-vide"><div style="font-size:42px">📝</div><div><b>Pièce sans PDF</b></div><div style="max-width:380px">Taxes, cotisations, prélèvements… : choisis l’organisme, saisis le libellé, le montant et l’échéance, puis Entrée.<br>La ligne part automatiquement dans l’échéancier, et le formulaire se vide pour la pièce suivante.</div></div>`;
+  renderFacForm();
+  const i=document.querySelector('#facForm [data-ff="frs"]');if(i)i.focus();
+}
+
 // ═══ VALIDATION ═══
 async function validerFacture(){
-  const f=DATA.fac.find(x=>x.ID===FACV.sel);const v=FACV.form;if(!f||!v||FACV.busy)return;
+  const f=facCur();const v=FACV.form;if(!f||!v||FACV.busy)return;
   facLireForm();
   const manque=[];if(!v.frsId)manque.push('fournisseur');if(!v.numero)manque.push('n° de facture');if(!v.date)manque.push('date');if(!v.montant)manque.push('montant');if(!v.echeance)manque.push('échéance');
   if(manque.length){renderFacForm();toast('⚠️ À compléter : '+manque.join(', '),'wa');return;}
   const k=facCtx(v);
   if(k.doublon){const ok=await showConfirm('Doublon probable',`La facture <b>${esc(v.numero)}</b> de <b>${esc(k.fr.Title)}</b> est déjà traitée.<br><br>Si c’est le même document reçu deux fois, utilise plutôt « Pas une facture » pour le retirer.`,'Enregistrer quand même','danger');if(!ok)return;}
   FACV.busy=true;renderFacForm();
-  const src=lienPdf(f);const dst=`${await facDossierReel()}/${k.nom}`;let lien=src;
+  const src=lienPdf(f);const dst=v.sansPdf||!src?'':`${await facDossierReel()}/${k.nom}`;let lien=src;
   try{
     // 1. renommer et ranger le PDF
     if(src&&src!==dst){
@@ -1748,6 +1763,13 @@ async function validerFacture(){
     // 2. compléter la facture
     const montant=r2((v.type==='Avoir'?-1:1)*v.montant);
     const body={Title:_trunc(v.numero),ID_Fournisseur:k.fr.ID,Fournisseur:k.fr.Title,Code_Compta:k.fr.Code_Compta||null,Type_Piece:v.type,Date_Facture:toSP(v.date),Date_Echeance:toSP(v.echeance),Montant_TTC:montant,Statut_Saisie:FAC_OK};
+    if(v.sansPdf){
+      const it=await facEcrire(null,{...body,Source:'Saisie manuelle'});
+      DATA.fac.push({...body,...it,Source:'Saisie manuelle',Created:new Date().toISOString(),Modified:new Date().toISOString()});
+      toast(`✓ ${k.fr.Title} – ${v.numero} enregistrée : part dans l’échéancier`,'ok');
+      FACV.busy=false;renderAll();
+      openSansPdf({date:v.date,echeance:v.echeance});return;
+    }
     if(lien!==src||!f.Lien_PDF)body.Lien_PDF=lienBody(lien);
     try{await facEcrire(f.ID,body,f);}
     catch(e){if(lien!==src){try{await facEcrire(f.ID,{Lien_PDF:lienBody(lien)},f);}catch(_){}}throw e;}
@@ -1760,7 +1782,7 @@ async function validerFacture(){
       const deja=String(k.fr.Emails_Expediteurs||'').toLowerCase();
       if(!deja.includes(exp)){const nv=(deja?k.fr.Emails_Expediteurs+'\n':'')+exp;try{await spPatch('Fournisseurs',k.fr.ID,{Emails_Expediteurs:nv},k.fr);k.fr.Emails_Expediteurs=nv;}catch(e){console.warn(e);}}
     }
-    toast(`✓ ${k.nom.replace(/\.pdf$/,'')} rangée${k.lignes.length?' et rattachée au dossier':''}`,'ok');
+    toast(src?`✓ ${k.nom.replace(/\.pdf$/,'')} rangée${k.lignes.length?' et rattachée au dossier':''}`:`✓ ${k.fr.Title} – ${v.numero} mise à jour`,'ok');
     FACV.busy=false;
     const suivante=facAF().sort((a,b)=>a.ID-b.ID).find(x=>x.ID!==f.ID);
     renderAll();
@@ -1768,7 +1790,7 @@ async function validerFacture(){
   }catch(e){FACV.busy=false;renderFacForm();toast('🔴 '+e.message,'ko');}
 }
 async function supprimerFacture(){
-  const f=DATA.fac.find(x=>x.ID===FACV.sel);if(!f||FACV.busy)return;
+  const f=facCur();if(!f||FACV.busy)return;
   const ok=await showConfirm('Retirer ce document ?',`<b>${esc(facNom(lienPdf(f)))}</b> sera retiré de la file et le PDF mis à la corbeille SharePoint (récupérable 93 jours).`,'Retirer','danger');
   if(!ok)return;
   FACV.busy=true;
@@ -1794,7 +1816,7 @@ async function numeroProche(fr,numero,src){
   return null;
 }
 async function supprimerTraitee(){
-  const f=DATA.fac.find(x=>x.ID===FACV.sel);if(!f||FACV.busy)return;
+  const f=facCur();if(!f||FACV.busy)return;
   const lignes=DATA.lig.filter(l=>l.ID_Facture===f.ID);const exp=f.Exporte_Echeancier===true||f.Exporte_Echeancier==='Oui';
   const ok=await showConfirm('Supprimer cette facture ?',`<b>${esc(f.Fournisseur||'')} – ${esc(f.Title||'')}</b> (${fmtEur(f.Montant_TTC)}) sera retirée de la liste des factures.${lignes.length?`<br>Elle sera détachée de ${lignes.length} ligne${lignes.length>1?'s':''} de dossier.`:''}${exp?'<br><br><b style="color:var(--red)">Elle a déjà été envoyée à l’échéancier : supprime aussi sa ligne dans l’Excel.</b>':''}`,'Supprimer','danger');
   if(!ok)return;
@@ -1835,6 +1857,7 @@ document.addEventListener('click',e=>{
   const ch=e.target.closest('[data-facf]');if(ch){FACV.filtre=ch.dataset.facf;renderFacListe();return;}
   const ty=e.target.closest('[data-fft]');if(ty&&FACV.form){facLireForm();FACV.form.type=ty.dataset.fft;FACV.form.src.type='';renderFacForm();return;}
   if(e.target.closest('#btnFacOk')){validerFacture();return;}
+  if(e.target.closest('#btnSansPdf')){openSansPdf();return;}
   if(e.target.closest('#btnFacDel')){supprimerFacture();return;}
   if(e.target.closest('#btnFacSuppr')){supprimerTraitee();return;}
 });
@@ -1846,7 +1869,7 @@ document.addEventListener('change',e=>{
   const avant=k==='montant'?v.montant:v[k];facLireForm();const apres=k==='montant'?v.montant:v[k];
   if(avant!==apres){v.src[k]='';const lab=i.closest('.f').querySelector('.lu');if(lab)lab.remove();}
   if(k==='montant'&&v.montant!=null)i.value=fmtN(v.montant);
-  if(k==='date'&&(v.src.echeance==='calc'||!v.echeance)){facEchAuto(v);const e2=document.querySelector('#facForm [data-ff="echeance"]');if(e2)e2.value=v.echeance||'';}
+  if(k==='date'&&(v.src.echeance==='calc'||v.src.echeance==='calc10'||!v.echeance)){facEchAuto(v);const e2=document.querySelector('#facForm [data-ff="echeance"]');if(e2)e2.value=v.echeance||'';}
   facMajDyn();
 });
 document.addEventListener('input',e=>{const i=e.target.closest&&e.target.closest('#facForm [data-ff]');if(!i||i.dataset.ff==='frs')return;i.classList.toggle('req-empty',!i.value.trim());});
