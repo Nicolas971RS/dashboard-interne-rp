@@ -569,7 +569,7 @@ async function spGetAll(list){
       }
       return all;
     }catch(e){
-      const msg=e.message||'';
+      const msg=String(e.message||'').replace(/\\u([0-9a-fA-F]{4})/g,(m,h)=>String.fromCharCode(parseInt(h,16)));
       const manque=cols.find(c=>!ESSENTIAL[list].includes(c)&&new RegExp(`(^|[^A-Za-z0-9_])${c}([^A-Za-z0-9_]|$)`).test(msg));
       if(!manque)throw e;
       (MISSING[list]=MISSING[list]||new Set()).add(manque);
