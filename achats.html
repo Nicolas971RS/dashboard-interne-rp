@@ -354,6 +354,11 @@ input,select,textarea{font-family:inherit;font-size:13.5px}
 .dfr-btn:hover{opacity:1}
 .dfr-pk{position:absolute;right:0;bottom:0;width:1px;height:1px;opacity:0;pointer-events:none;border:0;padding:0}
 input.dfr-ko{border:1.5px solid #e53935!important;background:#fff5f5!important}
+fieldset.lockfs{border:0;padding:0;margin:0;min-width:0}
+fieldset.lockfs input,fieldset.lockfs select,fieldset.lockfs textarea{background:#f6f7f9;color:var(--text-secondary)}
+fieldset.lockfs .btn{display:none}
+.lock-ban{background:#fff7e6;border:1px solid #f3d19c;color:#7a4b00;border-radius:10px;padding:10px 14px;margin-bottom:14px;font-size:13px}
+.detail-tg{margin:4px 0 14px}
 </style>
 </head>
 <body>
@@ -809,6 +814,7 @@ function openFiche(id){
   W={id,a:wa,aOrig:{...wa},lines:linesOf(id).sort((x,y)=>(x.Type_Ligne==='Frais')-(y.Type_Ligne==='Frais')||x.ID-y.ID).map(l=>({...l,_k:++_k,_st:''})),dirty:false,autoEP:!a.Date_Entrepot_Prevue||(!!a.ETA_Port&&dk(a,'Date_Entrepot_Prevue')===addDays(dk(a,'ETA_Port'),param('DELAI_PORT_ENTREPOT_J'))),att:null};
   renderFiche();$('ovFiche').classList.add('open');document.body.style.overflow='hidden';
   loadAttachments();
+  if(typeof nomsDossier==='function'&&!FAC_NOMS&&W.lines.some(l=>l.N_Facture))nomsDossier().then(()=>{if(W&&W.id===id){renderLines();refreshComputed();}}).catch(()=>{});
 }
 async function loadAttachments(){
   if(!W)return;const id=W.id;
@@ -829,6 +835,7 @@ function fField(label,f,opts={}){
 }
 function renderFiche(){
   const a=W.a;const c=ctrlInfo(W.lines);
+  const LOCK=STATUTS_VERROU.includes(a.Statut);const VUE_F=LOCK&&typeof estValideur==='function'&&estValideur();W.lecture=VUE_F;
   $('fiche').innerHTML=`
   <div class="fiche-head"><button class="x" title="Fermer (Échap)" onclick="closeFiche()">✕</button>
     <h2>🚢 <span id="fTitle">${esc(a.Title||'Nouveau dossier')}</span> <span id="fStatut">${statutBadge(statutAuto(a))}</span></h2>
@@ -836,9 +843,9 @@ function renderFiche(){
   </div>
   <div class="fiche-body">
     <div>
-      <div class="card"><div class="card-h"><h3>🧭 Où en est le dossier</h3><span class="muted" style="font-size:12px">Clique sur une étape pour la renseigner</span></div>
-        <div id="fSteps"></div></div>
-      <div class="card acc" id="accIdent"><div class="card-h" data-acc="accIdent"><h3>📋 Identification et dates</h3><span class="chev">▾</span></div><div class="card-b">
+${VUE_F?`      <div class="card" id="cardVal"><div class="card-h"><h3>🧮 Revient à appliquer — validation Fabrice</h3></div><div class="card-b" id="valBox"></div></div>
+      <div class="detail-tg"><button class="btn sm" onclick="toggleDetail()" id="btnDetail">👁 Voir le détail du dossier (lecture seule)</button></div>
+      <div id="detailBox" style="display:none"><fieldset disabled class="lockfs">      <div class="card acc" id="accIdent"><div class="card-h" data-acc="accIdent"><h3>📋 Identification et dates</h3><span class="chev">▾</span></div><div class="card-b">
         <div class="fgrid">
           ${fField('Référence','Title',{req:true})}${fField('Conteneur','Conteneur',{ph:'ex. TCNU230876/5'})}${fField('N° dossier Image','N_Dossier',{help:'Obtenu à la saisie du conteneur dans Image'})}${fField('Réf. transitaire','Ref_Transitaire')}
           ${fField('Transitaire','Transitaire',{list:'dlTrans'})}${fField('Type de transport','Type_Transport',{type:'select',options:TYPES_TRANSPORT})}${fField('Catégorie (tirelire)','Categorie',{type:'select',options:CATEGORIES})}${fField('Navire','Navire')}
@@ -851,7 +858,26 @@ function renderFiche(){
         <tbody id="tbMar"></tbody><tfoot><tr><td colspan="4">Total marchandise</td><td class="r" id="ftVM"></td><td class="r" id="ftFret"></td><td class="r" id="ftAj"></td><td class="r" id="ftCIF"></td><td colspan="2"></td></tr></tfoot></table></div></div>
       <div class="card"><div class="card-h"><h3>🚚 Frais d'approche <span class="tag" id="nFrais"></span></h3><button class="btn sm" data-act="addFrais">＋ Facture transitaire / transporteur</button></div>
         <div class="card-b" id="fraisBox"></div></div>
-      <div class="card" id="cardVal"><div class="card-h"><h3>🧮 Revient à appliquer — validation Fabrice</h3></div><div class="card-b" id="valBox"></div></div>
+</fieldset></div>
+      <div class="card" id="cardSteps" ${VUE_F?'style="display:none"':''}><div class="card-h"><h3>🧭 Où en est le dossier</h3><span class="muted" style="font-size:12px">Clique sur une étape pour la renseigner</span></div>
+        <div id="fSteps"></div></div>
+`:`      <div class="card" id="cardSteps" ${VUE_F?'style="display:none"':''}><div class="card-h"><h3>🧭 Où en est le dossier</h3><span class="muted" style="font-size:12px">Clique sur une étape pour la renseigner</span></div>
+        <div id="fSteps"></div></div>
+      <div class="card acc" id="accIdent"><div class="card-h" data-acc="accIdent"><h3>📋 Identification et dates</h3><span class="chev">▾</span></div><div class="card-b">
+        <div class="fgrid">
+          ${fField('Référence','Title',{req:true})}${fField('Conteneur','Conteneur',{ph:'ex. TCNU230876/5'})}${fField('N° dossier Image','N_Dossier',{help:'Obtenu à la saisie du conteneur dans Image'})}${fField('Réf. transitaire','Ref_Transitaire')}
+          ${fField('Transitaire','Transitaire',{list:'dlTrans'})}${fField('Type de transport','Type_Transport',{type:'select',options:TYPES_TRANSPORT})}${fField('Catégorie (tirelire)','Categorie',{type:'select',options:CATEGORIES})}${fField('Navire','Navire')}
+          ${fField('Départ','Date_Depart',{type:'date'})}${fField('Arrivée prévue au port (ETA)','ETA_Port',{type:'date'})}${fField('Arrivée réelle au port','Date_Arrivee_Port',{type:'date'})}${fField('Entrée entrepôt prévue','Date_Entrepot_Prevue',{type:'date',auto:W.autoEP,help:`Calculée : ETA + ${param('DELAI_PORT_ENTREPOT_J')} j (modifiable)`})}
+          ${fField('Confirmation transitaire local','Date_Confirmation_Locale',{type:'date'})}${fField('Transporteur réservé','Date_Transporteur',{type:'date'})}${fField('Entrée en entrepôt','Date_Entrepot',{type:'date'})}${fField('Dépotage','Date_Depotage',{type:'date'})}
+          ${fField('Contrôle au dépotage','Controle_OK',{type:'select',options:['Oui','Non']})}${fField('Manquants, casse, remarques','Anomalies_Depotage',{type:'textarea',span:3})}
+        </div></div></div>
+${LOCK?`<div class="lock-ban">🔒 <b>Montants verrouillés</b> : le dossier est ${esc(a.Statut==='À valider Fabrice'?'en validation chez Fabrice':'validé')}. Pour corriger, Fabrice doit le renvoyer.</div><fieldset disabled class="lockfs">`:''}      <div class="card"><div class="card-h"><h3>📦 Marchandise <span class="tag" id="nMar"></span></h3><button class="btn sm" data-act="addMar">＋ Ligne marchandise</button></div>
+        <div class="card-b tblwrap" style="padding:6px 10px 10px"><table class="ltable"><thead><tr><th style="width:22%">Fournisseur</th><th>N° cde</th><th>N° facture</th><th>Produits</th><th class="r">Valeur march.</th><th class="r">Fret frs</th><th class="r" title="Remise, avoir, correction (négatif possible)">Ajustement</th><th class="r">Total CIF</th><th>Client</th><th></th></tr></thead>
+        <tbody id="tbMar"></tbody><tfoot><tr><td colspan="4">Total marchandise</td><td class="r" id="ftVM"></td><td class="r" id="ftFret"></td><td class="r" id="ftAj"></td><td class="r" id="ftCIF"></td><td colspan="2"></td></tr></tfoot></table></div></div>
+      <div class="card"><div class="card-h"><h3>🚚 Frais d'approche <span class="tag" id="nFrais"></span></h3><button class="btn sm" data-act="addFrais">＋ Facture transitaire / transporteur</button></div>
+        <div class="card-b" id="fraisBox"></div></div>
+${LOCK?'</fieldset>':''}      <div class="card" id="cardVal"><div class="card-h"><h3>🧮 Revient à appliquer — validation Fabrice</h3></div><div class="card-b" id="valBox"></div></div>
+`}
     </div>
     <div class="side">
       <div class="coef-card" id="coefCard"></div>
@@ -862,10 +888,10 @@ function renderFiche(){
       <div class="card"><div class="card-h"><h3>🏭 Poids des fournisseurs</h3></div><div class="card-b bars" id="barsFrs"></div></div>
     </div>
   </div>
-  <div class="savebar" id="savebar"><button class="btn danger sm" id="btnDel" onclick="deleteDossier()" title="Supprime le dossier, ses lignes et ses documents">🗑 Supprimer le dossier</button><div class="msg" id="saveMsg"></div>
-    <span class="muted" style="font-size:12px"><span class="kbd">Ctrl</span> + <span class="kbd">S</span></span>
+  <div class="savebar" id="savebar">${VUE_F?'':`<button class="btn danger sm" id="btnDel" onclick="deleteDossier()" title="Supprime le dossier, ses lignes et ses documents">🗑 Supprimer le dossier</button>`}<div class="msg" id="saveMsg"></div>
+    ${VUE_F?'':`<span class="muted" style="font-size:12px"><span class="kbd">Ctrl</span> + <span class="kbd">S</span></span>`}
     <button class="btn ghost" onclick="closeFiche()">Fermer</button>
-    <button class="btn green" id="btnSave" onclick="saveFiche()">💾 Enregistrer</button></div>`;
+    ${VUE_F?'':`<button class="btn green" id="btnSave" onclick="saveFiche()">💾 Enregistrer</button>`}</div>`;
   renderLines();renderFrais();refreshComputed();renderAtt();
   if(tokenAgeMin()>=50&&!DEMO)toast(`⚠️ Session ouverte depuis ${tokenAgeMin()} min : enregistre souvent, elle peut expirer.`,'wa');
 }
@@ -1048,7 +1074,10 @@ function lineBody(l){
   return b;
 }
 let SAVING=false;
+const STATUTS_VERROU=['À valider Fabrice','Validé','Clôturé'];
+function toggleDetail(){const d=$('detailBox'),b=$('btnDetail');if(!d)return;const o=d.style.display==='none';d.style.display=o?'':'none';b.textContent=o?'🙈 Masquer le détail':'👁 Voir le détail du dossier (lecture seule)';}
 async function saveFiche(){
+  if(W&&W.lecture)return;
   if(!W||SAVING)return;
   const bad=W.lines.filter(l=>l._st!=='del'&&LINE_NUM.some(f=>l['_bad_'+f]));
   if(bad.length){toast(`🔴 ${bad.length} ligne(s) contiennent un montant illisible (en rouge). Corrige-les avant d'enregistrer.`,'ko');return;}
@@ -1905,8 +1934,17 @@ document.addEventListener('input',e=>{if(e.target.id==='facSearch'){FACV.rech=e.
 function pdfLigne(l){
   if(!DATA.fac||!l.N_Facture)return '';
   const f=(l.ID_Facture&&DATA.fac.find(x=>x.ID===l.ID_Facture))||DATA.fac.find(x=>x.Statut_Saisie===FAC_OK&&x.ID_Fournisseur&&x.ID_Fournisseur===l.ID_Fournisseur&&lpNorm(x.Title)===lpNorm(l.N_Facture));
-  const p=f&&lienPdf(f);
-  return p?`<a class="pdf-a" href="${pdfAbs(p)}" target="_blank" rel="noopener" title="Ouvrir la facture ${esc(f.Title)}">📄</a>`:'';
+  let p=f&&lienPdf(f),titre=f?f.Title:'';
+  if(!p){const nm=pdfDansDossier(l);if(nm){p=DOSSIER_REEL.replace(/\/$/,'')+'/'+nm;titre=nm;}}
+  return p?`<a class="pdf-a" href="${pdfAbs(p)}" target="_blank" rel="noopener" title="Ouvrir la facture ${esc(titre)}">📄</a>`:'';
+}
+// Repli : PDF déjà rangé dans « Factures Fournisseurs » dont le nom contient le n° de facture
+function pdfDansDossier(l){
+  if(!FAC_NOMS||!DOSSIER_REEL)return '';
+  const n=lpNorm(l.N_Facture);if(n.length<5)return '';
+  const fr=l.ID_Fournisseur?frsById(l.ID_Fournisseur):null;const P=fr?lpNorm(nomCourt(fr)):'';
+  const c=FAC_NOMS.filter(nm=>/\.pdf$/i.test(nm)&&lpNorm(nm.replace(/\.pdf$/i,'')).includes(n));
+  return c.find(nm=>P&&lpNorm(nm).startsWith(P))||c[0]||'';
 }
 
 // ═══ DIAGNOSTIC : teste chaque syntaxe d'accès au dossier des factures ═══
@@ -1975,7 +2013,7 @@ function renderValidation(){
   const rows=gs.map(g=>{
     const coef=W.coefs[g.key]??null;const gain=coef&&reel?r2(g.vm*(coef-reel)):null;if(gain!==null)tg+=gain;
     const der=dernierCoef(g.frsId,W.id);
-    const facts=g.lignes.map(l=>`${esc(l.N_Facture||'—')}${pdfLigne(l)}`).join('<br>');
+    const facts=g.lignes.map(l=>{const a=pdfLigne(l);return `${esc(l.N_Facture||'—')}${a||(l.N_Facture&&FAC_NOMS?' <span class="muted" title="PDF introuvable dans Factures Fournisseurs" style="font-size:10.5px">(pas de PDF)</span>':'')}`;}).join('<br>');
     const cdes=[...new Set(g.lignes.map(l=>l.N_Commande).filter(Boolean))].join(', ');
     return `<tr><td><b>${esc(g.nom)}</b></td><td class="mono">${esc(cdes)}</td><td class="mono">${facts}</td><td class="r mono">${fmtN(g.vm)}</td><td class="r mono">${g.fret?fmtN(g.fret):''}</td><td class="r mono">${fmtN(g.vm+g.fret)}</td>
       <td class="r">${editable?`<input class="n coef-in ${coef?'':'req-empty'}" data-coef="${esc(g.key)}" value="${coef?fmtN(coef,2):''}" inputmode="decimal" placeholder="—" style="width:70px">`:`<b class="mono">${coef?fmtN(coef,coef*100%1?3:2):'—'}</b>`}
