@@ -2034,16 +2034,16 @@ function renderValidation(){
   if(valide)entete=`<div class="fac-box ok">✅ Validé par <b>${esc(a.Valide_Par||'Fabrice')}</b> le ${fmtD(dk(a,'Date_Validation'))}${a.Commentaire_Fabrice?` — « ${esc(a.Commentaire_Fabrice)} »`:''}.${st==='Clôturé'?` Prix à jour dans Image le <b>${fmtD(dk(a,'Date_Saisie_Image'))}</b>.`:` <b style="color:var(--amber)">Coefficients à saisir dans Image${dk(a,'Date_Validation')?` (validé ${relDay(dk(a,'Date_Validation'))})`:''}.</b>`}</div>`;
   const pret=!!a.N_Dossier&&c.factOk&&c.nFrais>0&&c.coef;
   const LS=lectureSeule();
-  if(LS&&!enAttente){actions=st==='Validé'||st==='Clôturé'?`<button class="btn sm" id="btnFichePdf">🖨 Fiche de validation (PDF)</button>`:`<span class="muted" style="font-size:12px">${st==='Renvoyé à Patricia'?'Renvoyé à Patricia : en attente de ses corrections.':'Dossier en préparation chez Patricia.'}</span>`;}
+  if(LS&&!enAttente){actions=st==='Validé'||st==='Clôturé'?`<button class="btn sm" id="btnFichePdf">🖨 Imprimer le dossier (PDF)</button>`:`<span class="muted" style="font-size:12px">${st==='Renvoyé à Patricia'?'Renvoyé à Patricia : en attente de ses corrections.':'Dossier en préparation chez Patricia.'}</span>`;}
   else if(!enAttente&&!valide){
     const manque=[];if(!a.N_Dossier)manque.push('n° dossier Image');if(!c.factOk)manque.push('n° de facture sur chaque ligne');if(!c.nFrais)manque.push('facture du transitaire');
-    actions=`<button class="btn primary" id="btnEnvoiFab" ${pret?'':'disabled'}>📤 Envoyer à Fabrice</button>${manque.length?`<span class="muted" style="font-size:12px">Manque : ${esc(manque.join(', '))}</span>`:''}`;
+    actions=`<button class="btn primary" id="btnEnvoiFab" ${pret?'':'disabled'}>📤 Envoyer à Fabrice</button><button class="btn sm" id="btnFichePdf">🖨 Imprimer le dossier (PDF)</button>${manque.length?`<span class="muted" style="font-size:12px">Manque : ${esc(manque.join(', '))}</span>`:''}`;
   }else if(enAttente&&val){
-    actions=`<button class="btn green" id="btnValFab">✅ Valider les coefficients</button><button class="btn danger sm" id="btnRenvoi">↩ Renvoyer à Patricia</button>`;
+    actions=`<button class="btn green" id="btnValFab">✅ Valider les coefficients</button><button class="btn danger sm" id="btnRenvoi">↩ Renvoyer à Patricia</button><button class="btn sm" id="btnFichePdf">🖨 Imprimer le dossier (PDF)</button>`;
   }else if(st==='Validé'){
-    actions=`<button class="btn green" id="btnPrixImage">✅ Prix à jour dans Image</button><button class="btn sm" id="btnFichePdf">🖨 Fiche de validation (PDF)</button>`;
+    actions=`<button class="btn green" id="btnPrixImage">✅ Prix à jour dans Image</button><button class="btn sm" id="btnFichePdf">🖨 Imprimer le dossier (PDF)</button>`;
   }else if(st==='Clôturé'){
-    actions=`<button class="btn sm" id="btnFichePdf">🖨 Fiche de validation (PDF)</button>`;
+    actions=`<button class="btn sm" id="btnFichePdf">🖨 Imprimer le dossier (PDF)</button>`;
   }
   if((editable||st==='Validé')&&!W._vu){W._vu=true;setTimeout(()=>{const c=$('cardVal');if(c)c.scrollIntoView({behavior:'smooth',block:'start'});},400);}
   box.innerHTML=`${entete}
@@ -2133,38 +2133,126 @@ function loadJsPdf(){
     document.head.appendChild(s1);});
   return _pdfLibP;
 }
+// ── Dossier imprimable (PDF A4, 2 pages) : récapitulatif + gestion du coefficient de revient ──
+// Remplace les onglets imprimés de l'ancien Excel et le dossier papier.
 async function fichePDF(arrId){
   await loadJsPdf();
-  const a=DATA.arr.find(x=>x.ID===arrId)||W.a;const lines=(W&&W.id===arrId)?W.lines.filter(l=>l._st!=='del'):linesOf(arrId);
-  const c=calc(lines);const {jsPDF}=window.jspdf;const doc=new jsPDF({orientation:'landscape',unit:'mm',format:'a4'});
-  const eur=v=>fmtN(v).replace(/ | /g,' ')+' €';const nb=v=>fmtN(v).replace(/ | /g,' ');
-  try{const logo=document.querySelector('.logo-pill img');if(logo&&logo.src.startsWith('data:'))doc.addImage(logo.src,'JPEG',12,8,38,13);}catch(e){}
-  doc.setFont('helvetica','bold');doc.setFontSize(16);doc.setTextColor(10,31,61);doc.text('Validation du revient',58,15);
-  doc.setFontSize(22);doc.setTextColor(198,40,40);doc.text(String(a.N_Dossier||a.Title||''),285,16,{align:'right'});
-  doc.setFont('helvetica','normal');doc.setFontSize(10);doc.setTextColor(40,40,40);
-  const infos=[`Conteneur : ${a.Title||''}`,`Transitaire : ${a.Transitaire||''}`,`Catégorie : ${a.Categorie||''}`,`Entrée entrepôt : ${fmtD(dk(a,'Date_Entrepot'))}`];
-  doc.text(infos.join('     '),12,28);
-  doc.setFont('helvetica','bold');doc.text(`Total rendu : ${eur(c.total)}     Revient réel : ${fmtN(c.coef,3)}`,12,35);
-  doc.setFont('helvetica','normal');
-  doc.text(`Validé par ${a.Valide_Par||'—'} le ${fmtD(dk(a,'Date_Validation'))||'—'}${a.Commentaire_Fabrice?'  —  « '+a.Commentaire_Fabrice+' »':''}`,12,41);
+  const a=(W&&W.id===arrId)?W.a:(DATA.arr.find(x=>x.ID===arrId)||{});
+  const lines=(W&&W.id===arrId)?W.lines.filter(l=>l._st!=='del'):linesOf(arrId);
+  const c=calc(lines);const {jsPDF}=window.jspdf;const doc=new jsPDF({orientation:'portrait',unit:'mm',format:'a4'});
+  const PW=210,M=14,CW=PW-2*M;
+  const NAVY=[10,31,61],RED=[198,40,40],GREEN=[46,125,50],GREY=[110,118,130],LINE=[214,220,228],SOFT=[244,247,251],ACC=[232,242,253];
+  const cl=s=>String(s??'').replace(/[  ]/g,' ');
+  const nb=(v,d=2)=>cl(fmtN(v,d));const eur=v=>nb(v)+' €';
+  const st=a.Statut||'';const valide=st==='Validé'||st==='Clôturé';
+  const mar=lines.filter(l=>l.Type_Ligne!=='Frais').sort((p,q)=>String(p.Fournisseur).localeCompare(String(q.Fournisseur),'fr')||String(p.N_Commande||'').localeCompare(String(q.N_Commande||'')));
   const frais=lines.filter(l=>l.Type_Ligne==='Frais');
-  const body=[];
-  frais.forEach(l=>body.push([l.Fournisseur||'',l.N_Facture||'','','',nb(n0(l.Fret)+lineFrais(l)),'','','','']));
-  let tg=0;
-  lines.filter(l=>l.Type_Ligne!=='Frais').sort((p,q)=>String(p.Fournisseur).localeCompare(String(q.Fournisseur),'fr')).forEach(l=>{
-    const coef=n0(l.Coef_Applique)||null;const vm=lineVMnette(l);const g=coef?vm*(coef-c.coef):null;if(g!==null)tg+=g;
-    body.push([l.Fournisseur||'',l.N_Commande||'',l.N_Facture||'',nb(vm),l.Fret?nb(l.Fret):'',nb(vm+n0(l.Fret)),coef?fmtN(coef,2):'',coef?nb(vm*coef):'',g===null?'':(g>0?'+':'')+nb(g)]);});
-  doc.autoTable({startY:46,head:[['Fournisseur','Bon de cde','Facture','Valeur march.','Fret / frais','Total CIF','Revient appliqué','Valeur au revient','Gain / perte']],body,
-    foot:[['Total','','',nb(c.vm),nb(c.fretFrs+c.fretTrans+c.frais),nb(c.cif),'','',(tg>0?'+':'')+nb(tg)]],
-    styles:{fontSize:9,cellPadding:1.8},headStyles:{fillColor:[10,31,61],textColor:255},footStyles:{fillColor:[232,242,253],textColor:[10,31,61],fontStyle:'bold'},
-    columnStyles:{3:{halign:'right'},4:{halign:'right'},5:{halign:'right'},6:{halign:'center',fontStyle:'bold'},7:{halign:'right'},8:{halign:'right'}},
-    didParseCell:d=>{if(d.section==='body'&&d.column.index===8&&String(d.cell.raw).startsWith('-'))d.cell.styles.textColor=[198,40,40];}});
-  doc.setFontSize(8);doc.setTextColor(120);doc.text(`Portail Achats Réseaux Plus — édité le ${fmtD(todayKey())}. Les factures PDF sont rangées dans « Factures Fournisseurs ».`,12,200);
+  const num=cl(a.N_Dossier||a.Title||'');
+  let logo=null;try{const im=document.querySelector('.logo-pill img');if(im&&im.src.startsWith('data:'))logo=im.src;}catch(e){}
+
+  const entete=(titre,sous)=>{
+    doc.setFillColor(...NAVY);doc.rect(0,0,PW,4,'F');
+    if(logo)try{doc.addImage(logo,'JPEG',M,9,45,14);}catch(e){}
+    doc.setFont('helvetica','bold');doc.setFontSize(17);doc.setTextColor(...NAVY);doc.text(titre,PW-M,15,{align:'right'});
+    doc.setFont('helvetica','normal');doc.setFontSize(9);doc.setTextColor(...GREY);doc.text(sous,PW-M,21,{align:'right'});
+    doc.setDrawColor(...LINE);doc.setLineWidth(0.3);doc.line(M,28,PW-M,28);
+    // bandeau dossier
+    doc.setFont('helvetica','normal');doc.setFontSize(8);doc.setTextColor(...GREY);doc.text('DOSSIER IMAGE',M,35);
+    doc.setFont('helvetica','bold');doc.setFontSize(24);doc.setTextColor(...RED);doc.text(num||'—',M,45);
+    const infos=[['Conteneur',a.Conteneur||a.Title],['Transitaire',a.Transitaire],['Réf. transitaire',a.Ref_Transitaire],['Navire',a.Navire],
+      ['Transport',a.Type_Transport],['Catégorie',a.Categorie],['Arrivée port',fmtD(dk(a,'Date_Arrivee_Port'))||fmtD(dk(a,'ETA_Port'))],['Entrée entrepôt',fmtD(dk(a,'Date_Entrepot'))]];
+    const x0=M+62,cw=(PW-M-x0)/4;
+    infos.forEach(([k,val],n)=>{const x=x0+(n%4)*cw,y=34+Math.floor(n/4)*10;
+      doc.setFont('helvetica','normal');doc.setFontSize(7);doc.setTextColor(...GREY);doc.text(k.toUpperCase(),x,y);
+      doc.setFont('helvetica','bold');let fs=8.5;const tx=cl(val||'—');doc.setFontSize(fs);while(fs>6&&doc.getTextWidth(tx)>cw-2){fs-=0.5;doc.setFontSize(fs);}doc.setTextColor(30,36,48);doc.text(doc.splitTextToSize(tx,cw-2)[0],x,y+4.2);});
+    return 54;
+  };
+  const tuiles=(y,items)=>{const g=3,w=(CW-g*(items.length-1))/items.length;
+    items.forEach(([k,val,hl],n)=>{const x=M+n*(w+g);
+      doc.setFillColor(...(hl?NAVY:SOFT));doc.setDrawColor(...(hl?NAVY:LINE));doc.roundedRect(x,y,w,17,2,2,'FD');
+      doc.setFont('helvetica','normal');doc.setFontSize(7);doc.setTextColor(...(hl?[190,205,225]:GREY));doc.text(k.toUpperCase(),x+3,y+5.5);
+      doc.setFont('helvetica','bold');doc.setFontSize(hl?14:11);doc.setTextColor(...(hl?[255,255,255]:NAVY));doc.text(val,x+3,y+13.2);});
+    return y+17;};
+  const titreSection=(y,t)=>{doc.setFont('helvetica','bold');doc.setFontSize(10.5);doc.setTextColor(...NAVY);doc.text(t,M,y);doc.setDrawColor(...NAVY);doc.setLineWidth(0.6);doc.line(M,y+1.6,M+12,y+1.6);return y+4;};
+  const tbl=(y,o)=>{doc.autoTable(Object.assign({startY:y,margin:{left:M,right:M,bottom:18},theme:'plain',
+      styles:{font:'helvetica',fontSize:8,cellPadding:{top:1.6,bottom:1.6,left:1.8,right:1.8},textColor:[30,36,48],lineColor:LINE,lineWidth:{bottom:0.15}},
+      headStyles:{fillColor:NAVY,textColor:255,fontStyle:'bold',fontSize:7.5,lineWidth:0},
+      footStyles:{fillColor:ACC,textColor:NAVY,fontStyle:'bold',lineWidth:0},
+      alternateRowStyles:{fillColor:[250,251,253]}},o,{didParseCell:d=>{const cs=(o.columnStyles||{})[d.column.index];if(cs&&cs.halign&&d.section!=='body')d.cell.styles.halign=cs.halign;if(o.didParseCell)o.didParseCell(d);}}));return doc.lastAutoTable.finalY;};
+  const R={halign:'right'};
+
+  // ═══ PAGE 1 — Récapitulatif du dossier ═══
+  let y=entete('Récapitulatif du dossier',`Dossier d'arrivage · édité le ${fmtD(todayKey())}`);
+  y=tuiles(y+2,[['Valeur marchandise',eur(c.vm)],['Total CIF',eur(c.cif)],["Frais d'approche",eur(c.frais)],['Coût total rendu',eur(c.total)],['Revient réel',nb(c.coef,3),true]]);
+  const postesOk=POSTES.filter(([k])=>c.postes[k]>0);
+  const y0=y+7;let yd=y0;
+  if(postesOk.length){const tot=c.frais||1;
+    yd=tbl(y0,{head:[['Détail des frais','Montant','Part']],body:postesOk.map(([k,lab])=>{const p=c.postes[k]/tot*100;return [cl(lab),nb(c.postes[k]),p<1?'< 1 %':nb(p,0)+' %'];}),
+      tableWidth:92,styles:{fontSize:7.3,cellPadding:{top:0.9,bottom:0.9,left:1.6,right:1.6},lineColor:LINE,lineWidth:{bottom:0.15}},headStyles:{fillColor:SOFT,textColor:NAVY,fontStyle:'bold',fontSize:7},columnStyles:{1:R,2:{...R,textColor:GREY}}});}
+  // calcul du revient (encadré à droite)
+  const bx=M+98,bwid=CW-98;doc.setFillColor(...SOFT);doc.setDrawColor(...LINE);doc.roundedRect(bx,y0,bwid,34,2,2,'FD');
+  doc.setFont('helvetica','bold');doc.setFontSize(8);doc.setTextColor(...NAVY);doc.text('CALCUL DU REVIENT RÉEL',bx+4,y0+6);
+  const ligneCalc=(yy,op,lab,val,big)=>{doc.setFont('helvetica','normal');doc.setFontSize(8.5);doc.setTextColor(...GREY);doc.text(op,bx+4,yy);doc.text(lab,bx+9,yy);
+    doc.setFont('helvetica','bold');doc.setFontSize(big?13:9.5);doc.setTextColor(...(big?RED:NAVY));doc.text(val,bx+bwid-4,yy,{align:'right'});};
+  ligneCalc(y0+13,'','Coût total rendu',eur(c.total));
+  ligneCalc(y0+20,'÷','Valeur marchandise nette',eur(c.vm));
+  doc.setDrawColor(...LINE);doc.line(bx+4,y0+23.5,bx+bwid-4,y0+23.5);
+  ligneCalc(y0+30,'=','Revient réel',nb(c.coef,3),true);
+  // factures de frais sous l'encadré
+  let yf=tbl(y0+38,{head:[["Factures de frais d'approche",'N° facture','Total']],
+    body:frais.length?frais.map(l=>[cl(l.Fournisseur),cl(l.N_Facture),nb(lineTotal(l))]):[['Aucune','','']],
+    foot:frais.length>1?[['Total','',nb(c.fretTrans+c.frais)]]:undefined,
+    margin:{left:bx,right:M,bottom:18},tableWidth:bwid,styles:{fontSize:7.3,cellPadding:{top:0.9,bottom:0.9,left:1.6,right:1.6},lineColor:LINE,lineWidth:{bottom:0.15}},
+    headStyles:{fillColor:SOFT,textColor:NAVY,fontStyle:'bold',fontSize:7},columnStyles:{0:{fontStyle:'bold'},2:R}});
+  y=Math.max(yd,yf);
+
+  if(y>255){doc.addPage();y=16;}
+  y=titreSection(y+9,`Marchandise — ${mar.length} ligne${mar.length>1?'s':''}`);
+  y=tbl(y+1,{head:[['Fournisseur','Bon de cde','Facture','Produits','Valeur march.','Fret','Total CIF','Revient']],
+    body:mar.map(l=>{const vm=lineVMnette(l);return [cl(l.Fournisseur),cl(l.N_Commande),cl(l.N_Facture),cl(l.Produits),nb(vm),l.Fret?nb(l.Fret):'',nb(vm+n0(l.Fret)),n0(l.Coef_Applique)?nb(l.Coef_Applique):''];}),
+    foot:[['Total marchandise','','','',nb(c.vm),c.fretFrs?nb(c.fretFrs):'',nb(c.vm+c.fretFrs),'']],
+    styles:{font:'helvetica',fontSize:7.6,cellPadding:{top:1.25,bottom:1.25,left:1.6,right:1.6},textColor:[30,36,48],lineColor:LINE,lineWidth:{bottom:0.15}},
+    columnStyles:{0:{fontStyle:'bold',cellWidth:35},1:{cellWidth:19},2:{cellWidth:31},3:{cellWidth:'auto',textColor:GREY},4:{...R,cellWidth:21},5:{...R,cellWidth:14},6:{...R,cellWidth:21},7:{halign:'center',cellWidth:13,fontStyle:'bold',textColor:NAVY}}});
+  // ═══ PAGE 2 — Gestion du coefficient de revient ═══
+  doc.addPage();
+  y=entete('Gestion du coefficient de revient',valide?`Validé par ${cl(a.Valide_Par||'—')} le ${fmtD(dk(a,'Date_Validation'))||'—'}`:'En attente de validation');
+  const gs=groupesFrs(lines);let tR=0,tA=0;
+  const body=gs.map(g=>{const ca=coefGroupe(g);const vr=g.vm*(c.coef||0);const va=ca?g.vm*ca:null;tR+=vr;if(va!==null)tA+=va;
+    const gp=va!==null?va-vr:null;
+    return [cl(g.nom),cl([...new Set(g.lignes.map(l=>l.N_Facture).filter(Boolean))].join('\n')),nb(g.vm),nb(c.coef,3),nb(vr),ca?nb(ca):'—',va!==null?nb(va):'',gp===null?'':(gp>0?'+':'')+nb(gp)];});
+  const tg=tA&&valide?tA-tR:null;
+  y=tuiles(y+2,[['Valeur marchandise',eur(c.vm)],['Revient réel',nb(c.coef,3)],['Valeur au revient réel',eur(tR)],['Gain / perte total',tg===null?'—':(tg>0?'+':'')+eur(tg),true]]);
+  y=titreSection(y+9,'Revient appliqué par fournisseur');
+  y=tbl(y+1,{head:[['Fournisseur','Facture(s)','Valeur march.','Revient réel','Valeur × réel','Revient appliqué','Valeur × appliqué','Gain / perte']],body,
+    foot:[['Total','',nb(c.vm),nb(c.coef,3),nb(tR),'',tA?nb(tA):'',tg===null?'':(tg>0?'+':'')+nb(tg)]],
+    columnStyles:{0:{fontStyle:'bold',cellWidth:38},1:{cellWidth:28,textColor:GREY},2:R,3:{halign:'center'},4:R,5:{halign:'center',fontStyle:'bold',textColor:NAVY},6:R,7:{...R,fontStyle:'bold'}},
+    didParseCell:d=>{if((d.section==='body'||d.section==='foot')&&d.column.index===7){const s=String(d.cell.raw||'');if(s.startsWith('-'))d.cell.styles.textColor=RED;else if(s.startsWith('+'))d.cell.styles.textColor=GREEN;}}});
+  // validation et saisie Image
+  if(y>235){doc.addPage();y=20;}
+  y+=9;const bw=(CW-6)/3;
+  const box=(x,t,l1,l2)=>{doc.setDrawColor(...LINE);doc.setFillColor(255,255,255);doc.roundedRect(x,y,bw,26,2,2,'FD');
+    doc.setFont('helvetica','normal');doc.setFontSize(7);doc.setTextColor(...GREY);doc.text(t.toUpperCase(),x+3,y+5.5);
+    doc.setFont('helvetica','bold');doc.setFontSize(9.5);doc.setTextColor(...NAVY);doc.text(cl(l1),x+3,y+12);
+    doc.setFont('helvetica','normal');doc.setFontSize(8);doc.setTextColor(30,36,48);doc.text(doc.splitTextToSize(cl(l2),bw-6).slice(0,3),x+3,y+17.5);};
+  box(M,'Validation direction',valide?(a.Valide_Par||'—'):'En attente',valide?('le '+(fmtD(dk(a,'Date_Validation'))||'—')):'');
+  box(M+bw+3,'Commentaire',a.Commentaire_Fabrice?'':'—',a.Commentaire_Fabrice?'« '+a.Commentaire_Fabrice+' »':'');
+  box(M+2*(bw+3),'Saisie dans Image',dk(a,'Date_Saisie_Image')?'Prix à jour':'À faire',dk(a,'Date_Saisie_Image')?'le '+fmtD(dk(a,'Date_Saisie_Image')):(valide?'coefficients à saisir':'après validation'));
+  // pieds de page
+  const n=doc.getNumberOfPages();
+  for(let p=1;p<=n;p++){doc.setPage(p);doc.setDrawColor(...LINE);doc.setLineWidth(0.2);doc.line(M,284,PW-M,284);
+    doc.setFont('helvetica','normal');doc.setFontSize(7);doc.setTextColor(...GREY);
+    doc.text(`Réseaux Plus — Portail Achats · Dossier ${num} · Factures PDF dans « Factures Fournisseurs »`,M,288.5);doc.text(`Page ${p} / ${n}`,PW-M,288.5,{align:'right'});}
   return doc.output('blob');
 }
 async function telechargerFiche(){
-  try{const blob=await fichePDF(W.id);const u=URL.createObjectURL(blob);const lnk=document.createElement('a');lnk.href=u;lnk.download=`Validation ${safeName(W.a.N_Dossier||W.a.Title)}.pdf`;document.body.appendChild(lnk);lnk.click();lnk.remove();setTimeout(()=>URL.revokeObjectURL(u),5000);}
-  catch(e){toast('🔴 '+e.message,'ko');}
+  // Ouvre le PDF dans un nouvel onglet (impression directe) ; téléchargement si l'onglet est bloqué
+  const nom=`Dossier ${safeName(W.a.N_Dossier||W.a.Title)}.pdf`;let w=null;
+  try{w=window.open('','_blank');}catch(e){}
+  try{const blob=await fichePDF(W.id);const u=URL.createObjectURL(blob);
+    if(w&&!w.closed){w.location.href=u;}
+    else{const lnk=document.createElement('a');lnk.href=u;lnk.download=nom;document.body.appendChild(lnk);lnk.click();lnk.remove();}
+    setTimeout(()=>URL.revokeObjectURL(u),60000);}
+  catch(e){if(w&&!w.closed)w.close();toast('🔴 '+e.message,'ko');}
 }
 
 // ── Onglet Validations ──
