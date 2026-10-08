@@ -359,6 +359,44 @@ fieldset.lockfs input,fieldset.lockfs select,fieldset.lockfs textarea{background
 fieldset.lockfs .btn{display:none}
 .lock-ban{background:#fff7e6;border:1px solid #f3d19c;color:#7a4b00;border-radius:10px;padding:10px 14px;margin-bottom:14px;font-size:13px}
 .detail-tg{margin:4px 0 14px}
+
+/* TIRELIRE & STATISTIQUES */
+.tir-tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:12px;margin-bottom:16px}
+.tir-tile{background:#fff;border:1px solid var(--border);border-radius:var(--radius-lg);padding:13px 15px;text-align:left;cursor:pointer;box-shadow:var(--shadow-xs);position:relative;overflow:hidden;font:inherit;color:inherit}
+.tir-tile::before{content:"";position:absolute;left:0;top:0;bottom:0;width:4px;background:var(--c,var(--navy))}
+.tir-tile:hover{border-color:var(--navy-light)}
+.tir-tile.on{outline:2px solid var(--c,var(--navy));outline-offset:-2px}
+.tir-tile.tot{background:var(--navy);color:#fff;cursor:default;border-color:var(--navy)}
+.tir-tile.tot::before{display:none}
+.tir-tile .lab{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--text-muted)}
+.tir-tile.tot .lab{color:#b9c8dd}
+.tir-tile .val{font-size:22px;font-weight:700;letter-spacing:-.02em;margin-top:2px}
+.tir-tile .hint{font-size:11.5px;color:var(--text-secondary)}
+.tir-tile.tot .hint{color:#b9c8dd}
+.chart-svg{width:100%;height:auto;display:block}
+.legend{display:flex;flex-wrap:wrap;gap:12px;font-size:12px;color:var(--text-secondary)}
+.legend i{display:inline-block;width:14px;height:3px;border-radius:2px;margin-right:5px;vertical-align:middle}
+.cat-dot{display:inline-block;width:9px;height:9px;border-radius:50%;background:var(--c);margin-right:7px}
+.tag-tir{font-size:11.5px;padding:2px 8px;border-radius:10px;background:var(--grey-light);color:var(--text-secondary);white-space:nowrap}
+.tag-tir.neg{background:var(--red-light);color:var(--red)}
+.tag-tir.pos{background:var(--green-light);color:var(--green)}
+.ltable.stat-t{min-width:0;width:100%}
+.ltable.stat-t td{padding:6px 6px}
+.ltable.stat-t tr.clk{cursor:pointer}
+.ltable.stat-t tr.clk:hover td{background:var(--blue-xlight)}
+.ltable.stat-t tr.grp td{background:var(--grey-light);font-weight:700;color:var(--navy);font-size:12px;text-transform:uppercase;letter-spacing:.04em}
+.ltable.stat-t td.lo{background:#e8f5e9;color:var(--green);font-weight:700}
+.ltable.stat-t td.hi{background:#ffebee;color:var(--red);font-weight:700}
+.bar{display:flex;height:9px;background:var(--grey-light);border-radius:5px;overflow:hidden;min-width:60px}
+.bar i{display:block;height:100%}
+.peu{color:var(--amber);cursor:help}
+.stat-filters{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:14px}
+.sel{padding:7px 10px;border:1px solid var(--border);border-radius:var(--radius);background:#fff;font-size:13px}
+.kpis.k5{grid-template-columns:repeat(5,1fr)}
+.stat-2{display:grid;grid-template-columns:1fr 1.4fr;gap:14px}
+.imp-bar{height:8px;background:var(--grey-light);border-radius:4px;overflow:hidden;margin-top:12px}
+.imp-bar i{display:block;height:100%;background:var(--green);transition:width .2s}
+@media (max-width:1100px){.kpis.k5{grid-template-columns:repeat(2,1fr)}.stat-2{grid-template-columns:1fr}}
 </style>
 </head>
 <body>
@@ -392,7 +430,8 @@ fieldset.lockfs .btn{display:none}
     <button class="tab" data-tab="dossiers">🚢 Dossiers <span class="cnt a" id="cntDossiers" style="display:none"></span></button>
     <button class="tab" data-tab="factures">🧾 Factures <span class="cnt a" id="cntFactures" style="display:none"></span></button>
     <button class="tab" data-tab="validations">✅ Validations <span class="cnt a" id="cntValid" style="display:none"></span></button>
-    <button class="tab soon" data-tab="tirelire">💰 Tirelire <span class="soon-tag">étape 3</span></button>
+    <button class="tab" data-tab="tirelire">💰 Tirelire</button>
+    <button class="tab" data-tab="stats">📊 Statistiques</button>
   </div>
   <div class="main">
     <!-- À FAIRE -->
@@ -426,7 +465,16 @@ fieldset.lockfs .btn{display:none}
         <button class="btn" onclick="reloadAll()">↻ Actualiser</button></div>
       <div class="todo-grid" id="valListe"></div>
     </section>
-    <section class="section" id="sec-tirelire"><div class="soon-page"><div style="font-size:40px">💰</div><h2>Tirelire</h2><p class="muted">Arrive à l'étape 3 : solde par catégorie, mouvements, mail de clôture à Monique.</p></div></section>
+    <section class="section" id="sec-tirelire">
+      <div class="page-head"><div><h1>Tirelire du revient</h1><div class="sub">Solde des gains et pertes de revient par catégorie. Une perte sur un dossier est financée par la tirelire de sa catégorie.</div></div>
+        <button class="btn" onclick="reloadAll()">↻ Actualiser</button></div>
+      <div id="tirBox"></div>
+    </section>
+    <section class="section" id="sec-stats">
+      <div class="page-head"><div><h1>Statistiques</h1><div class="sub">Coûts des transitaires comparés à type de transport égal, frais négociables séparés des taxes, évolution, catégories et fournisseurs.</div></div>
+        <div style="display:flex;gap:8px"><label class="btn" id="btnHist" style="display:none">⬆️ Importer l’historique<input type="file" id="histFile" accept=".json,application/json" hidden></label><button class="btn" onclick="reloadAll()">↻ Actualiser</button></div></div>
+      <div id="statBox"></div>
+    </section>
   </div>
 </div>
 
@@ -469,12 +517,13 @@ const POSTE_KEYS=POSTES.map(p=>p[0]);
 const LINE_NUM=['Valeur_Marchandise','Fret',...POSTE_KEYS,'Ajustement'];
 const SCHEMA={
   Fournisseurs:['ID','Title','Code_Image','Code_Compta','Type_Tiers','Type_Achat','Categorie_Defaut','Alias','Delai_Paiement_Jours','Delai_Appro_Jours','Demande_Vendeur','Actif','Emails_Expediteurs','Nom_Court'],
-  Arrivages:['ID','Title','N_Dossier','Conteneur','Ref_Transitaire','Navire','Type_Transport','Categorie','ID_Transitaire','Transitaire','Date_Depart','ETA_Port','Date_Arrivee_Port','Date_Entrepot_Prevue','Date_Confirmation_Locale','Date_Transporteur','Date_Entrepot','Date_Depotage','Controle_OK','Anomalies_Depotage','Statut','Total_VM','Total_CIF','Total_Frais','Coef_Reel','Date_Envoi_Validation','Valide_Par','Date_Validation','Commentaire_Fabrice','Date_Saisie_Image','Historique','Notif_Statut','Resume_Validation','Message_Vendeurs','Attachments','Modified'],
+  Arrivages:['ID','Title','N_Dossier','Conteneur','Ref_Transitaire','Navire','Type_Transport','Categorie','ID_Transitaire','Transitaire','Date_Depart','ETA_Port','Date_Arrivee_Port','Date_Entrepot_Prevue','Date_Confirmation_Locale','Date_Transporteur','Date_Entrepot','Date_Depotage','Controle_OK','Anomalies_Depotage','Statut','Total_VM','Total_CIF','Total_Frais','Coef_Reel','Date_Envoi_Validation','Valide_Par','Date_Validation','Commentaire_Fabrice','Date_Saisie_Image','Historique','Notif_Statut','Resume_Validation','Message_Vendeurs','Nb_Conteneurs','Attachments','Modified'],
   Lignes_Arrivage:['ID','Title','ID_Arrivage','Type_Ligne','ID_Commande_Frs','N_Commande','ID_Fournisseur','Fournisseur','ID_Facture','N_Facture','Produits',...LINE_NUM,'Motif_Ajustement','Coef_Applique','Gain_Perte','Client_Concerne'],
   Parametres_Achats:['ID','Title','Valeur','Description'],
+  Tirelire_Mouvements:['ID','Title','Type_Mouvement','Categorie','Date_Mouvement','Montant','Motif','ID_Arrivage','ID_Facture','Created'],
   Factures_Frs:['ID','Title','ID_Fournisseur','Fournisseur','Code_Compta','Type_Piece','Date_Facture','Date_Echeance','Montant_TTC','Lien_PDF','Statut_Saisie','Source','Message_ID','Exporte_Echeancier','Statut_Paiement','Date_Paiement','Commentaire','Expediteur','Created','Modified']
 };
-const ESSENTIAL={Fournisseurs:['ID','Title'],Arrivages:['ID','Title'],Lignes_Arrivage:['ID','ID_Arrivage','Type_Ligne'],Parametres_Achats:['ID','Title','Valeur'],Factures_Frs:['ID','Title','Lien_PDF','Statut_Saisie']};
+const ESSENTIAL={Fournisseurs:['ID','Title'],Arrivages:['ID','Title'],Lignes_Arrivage:['ID','ID_Arrivage','Type_Ligne'],Parametres_Achats:['ID','Title','Valeur'],Factures_Frs:['ID','Title','Lien_PDF','Statut_Saisie'],Tirelire_Mouvements:['ID','Title','Montant']};
 const DATE_FIELDS=['Date_Depart','ETA_Port','Date_Arrivee_Port','Date_Entrepot_Prevue','Date_Confirmation_Locale','Date_Transporteur','Date_Entrepot','Date_Depotage','Date_Envoi_Validation','Date_Validation','Date_Saisie_Image'];
 const HEAD_EDIT=['Title','N_Dossier','Conteneur','Ref_Transitaire','Navire','Type_Transport','Categorie','ID_Transitaire','Transitaire','Date_Depart','ETA_Port','Date_Arrivee_Port','Date_Entrepot_Prevue','Date_Confirmation_Locale','Date_Transporteur','Date_Entrepot','Date_Depotage','Controle_OK','Anomalies_Depotage'];
 const TYPES_TRANSPORT=["20'","40'","40' HC",'Groupage maritime','Aérien','Départ usine','Express'];
@@ -485,7 +534,7 @@ const STATUTS_VALIDATION=['À valider Fabrice','Renvoyé à Patricia','Validé',
 const PARAM_DEFAUTS={DELAI_PORT_ENTREPOT_J:15,DELAI_APPRO_DEFAUT_J:28,DELAI_APPRO_LOCAL_J:7,SEUIL_DOSSIER_BLOQUE_J:15,SEUIL_VALIDATION_J:5,SEUIL_SAISIE_IMAGE_J:3,SEUIL_FACTURE_J:2};
 
 // ═══ ÉTAT ═══
-const DATA={frs:[],arr:[],lig:[],par:{},fac:[]};
+const DATA={frs:[],arr:[],lig:[],par:{},fac:[],tir:[]};
 const MISSING={};
 let W=null;            // copie de travail du dossier ouvert
 let CUR_TAB='afaire';
@@ -629,9 +678,10 @@ async function spAddAttachment(list,id,fileName,buf){
 
 // ═══ CHARGEMENT ═══
 async function loadAll(){
-  const [frs,arr,lig,par,fac]=await Promise.all([...['Fournisseurs','Arrivages','Lignes_Arrivage','Parametres_Achats'].map(spGetAll),
-    spGetAll('Factures_Frs').then(r=>{FAC_ERR='';return r;}).catch(e=>{FAC_ERR=e.message;console.warn('[Factures_Frs]',e);return null;})]);
-  if(fac)DATA.fac=fac;
+  const [frs,arr,lig,par,fac,tir]=await Promise.all([...['Fournisseurs','Arrivages','Lignes_Arrivage','Parametres_Achats'].map(spGetAll),
+    spGetAll('Factures_Frs').then(r=>{FAC_ERR='';return r;}).catch(e=>{FAC_ERR=e.message;console.warn('[Factures_Frs]',e);return null;}),
+    spGetAll('Tirelire_Mouvements').then(r=>{TIR_ERR='';return r;}).catch(e=>{TIR_ERR=e.message;console.warn('[Tirelire_Mouvements]',e);return null;})]);
+  if(fac)DATA.fac=fac;DATA.tir=tir||[];
   DATA.frs=frs.sort((a,b)=>String(a.Title).localeCompare(String(b.Title),'fr'));
   DATA.arr=arr;DATA.lig=lig;
   DATA.par={};par.forEach(p=>{if(p.Title)DATA.par[String(p.Title).trim()]=p.Valeur;});
@@ -734,7 +784,7 @@ function alertes(a){
 }
 
 // ═══ RENDU GÉNÉRAL ═══
-function renderAll(){renderTodo();renderDossiers();renderFactures();renderValidations();}
+function renderAll(){renderTodo();renderDossiers();renderFactures();renderValidations();renderTirelire();renderStats();}
 function setTab(t){
   CUR_TAB=t;
   document.querySelectorAll('.tab').forEach(b=>b.classList.toggle('active',b.dataset.tab===t));
@@ -851,7 +901,7 @@ ${VUE_F?`      <div class="card" id="cardVal"><div class="card-h"><h3>🧮 Revie
           ${fField('Transitaire','Transitaire',{list:'dlTrans'})}${fField('Type de transport','Type_Transport',{type:'select',options:TYPES_TRANSPORT})}${fField('Catégorie (tirelire)','Categorie',{type:'select',options:CATEGORIES})}${fField('Navire','Navire')}
           ${fField('Départ','Date_Depart',{type:'date'})}${fField('Arrivée prévue au port (ETA)','ETA_Port',{type:'date'})}${fField('Arrivée réelle au port','Date_Arrivee_Port',{type:'date'})}${fField('Entrée entrepôt prévue','Date_Entrepot_Prevue',{type:'date',auto:W.autoEP,help:`Calculée : ETA + ${param('DELAI_PORT_ENTREPOT_J')} j (modifiable)`})}
           ${fField('Confirmation transitaire local','Date_Confirmation_Locale',{type:'date'})}${fField('Transporteur réservé','Date_Transporteur',{type:'date'})}${fField('Entrée en entrepôt','Date_Entrepot',{type:'date'})}${fField('Dépotage','Date_Depotage',{type:'date'})}
-          ${fField('Contrôle au dépotage','Controle_OK',{type:'select',options:['Oui','Non']})}${fField('Manquants, casse, remarques','Anomalies_Depotage',{type:'textarea',span:3})}
+          ${fField('Contrôle au dépotage','Controle_OK',{type:'select',options:['Oui','Non']})}${fField('Nombre de conteneurs','Nb_Conteneurs',{type:'number',ph:'1',help:'Pour un lot de plusieurs conteneurs (stats par conteneur)'})}${fField('Manquants, casse, remarques','Anomalies_Depotage',{type:'textarea',span:2})}
         </div></div></div>
       <div class="card"><div class="card-h"><h3>📦 Marchandise <span class="tag" id="nMar"></span></h3><button class="btn sm" data-act="addMar">＋ Ligne marchandise</button></div>
         <div class="card-b tblwrap" style="padding:6px 10px 10px"><table class="ltable"><thead><tr><th style="width:22%">Fournisseur</th><th>N° cde</th><th>N° facture</th><th>Produits</th><th class="r">Valeur march.</th><th class="r">Fret frs</th><th class="r" title="Remise, avoir, correction (négatif possible)">Ajustement</th><th class="r">Total CIF</th><th>Client</th><th></th></tr></thead>
@@ -869,7 +919,7 @@ ${VUE_F?`      <div class="card" id="cardVal"><div class="card-h"><h3>🧮 Revie
           ${fField('Transitaire','Transitaire',{list:'dlTrans'})}${fField('Type de transport','Type_Transport',{type:'select',options:TYPES_TRANSPORT})}${fField('Catégorie (tirelire)','Categorie',{type:'select',options:CATEGORIES})}${fField('Navire','Navire')}
           ${fField('Départ','Date_Depart',{type:'date'})}${fField('Arrivée prévue au port (ETA)','ETA_Port',{type:'date'})}${fField('Arrivée réelle au port','Date_Arrivee_Port',{type:'date'})}${fField('Entrée entrepôt prévue','Date_Entrepot_Prevue',{type:'date',auto:W.autoEP,help:`Calculée : ETA + ${param('DELAI_PORT_ENTREPOT_J')} j (modifiable)`})}
           ${fField('Confirmation transitaire local','Date_Confirmation_Locale',{type:'date'})}${fField('Transporteur réservé','Date_Transporteur',{type:'date'})}${fField('Entrée en entrepôt','Date_Entrepot',{type:'date'})}${fField('Dépotage','Date_Depotage',{type:'date'})}
-          ${fField('Contrôle au dépotage','Controle_OK',{type:'select',options:['Oui','Non']})}${fField('Manquants, casse, remarques','Anomalies_Depotage',{type:'textarea',span:3})}
+          ${fField('Contrôle au dépotage','Controle_OK',{type:'select',options:['Oui','Non']})}${fField('Nombre de conteneurs','Nb_Conteneurs',{type:'number',ph:'1',help:'Pour un lot de plusieurs conteneurs (stats par conteneur)'})}${fField('Manquants, casse, remarques','Anomalies_Depotage',{type:'textarea',span:2})}
         </div></div></div>
 ${LOCK?`<div class="lock-ban">🔒 <b>Montants verrouillés</b> : le dossier est ${esc(a.Statut==='À valider Fabrice'?'en validation chez Fabrice':'validé')}. Pour corriger, Fabrice doit le renvoyer.</div><fieldset disabled class="lockfs">`:''}      <div class="card"><div class="card-h"><h3>📦 Marchandise <span class="tag" id="nMar"></span></h3><button class="btn sm" data-act="addMar">＋ Ligne marchandise</button></div>
         <div class="card-b tblwrap" style="padding:6px 10px 10px"><table class="ltable"><thead><tr><th style="width:22%">Fournisseur</th><th>N° cde</th><th>N° facture</th><th>Produits</th><th class="r">Valeur march.</th><th class="r">Fret frs</th><th class="r" title="Remise, avoir, correction (négatif possible)">Ajustement</th><th class="r">Total CIF</th><th>Client</th><th></th></tr></thead>
@@ -1089,7 +1139,7 @@ async function saveFiche(){
     for(const l of W.lines.filter(x=>x._st==='mod'&&x.ID))await spPatch('Lignes_Arrivage',l.ID,lineBody(l),DATA.lig.find(x=>x.ID===l.ID));
     const c=calc(W.lines);const a=W.a;
     const body={};
-    headDiff().forEach(f=>{body[f]=DATE_FIELDS.includes(f)?toSP(a[f]):(f==='ID_Transitaire'?(a[f]||null):(a[f]===''?null:a[f]));});
+    headDiff().forEach(f=>{body[f]=DATE_FIELDS.includes(f)?toSP(a[f]):(f==='ID_Transitaire'?(a[f]||null):(f==='Nb_Conteneurs'?(parseInt(a[f],10)||null):(a[f]===''?null:a[f])));});
     if(W.autoEP&&a.Date_Entrepot_Prevue&&a.Date_Entrepot_Prevue!==W.aOrig.Date_Entrepot_Prevue)body.Date_Entrepot_Prevue=toSP(a.Date_Entrepot_Prevue);
     if(a.ID_Transitaire!==W.aOrig.ID_Transitaire)body.ID_Transitaire=a.ID_Transitaire||null;
     const st=statutAuto(a);if(st!==W.aOrig.Statut)body.Statut=st;
@@ -1278,7 +1328,7 @@ function installFakeSharePoint(){
   const t0=todayKey();
   seed.ARR.forEach(a=>Object.keys(a).forEach(k=>{if(typeof a[k]==='string'&&/^@-?\d+$/.test(a[k]))a[k]=toSP(addDays(t0,+a[k].slice(1)));}));
   (seed.FAC||[]).forEach(f=>Object.keys(f).forEach(k=>{if(typeof f[k]==='string'&&/^@-?\d+$/.test(f[k]))f[k]=toSP(addDays(t0,+f[k].slice(1)));}));
-  const store={Fournisseurs:seed.F,Arrivages:seed.ARR,Lignes_Arrivage:seed.LIG,Parametres_Achats:seed.PAR,Factures_Frs:seed.FAC||[],Journal_Actions:[]};
+  const store={Fournisseurs:seed.F,Arrivages:seed.ARR,Lignes_Arrivage:seed.LIG,Parametres_Achats:seed.PAR,Factures_Frs:seed.FAC||[],Tirelire_Mouvements:seed.TIR||[],Journal_Actions:[]};
   const files={};(seed.FILES||[]).forEach(p=>files[p]=null);   // null = à charger depuis demo/<nom>
   window.__FAKE_FILES__=files;
   const att={};
@@ -2031,7 +2081,9 @@ function renderValidation(){
   let entete='',actions='';
   if(st==='Renvoyé à Patricia')entete=`<div class="fac-box ko">↩ <b>Renvoyé par ${esc(a.Valide_Par||'Fabrice')}</b>${a.Commentaire_Fabrice?` : « ${esc(a.Commentaire_Fabrice)} »`:''}. Corrige puis renvoie le dossier.</div>`;
   if(enAttente)entete=`<div class="fac-box ok">⏳ Envoyé à Fabrice le ${fmtD(dk(a,'Date_Envoi_Validation'))}${val?' — <b>à toi de saisir les coefficients</b>.':', en attente de sa validation.'}</div>`;
-  if(valide)entete=`<div class="fac-box ok">✅ Validé par <b>${esc(a.Valide_Par||'Fabrice')}</b> le ${fmtD(dk(a,'Date_Validation'))}${a.Commentaire_Fabrice?` — « ${esc(a.Commentaire_Fabrice)} »`:''}.${st==='Clôturé'?` Prix à jour dans Image le <b>${fmtD(dk(a,'Date_Saisie_Image'))}</b>.`:` <b style="color:var(--amber)">Coefficients à saisir dans Image${dk(a,'Date_Validation')?` (validé ${relDay(dk(a,'Date_Validation'))})`:''}.</b>`}</div>`;
+  const gpL=W.lines.filter(l=>l._st!=='del'&&l.Type_Ligne!=='Frais').reduce((s,l)=>s+n0(l.Gain_Perte),0);
+  const tirNote=valide&&gpL<-0.005?` <b style="color:var(--red)">💰 Perte de ${fmtN(-gpL)} € financée par la tirelire ${esc(a.Categorie||'')}.</b>`:(valide&&gpL>0.005?` 💰 Gain de ${fmtN(gpL)} € versé à la tirelire ${esc(a.Categorie||'')}.`:'');
+  if(valide)entete=`<div class="fac-box ok">✅ Validé par <b>${esc(a.Valide_Par||'Fabrice')}</b> le ${fmtD(dk(a,'Date_Validation'))}${a.Commentaire_Fabrice?` — « ${esc(a.Commentaire_Fabrice)} »`:''}.${st==='Clôturé'?` Prix à jour dans Image le <b>${fmtD(dk(a,'Date_Saisie_Image'))}</b>.`:` <b style="color:var(--amber)">Coefficients à saisir dans Image${dk(a,'Date_Validation')?` (validé ${relDay(dk(a,'Date_Validation'))})`:''}.</b>`}${tirNote}</div>`;
   const pret=!!a.N_Dossier&&c.factOk&&c.nFrais>0&&c.coef;
   const LS=lectureSeule();
   if(LS&&!enAttente){actions=st==='Validé'||st==='Clôturé'?`<button class="btn sm" id="btnFichePdf">🖨 Imprimer le dossier (PDF)</button>`:`<span class="muted" style="font-size:12px">${st==='Renvoyé à Patricia'?'Renvoyé à Patricia : en attente de ses corrections.':'Dossier en préparation chez Patricia.'}</span>`;}
@@ -2285,6 +2337,382 @@ document.addEventListener('input',e=>{
   const i=e.target.closest&&e.target.closest('.coef-in');if(!i||!W)return;
   const n=parseNum(i.value);if(n&&n>0&&n<10)W.coefs[i.dataset.coef]=n;else delete W.coefs[i.dataset.coef];
   i.classList.toggle('req-empty',!(n>0));majGains();
+});
+
+// ═══════════════════════════════════════════════════════════════
+//  ANALYSE — TIRELIRE, STATISTIQUES, IMPORT DE L'HISTORIQUE EXCEL
+//  Tirelire = Σ gain/perte des dossiers validés (par catégorie) + mouvements manuels (Tirelire_Mouvements).
+//  Une perte (revient appliqué < revient réel) est « financée par la tirelire » : pas de retrait à saisir en plus.
+//  Statistiques : frais négociables (prestations) séparés des taxes, comparés à type de transport égal.
+// ═══════════════════════════════════════════════════════════════
+const NEGO=['Fret','Debarquement','Transit','Manutention_SPI','Transport','Credit_Enlevement','Divers','Ajustement'];
+const TAXES=['OM','OM_Additionnel','TID','Droit_Port_LTA'];
+const POSTE_LAB=Object.assign({Fret:'Fret maritime',Ajustement:'Ajustement'},Object.fromEntries(POSTES));
+const CAT_VIDE='À classer';
+const CAT_COUL={'GROUPAGE/ASSEMBLAGE':'#1565c0','TUBES/DEPART USINE':'#e65100','AERIEN':'#5b5bd6','ILES DU NORD':'#00838f',[CAT_VIDE]:'#78909c','Hors catégorie':'#8d6e63'};
+const TYPES_MVT=['Retrait','Ajustement','Report'];
+let TIR_ERR='';
+const STATF={per:'12m',cat:'',type:'',typePoste:'',prest:''};
+const TIRF={cat:'',annee:''};
+const catOf=a=>a.Categorie||CAT_VIDE;
+function nbCont(a){const n=parseInt(a.Nb_Conteneurs,10);if(n>0)return n;const m=String(a.Title||'').match(/\bLOT\s+DE\s+(\d+)/i);return m?Math.max(1,+m[1]):1;}
+
+// ── Droits ──
+const emailsDe=(...cles)=>cles.map(k=>paramStr(k,'')).join(';').toLowerCase().split(/[;,\s]+/).filter(x=>x.includes('@'));
+function peutMouvementer(){if(DEMO)return !['direction','fabrice','monique'].includes(QS.get('role'));const e=userEmail();return !!e&&emailsDe('EMAIL_PATRICIA','EMAIL_NICOLAS').includes(e);}
+function peutImporter(){if(DEMO)return !QS.get('role');const e=userEmail();return !!e&&emailsDe('EMAIL_NICOLAS').includes(e);}
+
+// ── Agrégats par dossier ──
+function prestNom(l){const f=l.ID_Fournisseur?frsById(l.ID_Fournisseur):null;return String(f?f.Title:(l.Fournisseur||'Non précisé')).trim()||'Non précisé';}
+function prestRole(nom){const f=DATA.frs.find(x=>String(x.Title).trim()===nom);return f&&f.Type_Tiers?f.Type_Tiers:'';}
+function dateRef(a){return dk(a,'Date_Validation')||dk(a,'Date_Entrepot')||dk(a,'Date_Arrivee_Port')||dk(a,'ETA_Port')||'';}
+let _ANA=null;
+function analyseDossiers(){
+  if(_ANA&&_ANA.arr===DATA.arr&&_ANA.lig===DATA.lig)return _ANA.res;
+  const parArr=new Map();DATA.lig.forEach(l=>{if(!parArr.has(l.ID_Arrivage))parArr.set(l.ID_Arrivage,[]);parArr.get(l.ID_Arrivage).push(l);});
+  const res=DATA.arr.map(a=>{
+    const L=parArr.get(a.ID)||[];const mar=L.filter(l=>l.Type_Ligne!=='Frais');if(!mar.length)return null;
+    const c=calc(L);const prest={};
+    L.filter(l=>l.Type_Ligne==='Frais').forEach(l=>{const k=prestNom(l);const p=prest[k]||(prest[k]={nom:k,nego:0,tax:0,postes:{}});
+      NEGO.forEach(x=>{const v=n0(l[x]);if(v){p.nego+=v;p.postes[x]=(p.postes[x]||0)+v;}});
+      TAXES.forEach(x=>{const v=n0(l[x]);if(v){p.tax+=v;p.postes[x]=(p.postes[x]||0)+v;}});});
+    const ps=Object.values(prest);
+    const valide=['Validé','Clôturé'].includes(a.Statut);
+    const gp=valide?mar.reduce((s,l)=>s+n0(l.Gain_Perte),0):0;
+    const da=dk(a,'Date_Arrivee_Port'),de=dk(a,'Date_Entrepot');const del=da&&de?daysBetween(da,de):null;
+    const princ=a.Transitaire&&ps.some(p=>p.nom===a.Transitaire)?a.Transitaire:(ps.filter(p=>prestRole(p.nom)!=='Transporteur').sort((p,q)=>q.nego-p.nego)[0]||{}).nom||'';
+    return {a,nb:nbCont(a),date:dateRef(a),type:a.Type_Transport||'Non précisé',cat:catOf(a),vm:c.vm,total:c.total,coef:c.coef,
+      nego:ps.reduce((s,p)=>s+p.nego,0),tax:ps.reduce((s,p)=>s+p.tax,0),prest:ps,princ,gp,valide,delai:del!==null&&del>=0&&del<=180?del:null,mar};
+  }).filter(Boolean);
+  _ANA={arr:DATA.arr,lig:DATA.lig,res};return res;
+}
+function periodeOk(k,per){
+  if(!k)return per==='all';
+  if(per==='all')return true;
+  if(per==='12m')return k>=addDays(todayKey(),-365);
+  if(/^\d{4}$/.test(per))return k.startsWith(per);
+  return true;
+}
+const moy=a=>a.length?a.reduce((s,x)=>s+x,0)/a.length:null;
+const eur0=v=>v==null||!isFinite(v)?'—':fmtN(v,0)+' €';
+const pct=v=>v==null||!isFinite(v)?'—':fmtN(v*100,1)+' %';
+const anneesDispo=()=>[...new Set(analyseDossiers().map(x=>x.date.slice(0,4)).filter(Boolean))].sort().reverse();
+
+// ═══ TIRELIRE ═══
+function tirJournal(){
+  const E=[];
+  analyseDossiers().forEach(x=>{if(x.valide&&Math.abs(x.gp)>=0.005)E.push({date:dk(x.a,'Date_Validation')||x.date,cat:x.cat,montant:r2(x.gp),type:'Dossier',label:`${x.a.N_Dossier||''} ${x.a.Title||''}`.trim(),id:x.a.ID});});
+  (DATA.tir||[]).forEach(m=>{const v=n0(typeof m.Montant==='number'?m.Montant:parseNum(m.Montant));if(!v)return;
+    E.push({date:dk(m,'Date_Mouvement')||dkey(m.Created)||'',cat:m.Categorie||(m.Type_Mouvement==='Report'?'Hors catégorie':CAT_VIDE),montant:r2(v),type:m.Type_Mouvement||'Mouvement',label:m.Title||'',comm:m.Motif||'',mid:m.ID,manuel:m.Type_Mouvement!=='Dossier historique',id:m.ID_Arrivage||null});});
+  E.sort((p,q)=>(p.date||'').localeCompare(q.date||'')||(p.id||0)-(q.id||0));
+  const sc={};let sg=0;E.forEach(e=>{sc[e.cat]=(sc[e.cat]||0)+e.montant;e.soldeCat=sc[e.cat];sg+=e.montant;e.solde=sg;});
+  return E;
+}
+function svgCourbes(series,H=250){
+  const W=980,P={l:64,r:16,t:14,b:28};const all=series.flatMap(s=>s.pts);if(all.length<2)return '<div class="muted" style="padding:20px">Pas encore assez de mouvements pour tracer une courbe.</div>';
+  const ts=all.map(p=>p[0]),vs=all.map(p=>p[1]).concat([0]);
+  const t0=Math.min(...ts),t1=Math.max(...ts)||t0+1,v0=Math.min(...vs),v1=Math.max(...vs);const pad=(v1-v0)*0.08||1;
+  const X=t=>P.l+(t-t0)/(t1-t0||1)*(W-P.l-P.r),Y=v=>P.t+(1-(v-(v0-pad))/((v1+pad)-(v0-pad)))*(H-P.t-P.b);
+  const kf=v=>Math.abs(v)>=1000?fmtN(v/1000,0)+' k€':fmtN(v,0)+' €';
+  let g='';const nT=4;for(let i=0;i<=nT;i++){const v=(v0-pad)+((v1+pad)-(v0-pad))*i/nT;g+=`<line x1="${P.l}" x2="${W-P.r}" y1="${Y(v)}" y2="${Y(v)}" stroke="#eef1f6"/><text x="${P.l-8}" y="${Y(v)+4}" text-anchor="end" font-size="11" fill="#8099ae">${kf(v)}</text>`;}
+  g+=`<line x1="${P.l}" x2="${W-P.r}" y1="${Y(0)}" y2="${Y(0)}" stroke="#90a4ae" stroke-dasharray="4 3"/>`;
+  const d0=new Date(t0),d1=new Date(t1);for(let y=d0.getUTCFullYear(),m=Math.floor(d0.getUTCMonth()/3)*3;Date.UTC(y,m,1)<=t1;m+=3){if(m>=12){m-=12;y++;}const t=Date.UTC(y,m,1);if(t<t0)continue;g+=`<line x1="${X(t)}" x2="${X(t)}" y1="${P.t}" y2="${H-P.b}" stroke="#f3f5f9"/><text x="${X(t)}" y="${H-8}" text-anchor="middle" font-size="11" fill="#8099ae">${['janv.','avr.','juil.','oct.'][m/3]} ${String(y).slice(2)}</text>`;}
+  const lines=series.map(s=>{let d='';s.pts.forEach((p,i)=>{d+=(i?` H${X(p[0]).toFixed(1)} V${Y(p[1]).toFixed(1)}`:`M${X(p[0]).toFixed(1)} ${Y(p[1]).toFixed(1)}`);});
+    const last=s.pts[s.pts.length-1];return `<path d="${d}" fill="none" stroke="${s.color}" stroke-width="${s.bold?3:1.6}" ${s.bold?'':'opacity=".9"'}/><circle cx="${X(last[0])}" cy="${Y(last[1])}" r="${s.bold?4:3}" fill="${s.color}"/>`;}).join('');
+  return `<svg viewBox="0 0 ${W} ${H}" class="chart-svg" role="img" aria-label="Évolution du solde de la tirelire">${g}${lines}</svg>`;
+}
+function renderTirelire(){
+  const el=$('tirBox');if(!el)return;
+  const E=tirJournal();const sol={};E.forEach(e=>sol[e.cat]=(sol[e.cat]||0)+e.montant);
+  const cats=[...CATEGORIES.filter(c=>c in sol),...Object.keys(sol).filter(c=>!CATEGORIES.includes(c))];
+  const tot=E.reduce((s,e)=>s+e.montant,0);
+  const col=v=>v<0?'var(--red)':'var(--green)';
+  const tiles=`<div class="tir-tiles"><div class="tir-tile tot"><div class="lab">Solde global</div><div class="val">${(tot>0?'+':'')+fmtN(tot,0)} €</div><div class="hint">${E.length} écritures</div></div>`+
+    cats.map(c=>`<button class="tir-tile ${TIRF.cat===c?'on':''}" data-tircat="${esc(c)}" style="--c:${CAT_COUL[c]||'#546e7a'}"><div class="lab">${esc(c)}</div><div class="val" style="color:${col(sol[c])}">${(sol[c]>0?'+':'')+fmtN(sol[c],0)} €</div><div class="hint">${E.filter(e=>e.cat===c).length} écritures</div></button>`).join('')+`</div>`;
+  // courbes
+  const tms=k=>Date.parse((k||'2025-01-01')+'T12:00:00Z');
+  const series=cats.map(c=>{let s=0;return {color:CAT_COUL[c]||'#546e7a',pts:E.filter(e=>e.cat===c).map(e=>[tms(e.date),s+=e.montant])};});
+  let sg=0;series.push({color:'#0a1f3d',bold:true,pts:E.map(e=>[tms(e.date),sg+=e.montant])});
+  const legende=`<div class="legend"><span><i style="background:#0a1f3d;height:4px"></i>Global</span>${cats.map(c=>`<span><i style="background:${CAT_COUL[c]||'#546e7a'}"></i>${esc(c)}</span>`).join('')}</div>`;
+  // journal
+  const ans=[...new Set(E.map(e=>(e.date||'').slice(0,4)).filter(Boolean))].sort().reverse();
+  const J=E.filter(e=>(!TIRF.cat||e.cat===TIRF.cat)&&(!TIRF.annee||(e.date||'').startsWith(TIRF.annee))).slice().reverse();
+  const edit=peutMouvementer()&&!TIR_ERR;
+  const rows=J.slice(0,400).map(e=>`<tr ${e.type==='Dossier'&&e.id?`data-open="${e.id}" class="clk"`:''}><td class="mono">${fmtD(e.date)}</td><td><span class="cat-dot" style="--c:${CAT_COUL[e.cat]||'#546e7a'}"></span>${esc(e.cat)}</td>
+    <td>${esc(e.label)}${e.comm?`<div class="muted" style="font-size:11.5px">${esc(e.comm)}</div>`:''}</td>
+    <td>${e.type==='Dossier'?(e.montant<0?'<span class="tag-tir neg">Perte financée par la tirelire</span>':'<span class="tag-tir pos">Gain du dossier</span>'):`<span class="tag-tir">${esc(e.type)}</span>`}</td>
+    <td class="r mono" style="color:${col(e.montant)};font-weight:600">${(e.montant>0?'+':'')+fmtN(e.montant)}</td><td class="r mono">${fmtN(e.soldeCat,0)}</td>
+    <td class="r">${edit&&e.mid&&e.manuel?`<button class="rm" data-delmvt="${e.mid}" title="Supprimer ce mouvement">🗑</button>`:''}</td></tr>`).join('');
+  el.innerHTML=`${TIR_ERR?`<div class="warn-ribbon" style="border-radius:8px;margin-bottom:12px">⚠️ Liste <b>Tirelire_Mouvements</b> introuvable : les mouvements manuels et le report 2024 ne sont pas affichés. Crée la liste sur le site BondeCommande (voir les instructions).</div>`:''}
+    ${tiles}
+    <div class="card"><div class="card-h"><h3>📈 Évolution du solde</h3>${legende}</div><div class="card-b">${svgCourbes(series)}</div></div>
+    <div class="card"><div class="card-h"><h3>📒 Journal ${TIRF.cat?`· ${esc(TIRF.cat)}`:''}</h3>
+      <div style="display:flex;gap:8px;align-items:center"><select id="tirAnnee" class="sel"><option value="">Toutes les années</option>${ans.map(a=>`<option ${TIRF.annee===a?'selected':''}>${a}</option>`).join('')}</select>
+      ${TIRF.cat?`<button class="btn sm" data-tircat="">✕ Toutes catégories</button>`:''}${edit?`<button class="btn sm primary" id="btnMvt">＋ Mouvement</button>`:''}</div></div>
+      <div class="card-b tblwrap" style="padding:6px 10px 10px"><table class="ltable stat-t"><thead><tr><th>Date</th><th>Catégorie</th><th>Dossier / libellé</th><th>Nature</th><th class="r">Montant</th><th class="r">Solde catégorie</th><th></th></tr></thead>
+      <tbody>${rows||'<tr><td colspan="7" class="muted">Aucune écriture.</td></tr>'}</tbody></table>${J.length>400?`<div class="muted" style="font-size:12px;padding:6px">400 dernières écritures affichées sur ${J.length}.</div>`:''}</div></div>
+    <div class="muted" style="font-size:12px">Chaque dossier validé alimente sa catégorie : gain ou perte = valeur marchandise × (revient appliqué − revient réel). Une perte est financée par la tirelire, il n'y a pas de retrait à saisir en plus. Les mouvements manuels (ajustement, report) sont saisis par Patricia ou Nicolas.</div>`;
+}
+async function saisirMouvement(){
+  const opts=[...CATEGORIES,''].map(c=>`<option value="${esc(c)}">${c?esc(c):'Hors catégorie (global)'}</option>`).join('');
+  const dl=DATA.arr.slice().sort((p,q)=>q.ID-p.ID).slice(0,300).map(a=>`<option value="${esc(a.N_Dossier||a.Title)}">${esc(a.Title||'')}</option>`).join('');
+  const html=`<div class="fgrid" style="grid-template-columns:1fr 1fr;gap:10px">
+    <div class="f"><label>Nature</label><select id="mType">${TYPES_MVT.map(t=>`<option>${t}</option>`).join('')}</select></div>
+    <div class="f"><label>Catégorie</label><select id="mCat">${opts}</select></div>
+    <div class="f"><label>Date</label><input id="mDate" type="date" value="${todayKey()}"></div>
+    <div class="f"><label>Montant (€)</label><input id="mMt" inputmode="decimal" placeholder="ex. -1 500 ou 250"></div>
+    <div class="f" style="grid-column:span 2"><label>Dossier concerné (facultatif)</label><input id="mDos" list="dlDosTir" placeholder="n° Image ou conteneur"><datalist id="dlDosTir">${dl}</datalist></div>
+    <div class="f" style="grid-column:span 2"><label>Commentaire</label><textarea id="mCom" rows="2"></textarea></div></div>
+    <div class="muted" style="font-size:12px;margin-top:8px">Retrait = montant négatif. Une perte sur un dossier validé est déjà comptée automatiquement.</div>`;
+  for(;;){
+    const ok=await showConfirm('Mouvement de tirelire',html,'Enregistrer');if(!ok)return;
+    const v={type:$('mType').value,cat:$('mCat').value,date:$('mDate').value,mt:parseNum($('mMt').value),dos:$('mDos').value.trim(),com:$('mCom').value.trim()};
+    if(v.mt===null||isNaN(v.mt)||!v.mt){toast('⚠️ Montant invalide','wa');continue;}
+    if(v.type==='Retrait'&&v.mt>0)v.mt=-v.mt;
+    const a=v.dos?DATA.arr.find(x=>String(x.N_Dossier)===v.dos||x.Title===v.dos):null;
+    try{await spPost('Tirelire_Mouvements',{Title:_trunc(`${v.type}${a?' – '+(a.N_Dossier||'')+' '+(a.Title||''):(v.dos?' – '+v.dos:'')}`),Type_Mouvement:v.type,Categorie:v.cat||null,Date_Mouvement:toSP(v.date||todayKey()),Montant:r2(v.mt),
+      ID_Arrivage:a?a.ID:null,Motif:_trunc([v.com,'saisi par '+(sessionStorage.getItem('user_name')||'?')].filter(Boolean).join(' — '))});
+      await loadAll();toast('✓ Mouvement enregistré','ok');}catch(e){toast('🔴 '+e.message,'ko');}
+    return;
+  }
+}
+async function supprimerMouvement(id){
+  const m=(DATA.tir||[]).find(x=>x.ID===id);if(!m)return;
+  const ok=await showConfirm('Supprimer ce mouvement ?',`${esc(m.Title||'')} · <b>${fmtN(m.Montant)} €</b>`,'Supprimer','danger');if(!ok)return;
+  try{await spDelete('Tirelire_Mouvements',id,m);await loadAll();toast('✓ Mouvement supprimé','ok');}catch(e){toast('🔴 '+e.message,'ko');}
+}
+
+// ═══ STATISTIQUES ═══
+function statFiltre(){const D=analyseDossiers();return D.filter(x=>periodeOk(x.date,STATF.per)&&(!STATF.cat||x.cat===STATF.cat)&&(!STATF.type||x.type===STATF.type));}
+function statPrest(D){
+  // une ligne par prestataire × type
+  const M=new Map();
+  D.forEach(x=>x.prest.forEach(p=>{if(!(p.nego>0))return;const k=p.nom+'|'+x.type;
+    if(!M.has(k))M.set(k,{nom:p.nom,type:x.type,role:prestRole(p.nom),v:[],tax:[],del:[],postes:{},dos:[],sN:0,sV:0,nTC:0});
+    const o=M.get(k);for(let i=0;i<x.nb;i++){o.v.push(p.nego/x.nb);o.tax.push(p.tax/x.nb);}o.dos.push(x);o.sN+=p.nego;o.sV+=x.vm;o.nTC+=x.nb;
+    Object.entries(p.postes).forEach(([q,val])=>{const t=o.postes[q]=o.postes[q]||[];for(let i=0;i<x.nb;i++)t.push(val/x.nb);});
+    if(x.princ===p.nom&&x.delai!==null)o.del.push(x.delai);}));
+  return [...M.values()];
+}
+function barre(v,max,c){const w=max>0?Math.max(2,Math.round(v/max*100)):0;return `<span class="bar"><i style="width:${w}%;background:${c}"></i></span>`;}
+function renderStats(){
+  const el=$('statBox');if(!el)return;
+  const bh=$('btnHist');if(bh)bh.style.display=peutImporter()?'':'none';
+  const ALL=analyseDossiers();const D=statFiltre();
+  const types=[...new Set(ALL.map(x=>x.type))].sort(),cats=[...new Set(ALL.map(x=>x.cat))].sort();
+  const ans=anneesDispo();
+  const sel=(id,cur,opts)=>`<select id="${id}" class="sel">${opts.map(([v,l])=>`<option value="${esc(v)}" ${cur===v?'selected':''}>${esc(l)}</option>`).join('')}</select>`;
+  const filtres=`<div class="stat-filters">${sel('sfPer',STATF.per,[['12m','12 derniers mois'],...ans.map(a=>[a,'Année '+a]),['all','Tout l’historique']])}
+    ${sel('sfCat',STATF.cat,[['','Toutes catégories'],...cats.map(c=>[c,c])])}${sel('sfType',STATF.type,[['','Tous types'],...types.map(t=>[t,t])])}
+    <span class="muted" style="font-size:12.5px">${D.length} dossier${D.length>1?'s':''} analysé${D.length>1?'s':''}</span></div>`;
+  if(!D.length){el.innerHTML=filtres+'<div class="card"><div class="card-b muted">Aucun dossier sur cette sélection.</div></div>';return;}
+  const vm=D.reduce((s,x)=>s+x.vm,0),tot=D.reduce((s,x)=>s+x.total,0),nego=D.reduce((s,x)=>s+x.nego,0),tax=D.reduce((s,x)=>s+x.tax,0);
+  const kpis=`<div class="kpis k5">${[
+    {l:'Dossiers',v:D.length,h:`${D.filter(x=>x.valide).length} validés`,c:'var(--navy)'},
+    {l:'Valeur marchandise',v:eur0(vm),h:'achats nets des dossiers',c:'var(--blue)'},
+    {l:'Frais négociables',v:eur0(nego),h:`${pct(vm?nego/vm:null)} de la valeur · prestations`,c:'var(--teal-mid)'},
+    {l:'Taxes',v:eur0(tax),h:`${pct(vm?tax/vm:null)} de la valeur · OM, OM add., TID, port`,c:'var(--amber)'},
+    {l:'Revient moyen',v:fmtCoef(vm?tot/vm:null),h:'coût rendu ÷ valeur (pondéré)',c:'var(--violet)'}
+  ].map(k=>`<div class="kpi" style="--c:${k.c}"><div class="lab">${k.l}</div><div class="val">${k.v}</div><div class="hint">${k.h}</div></div>`).join('')}</div>`;
+
+  // 1. prestataires à type égal
+  const SP=statPrest(D);const parType={};SP.forEach(o=>(parType[o.type]=parType[o.type]||[]).push(o));
+  const ordreT=Object.keys(parType).sort((a,b)=>parType[b].reduce((s,o)=>s+o.v.length,0)-parType[a].reduce((s,o)=>s+o.v.length,0));
+  const tPrest=ordreT.map(t=>{const L=parType[t].sort((p,q)=>moy(q.v)-moy(p.v));const mx=Math.max(...L.map(o=>moy(o.v)));
+    return `<tr class="grp"><td colspan="8">${esc(t)}</td></tr>`+L.map(o=>{const m=moy(o.v);const pv=o.sV?o.sN/o.sV:null;const dl=moy(o.del);
+      return `<tr><td><b>${esc(o.nom)}</b>${o.role?` <span class="muted" style="font-size:11px">${esc(o.role)}</span>`:''}</td><td class="r">${o.dos.length}${o.nTC>o.dos.length?` <span class="muted" style="font-size:11px">(${o.nTC} TC)</span>`:''}${o.dos.length<3?' <span class="peu" title="Moins de 3 dossiers : moyenne peu fiable">⚠</span>':''}</td>
+        <td class="r mono"><b>${eur0(m)}</b></td><td>${barre(m,mx,'var(--teal-mid)')}</td><td class="r mono muted">${eur0(Math.min(...o.v))} – ${eur0(Math.max(...o.v))}</td>
+        <td class="r mono">${pct(pv)}</td><td class="r mono muted">${eur0(moy(o.tax))}</td><td class="r mono">${dl===null?'—':fmtN(dl,0)+' j'}</td></tr>`;}).join('');}).join('');
+  const cPrest=`<div class="card"><div class="card-h"><h3>🚢 Transitaires et transporteurs — à type égal</h3>
+      <div style="display:flex;gap:8px;align-items:center">${sel('sfPrest',STATF.prest,[['','Choisir un prestataire…'],...[...new Set(SP.map(o=>o.nom))].sort().map(n=>[n,n])])}<button class="btn sm primary" id="btnFicheTrans">🖨 Fiche réunion (PDF)</button></div></div>
+    <div class="card-b tblwrap" style="padding:6px 10px 10px"><table class="ltable stat-t"><thead><tr><th>Prestataire</th><th class="r">Dossiers</th><th class="r">Coût négociable / conteneur</th><th style="width:16%"></th><th class="r">Mini – maxi</th><th class="r">% de la valeur</th><th class="r">Taxes / conteneur (info)</th><th class="r">Port → entrepôt</th></tr></thead>
+    <tbody>${tPrest||'<tr><td colspan="8" class="muted">Aucune facture de frais sur la sélection.</td></tr>'}</tbody></table>
+    <div class="muted" style="font-size:12px;margin-top:6px">Coût négociable = fret maritime, débarquement, transit, manutention/SPI, transport, crédit d'enlèvement, divers, ramené à un conteneur (un lot de 20 TC compte pour 20). Les taxes (OM, OM additionnel, TID, droit de port/LTA) sont indiquées à part : elles ne se négocient pas. ⚠ = moins de 3 dossiers.</div></div></div>`;
+
+  // 2. poste par poste
+  const tp=STATF.typePoste&&parType[STATF.typePoste]?STATF.typePoste:ordreT[0];
+  let cPostes='';
+  if(tp){const L=parType[tp].filter(o=>o.role!=='Transporteur'||true);const cols=NEGO.filter(q=>L.some(o=>o.postes[q]&&o.postes[q].length));
+    const stat=q=>{const m=L.map(o=>o.postes[q]?moy(o.postes[q]):null).filter(v=>v!==null);return {min:Math.min(...m),max:Math.max(...m),n:m.length};};
+    const S=Object.fromEntries(cols.map(q=>[q,stat(q)]));
+    cPostes=`<div class="card"><div class="card-h"><h3>🔍 Poste par poste — moyenne par conteneur</h3>${sel('sfTypePoste',tp,ordreT.map(t=>[t,t]))}</div>
+      <div class="card-b tblwrap" style="padding:6px 10px 10px"><table class="ltable stat-t"><thead><tr><th>Prestataire</th><th class="r">Dossiers</th>${cols.map(q=>`<th class="r">${esc(POSTE_LAB[q]||q)}</th>`).join('')}</tr></thead>
+      <tbody>${L.map(o=>`<tr><td><b>${esc(o.nom)}</b></td><td class="r">${o.dos.length}</td>${cols.map(q=>{const v=o.postes[q]?moy(o.postes[q]):null;const s=S[q];
+        const cl=v===null||s.n<2||s.max===s.min?'':v===s.min?'lo':v===s.max?'hi':'';return `<td class="r mono ${cl}">${v===null?'<span class="muted">—</span>':fmtN(v,0)}</td>`;}).join('')}</tr>`).join('')}</tbody></table>
+      <div class="muted" style="font-size:12px;margin-top:6px">Vert = le moins cher sur ce poste, rouge = le plus cher. Moyenne calculée sur les dossiers où le poste est facturé.</div></div></div>`;}
+
+  // 3. mensuel
+  const mois={};D.forEach(x=>{const k=(x.date||'').slice(0,7)||'—';const o=mois[k]||(mois[k]={n:0,vm:0,tot:0,nego:0,tax:0});o.n++;o.vm+=x.vm;o.tot+=x.total;o.nego+=x.nego;o.tax+=x.tax;});
+  const MK=Object.keys(mois).sort();const mxF=Math.max(...MK.map(k=>mois[k].nego+mois[k].tax));
+  const nomMois=k=>{if(k==='—')return 'Sans date';const [y,m]=k.split('-');return ['janv.','févr.','mars','avr.','mai','juin','juil.','août','sept.','oct.','nov.','déc.'][+m-1]+' '+y;};
+  const cMois=`<div class="card"><div class="card-h"><h3>📅 Évolution mensuelle</h3><div class="legend"><span><i style="background:var(--teal-mid)"></i>Négociable</span><span><i style="background:#f0a35e"></i>Taxes</span></div></div>
+    <div class="card-b tblwrap" style="padding:6px 10px 10px"><table class="ltable stat-t"><thead><tr><th>Mois</th><th class="r">Dossiers</th><th class="r">Valeur</th><th class="r">Négociable</th><th class="r">Taxes</th><th style="width:22%"></th><th class="r">Frais / valeur</th><th class="r">Revient moyen</th></tr></thead>
+    <tbody>${MK.map(k=>{const o=mois[k];const w1=mxF?o.nego/mxF*100:0,w2=mxF?o.tax/mxF*100:0;
+      return `<tr><td>${nomMois(k)}</td><td class="r">${o.n}</td><td class="r mono">${eur0(o.vm)}</td><td class="r mono">${eur0(o.nego)}</td><td class="r mono muted">${eur0(o.tax)}</td>
+      <td><span class="bar"><i style="width:${w1}%;background:var(--teal-mid)"></i><i style="width:${w2}%;background:#f0a35e"></i></span></td><td class="r mono">${pct(o.vm?(o.nego+o.tax)/o.vm:null)}</td><td class="r mono"><b>${fmtCoef(o.vm?o.tot/o.vm:null)}</b></td></tr>`;}).join('')}</tbody></table></div></div>`;
+
+  // 4. catégories
+  const C={};D.forEach(x=>{const o=C[x.cat]||(C[x.cat]={n:0,vm:0,tot:0,gp:0});o.n++;o.vm+=x.vm;o.tot+=x.total;o.gp+=x.gp;});
+  const cCat=`<div class="card"><div class="card-h"><h3>🗂 Catégories</h3></div><div class="card-b tblwrap" style="padding:6px 10px 10px"><table class="ltable stat-t"><thead><tr><th>Catégorie</th><th class="r">Dossiers</th><th class="r">Valeur</th><th class="r">Revient moyen</th><th class="r">Gain / perte</th></tr></thead>
+    <tbody>${Object.entries(C).sort((p,q)=>q[1].vm-p[1].vm).map(([k,o])=>`<tr><td><span class="cat-dot" style="--c:${CAT_COUL[k]||'#546e7a'}"></span>${esc(k)}</td><td class="r">${o.n}</td><td class="r mono">${eur0(o.vm)}</td><td class="r mono"><b>${fmtCoef(o.vm?o.tot/o.vm:null)}</b></td><td class="r mono" style="color:${o.gp<0?'var(--red)':'var(--green)'}">${(o.gp>0?'+':'')+fmtN(o.gp,0)} €</td></tr>`).join('')}</tbody></table></div></div>`;
+
+  // 5. fournisseurs
+  const F={};D.forEach(x=>x.mar.forEach(l=>{const k=prestNom(l);const o=F[k]||(F[k]={dos:new Set(),vm:0,vc:0,vmc:0,gp:0});const v=lineVMnette(l);o.dos.add(x.a.ID);o.vm+=v;if(n0(l.Coef_Applique)>0){o.vc+=v*l.Coef_Applique;o.vmc+=v;}if(x.valide)o.gp+=n0(l.Gain_Perte);}));
+  const FL=Object.entries(F).sort((p,q)=>q[1].vm-p[1].vm).slice(0,15);const mxV=FL.length?FL[0][1].vm:0;
+  const cFrs=`<div class="card"><div class="card-h"><h3>🏭 Fournisseurs — 15 premiers par valeur</h3></div><div class="card-b tblwrap" style="padding:6px 10px 10px"><table class="ltable stat-t"><thead><tr><th>Fournisseur</th><th class="r">Dossiers</th><th class="r">Valeur achetée</th><th style="width:18%"></th><th class="r">% du total</th><th class="r">Revient appliqué moyen</th><th class="r">Gain / perte</th></tr></thead>
+    <tbody>${FL.map(([k,o])=>`<tr><td><b>${esc(k)}</b></td><td class="r">${o.dos.size}</td><td class="r mono">${eur0(o.vm)}</td><td>${barre(o.vm,mxV,'var(--blue)')}</td><td class="r mono">${pct(vm?o.vm/vm:null)}</td><td class="r mono"><b>${o.vmc?fmtN(o.vc/o.vmc,2):'—'}</b></td><td class="r mono" style="color:${o.gp<0?'var(--red)':'var(--green)'}">${o.gp?(o.gp>0?'+':'')+fmtN(o.gp,0)+' €':'—'}</td></tr>`).join('')}</tbody></table></div></div>`;
+
+  const A=D.filter(x=>x.vm>0&&(x.nego/x.vm>0.5||!x.prest.length)).sort((p,q)=>(q.nego/q.vm)-(p.nego/p.vm));
+  const cAno=A.length?`<div class="card acc closed" id="accAno"><div class="card-h" data-acc="accAno"><h3>⚠️ Dossiers à vérifier <span class="tag">${A.length}</span></h3><span class="muted" style="font-size:12px">frais négociables > 50 % de la valeur, ou aucune facture de frais · <span class="chev">▾</span></span></div>
+    <div class="card-b tblwrap" style="padding:6px 10px 10px"><table class="ltable stat-t"><thead><tr><th>Dossier</th><th>Type</th><th class="r">Conteneurs</th><th class="r">Valeur</th><th class="r">Négociable</th><th class="r">% valeur</th><th>Remarque</th></tr></thead>
+    <tbody>${A.map(x=>`<tr class="clk" data-open-stat="${x.a.ID}"><td><b>${esc(x.a.N_Dossier||'')}</b> ${esc(x.a.Title||'')}</td><td>${esc(x.type)}</td><td class="r">${x.nb}</td><td class="r mono">${eur0(x.vm)}</td><td class="r mono">${eur0(x.nego)}</td><td class="r mono">${pct(x.nego/x.vm)}</td><td class="muted">${x.prest.length?(x.nb===1&&/LOT/i.test(x.a.Title)?'lot : indiquer le nombre de conteneurs':'à vérifier'):'aucune facture de frais'}</td></tr>`).join('')}</tbody></table>
+    <div class="muted" style="font-size:12px;margin-top:6px">Ces dossiers faussent les moyennes s'ils contiennent une erreur : ouvre-les pour corriger, ou renseigne le nombre de conteneurs d'un lot.</div></div></div>`:'';
+  el.innerHTML=filtres+kpis+cPrest+cPostes+cMois+`<div class="stat-2">${cCat}${cFrs}</div>`+cAno;
+}
+
+// ── Fiche réunion transitaire (PDF) ──
+async function ficheTransitaire(nom){
+  if(!nom){toast('⚠️ Choisis d’abord un prestataire dans la liste','wa');return;}
+  let w=null;try{w=window.open('','_blank');}catch(e){}
+  try{const u=URL.createObjectURL(await ficheTransitairePDF(nom));
+    if(w&&!w.closed)w.location.href=u;else{const a=document.createElement('a');a.href=u;a.download=`Fiche ${safeName(nom)}.pdf`;document.body.appendChild(a);a.click();a.remove();}
+    setTimeout(()=>URL.revokeObjectURL(u),60000);
+  }catch(e){if(w&&!w.closed)w.close();toast('🔴 '+e.message,'ko');}
+}
+async function ficheTransitairePDF(nom){
+  {
+    await loadJsPdf();const {jsPDF}=window.jspdf;const doc=new jsPDF({orientation:'portrait',unit:'mm',format:'a4'});
+    const D=statFiltre(),SP=statPrest(D);const mine=SP.filter(o=>o.nom===nom);
+    const PW=210,M=14,CW=PW-2*M,NAVY=[10,31,61],GREY=[110,118,130],LINE=[214,220,228],SOFT=[244,247,251],ACC=[232,242,253],RED=[198,40,40],GREEN=[46,125,50];
+    const cl=s=>String(s??'').replace(/[  ]/g,' ');const nb=(v,d=0)=>v==null||!isFinite(v)?'—':cl(fmtN(v,d));
+    const perLab={'12m':'12 derniers mois','all':'tout l’historique'}[STATF.per]||('année '+STATF.per);
+    let logo=null;try{const im=document.querySelector('.logo-pill img');if(im&&im.src.startsWith('data:'))logo=im.src;}catch(e){}
+    doc.setFillColor(...NAVY);doc.rect(0,0,PW,4,'F');if(logo)try{doc.addImage(logo,'JPEG',M,9,45,14);}catch(e){}
+    doc.setFont('helvetica','bold');doc.setFontSize(17);doc.setTextColor(...NAVY);doc.text('Fiche réunion transitaire',PW-M,15,{align:'right'});
+    doc.setFont('helvetica','normal');doc.setFontSize(9);doc.setTextColor(...GREY);doc.text(`Période : ${perLab}${STATF.cat?' · '+STATF.cat:''} · éditée le ${fmtD(todayKey())}`,PW-M,21,{align:'right'});
+    doc.setDrawColor(...LINE);doc.line(M,28,PW-M,28);
+    doc.setFont('helvetica','bold');doc.setFontSize(22);doc.setTextColor(198,40,40);doc.text(cl(nom),M,40);
+    const nD=new Set(mine.flatMap(o=>o.dos.map(x=>x.a.ID))).size;const nTC=mine.reduce((s,o)=>s+o.nTC,0);const tN=mine.reduce((s,o)=>s+o.v.reduce((a,b)=>a+b,0),0);const tT=mine.reduce((s,o)=>s+o.tax.reduce((a,b)=>a+b,0),0);
+    const vmT=mine.reduce((s,o)=>s+o.dos.reduce((a,x)=>a+x.vm,0),0);
+    const tiles=[['Dossiers / conteneurs',`${nD} / ${nTC}`],['Prestations facturées',nb(tN)+' €'],['Moyenne par conteneur',nb(nTC?tN/nTC:null)+' €'],['Part de la valeur',vmT?cl(fmtN(tN/vmT*100,1))+' %':'—']];
+    const tw=(CW-9)/4;tiles.forEach(([k,v],i)=>{const x=M+i*(tw+3);doc.setFillColor(...(i===2?NAVY:SOFT));doc.setDrawColor(...(i===2?NAVY:LINE));doc.roundedRect(x,46,tw,17,2,2,'FD');
+      doc.setFont('helvetica','normal');doc.setFontSize(7);doc.setTextColor(...(i===2?[190,205,225]:GREY));doc.text(k.toUpperCase(),x+3,51.5);
+      doc.setFont('helvetica','bold');doc.setFontSize(12);doc.setTextColor(...(i===2?[255,255,255]:NAVY));doc.text(v,x+3,59.2);});
+    let y=72;
+    const titre=t=>{doc.setFont('helvetica','bold');doc.setFontSize(10.5);doc.setTextColor(...NAVY);doc.text(t,M,y);y+=3;};
+    const tbl=o=>{doc.autoTable(Object.assign({startY:y,margin:{left:M,right:M,bottom:18},theme:'plain',styles:{font:'helvetica',fontSize:8,cellPadding:1.5,textColor:[30,36,48],lineColor:LINE,lineWidth:{bottom:0.15}},
+      headStyles:{fillColor:NAVY,textColor:255,fontStyle:'bold',fontSize:7.5,lineWidth:0},alternateRowStyles:{fillColor:[250,251,253]},
+      didParseCell:d=>{const cs=(o.columnStyles||{})[d.column.index];if(cs&&cs.halign&&d.section!=='body')d.cell.styles.halign=cs.halign;if(d.section==='body'&&o.ecart&&d.column.index===o.ecart){const s=String(d.cell.raw||'');if(s.startsWith('+'))d.cell.styles.textColor=RED;else if(s.startsWith('-'))d.cell.styles.textColor=GREEN;}}},o));y=doc.lastAutoTable.finalY+8;};
+    const R={halign:'right'};
+    titre('Coût négociable par conteneur et par type, comparé aux autres prestataires');
+    tbl({head:[['Type','Conteneurs','Moyenne / conteneur','Mini','Maxi','Autres prestataires (moy.)','Écart']],ecart:6,
+      body:mine.map(o=>{const m=moy(o.v);const autres=SP.filter(p=>p.type===o.type&&p.nom!==nom&&p.role!=='Transporteur').flatMap(p=>p.v);const ma=moy(autres);
+        return [cl(o.type),o.v.length+(o.v.length<3?' (peu)':''),nb(m)+' €',nb(Math.min(...o.v))+' €',nb(Math.max(...o.v))+' €',ma===null?'—':nb(ma)+` € (${autres.length})`,ma?((m>ma?'+':'')+cl(fmtN((m/ma-1)*100,0))+' %'):'—'];}),
+      columnStyles:{1:{halign:'center'},2:{...R,fontStyle:'bold'},3:R,4:R,5:R,6:{...R,fontStyle:'bold'}}});
+    // postes
+    const postes=NEGO.filter(q=>mine.some(o=>o.postes[q]));
+    titre('Détail par poste (moyenne par conteneur, tous types confondus)');
+    tbl({head:[['Poste',cl(nom),'Autres prestataires','Écart']],ecart:3,body:postes.map(q=>{const a=moy(mine.flatMap(o=>o.postes[q]||[]));const b=moy(SP.filter(p=>p.nom!==nom&&p.role!=='Transporteur').flatMap(p=>p.postes[q]||[]));
+      return [cl(POSTE_LAB[q]||q),nb(a)+' €',b===null?'—':nb(b)+' €',b?((a>b?'+':'')+cl(fmtN((a/b-1)*100,0))+' %'):'—'];}),columnStyles:{1:{...R,fontStyle:'bold'},2:R,3:{...R,fontStyle:'bold'}},tableWidth:120});
+    // évolution trimestrielle
+    const Q={};mine.forEach(o=>o.dos.forEach(x=>{const k=x.date?`${x.date.slice(0,4)} T${Math.floor((+x.date.slice(5,7)-1)/3)+1}`:'Sans date';const e=Q[k]||(Q[k]={n:0,v:0});const p=x.prest.find(z=>z.nom===nom);e.n+=x.nb;e.v+=p?p.nego:0;}));
+    titre('Évolution par trimestre');
+    tbl({head:[['Trimestre','Conteneurs','Prestations facturées','Moyenne / conteneur']],body:Object.keys(Q).sort().map(k=>[k,String(Q[k].n),nb(Q[k].v)+' €',nb(Q[k].v/Q[k].n)+' €']),columnStyles:{1:{halign:'center'},2:R,3:{...R,fontStyle:'bold'}},tableWidth:120});
+    const dl=moy(mine.flatMap(o=>o.del));const tx=nTC?tT/nTC:null;
+    doc.setFont('helvetica','normal');doc.setFontSize(8.5);doc.setTextColor(...GREY);
+    const txl=doc.splitTextToSize(cl(`Délai moyen entre l’arrivée au port et l’entrée en entrepôt : ${dl===null?'non renseigné':fmtN(dl,0)+' jours'}. Taxes refacturées (OM, OM add., TID, port) : ${nb(tx)} € par conteneur en moyenne, non négociables.`),CW);doc.text(txl,M,y);y+=5*txl.length+4;
+    // notes
+    if(y>215){doc.addPage();y=20;}
+    titre('Notes de réunion');y+=1;
+    ['Points à négocier','Tarifs / conditions obtenus','Délais à améliorer','Litiges en cours','Décisions prises'].forEach(t=>{if(y>270){doc.addPage();y=20;}
+      doc.setFont('helvetica','bold');doc.setFontSize(8.5);doc.setTextColor(...NAVY);doc.text(t,M,y+4);doc.setDrawColor(...LINE);doc.line(M+48,y+5,PW-M,y+5);doc.line(M,y+11,PW-M,y+11);y+=14;});
+    const n=doc.getNumberOfPages();for(let p=1;p<=n;p++){doc.setPage(p);doc.setDrawColor(...LINE);doc.line(M,284,PW-M,284);doc.setFont('helvetica','normal');doc.setFontSize(7);doc.setTextColor(...GREY);
+      doc.text('Réseaux Plus — Portail Achats · Coût négociable = fret maritime, débarquement, transit, manutention, transport, crédit d’enlèvement, divers',M,288.5);doc.text(`Page ${p} / ${n}`,PW-M,288.5,{align:'right'});}
+    return doc.output('blob');
+  }
+}
+
+// ═══ IMPORT DE L'HISTORIQUE (une fois, réservé à Nicolas) ═══
+async function spPostSilencieux(list,body){
+  body=clean(list,body);
+  for(let essai=0;;essai++){
+    const r=await fetch(listUrl(list),{method:'POST',headers:H_JSON(),body:JSON.stringify(body)});
+    if((r.status===429||r.status===503)&&essai<5){await sleep(1500*(essai+1));continue;}
+    await _check(r,'Création '+list);const c=await r.json();return c.Id??c.ID;
+  }
+}
+const sansVide=o=>{const r={};for(const k in o){const v=o[k];if(v===null||v===undefined||v==='')continue;r[k]=v;}return r;};
+function progression(txt,pc){
+  let ov=$('ovImport');if(!ov){ov=document.createElement('div');ov.className='ov open';ov.id='ovImport';ov.style.zIndex=2600;ov.innerHTML='<div class="cbox"><h3>Import de l’historique</h3><div class="b" id="impTxt"></div><div class="imp-bar"><i id="impBar"></i></div></div>';document.body.appendChild(ov);}
+  $('impTxt').innerHTML=txt;$('impBar').style.width=Math.round(pc)+'%';
+}
+async function importerHistorique(file){
+  let h;try{h=JSON.parse(await file.text());}catch(e){toast('🔴 Fichier illisible : '+e.message,'ko');return;}
+  if(!h||!Array.isArray(h.dossiers)){toast('🔴 Ce fichier n’est pas un historique du portail.','ko');return;}
+  const dejaDos=new Set(DATA.arr.map(a=>String(a.N_Dossier||'').trim()).filter(Boolean));
+  const dejaCont=new Set(DATA.arr.map(a=>String(a.Title||'').trim().toUpperCase()).filter(t=>/^[A-Z]{4}\s?\d{6}/.test(t)));
+  const aCreer=h.dossiers.filter(d=>!dejaDos.has(String(d.N_Dossier))&&!dejaCont.has(String(d.Title).trim().toUpperCase()));
+  const cleM=m=>`${String(m.Title).trim()}|${r2(n0(typeof m.Montant==='number'?m.Montant:parseNum(m.Montant)))}`;
+  const dejaM=new Set((DATA.tir||[]).map(cleM));
+  const mvts=(h.mouvements||[]).filter(m=>!dejaM.has(cleM(m)));
+  const nL=aCreer.reduce((s,d)=>s+d.lignes.length,0);
+  const inconnus=new Set();aCreer.forEach(d=>d.lignes.forEach(l=>{if(l.Fournisseur&&!matchFrs(l.Fournisseur,l.Type_Ligne==='Frais'?['Transitaire','Transporteur','Autre']:null))inconnus.add(l.Fournisseur);}));
+  const ok=await showConfirm('Importer l’historique ?',`Fichier <b>${esc(file.name)}</b> (${esc(h.source||'')}, généré le ${fmtD(h.genere)||'?'}).<br><br>
+    <b>${aCreer.length}</b> dossiers à créer (${h.dossiers.length-aCreer.length} déjà présents, ignorés), <b>${nL}</b> lignes,
+    ${TIR_ERR?'<b style="color:var(--red)">mouvements de tirelire ignorés : la liste Tirelire_Mouvements n’existe pas</b>':`<b>${mvts.length}</b> mouvements de tirelire`}.<br><br>
+    Les dossiers sont créés <b>clôturés</b> et rangés dans l’Historique : aucun mail n’est envoyé.${inconnus.size?`<br><br><span class="muted">${inconnus.size} noms de fournisseurs non reconnus, gardés tels quels : ${esc([...inconnus].slice(0,12).join(', '))}${inconnus.size>12?'…':''}</span>`:''}<br><br>Compte quelques minutes. Ne ferme pas la page pendant l’import.`,'Lancer l’import');
+  if(!ok)return;
+  const total=aCreer.length+nL+(TIR_ERR?0:mvts.length);let fait=0,erreurs=[];
+  const tick=t=>progression(`${t}<br><span class="muted">${fait} / ${total} éléments</span>`,total?fait/total*100:100);
+  SAVING=true;
+  try{
+    for(const d of aCreer){
+      tick(`Dossier ${esc(d.N_Dossier)} · ${esc(d.Title)}`);
+      const trans=matchFrs(d.Transitaire,['Transitaire','Transporteur','Autre']);
+      const c=calc(d.lignes);
+      try{
+        const id=await spPostSilencieux('Arrivages',sansVide({Title:_trunc(d.Title||d.N_Dossier),N_Dossier:String(d.N_Dossier),Conteneur:d.Conteneur||null,Ref_Transitaire:'Import Excel',
+          ID_Transitaire:trans?trans.ID:null,Transitaire:trans?trans.Title:(d.Transitaire||null),Type_Transport:d.Type_Transport||null,
+          Categorie:d.Categorie&&d.Categorie!=='À CLASSER'?d.Categorie:null,Date_Depart:toSP(d.Date_Depart),Date_Arrivee_Port:toSP(d.Date_Arrivee_Port),Date_Entrepot:toSP(d.Date_Entrepot),
+          Date_Validation:d.Valide?toSP(d.Date_Validation):null,Date_Saisie_Image:d.Valide?toSP(d.Date_Validation):null,Valide_Par:d.Valide?'Historique Excel':null,
+          Statut:'Clôturé',Notif_Statut:'Clôturé',Historique:'Oui',Nb_Conteneurs:nbCont({Title:d.Title}),Coef_Reel:c.coef,Total_VM:r2(c.vm),Total_CIF:r2(c.cif),Total_Frais:r2(c.frais)}));
+        fait++;
+        const corps=d.lignes.map(l=>{const f=matchFrs(l.Fournisseur,l.Type_Ligne==='Frais'?['Transitaire','Transporteur','Autre']:null);
+          const b={Title:_trunc(`${l.N_Commande||l.Type_Ligne} – ${f?f.Title:l.Fournisseur||''}`),ID_Arrivage:id,Type_Ligne:l.Type_Ligne,ID_Fournisseur:f?f.ID:null,Fournisseur:f?f.Title:(l.Fournisseur||null),
+            N_Commande:l.N_Commande,N_Facture:l.N_Facture,Produits:l.Produits,Client_Concerne:l.Client_Concerne,Valeur_Marchandise:l.Valeur_Marchandise,Fret:l.Fret,Coef_Applique:l.Coef_Applique,Gain_Perte:l.Gain_Perte};
+          POSTE_KEYS.forEach(k=>{if(l[k]!=null)b[k]=l[k];});return sansVide(b);});
+        for(let i=0;i<corps.length;i+=5){await Promise.all(corps.slice(i,i+5).map(b=>spPostSilencieux('Lignes_Arrivage',b).then(()=>{fait++;}).catch(e=>{erreurs.push(`${d.N_Dossier} ligne : ${e.message}`);fait++;})));tick(`Dossier ${esc(d.N_Dossier)} · lignes`);}
+      }catch(e){erreurs.push(`${d.N_Dossier} : ${e.message}`);fait+=1+d.lignes.length;}
+    }
+    if(!TIR_ERR)for(const m of mvts){tick('Tirelire : '+esc(m.Title));
+      try{const a=m.N_Dossier?DATA.arr.find(x=>String(x.N_Dossier)===String(m.N_Dossier)):null;
+        await spPostSilencieux('Tirelire_Mouvements',sansVide({Title:_trunc(m.Title),Type_Mouvement:m.Type,Categorie:m.Categorie&&m.Categorie!=='À CLASSER'?m.Categorie:null,Date_Mouvement:toSP(m.Date_Mouvement),
+          Montant:m.Montant,ID_Arrivage:a?a.ID:null,Motif:_trunc(m.Commentaire||'Import Excel')}));}
+      catch(e){erreurs.push(`Tirelire ${m.Title} : ${e.message}`);}fait++;}
+    logAction('POST','Arrivages','import','Historique Excel','',`${aCreer.length} dossiers, ${nL} lignes, ${TIR_ERR?0:mvts.length} mouvements`,`Import de l’historique — ${erreurs.length} erreur(s)`,'');
+  }finally{SAVING=false;}
+  progression(`Rechargement des données…`,100);
+  try{await loadAll();}catch(e){}
+  const ov=$('ovImport');if(ov)ov.remove();
+  if(erreurs.length){await showConfirm('Import terminé avec des erreurs',`${erreurs.length} élément(s) non créés. Relance l’import : les dossiers déjà créés seront ignorés.<br><br><span class="muted" style="font-size:12px">${esc(erreurs.slice(0,8).join(' · '))}</span>`,'Compris');}
+  else toast(`✓ Import terminé : ${aCreer.length} dossiers, ${nL} lignes${TIR_ERR?'':`, ${mvts.length} mouvements`}`,'ok');
+}
+
+// ── Événements ──
+document.addEventListener('click',e=>{
+  const tc=e.target.closest('[data-tircat]');if(tc){TIRF.cat=tc.dataset.tircat===TIRF.cat?'':tc.dataset.tircat;renderTirelire();return;}
+  if(e.target.closest('#btnMvt')){saisirMouvement();return;}
+  const dm=e.target.closest('[data-delmvt]');if(dm){e.stopPropagation();supprimerMouvement(+dm.dataset.delmvt);return;}
+  const ac=e.target.closest('#statBox [data-acc]');if(ac){$(ac.dataset.acc).classList.toggle('closed');return;}
+  const os=e.target.closest('[data-open-stat]');if(os){openFiche(+os.dataset.openStat);return;}
+  if(e.target.closest('#btnFicheTrans')){ficheTransitaire(STATF.prest);return;}
+});
+document.addEventListener('change',e=>{
+  const t=e.target;if(!t||!t.id)return;
+  const m={sfPer:'per',sfCat:'cat',sfType:'type',sfTypePoste:'typePoste',sfPrest:'prest'}[t.id];
+  if(m){STATF[m]=t.value;if(m!=='prest')renderStats();return;}
+  if(t.id==='tirAnnee'){TIRF.annee=t.value;renderTirelire();return;}
+  if(t.id==='histFile'&&t.files&&t.files[0]){const f=t.files[0];t.value='';importerHistorique(f);}
 });
 
 // ═══ DÉMARRAGE ═══
