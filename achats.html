@@ -469,7 +469,7 @@ const POSTE_KEYS=POSTES.map(p=>p[0]);
 const LINE_NUM=['Valeur_Marchandise','Fret',...POSTE_KEYS,'Ajustement'];
 const SCHEMA={
   Fournisseurs:['ID','Title','Code_Image','Code_Compta','Type_Tiers','Type_Achat','Categorie_Defaut','Alias','Delai_Paiement_Jours','Delai_Appro_Jours','Demande_Vendeur','Actif','Emails_Expediteurs','Nom_Court'],
-  Arrivages:['ID','Title','N_Dossier','Conteneur','Ref_Transitaire','Navire','Type_Transport','Categorie','ID_Transitaire','Transitaire','Date_Depart','ETA_Port','Date_Arrivee_Port','Date_Entrepot_Prevue','Date_Confirmation_Locale','Date_Transporteur','Date_Entrepot','Date_Depotage','Controle_OK','Anomalies_Depotage','Statut','Total_VM','Total_CIF','Total_Frais','Coef_Reel','Date_Envoi_Validation','Valide_Par','Date_Validation','Commentaire_Fabrice','Date_Saisie_Image','Historique','Notif_Statut','Resume_Validation','Attachments','Modified'],
+  Arrivages:['ID','Title','N_Dossier','Conteneur','Ref_Transitaire','Navire','Type_Transport','Categorie','ID_Transitaire','Transitaire','Date_Depart','ETA_Port','Date_Arrivee_Port','Date_Entrepot_Prevue','Date_Confirmation_Locale','Date_Transporteur','Date_Entrepot','Date_Depotage','Controle_OK','Anomalies_Depotage','Statut','Total_VM','Total_CIF','Total_Frais','Coef_Reel','Date_Envoi_Validation','Valide_Par','Date_Validation','Commentaire_Fabrice','Date_Saisie_Image','Historique','Notif_Statut','Resume_Validation','Message_Vendeurs','Attachments','Modified'],
   Lignes_Arrivage:['ID','Title','ID_Arrivage','Type_Ligne','ID_Commande_Frs','N_Commande','ID_Fournisseur','Fournisseur','ID_Facture','N_Facture','Produits',...LINE_NUM,'Motif_Ajustement','Coef_Applique','Gain_Perte','Client_Concerne'],
   Parametres_Achats:['ID','Title','Valeur','Description'],
   Factures_Frs:['ID','Title','ID_Fournisseur','Fournisseur','Code_Compta','Type_Piece','Date_Facture','Date_Echeance','Montant_TTC','Lien_PDF','Statut_Saisie','Source','Message_ID','Exporte_Echeancier','Statut_Paiement','Date_Paiement','Commentaire','Expediteur','Created','Modified']
@@ -2091,20 +2091,31 @@ async function renvoyerPatricia(){
   if(com===null)return;
   await changerStatut({Statut:'Renvoyé à Patricia',Commentaire_Fabrice:com,Valide_Par:sessionStorage.getItem('user_name')||''},'↩ Dossier renvoyé à Patricia');
 }
+// Texte proposé aux vendeurs : articles (champ Produits) et clients des lignes du dossier
+function messageVendeursDefaut(){
+  const mar=W.lines.filter(l=>l._st!=='del'&&l.Type_Ligne!=='Frais');
+  const uniq=arr=>{const m=new Map();arr.map(x=>String(x||'').trim()).filter(Boolean).forEach(x=>{const k=x.toUpperCase();if(!m.has(k))m.set(k,x);});return [...m.values()];};
+  const prods=uniq(mar.map(l=>l.Produits));const clients=uniq(mar.map(l=>l.Client_Concerne));
+  let t='Articles arrivés :\n'+(prods.length?prods.map(p=>'• '+p).join('\n'):'• (à compléter)');
+  if(clients.length)t+='\n\nClients concernés : '+clients.join(', ');
+  return t;
+}
 async function prixAJour(){
   const a=W.a;
-  const ok=await showConfirm('Prix à jour dans Image ?',`Confirme que <b>l’entrée en stock et les coefficients</b> du dossier <b>${esc(a.N_Dossier||a.Title)}</b> sont saisis dans Image.<br><br>Fabrice et les vendeurs sont prévenus : ils peuvent facturer les BL en attente sur ce matériel. Le dossier est clôturé.`,'Confirmer');
-  if(!ok)return;
-  await changerStatut({Statut:'Clôturé',Date_Saisie_Image:toSP(todayKey())},'✅ Prix à jour : Fabrice et les vendeurs sont prévenus');
+  const msg=await demanderTexte('Prix à jour dans Image ?',`Confirme que <b>l’entrée en stock et les coefficients</b> du dossier <b>${esc(a.N_Dossier||a.Title)}</b> sont saisis dans Image. Le dossier sera clôturé.<br><br>Les vendeurs (et Fabrice en copie) reçoivent le message ci-dessous : ils peuvent facturer les BL en attente. <b>Complète-le ou colle la liste des articles depuis Image.</b>`,'Message aux vendeurs','Confirmer et prévenir',true,messageVendeursDefaut(),9);
+  if(msg===null)return;
+  await changerStatut({Statut:'Clôturé',Date_Saisie_Image:toSP(todayKey()),Message_Vendeurs:msg},'✅ Prix à jour : les vendeurs et Fabrice sont prévenus');
 }
 async function changerStatut(body,msg){
   if(SAVING)return;SAVING=true;
   try{await spPatch('Arrivages',W.id,body,DATA.arr.find(x=>x.ID===W.id));SAVING=false;await loadAll();const id=W.id;W.dirty=false;W=null;openFiche(id);toast(msg,'ok');}
   catch(e){SAVING=false;toast('🔴 '+e.message,'ko');}
 }
-async function demanderTexte(titre,html,label,okLabel,obligatoire){
+async function demanderTexte(titre,html,label,okLabel,obligatoire,defaut,lignes){
+  let val=defaut||'';
   for(;;){
-    const ok=await showConfirm(titre,`${html}<div class="f" style="margin-top:12px"><label>${esc(label)}</label><textarea id="cTexte" rows="3" style="width:100%"></textarea></div>`,okLabel,obligatoire?'danger':'primary');
+    const p=showConfirm(titre,`${html}<div class="f" style="margin-top:12px"><label>${esc(label)}</label><textarea id="cTexte" rows="${lignes||3}" style="width:100%">${esc(val)}</textarea></div>`,okLabel,obligatoire&&!defaut?'danger':'primary');
+    const ok=await p;val=(($('cTexte')||{}).value||'');
     if(!ok)return null;
     const v=(($('cTexte')||{}).value||'').trim();
     if(obligatoire&&!v){toast('⚠️ Le commentaire est obligatoire','wa');continue;}
