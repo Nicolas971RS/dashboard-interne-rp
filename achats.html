@@ -341,6 +341,12 @@ input,select,textarea{font-family:inherit;font-size:13.5px}
 @media (max-width:1250px){.fac-wrap{grid-template-columns:260px minmax(0,1fr)}.fac-form{grid-column:1/-1;position:static}}
 @media (max-width:800px){.fac-wrap{grid-template-columns:1fr}.fac-list{max-height:300px}}
 
+/* validation Fabrice */
+.ltable.val-t{min-width:0;width:100%}
+.val-t td,.val-t th{padding:6px 8px;vertical-align:top}
+.val-t td:nth-child(2),.val-t td:nth-child(3){font-size:12px}
+.val-t input.coef-in{width:64px;text-align:right;font-weight:700;font-family:var(--font-mono)}
+#cardVal .card-h h3{color:var(--violet)}
 /* dates JJ/MM/AAAA */
 .dfr-w{position:relative;display:block}
 .dfr-w input[data-dfr="1"]{padding-right:30px;font-variant-numeric:tabular-nums}
@@ -380,7 +386,7 @@ input.dfr-ko{border:1.5px solid #e53935!important;background:#fff5f5!important}
     <button class="tab active" data-tab="afaire">🏠 À faire <span class="cnt" id="cntAfaire" style="display:none"></span></button>
     <button class="tab" data-tab="dossiers">🚢 Dossiers <span class="cnt a" id="cntDossiers" style="display:none"></span></button>
     <button class="tab" data-tab="factures">🧾 Factures <span class="cnt a" id="cntFactures" style="display:none"></span></button>
-    <button class="tab soon" data-tab="validations">✅ Validations <span class="soon-tag">étape 2</span></button>
+    <button class="tab" data-tab="validations">✅ Validations <span class="cnt a" id="cntValid" style="display:none"></span></button>
     <button class="tab soon" data-tab="tirelire">💰 Tirelire <span class="soon-tag">étape 3</span></button>
   </div>
   <div class="main">
@@ -410,7 +416,11 @@ input.dfr-ko{border:1.5px solid #e53935!important;background:#fff5f5!important}
       </div>
       <div class="drop-hint">⬆️ Dépose tes PDF ici</div>
     </section>
-    <section class="section" id="sec-validations"><div class="soon-page"><div style="font-size:40px">✅</div><h2>Validations de Fabrice</h2><p class="muted">Arrive à l'étape 2 : coefficients par fournisseur, historique, gain / perte calculé en direct.</p></div></section>
+    <section class="section" id="sec-validations">
+      <div class="page-head"><div><h1>Validations</h1><div class="sub">Dossiers à valider (revient à appliquer par fournisseur), et dossiers validés pas encore saisis dans Image. Clique sur un dossier pour l’ouvrir.</div></div>
+        <button class="btn" onclick="reloadAll()">↻ Actualiser</button></div>
+      <div class="todo-grid" id="valListe"></div>
+    </section>
     <section class="section" id="sec-tirelire"><div class="soon-page"><div style="font-size:40px">💰</div><h2>Tirelire</h2><p class="muted">Arrive à l'étape 3 : solde par catégorie, mouvements, mail de clôture à Monique.</p></div></section>
   </div>
 </div>
@@ -454,7 +464,7 @@ const POSTE_KEYS=POSTES.map(p=>p[0]);
 const LINE_NUM=['Valeur_Marchandise','Fret',...POSTE_KEYS,'Ajustement'];
 const SCHEMA={
   Fournisseurs:['ID','Title','Code_Image','Code_Compta','Type_Tiers','Type_Achat','Categorie_Defaut','Alias','Delai_Paiement_Jours','Delai_Appro_Jours','Demande_Vendeur','Actif','Emails_Expediteurs','Nom_Court'],
-  Arrivages:['ID','Title','N_Dossier','Conteneur','Ref_Transitaire','Navire','Type_Transport','Categorie','ID_Transitaire','Transitaire','Date_Depart','ETA_Port','Date_Arrivee_Port','Date_Entrepot_Prevue','Date_Confirmation_Locale','Date_Transporteur','Date_Entrepot','Date_Depotage','Controle_OK','Anomalies_Depotage','Statut','Total_VM','Total_CIF','Total_Frais','Coef_Reel','Date_Envoi_Validation','Valide_Par','Date_Validation','Commentaire_Fabrice','Date_Saisie_Image','Historique','Attachments','Modified'],
+  Arrivages:['ID','Title','N_Dossier','Conteneur','Ref_Transitaire','Navire','Type_Transport','Categorie','ID_Transitaire','Transitaire','Date_Depart','ETA_Port','Date_Arrivee_Port','Date_Entrepot_Prevue','Date_Confirmation_Locale','Date_Transporteur','Date_Entrepot','Date_Depotage','Controle_OK','Anomalies_Depotage','Statut','Total_VM','Total_CIF','Total_Frais','Coef_Reel','Date_Envoi_Validation','Valide_Par','Date_Validation','Commentaire_Fabrice','Date_Saisie_Image','Historique','Notif_Statut','Resume_Validation','Attachments','Modified'],
   Lignes_Arrivage:['ID','Title','ID_Arrivage','Type_Ligne','ID_Commande_Frs','N_Commande','ID_Fournisseur','Fournisseur','ID_Facture','N_Facture','Produits',...LINE_NUM,'Motif_Ajustement','Coef_Applique','Gain_Perte','Client_Concerne'],
   Parametres_Achats:['ID','Title','Valeur','Description'],
   Factures_Frs:['ID','Title','ID_Fournisseur','Fournisseur','Code_Compta','Type_Piece','Date_Facture','Date_Echeance','Montant_TTC','Lien_PDF','Statut_Saisie','Source','Message_ID','Exporte_Echeancier','Statut_Paiement','Date_Paiement','Commentaire','Expediteur','Created','Modified']
@@ -681,7 +691,7 @@ function statutAuto(a){
 // accès date (copie de travail en 'YYYY-MM-DD', données SP en ISO)
 function dk(a,f){const v=a[f];if(!v)return '';return v.length===10?v:dkey(v);}
 function entrepotPrevu(a){return dk(a,'Date_Entrepot_Prevue')||(dk(a,'ETA_Port')?addDays(dk(a,'ETA_Port'),param('DELAI_PORT_ENTREPOT_J')):'');}
-function estHisto(a){return a.Historique==='Oui'||['Validé','Clôturé'].includes(a.Statut);}
+function estHisto(a){return a.Historique==='Oui'||a.Statut==='Clôturé';}
 
 // Étapes 5 → 14 de la chronologie de Patricia
 const ETAPES=[
@@ -692,8 +702,8 @@ const ETAPES=[
   {n:9,lbl:'Dépotage et contrôle',done:a=>!!dk(a,'Date_Depotage'),date:a=>dk(a,'Date_Depotage'),field:'Date_Depotage',todo:'Après le dépotage, note le contrôle (et les éventuels manquants ou casse).'},
   {n:10,lbl:'Saisie Image (n° dossier)',done:a=>!!a.N_Dossier,date:()=>'',focus:'N_Dossier',todo:'Saisis le conteneur dans Image et reporte ici le n° de dossier.'},
   {n:11,lbl:'Factures',done:(a,c)=>c&&c.nMar>0&&c.factOk&&c.nFrais>0,date:()=>'',later:true,todo:'Complète les n° de facture et les frais du transitaire.'},
-  {n:12,lbl:'Envoi à Fabrice',done:a=>STATUTS_VALIDATION.includes(a.Statut),date:a=>dk(a,'Date_Envoi_Validation'),later:true,todo:'Envoi à Fabrice : arrive à l’étape 2.'},
-  {n:13,lbl:'Coefficients dans Image',done:a=>!!dk(a,'Date_Saisie_Image')||a.Statut==='Clôturé',date:a=>dk(a,'Date_Saisie_Image'),later:true,todo:''},
+  {n:12,lbl:'Validation Fabrice',done:a=>['Validé','Clôturé'].includes(a.Statut),date:a=>dk(a,'Date_Validation'),todo:'Envoie le dossier à Fabrice (bouton « Envoyer à Fabrice » en bas de la fiche).'},
+  {n:13,lbl:'Prix à jour dans Image',done:a=>!!dk(a,'Date_Saisie_Image')||a.Statut==='Clôturé',date:a=>dk(a,'Date_Saisie_Image'),todo:'Saisis l’entrée en stock et les coefficients dans Image, puis clique « Prix à jour dans Image ».'},
   {n:14,lbl:'Tirelire',done:a=>a.Statut==='Clôturé',date:()=>'',later:true,todo:''}
 ];
 function etapeCourante(a,c){
@@ -712,12 +722,14 @@ function alertes(a){
   const ep=entrepotPrevu(a);
   if(ep&&!dk(a,'Date_Entrepot')&&ep<t)out.push({k:'ent',txt:`Entrée entrepôt prévue le ${fmtD(ep)} dépassée`,lvl:'r'});
   if(dk(a,'Date_Entrepot')&&!a.N_Dossier)out.push({k:'img',txt:'N° de dossier Image manquant',lvl:'a'});
+  if(a.Statut==='À valider Fabrice'&&dk(a,'Date_Envoi_Validation')&&daysBetween(dk(a,'Date_Envoi_Validation'),t)>param('SEUIL_VALIDATION_J'))out.push({k:'val',txt:`En attente de Fabrice depuis ${daysBetween(dk(a,'Date_Envoi_Validation'),t)} j`,lvl:'a'});
+  if(a.Statut==='Validé'&&dk(a,'Date_Validation')&&daysBetween(dk(a,'Date_Validation'),t)>param('SEUIL_SAISIE_IMAGE_J'))out.push({k:'img2',txt:`Validé depuis ${daysBetween(dk(a,'Date_Validation'),t)} j, prix pas encore dans Image`,lvl:'r'});
   if(dk(a,'Date_Entrepot')&&a.Statut==='Reçu entrepôt'&&daysBetween(dk(a,'Date_Entrepot'),t)>param('SEUIL_DOSSIER_BLOQUE_J'))out.push({k:'blq',txt:`Reçu depuis ${daysBetween(dk(a,'Date_Entrepot'),t)} j, pas encore envoyé à Fabrice`,lvl:'a'});
   return out;
 }
 
 // ═══ RENDU GÉNÉRAL ═══
-function renderAll(){renderTodo();renderDossiers();renderFactures();}
+function renderAll(){renderTodo();renderDossiers();renderFactures();renderValidations();}
 function setTab(t){
   CUR_TAB=t;
   document.querySelectorAll('.tab').forEach(b=>b.classList.toggle('active',b.dataset.tab===t));
@@ -739,6 +751,7 @@ function renderTodo(){
     {ic:'⏰',t:'Retards à traiter',c:'var(--red)',items:actifs.filter(a=>alertes(a).some(x=>x.lvl==='r')).map(a=>({a,txt:alertes(a).filter(x=>x.lvl==='r').map(x=>x.txt).join(' · ')}))},
     {ic:'🚢',t:'Arrivées des 10 prochains jours',c:'var(--blue)',items:actifs.filter(a=>{const k=dk(a,'Date_Arrivee_Port')?entrepotPrevu(a):dk(a,'ETA_Port');return !dk(a,'Date_Entrepot')&&k&&k>=t&&daysBetween(t,k)<=10;}).sort((x,y)=>(dk(x,'ETA_Port')).localeCompare(dk(y,'ETA_Port'))).map(a=>({a,txt:dk(a,'Date_Arrivee_Port')?`Au port — entrepôt prévu ${relDay(entrepotPrevu(a))}`:`Arrivée au port ${relDay(dk(a,'ETA_Port'))} (${fmtD(dk(a,'ETA_Port'))})`}))},
     {ic:'📦',t:'Reçus à finaliser',c:'var(--amber)',items:actifs.filter(a=>dk(a,'Date_Entrepot')&&!STATUTS_VALIDATION.includes(a.Statut)).map(a=>{const c=ctrlInfo(linesOf(a.ID));const m=[];if(!a.N_Dossier)m.push('n° dossier Image');if(!c.factOk)m.push('factures');if(!c.nFrais)m.push('frais transitaire');return {a,txt:m.length?'Manque : '+m.join(', '):'Complet : prêt pour Fabrice (étape 2)'};})},
+    {ic:'🧮',t:'Validation Fabrice',c:'var(--violet)',items:actifs.filter(a=>['Renvoyé à Patricia','Validé'].includes(a.Statut)).map(a=>({a,txt:a.Statut==='Validé'?`Validé ${relDay(dk(a,'Date_Validation'))} : coefficients à saisir dans Image`:`Renvoyé : ${a.Commentaire_Fabrice||'voir commentaire'}`}))},
     {ic:'🧭',t:'En préparation',c:'var(--grey)',items:actifs.filter(a=>statutAuto(a)==='En préparation').map(a=>({a,txt:'Dates de départ et d’arrivée à saisir'}))}
   ];
   let total=0;
@@ -838,6 +851,7 @@ function renderFiche(){
         <tbody id="tbMar"></tbody><tfoot><tr><td colspan="4">Total marchandise</td><td class="r" id="ftVM"></td><td class="r" id="ftFret"></td><td class="r" id="ftAj"></td><td class="r" id="ftCIF"></td><td colspan="2"></td></tr></tfoot></table></div></div>
       <div class="card"><div class="card-h"><h3>🚚 Frais d'approche <span class="tag" id="nFrais"></span></h3><button class="btn sm" data-act="addFrais">＋ Facture transitaire / transporteur</button></div>
         <div class="card-b" id="fraisBox"></div></div>
+      <div class="card" id="cardVal"><div class="card-h"><h3>🧮 Revient à appliquer — validation Fabrice</h3></div><div class="card-b" id="valBox"></div></div>
     </div>
     <div class="side">
       <div class="coef-card" id="coefCard"></div>
@@ -900,6 +914,7 @@ function refreshComputed(){
   $('fStatut').innerHTML=statutBadge(statutAuto(a));
   $('fSub').textContent=[a.N_Dossier?'Dossier Image '+a.N_Dossier:'N° de dossier Image à venir',a.Transitaire,a.Ref_Transitaire?'Réf. '+a.Ref_Transitaire:'',a.Type_Transport,a.Categorie,dk(a,'ETA_Port')?'ETA port '+fmtD(dk(a,'ETA_Port')):''].filter(Boolean).join('  ·  ');
   renderSteps();
+  if(typeof renderValidation==='function'&&!(document.activeElement&&document.activeElement.classList.contains('coef-in')))renderValidation();
   // pieds de tableau
   const mar=W.lines.filter(l=>l._st!=='del'&&l.Type_Ligne!=='Frais');
   $('ftVM').textContent=fmtN(mar.reduce((s,l)=>s+n0(l.Valeur_Marchandise),0));
@@ -1914,6 +1929,216 @@ async function facDiagnostic(){
   await showConfirm('Diagnostic du dossier des factures',`<div style="font-size:12px;line-height:1.65;max-height:60vh;overflow:auto">${out.join('<br>')}</div><p class="muted" style="font-size:12px">Fais une capture de cette fenêtre.</p>`,'Fermer');
 }
 
+// ═══════════════════════════════════════════════════════════════
+//  F4 — VALIDATION DES COEFFICIENTS PAR FABRICE
+//  Patricia envoie le dossier complet → Fabrice saisit un coefficient par fournisseur
+//  → Validé (fiche PDF archivée dans le dossier) → Patricia saisit dans Image → « Prix à jour » (clôture)
+// ═══════════════════════════════════════════════════════════════
+const JSPDF_CDN='https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js';
+const AUTOTABLE_CDN='https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js';
+const userEmail=()=>String(sessionStorage.getItem('user_email')||'').toLowerCase();
+function valideurs(){
+  const l=[paramStr('VALIDEURS_COEF',''),paramStr('EMAIL_FABRICE',''),paramStr('EMAIL_NICOLAS','')].join(';');
+  return l.toLowerCase().split(/[;,\s]+/).filter(x=>x.includes('@'));
+}
+function estValideur(){if(DEMO)return QS.get('role')==='fabrice';const e=userEmail();return !!e&&valideurs().includes(e);}
+
+// Regroupement par fournisseur des lignes marchandise du dossier ouvert
+function groupesFrs(lines){
+  const g=new Map();
+  for(const l of lines.filter(l=>l._st!=='del'&&l.Type_Ligne!=='Frais')){
+    const key=l.ID_Fournisseur?('F'+l.ID_Fournisseur):('N'+nFull(l.Fournisseur||'?'));
+    if(!g.has(key))g.set(key,{key,frsId:l.ID_Fournisseur||null,nom:l.Fournisseur||'?',lignes:[],vm:0,fret:0});
+    const o=g.get(key);o.lignes.push(l);o.vm+=lineVMnette(l);o.fret+=n0(l.Fret);
+  }
+  return [...g.values()].sort((a,b)=>String(a.nom).localeCompare(String(b.nom),'fr'));
+}
+// Dernier coefficient appliqué à ce fournisseur sur un autre dossier (repère pour Fabrice)
+function dernierCoef(frsId,exclArr){
+  if(!frsId)return null;
+  const cands=DATA.lig.filter(l=>l.ID_Fournisseur===frsId&&l.ID_Arrivage!==exclArr&&n0(l.Coef_Applique)>0).map(l=>{const a=DATA.arr.find(x=>x.ID===l.ID_Arrivage);return {l,a,d:a?(dk(a,'Date_Validation')||dk(a,'Date_Entrepot')||''):''};});
+  cands.sort((p,q)=>q.d.localeCompare(p.d)||q.l.ID-p.l.ID);
+  const c=cands[0];return c?{coef:c.l.Coef_Applique,dossier:c.a?(c.a.N_Dossier||c.a.Title):'',date:c.d}:null;
+}
+function coefGroupe(g){const v=g.lignes.map(l=>n0(l.Coef_Applique)).filter(x=>x>0);return v.length&&v.every(x=>x===v[0])?v[0]:(v[0]||null);}
+
+// ── Rendu de la carte « Coefficients et validation » ──
+function renderValidation(){
+  const box=$('valBox');if(!box||!W)return;
+  const a=W.a;const st=a.Statut||'';const c=ctrlInfo(W.lines);const gs=groupesFrs(W.lines);
+  const val=estValideur();
+  const enAttente=st==='À valider Fabrice';const valide=st==='Validé'||st==='Clôturé';
+  if(!W.coefs){W.coefs={};gs.forEach(g=>{const v=coefGroupe(g);if(v)W.coefs[g.key]=v;});}
+  const editable=enAttente&&val;
+  const reel=c.coef;
+  let tg=0;
+  const rows=gs.map(g=>{
+    const coef=W.coefs[g.key]??null;const gain=coef&&reel?r2(g.vm*(coef-reel)):null;if(gain!==null)tg+=gain;
+    const der=dernierCoef(g.frsId,W.id);
+    const facts=g.lignes.map(l=>`${esc(l.N_Facture||'—')}${pdfLigne(l)}`).join('<br>');
+    const cdes=[...new Set(g.lignes.map(l=>l.N_Commande).filter(Boolean))].join(', ');
+    return `<tr><td><b>${esc(g.nom)}</b></td><td class="mono">${esc(cdes)}</td><td class="mono">${facts}</td><td class="r mono">${fmtN(g.vm)}</td><td class="r mono">${g.fret?fmtN(g.fret):''}</td><td class="r mono">${fmtN(g.vm+g.fret)}</td>
+      <td class="r">${editable?`<input class="n coef-in ${coef?'':'req-empty'}" data-coef="${esc(g.key)}" value="${coef?fmtN(coef,2):''}" inputmode="decimal" placeholder="—" style="width:70px">`:`<b class="mono">${coef?fmtN(coef,coef*100%1?3:2):'—'}</b>`}
+        ${der?`<div class="muted" style="font-size:10.5px;white-space:nowrap">dernier : ${fmtN(der.coef,2)}${der.dossier?' ('+esc(der.dossier)+')':''}</div>`:''}</td>
+      <td class="r mono" data-gain="${esc(g.key)}" style="color:${gain<0?'var(--red)':'var(--green)'}">${gain===null?'':(gain>0?'+':'')+fmtN(gain)}</td></tr>`;}).join('');
+  let entete='',actions='';
+  if(st==='Renvoyé à Patricia')entete=`<div class="fac-box ko">↩ <b>Renvoyé par ${esc(a.Valide_Par||'Fabrice')}</b>${a.Commentaire_Fabrice?` : « ${esc(a.Commentaire_Fabrice)} »`:''}. Corrige puis renvoie le dossier.</div>`;
+  if(enAttente)entete=`<div class="fac-box ok">⏳ Envoyé à Fabrice le ${fmtD(dk(a,'Date_Envoi_Validation'))}${val?' — <b>à toi de saisir les coefficients</b>.':', en attente de sa validation.'}</div>`;
+  if(valide)entete=`<div class="fac-box ok">✅ Validé par <b>${esc(a.Valide_Par||'Fabrice')}</b> le ${fmtD(dk(a,'Date_Validation'))}${a.Commentaire_Fabrice?` — « ${esc(a.Commentaire_Fabrice)} »`:''}.${st==='Clôturé'?` Prix à jour dans Image le <b>${fmtD(dk(a,'Date_Saisie_Image'))}</b>.`:` <b style="color:var(--amber)">Coefficients à saisir dans Image${dk(a,'Date_Validation')?` (validé ${relDay(dk(a,'Date_Validation'))})`:''}.</b>`}</div>`;
+  const pret=!!a.N_Dossier&&c.factOk&&c.nFrais>0&&c.coef;
+  if(!enAttente&&!valide){
+    const manque=[];if(!a.N_Dossier)manque.push('n° dossier Image');if(!c.factOk)manque.push('n° de facture sur chaque ligne');if(!c.nFrais)manque.push('facture du transitaire');
+    actions=`<button class="btn primary" id="btnEnvoiFab" ${pret?'':'disabled'}>📤 Envoyer à Fabrice</button>${manque.length?`<span class="muted" style="font-size:12px">Manque : ${esc(manque.join(', '))}</span>`:''}`;
+  }else if(enAttente&&val){
+    actions=`<button class="btn green" id="btnValFab">✅ Valider les coefficients</button><button class="btn danger sm" id="btnRenvoi">↩ Renvoyer à Patricia</button>`;
+  }else if(st==='Validé'){
+    actions=`<button class="btn green" id="btnPrixImage">✅ Prix à jour dans Image</button><button class="btn sm" id="btnFichePdf">🖨 Fiche de validation (PDF)</button>`;
+  }else if(st==='Clôturé'){
+    actions=`<button class="btn sm" id="btnFichePdf">🖨 Fiche de validation (PDF)</button>`;
+  }
+  if((editable||st==='Validé')&&!W._vu){W._vu=true;setTimeout(()=>{const c=$('cardVal');if(c)c.scrollIntoView({behavior:'smooth',block:'start'});},400);}
+  box.innerHTML=`${entete}
+    <div class="tblwrap"><table class="ltable val-t"><thead><tr><th>Fournisseur</th><th>N° cde</th><th>Facture(s)</th><th class="r">Valeur march.</th><th class="r">Fret</th><th class="r">Total CIF</th><th class="r">Revient à appliquer</th><th class="r">Gain / perte</th></tr></thead>
+    <tbody>${rows||'<tr><td colspan="8" class="muted">Aucune ligne marchandise.</td></tr>'}</tbody>
+    <tfoot><tr><td colspan="3">Revient réel du dossier : <b class="mono">${fmtCoef(reel)}</b></td><td class="r">${fmtN(c.vm)}</td><td class="r">${fmtN(c.fretFrs)}</td><td class="r">${fmtN(c.vm+c.fretFrs)}</td><td></td><td class="r" id="valTotGain" style="color:${tg<0?'var(--red)':'var(--green)'}">${Object.keys(W.coefs).length?(tg>0?'+':'')+fmtN(tg):''}</td></tr></tfoot></table></div>
+    <div class="fac-actions" style="margin-top:12px">${actions}</div>`;
+}
+function majGains(){
+  const c=ctrlInfo(W.lines);const reel=c.coef;let tg=0;
+  groupesFrs(W.lines).forEach(g=>{const coef=W.coefs[g.key];const e=document.querySelector(`[data-gain="${CSS.escape(g.key)}"]`);
+    const gain=coef&&reel?r2(g.vm*(coef-reel)):null;if(gain!==null)tg+=gain;
+    if(e){e.textContent=gain===null?'':(gain>0?'+':'')+fmtN(gain);e.style.color=gain<0?'var(--red)':'var(--green)';}});
+  const t=$('valTotGain');if(t){t.textContent=(tg>0?'+':'')+fmtN(tg);t.style.color=tg<0?'var(--red)':'var(--green)';}
+}
+
+// ── Actions ──
+async function envoyerFabrice(){
+  if(W.dirty){toast('⚠️ Enregistre d’abord le dossier (Ctrl+S).','wa');return;}
+  const a=W.a;const c=ctrlInfo(W.lines);
+  const ok=await showConfirm('Envoyer à Fabrice ?',`Dossier <b>${esc(a.N_Dossier||a.Title)}</b> — revient réel <b>${fmtCoef(c.coef)}</b>, ${groupesFrs(W.lines).length} fournisseur(s).<br><br>Fabrice reçoit un message Teams et un mail avec le lien vers ce dossier.`,'Envoyer');
+  if(!ok)return;
+  await changerStatut({Statut:'À valider Fabrice',Date_Envoi_Validation:new Date().toISOString(),Total_VM:r2(c.vm),Total_CIF:r2(c.cif),Total_Frais:r2(c.frais),Coef_Reel:c.coef},'📤 Dossier envoyé à Fabrice');
+}
+async function validerFabrice(){
+  const gs=groupesFrs(W.lines);const manque=gs.filter(g=>!(n0(W.coefs[g.key])>0));
+  if(manque.length){toast(`⚠️ Coefficient manquant : ${manque.map(g=>g.nom).join(', ')}`,'wa');document.querySelectorAll('.coef-in').forEach(i=>i.classList.toggle('req-empty',!parseNum(i.value)));return;}
+  const c=ctrlInfo(W.lines);const tg=gs.reduce((s,g)=>s+g.vm*(W.coefs[g.key]-c.coef),0);
+  const com=await demanderTexte('Valider les coefficients ?',`Revient réel <b>${fmtCoef(c.coef)}</b> · gain / perte total <b style="color:${tg<0?'var(--red)':'var(--green)'}">${tg>0?'+':''}${fmtN(tg)} €</b>.<br>Patricia sera prévenue pour les saisir dans Image.`,'Commentaire pour Patricia (facultatif)','Valider');
+  if(com===null)return;
+  if(SAVING)return;SAVING=true;
+  try{
+    for(const g of gs){const coef=W.coefs[g.key];
+      for(const l of g.lignes){const body={Coef_Applique:coef,Gain_Perte:r2(lineVMnette(l)*(coef-c.coef))};await spPatch('Lignes_Arrivage',l.ID,body,DATA.lig.find(x=>x.ID===l.ID));Object.assign(l,body);}}
+    const a=W.a;const resume=gs.map(g=>`${g.nom} : ${fmtN(W.coefs[g.key],2)}`).join('\n');
+    const body={Statut:'Validé',Valide_Par:sessionStorage.getItem('user_name')||'',Date_Validation:new Date().toISOString(),Commentaire_Fabrice:com||null,Coef_Reel:c.coef,Total_VM:r2(c.vm),Total_CIF:r2(c.cif),Total_Frais:r2(c.frais),Resume_Validation:resume};
+    await spPatch('Arrivages',W.id,body,DATA.arr.find(x=>x.ID===W.id));Object.assign(a,body);
+    try{const blob=await fichePDF(W.id);await spAddAttachment('Arrivages',W.id,`Validation ${safeName(a.N_Dossier||a.Title)}.pdf`,await blob.arrayBuffer());}
+    catch(e){console.warn(e);toast('⚠️ Validé, mais la fiche PDF n’a pas pu être jointe : '+e.message,'wa');}
+    SAVING=false;await loadAll();const id=W.id;W.dirty=false;W=null;openFiche(id);toast('✅ Coefficients validés — Patricia est prévenue','ok');
+  }catch(e){SAVING=false;toast('🔴 '+e.message,'ko');}
+}
+async function renvoyerPatricia(){
+  const com=await demanderTexte('Renvoyer à Patricia',`Indique ce qu’il faut corriger (facture manquante, montant à revoir…).`,'Commentaire (obligatoire)','Renvoyer',true);
+  if(com===null)return;
+  await changerStatut({Statut:'Renvoyé à Patricia',Commentaire_Fabrice:com,Valide_Par:sessionStorage.getItem('user_name')||''},'↩ Dossier renvoyé à Patricia');
+}
+async function prixAJour(){
+  const a=W.a;
+  const ok=await showConfirm('Prix à jour dans Image ?',`Confirme que <b>l’entrée en stock et les coefficients</b> du dossier <b>${esc(a.N_Dossier||a.Title)}</b> sont saisis dans Image.<br><br>Fabrice et les vendeurs sont prévenus : ils peuvent facturer les BL en attente sur ce matériel. Le dossier est clôturé.`,'Confirmer');
+  if(!ok)return;
+  await changerStatut({Statut:'Clôturé',Date_Saisie_Image:toSP(todayKey())},'✅ Prix à jour : Fabrice et les vendeurs sont prévenus');
+}
+async function changerStatut(body,msg){
+  if(SAVING)return;SAVING=true;
+  try{await spPatch('Arrivages',W.id,body,DATA.arr.find(x=>x.ID===W.id));SAVING=false;await loadAll();const id=W.id;W.dirty=false;W=null;openFiche(id);toast(msg,'ok');}
+  catch(e){SAVING=false;toast('🔴 '+e.message,'ko');}
+}
+async function demanderTexte(titre,html,label,okLabel,obligatoire){
+  for(;;){
+    const ok=await showConfirm(titre,`${html}<div class="f" style="margin-top:12px"><label>${esc(label)}</label><textarea id="cTexte" rows="3" style="width:100%"></textarea></div>`,okLabel,obligatoire?'danger':'primary');
+    if(!ok)return null;
+    const v=(($('cTexte')||{}).value||'').trim();
+    if(obligatoire&&!v){toast('⚠️ Le commentaire est obligatoire','wa');continue;}
+    return v;
+  }
+}
+
+// ── Fiche de validation PDF (remplace le tableau imprimé du dossier papier) ──
+let _pdfLibP=null;
+function loadJsPdf(){
+  if(window.jspdf&&window.jspdf.jsPDF&&window.jspdf.jsPDF.API.autoTable)return Promise.resolve();
+  if(!_pdfLibP)_pdfLibP=new Promise((res,rej)=>{
+    const s1=document.createElement('script');s1.src=JSPDF_CDN;s1.onerror=()=>{_pdfLibP=null;rej(new Error('Impossible de charger jsPDF'));};
+    s1.onload=()=>{const s2=document.createElement('script');s2.src=AUTOTABLE_CDN;s2.onload=()=>res();s2.onerror=()=>{_pdfLibP=null;rej(new Error('Impossible de charger jsPDF-AutoTable'));};document.head.appendChild(s2);};
+    document.head.appendChild(s1);});
+  return _pdfLibP;
+}
+async function fichePDF(arrId){
+  await loadJsPdf();
+  const a=DATA.arr.find(x=>x.ID===arrId)||W.a;const lines=(W&&W.id===arrId)?W.lines.filter(l=>l._st!=='del'):linesOf(arrId);
+  const c=calc(lines);const {jsPDF}=window.jspdf;const doc=new jsPDF({orientation:'landscape',unit:'mm',format:'a4'});
+  const eur=v=>fmtN(v).replace(/ | /g,' ')+' €';const nb=v=>fmtN(v).replace(/ | /g,' ');
+  try{const logo=document.querySelector('.logo-pill img');if(logo&&logo.src.startsWith('data:'))doc.addImage(logo.src,'JPEG',12,8,38,13);}catch(e){}
+  doc.setFont('helvetica','bold');doc.setFontSize(16);doc.setTextColor(10,31,61);doc.text('Validation du revient',58,15);
+  doc.setFontSize(22);doc.setTextColor(198,40,40);doc.text(String(a.N_Dossier||a.Title||''),285,16,{align:'right'});
+  doc.setFont('helvetica','normal');doc.setFontSize(10);doc.setTextColor(40,40,40);
+  const infos=[`Conteneur : ${a.Title||''}`,`Transitaire : ${a.Transitaire||''}`,`Catégorie : ${a.Categorie||''}`,`Entrée entrepôt : ${fmtD(dk(a,'Date_Entrepot'))}`];
+  doc.text(infos.join('     '),12,28);
+  doc.setFont('helvetica','bold');doc.text(`Total rendu : ${eur(c.total)}     Revient réel : ${fmtN(c.coef,3)}`,12,35);
+  doc.setFont('helvetica','normal');
+  doc.text(`Validé par ${a.Valide_Par||'—'} le ${fmtD(dk(a,'Date_Validation'))||'—'}${a.Commentaire_Fabrice?'  —  « '+a.Commentaire_Fabrice+' »':''}`,12,41);
+  const frais=lines.filter(l=>l.Type_Ligne==='Frais');
+  const body=[];
+  frais.forEach(l=>body.push([l.Fournisseur||'',l.N_Facture||'','','',nb(n0(l.Fret)+lineFrais(l)),'','','','']));
+  let tg=0;
+  lines.filter(l=>l.Type_Ligne!=='Frais').sort((p,q)=>String(p.Fournisseur).localeCompare(String(q.Fournisseur),'fr')).forEach(l=>{
+    const coef=n0(l.Coef_Applique)||null;const vm=lineVMnette(l);const g=coef?vm*(coef-c.coef):null;if(g!==null)tg+=g;
+    body.push([l.Fournisseur||'',l.N_Commande||'',l.N_Facture||'',nb(vm),l.Fret?nb(l.Fret):'',nb(vm+n0(l.Fret)),coef?fmtN(coef,2):'',coef?nb(vm*coef):'',g===null?'':(g>0?'+':'')+nb(g)]);});
+  doc.autoTable({startY:46,head:[['Fournisseur','Bon de cde','Facture','Valeur march.','Fret / frais','Total CIF','Revient appliqué','Valeur au revient','Gain / perte']],body,
+    foot:[['Total','','',nb(c.vm),nb(c.fretFrs+c.fretTrans+c.frais),nb(c.cif),'','',(tg>0?'+':'')+nb(tg)]],
+    styles:{fontSize:9,cellPadding:1.8},headStyles:{fillColor:[10,31,61],textColor:255},footStyles:{fillColor:[232,242,253],textColor:[10,31,61],fontStyle:'bold'},
+    columnStyles:{3:{halign:'right'},4:{halign:'right'},5:{halign:'right'},6:{halign:'center',fontStyle:'bold'},7:{halign:'right'},8:{halign:'right'}},
+    didParseCell:d=>{if(d.section==='body'&&d.column.index===8&&String(d.cell.raw).startsWith('-'))d.cell.styles.textColor=[198,40,40];}});
+  doc.setFontSize(8);doc.setTextColor(120);doc.text(`Portail Achats Réseaux Plus — édité le ${fmtD(todayKey())}. Les factures PDF sont rangées dans « Factures Fournisseurs ».`,12,200);
+  return doc.output('blob');
+}
+async function telechargerFiche(){
+  try{const blob=await fichePDF(W.id);const u=URL.createObjectURL(blob);const lnk=document.createElement('a');lnk.href=u;lnk.download=`Validation ${safeName(W.a.N_Dossier||W.a.Title)}.pdf`;document.body.appendChild(lnk);lnk.click();lnk.remove();setTimeout(()=>URL.revokeObjectURL(u),5000);}
+  catch(e){toast('🔴 '+e.message,'ko');}
+}
+
+// ── Onglet Validations ──
+function renderValidations(){
+  const el=$('valListe');if(!el)return;
+  const t=todayKey();
+  const att=DATA.arr.filter(a=>a.Statut==='À valider Fabrice');
+  const img=DATA.arr.filter(a=>a.Statut==='Validé');
+  const ren=DATA.arr.filter(a=>a.Statut==='Renvoyé à Patricia');
+  const carte=(a,txt,cls)=>`<div class="todo-i" data-open="${a.ID}"><span><b>${esc(a.N_Dossier||a.Title)}</b> <span class="muted">${esc(a.Title)} · ${esc(a.Transitaire||'')}</span></span><span class="${cls||'muted'}" style="text-align:right">${txt}</span></div>`;
+  const bloc=(ic,titre,c,items)=>`<div class="todo"><div class="todo-h"><span class="ic">${ic}</span><span class="t">${titre}</span><span class="c" style="--c:${c}">${items.length}</span></div><div class="todo-b">${items.length?items.join(''):'<div class="todo-none">✓ Rien en attente</div>'}</div></div>`;
+  el.innerHTML=[
+    bloc('🧮','À valider (coefficients)','var(--violet)',att.map(a=>carte(a,`envoyé ${relDay(dk(a,'Date_Envoi_Validation'))} · revient ${fmtCoef(a.Coef_Reel||coefOf(a))}`))),
+    bloc('⏱','Validés, pas encore dans Image','var(--red)',img.map(a=>{const d=dk(a,'Date_Validation');const n=d?daysBetween(d,t):0;return carte(a,`validé ${relDay(d)}${n>param('SEUIL_SAISIE_IMAGE_J')?' ⚠️':''}`,n>param('SEUIL_SAISIE_IMAGE_J')?'':'muted');})),
+    bloc('↩','Renvoyés à Patricia','var(--amber)',ren.map(a=>carte(a,esc(a.Commentaire_Fabrice||''))))
+  ].join('');
+  const cnt=$('cntValid');if(cnt){const n=att.length;cnt.style.display=n?'':'none';cnt.textContent=n;}
+}
+
+// ── Événements ──
+document.addEventListener('click',e=>{
+  if(!W||!e.target.closest('#valBox'))return;
+  if(e.target.closest('#btnEnvoiFab'))envoyerFabrice();
+  else if(e.target.closest('#btnValFab'))validerFabrice();
+  else if(e.target.closest('#btnRenvoi'))renvoyerPatricia();
+  else if(e.target.closest('#btnPrixImage'))prixAJour();
+  else if(e.target.closest('#btnFichePdf'))telechargerFiche();
+});
+document.addEventListener('input',e=>{
+  const i=e.target.closest&&e.target.closest('.coef-in');if(!i||!W)return;
+  const n=parseNum(i.value);if(n&&n>0&&n<10)W.coefs[i.dataset.coef]=n;else delete W.coefs[i.dataset.coef];
+  i.classList.toggle('req-empty',!(n>0));majGains();
+});
+
 // ═══ DÉMARRAGE ═══
 async function init(){
   $('currentDate').textContent=new Date().toLocaleDateString('fr-FR',{weekday:'long',day:'numeric',month:'long',year:'numeric'});
@@ -1929,11 +2154,11 @@ async function init(){
       try{
         const tok=await exchangeCode(code);
         sessionStorage.setItem('access_token',tok.access_token);
-        if(tok.id_token){try{const p=JSON.parse(decodeURIComponent(escape(atob(tok.id_token.split('.')[1].replace(/-/g,'+').replace(/_/g,'/')))));sessionStorage.setItem('user_name',p.name||p.preferred_username||'');}catch(e){}}
+        if(tok.id_token){try{const p=JSON.parse(decodeURIComponent(escape(atob(tok.id_token.split('.')[1].replace(/-/g,'+').replace(/_/g,'/')))));sessionStorage.setItem('user_name',p.name||p.preferred_username||'');sessionStorage.setItem('user_email',String(p.preferred_username||p.email||p.upn||'').toLowerCase());}catch(e){}}
         history.replaceState({},document.title,C.redirectUri);
       }catch(e){$('loadingScreen').style.display='none';$('authScreen').style.display='flex';$('authStatus').textContent='Erreur de connexion : '+e.message;return;}
     }
-    if(!getToken()){$('authScreen').style.display='flex';return;}
+    if(!getToken()){if(QS.get('dossier'))sessionStorage.setItem('open_dossier',QS.get('dossier'));$('authScreen').style.display='flex';return;}
   }
   const u=sessionStorage.getItem('user_name')||'';
   $('userName').textContent=u;$('userInitials').textContent=(u.split(' ').map(w=>(w.match(/[A-Za-zÀ-ÿ]/)||[''])[0]).join('').toUpperCase().slice(0,2))||'RP';
@@ -1941,7 +2166,7 @@ async function init(){
   try{await loadAll();}
   catch(e){$('loadingScreen').style.display='none';$('authScreen').style.display='flex';$('authStatus').textContent='Erreur de chargement SharePoint : '+e.message;console.error(e);return;}
   $('loadingScreen').style.display='none';$('app').style.display='block';
-  const open=QS.get('dossier');if(open){const a=DATA.arr.find(x=>String(x.ID)===open||x.N_Dossier===open);if(a){setTab('dossiers');openFiche(a.ID);}}
+  const open=QS.get('dossier')||sessionStorage.getItem('open_dossier');sessionStorage.removeItem('open_dossier');if(open){const a=DATA.arr.find(x=>String(x.ID)===open||x.N_Dossier===open);if(a){setTab('dossiers');openFiche(a.ID);}}
   setInterval(()=>{if(!W&&!$('ovNew').classList.contains('open'))loadAll().catch(()=>{});},5*60*1000);
 }
 init();
