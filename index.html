@@ -8289,6 +8289,20 @@ async function validerLivraisonPrete(sessionId, numBL){
   }catch(e){toast('❌ '+e.message);}
 }
 
+// ── Préparations matériel terminées mais pas encore affectées à un client/BL ──
+// Même logique de filtre que l'onglet "À affecter" (renderPreparations) :
+// extraite ici pour être réutilisable par le garde-fou de "+Nouveau BL".
+function getPrepsAAffecter(){
+  const all=DATA.sessionsScan||[];
+  const isPrepLibre=s=>(f(s,'Type_Operation')||'').toLowerCase()==='préparation matériel';
+  const isTerminee=s=>{const st=(f(s,'Statut')||'').toLowerCase();return st==='terminée'||st==='terminee';};
+  const isClotureePrepLibre=s=>{
+    const st=(f(s,'Statut')||'').toLowerCase();
+    return isTerminee(s)||st.includes('écart')||st.includes('ecart')||st.includes('partiellement');
+  };
+  return all.filter(s=>isPrepLibre(s)&&isClotureePrepLibre(s)&&String(f(s,'Numero_BL')||'').startsWith('PREP-'));
+}
+
 // Client indiqué pour une préparation : champ Client en priorité (portail
 // corrigé le 30/09, ou ✏️ du panneau), sinon ce qui suit " - " dans le titre
 // (anciennes préparations). SharePoint renvoie "Title", jamais "Titre".
@@ -11085,6 +11099,7 @@ function openEmissionBL(){
           <input type="hidden" id="em-client-id">
           <div id="em-client-drop" style="position:absolute;top:100%;left:0;right:0;background:white;border:1px solid var(--border);border-radius:var(--radius-sm);box-shadow:0 4px 12px rgba(0,0,0,.1);z-index:50;display:none;max-height:200px;overflow-y:auto"></div>
         </div>
+        <div id="em-prep-warn" style="font-size:11.5px;color:#92400e;background:#fff7ed;border:1px solid #fed7aa;border-radius:var(--radius-sm);padding:8px 10px;margin-top:6px;display:none;line-height:1.4"></div>
       </div>
       <div>
         <label style="font-size:12px;font-weight:700;color:var(--text-muted);display:block;margin-bottom:6px">Vendeur émetteur <span style="color:var(--red)">*</span></label>
@@ -11124,12 +11139,42 @@ function openEmissionBL(){
   // Autocomplete client avec saisie libre (setupAC laisse le texte tapé si rien n'est choisi)
   setTimeout(()=>{
     const clientData=Object.entries(DATA.clients||{}).map(([cid,cname])=>({id:cid,name:cname}));
-    setupAC('em-client-search','em-client-id','em-client-drop',clientData);
+    setupAC('em-client-search','em-client-id','em-client-drop',clientData,checkEmissionClientPrep);
     // Champs obligatoires rouge/vert
     setupRequiredField(document.getElementById('em-numero'));
     setupRequiredField(document.getElementById('em-client-search'));
     setupRequiredSelect(document.getElementById('em-vendeur'));
+    // Garde-fou : prévenir si une préparation du magasinier attend déjà ce client
+    document.getElementById('em-client-search')?.addEventListener('input',checkEmissionClientPrep);
   },60);
+}
+
+// ── Garde-fou : une préparation matériel (magasinier) est déjà en attente pour
+// ce client — éviter qu'un vendeur crée un 2e BL au lieu de reprendre celle-ci
+// via « ✅ Prendre en charge » (onglet « À affecter »). Pur avertissement,
+// jamais bloquant : le vendeur reste libre de continuer s'il sait ce qu'il fait.
+function checkEmissionClientPrep(){
+  const warn=document.getElementById('em-prep-warn');
+  if(!warn)return;
+  if(_emissionType==='Inventaire physique'){warn.style.display='none';return;}
+  const val=(document.getElementById('em-client-search')?.value||'').trim();
+  if(val.length<3){warn.style.display='none';return;}
+  const norm=x=>String(x||'').normalize('NFD').replace(/[̀-ͯ]/g,'').trim().toLowerCase();
+  const q=norm(val);
+  const matches=getPrepsAAffecter().filter(s=>{
+    const c=norm(clientIndiquePrep(s));
+    return c&&(c===q||c.includes(q)||q.includes(c));
+  });
+  if(matches.length){
+    const liste=matches.map(s=>{
+      const nb=(DATA.lignesScan||[]).filter(l=>String(lineSessionId(l))===String(s.ID)).length;
+      return `<strong>${f(s,'Numero_BL')}</strong> (${nb} art., préparé par ${f(s,'Magasinier')||'—'})`;
+    }).join(' · ');
+    warn.innerHTML=`⚠️ ${matches.length>1?'Des préparations existent':'Une préparation existe'} déjà pour ce client, pas encore affectée : ${liste}. Utilise plutôt « ✅ Prendre en charge » depuis l'onglet « À affecter » pour éviter un doublon.`;
+    warn.style.display='block';
+  }else{
+    warn.style.display='none';
+  }
 }
 
 function setEmissionType(type){
