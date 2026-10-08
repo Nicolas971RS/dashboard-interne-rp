@@ -835,7 +835,7 @@ function fField(label,f,opts={}){
 }
 function renderFiche(){
   const a=W.a;const c=ctrlInfo(W.lines);
-  const LOCK=STATUTS_VERROU.includes(a.Statut);const VUE_F=LOCK&&typeof estValideur==='function'&&estValideur();W.lecture=VUE_F;
+  const LOCK=STATUTS_VERROU.includes(a.Statut);const VUE_F=(LOCK&&typeof estValideur==='function'&&estValideur())||(typeof lectureSeule==='function'&&lectureSeule());W.lecture=VUE_F;
   $('fiche').innerHTML=`
   <div class="fiche-head"><button class="x" title="Fermer (Échap)" onclick="closeFiche()">✕</button>
     <h2>🚢 <span id="fTitle">${esc(a.Title||'Nouveau dossier')}</span> <span id="fStatut">${statutBadge(statutAuto(a))}</span></h2>
@@ -1979,7 +1979,16 @@ function valideurs(){
   const l=[paramStr('VALIDEURS_COEF',''),paramStr('EMAIL_FABRICE',''),paramStr('EMAIL_NICOLAS','')].join(';');
   return l.toLowerCase().split(/[;,\s]+/).filter(x=>x.includes('@'));
 }
-function estValideur(){if(DEMO)return QS.get('role')==='fabrice';const e=userEmail();return !!e&&valideurs().includes(e);}
+function estValideur(){if(DEMO)return QS.get('role')==='fabrice'||QS.get('role')==='direction';const e=userEmail();return !!e&&valideurs().includes(e);}
+// Fabrice (direction) : consultation seule, il ne saisit que les coefficients quand c'est son tour.
+// Patricia et Nicolas gardent la modification même s'ils sont aussi valideurs.
+function lectureSeule(){
+  if(DEMO)return QS.get('role')==='direction';
+  const e=userEmail();if(!e)return false;
+  const ed=[paramStr('EMAIL_PATRICIA',''),paramStr('EMAIL_NICOLAS','')].join(';').toLowerCase().split(/[;,\s]+/).filter(x=>x.includes('@'));
+  if(ed.includes(e))return false;
+  return valideurs().includes(e);
+}
 
 // Regroupement par fournisseur des lignes marchandise du dossier ouvert
 function groupesFrs(lines){
@@ -2024,7 +2033,9 @@ function renderValidation(){
   if(enAttente)entete=`<div class="fac-box ok">⏳ Envoyé à Fabrice le ${fmtD(dk(a,'Date_Envoi_Validation'))}${val?' — <b>à toi de saisir les coefficients</b>.':', en attente de sa validation.'}</div>`;
   if(valide)entete=`<div class="fac-box ok">✅ Validé par <b>${esc(a.Valide_Par||'Fabrice')}</b> le ${fmtD(dk(a,'Date_Validation'))}${a.Commentaire_Fabrice?` — « ${esc(a.Commentaire_Fabrice)} »`:''}.${st==='Clôturé'?` Prix à jour dans Image le <b>${fmtD(dk(a,'Date_Saisie_Image'))}</b>.`:` <b style="color:var(--amber)">Coefficients à saisir dans Image${dk(a,'Date_Validation')?` (validé ${relDay(dk(a,'Date_Validation'))})`:''}.</b>`}</div>`;
   const pret=!!a.N_Dossier&&c.factOk&&c.nFrais>0&&c.coef;
-  if(!enAttente&&!valide){
+  const LS=lectureSeule();
+  if(LS&&!enAttente){actions=st==='Validé'||st==='Clôturé'?`<button class="btn sm" id="btnFichePdf">🖨 Fiche de validation (PDF)</button>`:`<span class="muted" style="font-size:12px">${st==='Renvoyé à Patricia'?'Renvoyé à Patricia : en attente de ses corrections.':'Dossier en préparation chez Patricia.'}</span>`;}
+  else if(!enAttente&&!valide){
     const manque=[];if(!a.N_Dossier)manque.push('n° dossier Image');if(!c.factOk)manque.push('n° de facture sur chaque ligne');if(!c.nFrais)manque.push('facture du transitaire');
     actions=`<button class="btn primary" id="btnEnvoiFab" ${pret?'':'disabled'}>📤 Envoyer à Fabrice</button>${manque.length?`<span class="muted" style="font-size:12px">Manque : ${esc(manque.join(', '))}</span>`:''}`;
   }else if(enAttente&&val){
