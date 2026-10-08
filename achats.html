@@ -387,8 +387,10 @@ fieldset.lockfs .btn{display:none}
 .ltable.stat-t tr.grp td{background:var(--grey-light);font-weight:700;color:var(--navy);font-size:12px;text-transform:uppercase;letter-spacing:.04em}
 .ltable.stat-t td.lo{background:#e8f5e9;color:var(--green);font-weight:700}
 .ltable.stat-t td.hi{background:#ffebee;color:var(--red);font-weight:700}
-.bar{display:flex;height:9px;background:var(--grey-light);border-radius:5px;overflow:hidden;min-width:60px}
-.bar i{display:block;height:100%}
+.sbar{display:flex;height:9px;background:var(--grey-light);border-radius:5px;overflow:hidden;min-width:60px}
+.sbar i{display:block;height:100%}
+.ltable.stat-t tr.hl td{background:#fff8e1}
+.sel.sm{padding:3px 6px;font-size:12px}
 .peu{color:var(--amber);cursor:help}
 .stat-filters{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:14px}
 .sel{padding:7px 10px;border:1px solid var(--border);border-radius:var(--radius);background:#fff;font-size:13px}
@@ -885,7 +887,7 @@ function fField(label,f,opts={}){
 }
 function renderFiche(){
   const a=W.a;const c=ctrlInfo(W.lines);
-  const LOCK=STATUTS_VERROU.includes(a.Statut);const VUE_F=(LOCK&&typeof estValideur==='function'&&estValideur())||(typeof lectureSeule==='function'&&lectureSeule());W.lecture=VUE_F;
+  const LOCK=STATUTS_VERROU.includes(a.Statut);const VUE_F=(a.Statut==='À valider Fabrice'&&typeof estValideur==='function'&&estValideur())||(typeof lectureSeule==='function'&&lectureSeule());W.lecture=VUE_F;
   $('fiche').innerHTML=`
   <div class="fiche-head"><button class="x" title="Fermer (Échap)" onclick="closeFiche()">✕</button>
     <h2>🚢 <span id="fTitle">${esc(a.Title||'Nouveau dossier')}</span> <span id="fStatut">${statutBadge(statutAuto(a))}</span></h2>
@@ -2439,7 +2441,7 @@ function renderTirelire(){
   const J=E.filter(e=>(!TIRF.cat||e.cat===TIRF.cat)&&(!TIRF.annee||(e.date||'').startsWith(TIRF.annee))).slice().reverse();
   const edit=peutMouvementer()&&!TIR_ERR;
   const rows=J.slice(0,400).map(e=>`<tr ${e.type==='Dossier'&&e.id?`data-open="${e.id}" class="clk"`:''}><td class="mono">${fmtD(e.date)}</td><td><span class="cat-dot" style="--c:${CAT_COUL[e.cat]||'#546e7a'}"></span>${esc(e.cat)}</td>
-    <td>${esc(e.label)}${e.comm?`<div class="muted" style="font-size:11.5px">${esc(e.comm)}</div>`:''}</td>
+    <td>${esc(e.label)}${e.comm?`<div class="muted" style="font-size:11.5px">${esc(e.comm)}</div>`:''}${edit&&e.cat===CAT_VIDE&&(e.type==='Dossier'||e.mid)?`<div style="margin-top:4px"><select class="sel sm" data-reclass="${e.type==='Dossier'?'A'+e.id:'M'+e.mid}"><option value="">Classer dans…</option>${CATEGORIES.map(c=>`<option>${esc(c)}</option>`).join('')}</select></div>`:''}</td>
     <td>${e.type==='Dossier'?(e.montant<0?'<span class="tag-tir neg">Perte financée par la tirelire</span>':'<span class="tag-tir pos">Gain du dossier</span>'):`<span class="tag-tir">${esc(e.type)}</span>`}</td>
     <td class="r mono" style="color:${col(e.montant)};font-weight:600">${(e.montant>0?'+':'')+fmtN(e.montant)}</td><td class="r mono">${fmtN(e.soldeCat,0)}</td>
     <td class="r">${edit&&e.mid&&e.manuel?`<button class="rm" data-delmvt="${e.mid}" title="Supprimer ce mouvement">🗑</button>`:''}</td></tr>`).join('');
@@ -2476,6 +2478,13 @@ async function saisirMouvement(){
     return;
   }
 }
+async function reclasser(ref,cat){
+  const estDos=ref[0]==='A',id=+ref.slice(1);
+  const it=estDos?DATA.arr.find(x=>x.ID===id):(DATA.tir||[]).find(x=>x.ID===id);if(!it)return;
+  const ok=await showConfirm('Classer dans une catégorie ?',`<b>${esc(estDos?(it.N_Dossier||'')+' '+(it.Title||''):it.Title||'')}</b> → <b>${esc(cat)}</b>`,'Classer');
+  if(!ok){renderTirelire();return;}
+  try{await spPatch(estDos?'Arrivages':'Tirelire_Mouvements',id,{Categorie:cat},it);await loadAll();toast('✓ Classé dans '+cat,'ok');}catch(e){toast('🔴 '+e.message,'ko');}
+}
 async function supprimerMouvement(id){
   const m=(DATA.tir||[]).find(x=>x.ID===id);if(!m)return;
   const ok=await showConfirm('Supprimer ce mouvement ?',`${esc(m.Title||'')} · <b>${fmtN(m.Montant)} €</b>`,'Supprimer','danger');if(!ok)return;
@@ -2494,7 +2503,7 @@ function statPrest(D){
     if(x.princ===p.nom&&x.delai!==null)o.del.push(x.delai);}));
   return [...M.values()];
 }
-function barre(v,max,c){const w=max>0?Math.max(2,Math.round(v/max*100)):0;return `<span class="bar"><i style="width:${w}%;background:${c}"></i></span>`;}
+function barre(v,max,c){const w=max>0?Math.max(2,Math.round(v/max*100)):0;return `<span class="sbar"><i style="width:${w}%;background:${c}"></i></span>`;}
 function renderStats(){
   const el=$('statBox');if(!el)return;
   const bh=$('btnHist');if(bh)bh.style.display=peutImporter()?'':'none';
@@ -2520,11 +2529,11 @@ function renderStats(){
   const ordreT=Object.keys(parType).sort((a,b)=>parType[b].reduce((s,o)=>s+o.v.length,0)-parType[a].reduce((s,o)=>s+o.v.length,0));
   const tPrest=ordreT.map(t=>{const L=parType[t].sort((p,q)=>moy(q.v)-moy(p.v));const mx=Math.max(...L.map(o=>moy(o.v)));
     return `<tr class="grp"><td colspan="8">${esc(t)}</td></tr>`+L.map(o=>{const m=moy(o.v);const pv=o.sV?o.sN/o.sV:null;const dl=moy(o.del);
-      return `<tr><td><b>${esc(o.nom)}</b>${o.role?` <span class="muted" style="font-size:11px">${esc(o.role)}</span>`:''}</td><td class="r">${o.dos.length}${o.nTC>o.dos.length?` <span class="muted" style="font-size:11px">(${o.nTC} TC)</span>`:''}${o.dos.length<3?' <span class="peu" title="Moins de 3 dossiers : moyenne peu fiable">⚠</span>':''}</td>
+      return `<tr class="${STATF.prest&&o.nom===STATF.prest?'hl':''}"><td><b>${esc(o.nom)}</b>${o.role?` <span class="muted" style="font-size:11px">${esc(o.role)}</span>`:''}</td><td class="r">${o.dos.length}${o.nTC>o.dos.length?` <span class="muted" style="font-size:11px">(${o.nTC} TC)</span>`:''}${o.dos.length<3?' <span class="peu" title="Moins de 3 dossiers : moyenne peu fiable">⚠</span>':''}</td>
         <td class="r mono"><b>${eur0(m)}</b></td><td>${barre(m,mx,'var(--teal-mid)')}</td><td class="r mono muted">${eur0(Math.min(...o.v))} – ${eur0(Math.max(...o.v))}</td>
         <td class="r mono">${pct(pv)}</td><td class="r mono muted">${eur0(moy(o.tax))}</td><td class="r mono">${dl===null?'—':fmtN(dl,0)+' j'}</td></tr>`;}).join('');}).join('');
   const cPrest=`<div class="card"><div class="card-h"><h3>🚢 Transitaires et transporteurs — à type égal</h3>
-      <div style="display:flex;gap:8px;align-items:center">${sel('sfPrest',STATF.prest,[['','Choisir un prestataire…'],...[...new Set(SP.map(o=>o.nom))].sort().map(n=>[n,n])])}<button class="btn sm primary" id="btnFicheTrans">🖨 Fiche réunion (PDF)</button></div></div>
+      <div style="display:flex;gap:8px;align-items:center">${sel('sfPrest',STATF.prest,[['','Choisir un prestataire…'],...[...new Set(SP.map(o=>o.nom))].sort().map(n=>[n,n])])}<button class="btn sm primary" id="btnFicheTrans" ${STATF.prest?'':'disabled'}>🖨 Fiche ${STATF.prest?esc(STATF.prest):'réunion'} (PDF)</button></div></div>
     <div class="card-b tblwrap" style="padding:6px 10px 10px"><table class="ltable stat-t"><thead><tr><th>Prestataire</th><th class="r">Dossiers</th><th class="r">Coût négociable / conteneur</th><th style="width:16%"></th><th class="r">Mini – maxi</th><th class="r">% de la valeur</th><th class="r">Taxes / conteneur (info)</th><th class="r">Port → entrepôt</th></tr></thead>
     <tbody>${tPrest||'<tr><td colspan="8" class="muted">Aucune facture de frais sur la sélection.</td></tr>'}</tbody></table>
     <div class="muted" style="font-size:12px;margin-top:6px">Coût négociable = fret maritime, débarquement, transit, manutention/SPI, transport, crédit d'enlèvement, divers, ramené à un conteneur (un lot de 20 TC compte pour 20). Les taxes (OM, OM additionnel, TID, droit de port/LTA) sont indiquées à part : elles ne se négocient pas. ⚠ = moins de 3 dossiers.</div></div></div>`;
@@ -2549,7 +2558,7 @@ function renderStats(){
     <div class="card-b tblwrap" style="padding:6px 10px 10px"><table class="ltable stat-t"><thead><tr><th>Mois</th><th class="r">Dossiers</th><th class="r">Valeur</th><th class="r">Négociable</th><th class="r">Taxes</th><th style="width:22%"></th><th class="r">Frais / valeur</th><th class="r">Revient moyen</th></tr></thead>
     <tbody>${MK.map(k=>{const o=mois[k];const w1=mxF?o.nego/mxF*100:0,w2=mxF?o.tax/mxF*100:0;
       return `<tr><td>${nomMois(k)}</td><td class="r">${o.n}</td><td class="r mono">${eur0(o.vm)}</td><td class="r mono">${eur0(o.nego)}</td><td class="r mono muted">${eur0(o.tax)}</td>
-      <td><span class="bar"><i style="width:${w1}%;background:var(--teal-mid)"></i><i style="width:${w2}%;background:#f0a35e"></i></span></td><td class="r mono">${pct(o.vm?(o.nego+o.tax)/o.vm:null)}</td><td class="r mono"><b>${fmtCoef(o.vm?o.tot/o.vm:null)}</b></td></tr>`;}).join('')}</tbody></table></div></div>`;
+      <td><span class="sbar"><i style="width:${w1}%;background:var(--teal-mid)"></i><i style="width:${w2}%;background:#f0a35e"></i></span></td><td class="r mono">${pct(o.vm?(o.nego+o.tax)/o.vm:null)}</td><td class="r mono"><b>${fmtCoef(o.vm?o.tot/o.vm:null)}</b></td></tr>`;}).join('')}</tbody></table></div></div>`;
 
   // 4. catégories
   const C={};D.forEach(x=>{const o=C[x.cat]||(C[x.cat]={n:0,vm:0,tot:0,gp:0});o.n++;o.vm+=x.vm;o.tot+=x.total;o.gp+=x.gp;});
@@ -2705,12 +2714,14 @@ document.addEventListener('click',e=>{
   const dm=e.target.closest('[data-delmvt]');if(dm){e.stopPropagation();supprimerMouvement(+dm.dataset.delmvt);return;}
   const ac=e.target.closest('#statBox [data-acc]');if(ac){$(ac.dataset.acc).classList.toggle('closed');return;}
   const os=e.target.closest('[data-open-stat]');if(os){openFiche(+os.dataset.openStat);return;}
-  if(e.target.closest('#btnFicheTrans')){ficheTransitaire(STATF.prest);return;}
+  if(e.target.closest('#btnFicheTrans')){const s=$('sfPrest');ficheTransitaire((s&&s.value)||STATF.prest);return;}
 });
 document.addEventListener('change',e=>{
-  const t=e.target;if(!t||!t.id)return;
+  const t=e.target;if(!t)return;
+  if(t.dataset&&t.dataset.reclass&&t.value){reclasser(t.dataset.reclass,t.value);return;}
+  if(!t.id)return;
   const m={sfPer:'per',sfCat:'cat',sfType:'type',sfTypePoste:'typePoste',sfPrest:'prest'}[t.id];
-  if(m){STATF[m]=t.value;if(m!=='prest')renderStats();return;}
+  if(m){STATF[m]=t.value;renderStats();if(m==='prest'&&t.value){const r=document.querySelector('#statBox tr.hl');if(r)r.scrollIntoView({block:'center',behavior:'smooth'});}return;}
   if(t.id==='tirAnnee'){TIRF.annee=t.value;renderTirelire();return;}
   if(t.id==='histFile'&&t.files&&t.files[0]){const f=t.files[0];t.value='';importerHistorique(f);}
 });
