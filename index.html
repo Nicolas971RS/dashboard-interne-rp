@@ -9590,7 +9590,17 @@ async function openTraiterModal(id,numBC,client){
     if(chantierId==='__clear__')body['ProjetId']=null;
     else if(chantierId)body['ProjetId']=parseInt(chantierId);
     const bl=document.getElementById('m-bl').value.trim();
-    if(bl)body['N_x00b0_BL']=bl;
+    if(bl&&/^0+$/.test(bl)){document.getElementById('m-bl').classList.add('err');throw new Error('« '+bl+' » n\'est pas un N° de BL. Pour retirer un BL saisi par erreur, vide simplement le champ.');}
+    // N° BL vidé alors qu'il y en avait un : on le retire vraiment (avant, un champ
+    // vide était ignoré et l'ancien BL restait en place).
+    const blRetire=!bl&&!!String(curBL||'').trim();
+    if(blRetire){
+      if(!confirm('Retirer le N° BL '+curBL+' de ce BC ?\n\nLes dates BL et prise en charge seront aussi effacées.'))throw new Error('Retrait du N° BL annulé.');
+      body['N_x00b0_BL']=null;body['DateBL']=null;body['Datepriseencharge']=null;
+    }
+    else if(bl)body['N_x00b0_BL']=bl;
+    // Ancien BL abandonné (retiré ou remplacé) : sa session magasin devient orpheline
+    const _blAbandonne=(blRetire||(bl&&curBL&&bl.toLowerCase()!==String(curBL).trim().toLowerCase()))?String(curBL).trim():'';
     const datebl=document.getElementById('m-datebl').value;
     const datepec=document.getElementById('m-datepec').value;
     const eta=document.getElementById('m-eta').value;
@@ -9598,11 +9608,11 @@ async function openTraiterModal(id,numBC,client){
     // on n'écrit rien (sauf date saisie volontairement) ; avec un BL, une date
     // vide prend la date du jour. On n'écrit que ce qui change.
     {
-      const aBL=!!(bl||String(f(currentItem,'N_x00b0_BL')||'').trim());
+      const aBL=!!(bl||(!blRetire&&String(f(currentItem,'N_x00b0_BL')||'').trim()));
       const dBL=datebl||(aBL&&!curDateBL?today:'');
       const dPEC=datepec||(aBL&&!curDatePEC?today:'');
-      if(dBL&&dBL!==(curDateBL?curDateBL.slice(0,10):''))body['DateBL']=dBL+'T00:00:00Z';
-      if(dPEC&&dPEC!==(curDatePEC?curDatePEC.slice(0,10):''))body['Datepriseencharge']=dPEC+'T00:00:00Z';
+      if(!blRetire&&dBL&&dBL!==(curDateBL?curDateBL.slice(0,10):''))body['DateBL']=dBL+'T00:00:00Z';
+      if(!blRetire&&dPEC&&dPEC!==(curDatePEC?curDatePEC.slice(0,10):''))body['Datepriseencharge']=dPEC+'T00:00:00Z';
     }
     if(eta)body['DateLivraisonpr_x00e9_vue']=eta+'T00:00:00Z';
     const arrivage=document.getElementById('m-arrivage')?.value;
@@ -9635,7 +9645,14 @@ async function openTraiterModal(id,numBC,client){
 
     // Un BL signifie que le BC a été pris en charge : client et vendeur
     // doivent être renseignés, sinon le BC reste orphelin dans le suivi.
-    const blEffectif=bl||f(currentItem,'N_x00b0_BL');
+    const blEffectif=bl||(blRetire?'':f(currentItem,'N_x00b0_BL'));
+    if(_blAbandonne){
+      // Proposer la suppression de la session magasin de l'ancien BL si aucun
+      // autre BC ne l'utilise (la fonction vérifie elle-même qu'elle n'est pas clôturée).
+      const _sOld=findSessionByBL(_blAbandonne);
+      const _autreBC=(DATA.suivi||[]).some(x=>x.ID!==id&&String(f(x,'N_x00b0_BL')||'').trim().toLowerCase()===_blAbandonne.toLowerCase());
+      if(_sOld&&!_autreBC)setTimeout(()=>{toast('ℹ️ La session magasin du BL '+_blAbandonne+' n\'est plus rattachée à aucun BC');supprimerSessionScan(_sOld.ID);},1200);
+    }
     if(blEffectif){
       const clientEffectif=clientId||currentItem.ClientId;
       const vendeurEffectif=vendeur||f(currentItem,'Vendeurencharge');
