@@ -1291,7 +1291,7 @@
           </select>
           <label style="color:rgba(255,255,255,.7);font-size:12px">Du <input type="date" id="scl-du" onchange="renderSuivisClients()" class="fs" style="padding:5px 6px"></label>
           <label style="color:rgba(255,255,255,.7);font-size:12px">Au <input type="date" id="scl-au" onchange="renderSuivisClients()" class="fs" style="padding:5px 6px"></label>
-          <label style="color:rgba(255,255,255,.8);font-size:12px;display:flex;align-items:center;gap:4px"><input type="checkbox" id="scl-dernier" onchange="renderSuivisClients()"> Dernier suivi par BC</label>
+          <label style="color:rgba(255,255,255,.8);font-size:12px;display:flex;align-items:center;gap:4px"><input type="checkbox" id="scl-dernier" checked onchange="renderSuivisClients()"> Une ligne par BC</label>
           <button class="btn" style="border-color:rgba(255,255,255,.3);color:rgba(255,255,255,.75);background:none" onclick="sclReinitialiser()">Réinitialiser</button>
           <button class="btn" style="border-color:rgba(255,255,255,.3);color:rgba(255,255,255,.75);background:none" onclick="exportSuivisClientsCSV()">⬇ CSV</button>
           <span id="scl-count" style="font-size:11px;color:rgba(255,255,255,.55)"></span>
@@ -4262,8 +4262,20 @@ const SC_RESULTATS={
   reporte:{lib:'Client reporte',ico:'⏳',dateReq:true},
   autre:{lib:'Autre',ico:'💬',dateReq:false}
 };
+// Texte UTF-8 lu comme Latin-1 (« FrÃ©dÃ©ric ») → « Frédéric ». Sans effet sur un texte correct.
+function fixAccents(t){
+  if(typeof t!=='string'||!/[ÃÂ]/.test(t))return t;
+  try{return decodeURIComponent(escape(t));}catch(e){return t;}
+}
 function scLireBrut(bc){
-  return String(f(bc||{},'Suivi_Client')||'').split('\n').map(x=>{try{return JSON.parse(x);}catch(e){return null;}}).filter(Boolean);
+  return String(f(bc||{},'Suivi_Client')||'').split('\n').map(x=>{try{const o=JSON.parse(x);if(o&&o.u)o.u=fixAccents(o.u);return o;}catch(e){return null;}}).filter(Boolean);
+}
+// Clôtures répétées (ex. clic sur 📞+ d'une ligne d'historique) : on ne garde
+// que la première tant qu'aucune autre action n'a rouvert le suivi.
+function scSansDoublons(h){
+  const out=[];
+  h.forEach(e=>{const prev=out[out.length-1];if(e.r==='clos'&&prev&&prev.r==='clos')return;out.push(e);});
+  return out;
 }
 // Le suivi client concerne le dossier : BC d'origine + BC partiels (-A, -A-A…)
 function scOrigine(bc){
@@ -4275,13 +4287,15 @@ function scLire(bc){
   if(!bc)return[];
   const r=bcRacine(f(bc,'Title')||'').toUpperCase();
   const bcs=r?(DATA.suivi||[]).filter(x=>bcRacine(f(x,'Title')||'').toUpperCase()===r):[bc];
-  return (bcs.length?bcs:[bc]).flatMap(scLireBrut).sort((a,b)=>String(a.t).localeCompare(String(b.t)));
+  return scSansDoublons((bcs.length?bcs:[bc]).flatMap(scLireBrut).sort((a,b)=>String(a.t).localeCompare(String(b.t))));
 }
 const _scJour=()=>{try{return jourLocal(new Date().toISOString());}catch(e){return new Date().toISOString().slice(0,10);}};
 const _scFmtJ=d=>{if(!d)return'';const[a,m,j]=String(d).split('-');return j&&m?`${j}/${m}`:d;};
 // BC encore « ouvert » : pas soldé et (sans N° BL, ou reste à livrer sur le dossier)
 function scBCOuvert(bc){
   if(!bc||estSolde(bc)||estIgnore(bc))return false;
+  // BC terminé, annulé, entièrement livré ou entièrement facturé : plus rien à suivre
+  if(['Terminé','Annulé','Entièrement livré'].includes(getStatut(bc))||getEtatFact(bc)==='Entièrement facturé')return false;
   if(!f(bc,'N_x00b0_BL'))return true;
   const racine=bcRacine(f(bc,'Title')||'');
   return dossierResume(racine).lignes.some(l=>(parseFloat(f(l,'Quantit_x00e9_command_x00e9_e'))||0)-(parseFloat(f(l,'Quantit_x00e9_livr_x00e9_e'))||0)>0);
@@ -4359,6 +4373,8 @@ function openSuiviClient(bcId){
     const x=document.getElementById('sc-x').value.trim();
     let en='',em='',m='';
     if(r==='clos'){
+      const _et=scEtat(bc);
+      if(_et&&_et.clos)throw new Error('Ce suivi est déjà clos (le '+dateHeureGP(_et.der.t)+' par '+(_et.der.u||'—')+'). Rien à refaire.');
       m=document.getElementById('sc-m').value;
       if(!m){document.getElementById('sc-m').style.borderColor='var(--red)';throw new Error('Choisis le motif de clôture du suivi.');}
       if(m==='Autre'&&!x){document.getElementById('sc-x').style.borderColor='var(--red)';throw new Error('Précise le motif dans le commentaire.');}
@@ -4403,14 +4419,15 @@ function sclToutes(){
     const brut=scLireBrut(bcBrut);if(!brut.length)return;
     const bc=scOrigine(bcBrut);
     const h=scLire(bc);const etat=scEtat(bc);const der=h[h.length-1];
-    brut.forEach(e=>rows.push({bc,e,dernier:der&&der.t===e.t&&der.u===e.u,etat}));
+    const garde=new Set(h.map(e=>e.t+'|'+e.u));
+    brut.filter(e=>garde.has(e.t+'|'+e.u)).forEach(e=>rows.push({bc,e,dernier:der&&der.t===e.t&&der.u===e.u,etat,nb:h.length}));
   });
   return rows.sort((a,b)=>String(b.e.t).localeCompare(String(a.e.t)));
 }
 function sclReinitialiser(){
   ['scl-q','scl-du','scl-au'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});
   ['scl-vendeur','scl-resultat','scl-etat'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='all';});
-  const d=document.getElementById('scl-dernier');if(d)d.checked=false;
+  const d=document.getElementById('scl-dernier');if(d)d.checked=true;
   renderSuivisClients();
 }
 function sclFiltrees(){
@@ -4475,26 +4492,42 @@ function renderSuivisClients(){
   set('kpi-scl-bc',new Set(rows.map(x=>x.bc.ID)).size);
   set('kpi-scl-du',bcDus.size);
   set('kpi-scl-inj',rows.filter(x=>x.e.r==='injoignable').length);
-  set('scl-count',rows.length+' suivi'+(rows.length>1?'s':''));
+  const parBC=!!document.getElementById('scl-dernier')?.checked;
+  set('scl-count',parBC?rows.length+' BC':rows.length+' suivi'+(rows.length>1?'s':''));
   const b=document.getElementById('scl-body');
   if(!b)return;
   if(!tout.length){b.innerHTML='<tr class="empty-row"><td colspan="9">Aucun suivi client enregistré pour l’instant — utilise « 📞 Suivi client » sur un BC.</td></tr>';return;}
   if(!rows.length){b.innerHTML='<tr class="empty-row"><td colspan="9">Aucun suivi ne correspond aux filtres</td></tr>';return;}
-  b.innerHTML=rows.map(x=>{
+  // Historique complet par BC (pour le dépliage en mode « une ligne par BC »)
+  const histoParBC={};
+  tout.forEach(x=>{(histoParBC[x.bc.ID]=histoParBC[x.bc.ID]||[]).push(x);});
+  const ligne=(x,enfant)=>{
     const R=SC_RESULTATS[x.e.r]||SC_RESULTATS.autre;
     const etatTxt=x.etat.clos?`<span class="ctag" style="background:#64748b">✅ Suivi clos</span>`:x.etat.du?'<span class="ctag r">⏰ À relancer</span>':x.etat.ouvert?'<span class="ctag o">En attente</span>':'<span class="ctag g">Récupéré / soldé</span>';
     const dest=x.e.em?`${x.e.en?_escD(x.e.en)+'<br>':''}<a href="mailto:${_escD(x.e.em)}" style="color:var(--blue);font-size:11.5px">${_escD(x.e.em)}</a>`:_escD(x.e.c||'—');
-    return`<tr style="${x.dernier?'':'opacity:.72'}">
-      <td class="mono" style="font-size:11.5px;white-space:nowrap">${dateHeureGP(x.e.t)}</td>
+    const tog=parBC&&!enfant&&x.nb>1?`<button type="button" class="btn" style="height:20px;font-size:10.5px;padding:0 6px;margin-left:4px" onclick="sclDeplier(${x.bc.ID},this)" title="Voir l'historique de ce BC">▸ ${x.nb} suivis</button>`:'';
+    return`<tr class="${enfant?'scl-enfant scl-enf-'+x.bc.ID:''}" style="${enfant?'display:none;background:#f8fafc;opacity:.8':(x.dernier?'':'opacity:.72')}">
+      <td class="mono" style="font-size:11.5px;white-space:nowrap">${enfant?'<span style="color:var(--text-muted)">└ </span>':''}${dateHeureGP(x.e.t)}${tog}</td>
       <td>${_escD(x.e.u||'—')}</td>
-      <td class="ref" style="cursor:pointer;color:var(--blue)" onclick="openBCPanel(${x.bc.ID})">${_escD(f(x.bc,'Title')||'')}${x.dernier?'':' <span style="font-size:10px;color:var(--text-muted)">(ancien)</span>'}</td>
-      <td class="cname">${_escD(getClient(x.bc))}</td>
+      <td class="ref" style="cursor:pointer;color:var(--blue)" onclick="openBCPanel(${x.bc.ID})">${enfant?'':_escD(f(x.bc,'Title')||'')}${!enfant&&!x.dernier?' <span style="font-size:10px;color:var(--text-muted)">(historique)</span>':''}</td>
+      <td class="cname">${enfant?'':_escD(getClient(x.bc))}</td>
       <td style="white-space:nowrap">${R.ico} ${_escD(R.lib)}${x.e.m?`<div style="font-size:11px;color:var(--text-muted)">${_escD(x.e.m)}</div>`:''}</td>
       <td class="mono" style="${x.dernier&&x.etat.du?'color:var(--red);font-weight:700':''}">${x.e.d?_sclJ(x.e.d):'—'}</td>
       <td style="font-size:12px">${dest}</td>
       <td style="font-size:12px;max-width:260px">${x.e.x?`<div class="scl-com" data-com="${_escD(x.e.x)}" onmouseenter="sclTip(this)" onmouseleave="sclTipOff()" onclick="sclTip(this,true)">💬 ${_escD(x.e.x.replace(/\s+/g,' ').slice(0,60))}${x.e.x.length>60?'…':''}</div>`:''}</td>
-      <td>${x.dernier?etatTxt:''} <button class="btn" style="height:22px;font-size:11px;padding:0 6px;margin-left:4px" title="Ajouter un suivi" onclick="openSuiviClient(${x.bc.ID})">📞+</button></td>
-    </tr>`;}).join('');
+      <td>${x.dernier&&!enfant?etatTxt+(x.etat.clos?'':` <button class="btn" style="height:22px;font-size:11px;padding:0 6px;margin-left:4px" title="Ajouter un suivi à ce BC" onclick="openSuiviClient(${x.bc.ID})">📞+</button>`):''}</td>
+    </tr>`;};
+  b.innerHTML=rows.map(x=>{
+    let html=ligne(x,false);
+    if(parBC&&x.nb>1)html+=(histoParBC[x.bc.ID]||[]).filter(y=>!y.dernier).map(y=>ligne(y,true)).join('');
+    return html;
+  }).join('');
+}
+function sclDeplier(bcId,btn){
+  const enf=document.querySelectorAll('.scl-enf-'+bcId);
+  const ouvrir=[...enf].some(r=>r.style.display==='none');
+  enf.forEach(r=>{r.style.display=ouvrir?'':'none';});
+  if(btn)btn.textContent=btn.textContent.replace(/^[▸▾]/,ouvrir?'▾':'▸');
 }
 function exportSuivisClientsCSV(){
   exportCSV(sclFiltrees(),[
@@ -6481,7 +6514,6 @@ function openSessionPanel(id){
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;margin-top:4px">
       <h2 style="font-size:14px;margin:0">📋 Articles ${isLiv?'livrés':'inventoriés'}</h2>
       <div style="display:flex;gap:6px">
-        <button class="btn" style="height:26px;font-size:11px" onclick="printSessionBL(${id})">🖨️ Imprimer</button>
         ${isLiv?`<button class="btn" style="height:26px;font-size:11px;background:#7c3aed;color:white;border-color:#7c3aed" onclick="openRetourModalSession(${id})">↩️ Retour marchandise</button>`:''}
         <button class="btn navy" style="height:26px;font-size:11px" onclick="sessionPanelAddLigne(${id})">➕ Ajouter un article</button>
       </div>
@@ -6576,75 +6608,6 @@ async function supprimerSessionScan(id){
     try{renderBandeauPriorite();}catch(e){}
     toast(`🗑 ${num} supprimé`);
   }catch(e){toast('🔴 Suppression impossible : '+e.message,'ko');}
-}
-
-// ── Impression du BL / fiche depuis le panneau session ──
-function printSessionBL(id){
-  const s=(DATA.sessionsScan||[]).find(x=>x.ID===id);
-  if(!s){toast('❌ Session introuvable');return;}
-  const type=f(s,'Type_Operation')||'—';
-  const isLiv=type.toLowerCase()==='livraison client'||type.toLowerCase()==='préparation matériel';
-  const lignes=(DATA.lignesScan||[]).filter(l=>String(lineSessionId(l))===String(id));
-  const numBL=f(s,'Numero_BL')||'—';
-  const client=f(s,'Client')||'—';
-  const vendeur=f(s,'Vendeur_Emetteur')||'—';
-  const magasinier=f(s,'Magasinier')||'—';
-  const dateEmis=fmtDate(f(s,'Date_Emission'));
-  const dateScan=fmtDate(f(s,'Date_Scan'));
-  const statut=f(s,'Statut')||'—';
-  const dejaScan=!!f(s,'Date_Scan')||lignes.some(l=>Number(f(l,'Quantite_Scannee')||0)>0);
-  const esc=v=>String(v||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
-
-  const rows=lignes.map(l=>{
-    const att=Number(f(l,'Quantite_Attendue')||0);
-    const scan=Number(f(l,'Quantite_Scannee')||0);
-    const ecart=dejaScan?(scan-att):null;
-    const ecartTxt=ecart===null?'—':(ecart===0?'OK':(ecart<0?'manque '+Math.abs(ecart):'surplus '+ecart));
-    return`<tr>
-      <td>${esc(f(l,'Reference_Article'))}</td>
-      <td>${esc(f(l,'Designation'))}</td>
-      <td style="text-align:center">${att}</td>
-      <td style="text-align:center">${dejaScan?scan:'—'}</td>
-      <td style="text-align:center">${ecartTxt}</td>
-    </tr>`;
-  }).join('');
-
-  const win=window.open('','_blank');
-  if(!win){toast('❌ Autorisez les pop-ups pour imprimer');return;}
-  win.document.write(`<!doctype html>
-<html><head><meta charset="utf-8"><title>${esc(numBL)}</title>
-<style>
-  body{font-family:Arial,Helvetica,sans-serif;padding:30px;color:#1a1a1a}
-  h1{font-size:18px;margin:0 0 4px}
-  .sub{color:#666;font-size:12px;margin-bottom:20px}
-  .info{display:flex;flex-wrap:wrap;gap:28px;margin-bottom:6px;font-size:13px}
-  .info div span{color:#666;font-size:11px;display:block}
-  table{width:100%;border-collapse:collapse;margin-top:16px}
-  th,td{border:1px solid #ccc;padding:6px 8px;font-size:12px;text-align:left}
-  th{background:#f2f2f2}
-  @media print{ body{padding:0} }
-</style></head>
-<body>
-  <h1>${isLiv?'Bon de livraison':'Fiche inventaire'} — ${esc(numBL)}</h1>
-  <div class="sub">Imprimé le ${new Date().toLocaleString('fr-FR')}</div>
-  <div class="info">
-    ${isLiv?`<div><span>Client</span>${esc(client)}</div>`:''}
-    <div><span>Vendeur</span>${esc(vendeur)}</div>
-    <div><span>Magasinier</span>${esc(magasinier)}</div>
-  </div>
-  <div class="info">
-    <div><span>Émis le</span>${esc(dateEmis)}</div>
-    <div><span>Scanné le</span>${esc(dateScan)}</div>
-    <div><span>Statut</span>${esc(statut)}</div>
-  </div>
-  <table>
-    <thead><tr><th>Référence</th><th>Désignation</th><th style="text-align:center">Attendu</th><th style="text-align:center">Scanné</th><th style="text-align:center">Écart</th></tr></thead>
-    <tbody>${rows||'<tr><td colspan="5">Aucun article</td></tr>'}</tbody>
-  </table>
-</body></html>`);
-  win.document.close();
-  win.focus();
-  setTimeout(()=>win.print(),300);
 }
 
 // ── Gestion des articles depuis le panneau session ──
@@ -8287,20 +8250,6 @@ async function validerLivraisonPrete(sessionId, numBL){
     renderPreparations();updateBadges();
     toast(`✅ BL ${numBL} — livraison validée`);
   }catch(e){toast('❌ '+e.message);}
-}
-
-// ── Préparations matériel terminées mais pas encore affectées à un client/BL ──
-// Même logique de filtre que l'onglet "À affecter" (renderPreparations) :
-// extraite ici pour être réutilisable par le garde-fou de "+Nouveau BL".
-function getPrepsAAffecter(){
-  const all=DATA.sessionsScan||[];
-  const isPrepLibre=s=>(f(s,'Type_Operation')||'').toLowerCase()==='préparation matériel';
-  const isTerminee=s=>{const st=(f(s,'Statut')||'').toLowerCase();return st==='terminée'||st==='terminee';};
-  const isClotureePrepLibre=s=>{
-    const st=(f(s,'Statut')||'').toLowerCase();
-    return isTerminee(s)||st.includes('écart')||st.includes('ecart')||st.includes('partiellement');
-  };
-  return all.filter(s=>isPrepLibre(s)&&isClotureePrepLibre(s)&&String(f(s,'Numero_BL')||'').startsWith('PREP-'));
 }
 
 // Client indiqué pour une préparation : champ Client en priorité (portail
@@ -11099,7 +11048,6 @@ function openEmissionBL(){
           <input type="hidden" id="em-client-id">
           <div id="em-client-drop" style="position:absolute;top:100%;left:0;right:0;background:white;border:1px solid var(--border);border-radius:var(--radius-sm);box-shadow:0 4px 12px rgba(0,0,0,.1);z-index:50;display:none;max-height:200px;overflow-y:auto"></div>
         </div>
-        <div id="em-prep-warn" style="font-size:11.5px;color:#92400e;background:#fff7ed;border:1px solid #fed7aa;border-radius:var(--radius-sm);padding:8px 10px;margin-top:6px;display:none;line-height:1.4"></div>
       </div>
       <div>
         <label style="font-size:12px;font-weight:700;color:var(--text-muted);display:block;margin-bottom:6px">Vendeur émetteur <span style="color:var(--red)">*</span></label>
@@ -11139,42 +11087,12 @@ function openEmissionBL(){
   // Autocomplete client avec saisie libre (setupAC laisse le texte tapé si rien n'est choisi)
   setTimeout(()=>{
     const clientData=Object.entries(DATA.clients||{}).map(([cid,cname])=>({id:cid,name:cname}));
-    setupAC('em-client-search','em-client-id','em-client-drop',clientData,checkEmissionClientPrep);
+    setupAC('em-client-search','em-client-id','em-client-drop',clientData);
     // Champs obligatoires rouge/vert
     setupRequiredField(document.getElementById('em-numero'));
     setupRequiredField(document.getElementById('em-client-search'));
     setupRequiredSelect(document.getElementById('em-vendeur'));
-    // Garde-fou : prévenir si une préparation du magasinier attend déjà ce client
-    document.getElementById('em-client-search')?.addEventListener('input',checkEmissionClientPrep);
   },60);
-}
-
-// ── Garde-fou : une préparation matériel (magasinier) est déjà en attente pour
-// ce client — éviter qu'un vendeur crée un 2e BL au lieu de reprendre celle-ci
-// via « ✅ Prendre en charge » (onglet « À affecter »). Pur avertissement,
-// jamais bloquant : le vendeur reste libre de continuer s'il sait ce qu'il fait.
-function checkEmissionClientPrep(){
-  const warn=document.getElementById('em-prep-warn');
-  if(!warn)return;
-  if(_emissionType==='Inventaire physique'){warn.style.display='none';return;}
-  const val=(document.getElementById('em-client-search')?.value||'').trim();
-  if(val.length<3){warn.style.display='none';return;}
-  const norm=x=>String(x||'').normalize('NFD').replace(/[̀-ͯ]/g,'').trim().toLowerCase();
-  const q=norm(val);
-  const matches=getPrepsAAffecter().filter(s=>{
-    const c=norm(clientIndiquePrep(s));
-    return c&&(c===q||c.includes(q)||q.includes(c));
-  });
-  if(matches.length){
-    const liste=matches.map(s=>{
-      const nb=(DATA.lignesScan||[]).filter(l=>String(lineSessionId(l))===String(s.ID)).length;
-      return `<strong>${f(s,'Numero_BL')}</strong> (${nb} art., préparé par ${f(s,'Magasinier')||'—'})`;
-    }).join(' · ');
-    warn.innerHTML=`⚠️ ${matches.length>1?'Des préparations existent':'Une préparation existe'} déjà pour ce client, pas encore affectée : ${liste}. Utilise plutôt « ✅ Prendre en charge » depuis l'onglet « À affecter » pour éviter un doublon.`;
-    warn.style.display='block';
-  }else{
-    warn.style.display='none';
-  }
 }
 
 function setEmissionType(type){
@@ -12991,11 +12909,13 @@ async function init(){
     try{
       const tok=await exchangeCode(params.get('code'));
       sessionStorage.setItem('access_token',tok.access_token);
-      if(tok.id_token){try{const p=JSON.parse(atob(tok.id_token.split('.')[1].replace(/-/g,'+').replace(/_/g,'/')));sessionStorage.setItem('user_name',p.name||p.preferred_username||'');}catch(e){}}
+      if(tok.id_token){try{const _b=atob(tok.id_token.split('.')[1].replace(/-/g,'+').replace(/_/g,'/'));const p=JSON.parse(new TextDecoder('utf-8').decode(Uint8Array.from(_b,ch=>ch.charCodeAt(0))));sessionStorage.setItem('user_name',p.name||p.preferred_username||'');}catch(e){}}
       window.history.replaceState({},document.title,C.redirectUri);
     }catch(e){document.getElementById('authStatus').textContent='Erreur auth : '+e.message;document.getElementById('authScreen').style.display='flex';document.getElementById('loadingScreen').style.display='none';return;}
   }
   if(!getToken()){document.getElementById('authScreen').style.display='flex';return;}
+  // Répare un nom déjà stocké mal décodé (ex. « FrÃ©dÃ©ric ») avant tout usage
+  try{const _u=sessionStorage.getItem('user_name');if(_u&&fixAccents(_u)!==_u)sessionStorage.setItem('user_name',fixAccents(_u));}catch(e){}
   const uname=sessionStorage.getItem('user_name')||'Nicolas Lemond';
   document.getElementById('userName').textContent=uname;
   document.getElementById('userInitials').textContent=uname.split(' ').map(w=>w[0]).join('').toUpperCase().slice(0,2)||'NL';
