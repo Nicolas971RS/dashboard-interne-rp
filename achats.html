@@ -400,6 +400,10 @@ fieldset.lockfs .btn{display:none}
 .imp-bar i{display:block;height:100%;background:var(--green);transition:width .2s}
 @media (max-width:1100px){.kpis.k5{grid-template-columns:repeat(2,1fr)}.stat-2{grid-template-columns:1fr}}
 .bcc{padding:6px 0;border-bottom:1px dashed var(--border,#e5e7eb);font-size:13px}.bcc:last-child{border-bottom:0}
+.sifa-l{border:1px solid var(--border,#e5e7eb);border-radius:10px;padding:10px 12px;margin-bottom:12px;font-size:13px;background:var(--bg-soft,#f8fafc)}
+.sifa-h{display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;gap:8px}.sifa-h a,.sifa-l a{font-size:12px}
+.sifa-f{display:flex;justify-content:space-between;gap:10px;width:100%;text-align:left;border:1px solid var(--border,#e5e7eb);background:#fff;border-radius:8px;padding:7px 10px;margin-top:5px;cursor:pointer;font:inherit}
+.sifa-f:hover{border-color:var(--teal,#0f766e);background:#f0fdfa}
 </style>
 </head>
 <body>
@@ -1162,8 +1166,8 @@ async function saveFiche(){
 }
 
 // ═══ NOUVEAU DOSSIER ═══
-let NEW={mode:'sifa',parsed:null,file:null};
-function openNewDossier(){NEW={mode:'sifa',parsed:null,file:null};renderNew();$('ovNew').classList.add('open');}
+let NEW={mode:'sifa',parsed:null,file:null,sp:null};
+function openNewDossier(){NEW={mode:'sifa',parsed:null,file:null,sp:null};renderNew();$('ovNew').classList.add('open');}
 function closeNew(){$('ovNew').classList.remove('open');}
 function sel(id,opts,v){return `<select id="${id}"><option value=""></option>${opts.map(o=>`<option ${o===v?'selected':''}>${esc(o)}</option>`).join('')}</select>`;}
 function defTransitaire(){const f=DATA.frs.find(x=>nFull(x.Title)==='SIFAGUADELOUPE');return f?f.Title:'';}
@@ -1172,7 +1176,7 @@ function renderNew(){
   let body='';
   if(NEW.mode==='sifa'){
     if(!p){
-      body=`<div class="drop" id="drop"><div class="big">📄</div><b>Dépose ici l'extrait d'expédition SIFA (Excel)</b><div class="muted" style="margin-top:4px">ou clique pour choisir le fichier (.xls / .xlsx) — le dossier et ses lignes seront créés automatiquement</div><input type="file" id="sifaFile" accept=".xls,.xlsx" hidden></div>
+      body=`<div id="sifaListe"></div><div class="drop" id="drop"><div class="big">📄</div><b>Dépose ici l'extrait d'expédition SIFA (Excel)</b><div class="muted" style="margin-top:4px">ou clique pour choisir le fichier (.xls / .xlsx) — le dossier et ses lignes seront créés automatiquement</div><input type="file" id="sifaFile" accept=".xls,.xlsx" hidden></div>
       ${DEMO?`<div style="text-align:center;margin-top:12px"><button class="btn" id="btnSample">🧪 Essayer avec l'extrait d'exemple (TCNU230876/5)</button></div>`:''}
       <div class="muted" style="font-size:12px;margin-top:12px">Les dates de départ et d'arrivée ne figurent pas dans l'Excel de SIFA : tu les reprendras du PDF à l'étape suivante.</div>`;
     }else{
@@ -1210,22 +1214,23 @@ function renderNew(){
       ${NEW.mode==='sifa'&&p?`<button class="btn" id="btnReset">↺ Autre fichier</button>`:''}
       <button class="btn ghost" onclick="closeNew()">Annuler</button>
       ${NEW.mode==='manuel'||p?`<button class="btn primary" id="btnCreate">Créer le dossier${p?` (${p.lines.length} lignes)`:''}</button>`:''}</div>`;
+  if(NEW.mode==='sifa'&&!p&&typeof sifaLister==='function')sifaLister();
 }
 document.addEventListener('click',e=>{
   if(!e.target.closest('#newModal'))return;
   const m=e.target.closest('[data-mode]');if(m){NEW.mode=m.dataset.mode;renderNew();return;}
   if(e.target.closest('#drop')&&!e.target.closest('input')){$('sifaFile').click();return;}
   if(e.target.closest('#btnSample')){NEW.parsed=enrichParsed(JSON.parse(JSON.stringify(SAMPLE_SIFA)));NEW.file=null;renderNew();return;}
-  if(e.target.closest('#btnReset')){NEW.parsed=null;NEW.file=null;renderNew();return;}
+  if(e.target.closest('#btnReset')){NEW.parsed=null;NEW.file=null;NEW.sp=null;renderNew();return;}
   if(e.target.closest('#btnCreate')){createDossier();}
 });
 document.addEventListener('change',e=>{
-  if(e.target.id==='sifaFile'&&e.target.files[0])handleSifaFile(e.target.files[0]);
+  if(e.target.id==='sifaFile'&&e.target.files[0]){NEW.sp=null;handleSifaFile(e.target.files[0]);}
   if(e.target.dataset&&e.target.dataset.pl!==undefined&&NEW.parsed){const l=NEW.parsed.lines[+e.target.dataset.pl];l.frs=matchFrs(e.target.value);renderNew();}
 });
 document.addEventListener('dragover',e=>{const d=e.target.closest&&e.target.closest('#drop');if(d){e.preventDefault();d.classList.add('over');}});
 document.addEventListener('dragleave',e=>{const d=e.target.closest&&e.target.closest('#drop');if(d)d.classList.remove('over');});
-document.addEventListener('drop',e=>{const d=e.target.closest&&e.target.closest('#drop');if(d){e.preventDefault();d.classList.remove('over');const f=e.dataTransfer.files[0];if(f)handleSifaFile(f);}});
+document.addEventListener('drop',e=>{const d=e.target.closest&&e.target.closest('#drop');if(d){e.preventDefault();d.classList.remove('over');const f=e.dataTransfer.files[0];if(f){NEW.sp=null;handleSifaFile(f);}}});
 function loadScript(src){return new Promise((res,rej)=>{if(window.XLSX)return res();const s=document.createElement('script');s.src=src;s.onload=res;s.onerror=()=>rej(new Error('Impossible de charger la bibliothèque Excel ('+src+')'));document.head.appendChild(s);});}
 async function handleSifaFile(file){
   try{
@@ -1281,6 +1286,7 @@ async function createDossier(){
       for(const l of p.lines){i++;btn.textContent=`Lignes ${i}/${p.lines.length}…`;
         await spPost('Lignes_Arrivage',{Title:_trunc(`${l.cde} – ${l.frs?l.frs.Title:l.frsExtrait}`),ID_Arrivage:a.ID,Type_Ligne:'Marchandise',N_Commande:l.cde||null,ID_Fournisseur:l.frs?l.frs.ID:null,Fournisseur:l.frs?l.frs.Title:l.frsExtrait,N_Facture:l.facture||null,Produits:l.produits||null,Valeur_Marchandise:l.valeur!=null&&!isNaN(l.valeur)?r2(l.valeur):null});}
       if(NEW.file){try{await spAddAttachment('Arrivages',a.ID,NEW.file.name,NEW.file.buf);}catch(e){toast('⚠️ Dossier créé, mais l’extrait n’a pas pu être joint : '+e.message,'wa');}}
+      if(NEW.sp&&typeof sifaArchiver==='function')await sifaArchiver(NEW.sp);
     }
     if($('nAddFrais').checked)await spPost('Lignes_Arrivage',{Title:_trunc(`Frais – ${trans?trans.Title:'transitaire'}`),ID_Arrivage:a.ID,Type_Ligne:'Frais',ID_Fournisseur:trans?trans.ID:null,Fournisseur:trans?trans.Title:null});
     await loadAll();closeNew();openFiche(a.ID);
@@ -2781,6 +2787,57 @@ function bccMessage(){
   const L=W?bcClientsDossier(W.lines,W.a):[];if(!L.length)return '';
   return '\n\nBC clients à livrer / facturer :\n'+L.map(b=>`• ${b.Title} — ${b.Client||'client ?'} (${b.Vendeur||'vendeur ?'}) · cde ${b.via.join(', ')}`).join('\n');
 }
+
+// ═══ EXTRAITS SIFA DÉPOSÉS DANS SHAREPOINT ═══
+// « Nouveau dossier » liste directement les Excel du dossier « Dossier partage/SIFA »
+// (clé Parametres_Achats SIFA_DOSSIER, sinon voisin du dossier des factures).
+// Un clic = import, sans téléchargement. Après création, l'extrait part dans « SIFA/Importés » si ce sous-dossier existe.
+let SIFA_D=null;
+async function sifaDossier(){
+  if(SIFA_D)return SIFA_D;
+  const p=DATA.par&&DATA.par.SIFA_DOSSIER;
+  if(p&&String(p).trim().startsWith('/')){SIFA_D=String(p).trim().replace(/\/$/,'');return SIFA_D;}
+  const f=await facDossierReel();                    // …/Dossier partage/Factures Fournisseurs
+  SIFA_D=f.replace(/\/[^\/]+$/,'')+'/SIFA';return SIFA_D;
+}
+const SIFA_ARCH='Importés';
+async function sifaLister(){
+  const box=$('sifaListe');if(!box)return;
+  box.innerHTML='<div class="sifa-l muted">📂 Recherche des extraits dans « Dossier partage › SIFA »…</div>';
+  try{
+    const D=await sifaDossier();
+    const lien=`<a href="${pdfAbs(D)}" target="_blank" rel="noopener">Ouvrir le dossier SIFA ↗</a>`;
+    if(!await spFolderOk(D)){box.innerHTML=`<div class="sifa-l muted">📂 Dossier introuvable : <span class="mono">${esc(D)}</span>. Crée-le dans « Dossier partage » ou renseigne la clé SIFA_DOSSIER.</div>`;return;}
+    const r=await spTry('dossier',D,'/Files','$select=Name,TimeLastModified&$top=500',{});await _check(r,'Lecture du dossier SIFA');
+    const fic=((await r.json()).value||[]).filter(x=>/\.(xlsx?|xlsm)$/i.test(x.Name))
+      .sort((a,b)=>String(b.TimeLastModified||'').localeCompare(String(a.TimeLastModified||''))||b.Name.localeCompare(a.Name));
+    if(!fic.length){box.innerHTML=`<div class="sifa-l muted">📂 Aucun extrait en attente dans le dossier SIFA. ${lien}</div>`;return;}
+    const dj=x=>x.TimeLastModified?new Date(x.TimeLastModified).toLocaleDateString('fr-FR',{day:'2-digit',month:'2-digit',year:'numeric'}):'';
+    box.innerHTML=`<div class="sifa-l"><div class="sifa-h"><b>📂 Extraits en attente (${fic.length})</b>${lien}</div>
+      ${fic.slice(0,12).map(x=>`<button class="sifa-f" data-sifa="${esc(D+'/'+x.Name)}"><span>📄 ${esc(x.Name)}</span><span class="muted">${esc(dj(x))}</span></button>`).join('')}
+      ${fic.length>12?`<div class="muted" style="font-size:12px;margin-top:4px">… et ${fic.length-12} autres : ${lien}</div>`:''}</div>`;
+  }catch(e){box.innerHTML=`<div class="sifa-l muted">📂 Dossier SIFA non consultable (${esc(String(e.message).slice(0,120))}). Utilise le dépôt ci-dessous.</div>`;}
+}
+async function sifaOuvrir(path){
+  try{
+    $('newMsg').textContent='Lecture de l’extrait dans SharePoint…';
+    const buf=await spFileGet(path);
+    await handleSifaFile({name:facNom(path),arrayBuffer:async()=>buf});
+    if(NEW.parsed)NEW.sp=path;
+  }catch(e){toast('🔴 '+e.message,'ko');$('newMsg').textContent='';}
+}
+// Après création du dossier : range l'extrait dans SIFA/Importés (si ce sous-dossier existe)
+async function sifaArchiver(path){
+  try{
+    const D=path.replace(/\/[^\/]+$/,''),A=D+'/'+SIFA_ARCH;
+    if(!await spFolderOk(A))return false;
+    let dst=A+'/'+facNom(path);
+    if(await spFileExists(dst))dst=A+'/'+facNom(path).replace(/(\.[^.]+)$/,` (${Date.now().toString().slice(-5)})$1`);
+    const r=await spTry('fichier',path,'/MoveTo(newurl=@b,flags=0)',qa('b',dst),{method:'POST'});await _check(r,'Rangement de l’extrait');
+    return true;
+  }catch(e){console.warn('[SIFA] rangement',e);toast('⚠️ Dossier créé, mais l’extrait n’a pas pu être rangé dans « Importés » : '+e.message,'wa');return false;}
+}
+document.addEventListener('click',e=>{const b=e.target.closest&&e.target.closest('[data-sifa]');if(b){e.preventDefault();sifaOuvrir(b.dataset.sifa);}});
 
 // ═══ DÉMARRAGE ═══
 async function init(){
