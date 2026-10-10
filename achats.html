@@ -399,6 +399,7 @@ fieldset.lockfs .btn{display:none}
 .imp-bar{height:8px;background:var(--grey-light);border-radius:4px;overflow:hidden;margin-top:12px}
 .imp-bar i{display:block;height:100%;background:var(--green);transition:width .2s}
 @media (max-width:1100px){.kpis.k5{grid-template-columns:repeat(2,1fr)}.stat-2{grid-template-columns:1fr}}
+.bcc{padding:6px 0;border-bottom:1px dashed var(--border,#e5e7eb);font-size:13px}.bcc:last-child{border-bottom:0}
 </style>
 </head>
 <body>
@@ -680,6 +681,7 @@ async function spAddAttachment(list,id,fileName,buf){
 
 // ═══ CHARGEMENT ═══
 async function loadAll(){
+  const pBCC=typeof chargerBCClients==='function'?chargerBCClients():null;
   const [frs,arr,lig,par,fac,tir]=await Promise.all([...['Fournisseurs','Arrivages','Lignes_Arrivage','Parametres_Achats'].map(spGetAll),
     spGetAll('Factures_Frs').then(r=>{FAC_ERR='';return r;}).catch(e=>{FAC_ERR=e.message;console.warn('[Factures_Frs]',e);return null;}),
     spGetAll('Tirelire_Mouvements').then(r=>{TIR_ERR='';return r;}).catch(e=>{TIR_ERR=e.message;console.warn('[Tirelire_Mouvements]',e);return null;})]);
@@ -687,6 +689,7 @@ async function loadAll(){
   DATA.frs=frs.sort((a,b)=>String(a.Title).localeCompare(String(b.Title),'fr'));
   DATA.arr=arr;DATA.lig=lig;
   DATA.par={};par.forEach(p=>{if(p.Title)DATA.par[String(p.Title).trim()]=p.Valeur;});
+  if(pBCC)await pBCC;
   buildDatalists();renderRibbons();renderAll();
 }
 async function reloadAll(){try{await loadAll();toast('✓ Données actualisées','ok');}catch(e){toast('🔴 '+e.message,'ko');}}
@@ -935,6 +938,7 @@ ${LOCK?'</fieldset>':''}      <div class="card" id="cardVal"><div class="card-h"
       <div class="coef-card" id="coefCard"></div>
       <div class="card"><div class="card-h"><h3>🧮 Prix de revient</h3></div><div class="card-b" id="sumBox"></div></div>
       <div class="card"><div class="card-h"><h3>✅ Contrôles</h3></div><div class="card-b"><ul class="checks" id="checks"></ul></div></div>
+      <div class="card" id="cardBCC" style="display:none"><div class="card-h"><h3>🔗 BC clients en attente</h3></div><div class="card-b" id="bccBox"></div></div>
       <div class="card"><div class="card-h"><h3>📎 Documents</h3><label class="btn sm">＋ Ajouter<input type="file" id="attInput" hidden multiple></label></div><div class="card-b" id="attBox"><span class="muted">Chargement…</span></div></div>
       <div class="card"><div class="card-h"><h3>📊 Répartition des frais</h3></div><div class="card-b bars" id="barsFrais"></div></div>
       <div class="card"><div class="card-h"><h3>🏭 Poids des fournisseurs</h3></div><div class="card-b bars" id="barsFrs"></div></div>
@@ -990,6 +994,7 @@ function refreshComputed(){
   // en-tête
   $('fTitle').textContent=a.Title||'Nouveau dossier';
   $('fStatut').innerHTML=statutBadge(statutAuto(a));
+  if(typeof renderBCC==='function')renderBCC();
   $('fSub').textContent=[a.N_Dossier?'Dossier Image '+a.N_Dossier:'N° de dossier Image à venir',a.Transitaire,a.Ref_Transitaire?'Réf. '+a.Ref_Transitaire:'',a.Type_Transport,a.Categorie,dk(a,'ETA_Port')?'ETA port '+fmtD(dk(a,'ETA_Port')):''].filter(Boolean).join('  ·  ');
   renderSteps();
   if(typeof renderValidation==='function'&&!(document.activeElement&&document.activeElement.classList.contains('coef-in')))renderValidation();
@@ -2152,6 +2157,7 @@ function messageVendeursDefaut(){
   const prods=uniq(mar.map(l=>l.Produits));const clients=uniq(mar.map(l=>l.Client_Concerne));
   let t='Articles arrivés :\n'+(prods.length?prods.map(p=>'• '+p).join('\n'):'• (à compléter)');
   if(clients.length)t+='\n\nClients concernés : '+clients.join(', ');
+  if(typeof bccMessage==='function')t+=bccMessage();
   return t;
 }
 async function prixAJour(){
@@ -2725,6 +2731,56 @@ document.addEventListener('change',e=>{
   if(t.id==='tirAnnee'){TIRF.annee=t.value;renderTirelire();return;}
   if(t.id==='histFile'&&t.files&&t.files[0]){const f=t.files[0];t.value='';importerHistorique(f);}
 });
+
+// ═══ BC CLIENTS (Dashboard RP, site RseauxPlus, liste Suivi_BC) ═══
+// Retrouve les BC clients qui attendent la marchandise d'un dossier : le vendeur note dans
+// Suivi_BC.N_BC_Fournisseur le n° de commande Image (plusieurs séparés par « - »),
+// le même que Lignes_Arrivage.N_Commande. Lecture seule, tolérante : sans accès, rien ne s'affiche.
+let BCC_ERR='';
+const bccNums=s=>[...new Set((String(s||'').match(/\d{3,}/g)||[]).map(x=>x.replace(/^0+(?=\d)/,'')))];
+async function chargerBCClients(){
+  const base=`${C.spRoot}/sites/RseauxPlus/_api/web/lists/getbytitle('Suivi_BC')/items`;
+  const lire=async(sel,exp)=>{
+    let all=[],last=0;
+    for(let p=0;p<50;p++){
+      const r=await fetch(`${base}?$select=${sel}${exp?'&$expand='+exp:''}&$filter=ID gt ${last}&$orderby=ID asc&$top=2000`,{headers:{'Authorization':`Bearer ${getToken()}`,'Accept':'application/json;odata=nometadata'}});
+      if(!r.ok)throw new Error(`Suivi_BC : HTTP ${r.status} — ${(await r.text().catch(()=>'')).slice(0,200)}`);
+      const b=(await r.json()).value||[];all=all.concat(b);if(b.length<2000)break;last=b[b.length-1].ID;
+    }
+    return all;
+  };
+  try{
+    let rows;
+    try{rows=await lire('ID,Title,N_BC_Fournisseur,Vendeurencharge,Statut,StatutBCLivr_x00e9_etFC,Created,Client/Title','Client');}
+    catch(e){rows=await lire('ID,Title,N_BC_Fournisseur,Vendeurencharge,Statut,Created');}
+    DATA.bcc=rows.filter(r=>r.N_BC_Fournisseur).map(r=>({ID:r.ID,Title:r.Title||('BC-'+r.ID),nums:bccNums(r.N_BC_Fournisseur),
+      Client:(r.Client&&r.Client.Title)||'',Vendeur:r.Vendeurencharge||'',Statut:r.Statut||'',Created:r.Created,
+      fini:/^(annulé|terminé|livré|facturé)$/i.test(String(r.Statut||'').trim())||/entièrement livré/i.test(r.Statut||'')||r.StatutBCLivr_x00e9_etFC===true||r.StatutBCLivr_x00e9_etFC==='Oui'}));
+    BCC_ERR='';
+  }catch(e){DATA.bcc=null;BCC_ERR=e.message;console.warn('[Suivi_BC]',e);}
+}
+// BC clients (non soldés) qui citent un des n° de commande des lignes marchandise du dossier
+function bcClientsDossier(lines,a){
+  if(!DATA.bcc)return [];
+  const parNum={};(lines||[]).filter(l=>l._st!=='del'&&l.Type_Ligne!=='Frais').forEach(l=>bccNums(l.N_Commande).forEach(n=>(parNum[n]=parNum[n]||new Set()).add(l.Fournisseur||'')));
+  const nums=Object.keys(parNum);if(!nums.length)return [];
+  // un n° Image peut revenir des années plus tard : BC créé plus de 60 j après l'arrivée du dossier = autre commande
+  const fin=a&&(a.Date_Entrepot||a.Date_Saisie_Image);const lim=fin?new Date(fin).getTime()+60*864e5:null;
+  return DATA.bcc.filter(b=>!b.fini&&b.nums.some(n=>parNum[n])&&!(lim&&b.Created&&new Date(b.Created).getTime()>lim))
+    .map(b=>({...b,via:b.nums.filter(n=>parNum[n]),frs:[...new Set(b.nums.filter(n=>parNum[n]).flatMap(n=>[...parNum[n]]))].filter(Boolean)}));
+}
+function renderBCC(){
+  const box=$('bccBox'),card=$('cardBCC');if(!box||!card||!W)return;
+  if(!DATA.bcc){card.style.display=BCC_ERR?'':'none';box.innerHTML=`<span class="muted" style="font-size:12px">BC clients non consultables (${esc(BCC_ERR.slice(0,80))}).</span>`;return;}
+  const L=bcClientsDossier(W.lines,W.a);card.style.display='';
+  box.innerHTML=L.length?L.map(b=>`<div class="bcc"><b>${esc(b.Title)}</b> · ${esc(b.Client||'client ?')}<div class="muted" style="font-size:12px">${esc(b.Vendeur||'vendeur ?')} · cde ${esc(b.via.join(', '))}${b.frs.length?' ('+esc(b.frs.join(', '))+')':''}</div></div>`).join('')
+    :'<span class="muted" style="font-size:12px">Aucun BC client en cours ne cite les n° de commande de ce dossier.</span>';
+}
+// Ligne ajoutée au message aux vendeurs (« Prix à jour dans Image »)
+function bccMessage(){
+  const L=W?bcClientsDossier(W.lines,W.a):[];if(!L.length)return '';
+  return '\n\nBC clients à livrer / facturer :\n'+L.map(b=>`• ${b.Title} — ${b.Client||'client ?'} (${b.Vendeur||'vendeur ?'}) · cde ${b.via.join(', ')}`).join('\n');
+}
 
 // ═══ DÉMARRAGE ═══
 async function init(){
