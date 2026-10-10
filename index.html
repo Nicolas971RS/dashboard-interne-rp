@@ -104,9 +104,14 @@
   .sp-passage-row.init td{background:var(--grey-xlight,#f1f5f9);color:var(--text-muted);border-top:none}
   .scl-com{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:260px;cursor:help;color:var(--text-secondary)}
   .scl-com:hover{color:var(--blue)}
-  #bc-tip{position:fixed;z-index:10000;display:none;background:#fff;color:#1e293b;border:1px solid var(--border);border-radius:8px;box-shadow:0 10px 30px rgba(15,23,42,.18);padding:10px 12px;font-size:12px;line-height:1.5;max-width:560px;max-height:70vh;overflow:auto;font-family:var(--font-body);pointer-events:none}
+  #bc-tip{position:fixed;z-index:10000;display:none;background:#fff;color:#1e293b;border:1px solid var(--border);border-radius:8px;box-shadow:0 10px 30px rgba(15,23,42,.18);padding:10px 12px;font-size:12px;line-height:1.5;width:min(580px,94vw);max-height:75vh;overflow-y:auto;overflow-x:hidden;font-family:var(--font-body)}
+  #bc-tip .bt-g{display:grid;grid-template-columns:1fr 1fr;column-gap:14px;row-gap:3px}
+  #bc-tip .bt-g div{min-width:0;overflow-wrap:anywhere}
+  #bc-tip .bt-g .k{display:block;color:var(--text-muted);font-size:10px;text-transform:uppercase;letter-spacing:.02em}
+  #bc-tip table.bt-art{table-layout:fixed}
+  #bc-tip table.bt-art td{overflow-wrap:anywhere}
   #bc-tip .bt-t{font-weight:800;font-size:12.5px;margin-bottom:6px;color:var(--navy)}
-  #bc-tip table{border-collapse:collapse;width:100%}
+  #bc-tip table{border-collapse:collapse;width:100%;min-width:0!important}
   #bc-tip td{padding:2px 6px 2px 0;vertical-align:top}
   #bc-tip td.k{color:var(--text-muted);white-space:nowrap;font-size:11px;text-transform:uppercase;letter-spacing:.02em}
   #bc-tip table.bt-art{margin-top:8px;border-top:1px solid var(--border)}
@@ -4582,7 +4587,7 @@ function sclDeplier(bcId,btn){
 function bcApercuHTML(bc){
   const e=v=>_escD(String(v==null?'':v));
   const L=[];
-  const add=(k,v)=>{if(v!==undefined&&v!==null&&String(v).trim()!==''&&String(v).trim()!=='—')L.push(`<tr><td class="k">${k}</td><td>${v}</td></tr>`);};
+  const add=(k,v)=>{if(v!==undefined&&v!==null&&String(v).trim()!==''&&String(v).trim()!=='—')L.push(`<div><span class="k">${k}</span>${v}</div>`);};
   add('Client',e(getClient(bc)));
   add('Chantier',e(getChantier(bc)));
   add('N° devis',e(f(bc,'N_x00b0_Devis','Num_ro_Devis','NumeroDevis')));
@@ -4605,7 +4610,7 @@ function bcApercuHTML(bc){
     const liv=lignes.reduce((a,l)=>a+q(l,'Quantit_x00e9_livr_x00e9_e'),0);
     add('Articles',`${lignes.length} ligne${lignes.length>1?'s':''} · ${liv}/${cmd} livré${liv>1?'s':''}`);
     const MAX=15;
-    artHTML=`<table class="bt-art"><thead><tr><th>Réf.</th><th>Désignation</th><th>Cmd</th><th>Livré</th><th>RAL</th></tr></thead><tbody>`
+    artHTML=`<table class="bt-art"><colgroup><col style="width:72px"><col><col style="width:40px"><col style="width:44px"><col style="width:38px"></colgroup><thead><tr><th>Réf.</th><th>Désignation</th><th style="text-align:right">Cmd</th><th style="text-align:right">Livré</th><th style="text-align:right">RAL</th></tr></thead><tbody>`
       +lignes.slice(0,MAX).map(l=>{const c=q(l,'Quantit_x00e9_command_x00e9_e'),lv=q(l,'Quantit_x00e9_livr_x00e9_e'),r=Math.max(c-lv,0);
         return`<tr><td class="mono">${e(f(l,'R_x00e9_f_x00e9_rence')||'—')}</td><td>${e(f(l,'Produit_x002f_D_x00e9_signation')||'')}</td><td class="n">${c}</td><td class="n">${lv}</td><td class="n" style="${r>0?'color:#dc2626;font-weight:700':'color:#16a34a'}">${r}</td></tr>`;}).join('')
       +`</tbody></table>${lignes.length>MAX?`<div style="font-size:11px;color:var(--text-muted);margin-top:3px">… et ${lignes.length-MAX} autre(s) ligne(s) — ouvre « Voir BC » pour tout voir</div>`:''}`;
@@ -4614,19 +4619,25 @@ function bcApercuHTML(bc){
   const rem=String(f(bc,'Remarques')||'').trim();
   const titre=`${e(f(bc,'Title')||'BC-'+bc.ID)}`;
   if(!L.length&&!rem)return`<div class="bt-t">${titre}</div><div style="color:var(--text-muted)">Rien de saisi pour l'instant.</div>`;
-  return`<div class="bt-t">${titre}</div><table>${L.join('')}</table>${artHTML}${rem?`<div class="bt-rem"><span style="color:var(--text-muted);font-size:11px">REMARQUES</span><br>${e(rem.length>400?rem.slice(0,400)+'…':rem)}</div>`:''}`;
+  return`<div class="bt-t">${titre}</div><div class="bt-g">${L.join('')}</div>${artHTML}${rem?`<div class="bt-rem"><span style="color:var(--text-muted);font-size:11px">REMARQUES</span><br>${e(rem.length>400?rem.slice(0,400)+'…':rem)}</div>`:''}`;
 }
 (function(){
   let tip=null,timer=null,cur=null;
   const RE=/open(?:TraiterModal|BCPanel)\((\d+)/;
-  const cache=()=>{if(!tip){tip=document.createElement('div');tip.id='bc-tip';document.body.appendChild(tip);}return tip;};
-  const hide=()=>{clearTimeout(timer);cur=null;if(tip)tip.style.display='none';};
+  let hideT=null;
+  const cache=()=>{if(!tip){tip=document.createElement('div');tip.id='bc-tip';document.body.appendChild(tip);
+    // La bulle reste ouverte tant que la souris est dessus (pour faire défiler les articles)
+    tip.addEventListener('mouseenter',()=>clearTimeout(hideT));
+    tip.addEventListener('mouseleave',()=>hide());}
+    return tip;};
+  const hide=()=>{clearTimeout(timer);clearTimeout(hideT);cur=null;if(tip)tip.style.display='none';};
+  const hideBientot=()=>{clearTimeout(timer);clearTimeout(hideT);hideT=setTimeout(hide,300);};
   document.addEventListener('mouseover',ev=>{
     const el=ev.target.closest&&ev.target.closest('[onclick]');
     if(!el||el===cur)return;
     const m=String(el.getAttribute('onclick')||'').match(RE);
     if(!m||!/^(BUTTON|A)$/.test(el.tagName)){return;}
-    cur=el;clearTimeout(timer);
+    cur=el;clearTimeout(timer);clearTimeout(hideT);
     timer=setTimeout(()=>{
       const bc=(DATA.suivi||[]).find(x=>x.ID===parseInt(m[1]));
       if(!bc||cur!==el)return;
@@ -4637,9 +4648,13 @@ function bcApercuHTML(bc){
       t.style.left=left+'px';t.style.top=top+'px';
     },350);
   });
-  document.addEventListener('mouseout',ev=>{if(cur&&(!ev.relatedTarget||!cur.contains(ev.relatedTarget)))hide();});
-  document.addEventListener('scroll',hide,true);
-  document.addEventListener('click',hide,true);
+  document.addEventListener('mouseout',ev=>{
+    if(!cur||cur.contains(ev.relatedTarget))return;
+    if(tip&&ev.relatedTarget&&tip.contains(ev.relatedTarget)){clearTimeout(timer);return;} // on passe du bouton à la bulle
+    if(cur.contains(ev.target))hideBientot();
+  });
+  document.addEventListener('scroll',ev=>{if(tip&&tip.contains(ev.target))return;hide();},true);
+  document.addEventListener('click',ev=>{if(tip&&tip.contains(ev.target))return;hide();},true);
 })();
 function exportSuivisClientsCSV(){
   exportCSV(sclFiltrees(),[
