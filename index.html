@@ -692,7 +692,7 @@
           <div class="acc-hd-left">
             <span class="acc-arrow">▼</span>
             <div class="acc-hd-title">📦 En commande — Arrivage attendu</div>
-            <div class="acc-hd-meta"><span class="ctag t" id="sd-commande-count">0</span><span class="site-tag rp">Arrivage attendu ou BC frs suivi au Portail Achats</span></div>
+            <div class="acc-hd-meta"><span class="ctag t" id="sd-commande-count">0</span><span class="site-tag rp">Date_Arrivage_Attendu renseignée</span></div>
           </div>
         </div>
         <div class="acc-body" id="acc-commande" style="margin-bottom:4px">
@@ -1908,8 +1908,6 @@ async function loadAll(){
       'Suivi_BC','Chantiers (lookup)','Lignes_BC','Demandes_BC','Demandes_Devis',
       'Base_Clients','Chantiers','Cathalogue_Produits','Sessions_Scan','Lignes_Scan','Annonces'
     ];
-    // Portail Achats (Arrivages) — lu en parallèle ; un échec n'affecte pas le dashboard
-    const _achatsP=fetchAchatsArrivages().catch(e=>{console.warn('[Portail Achats] lecture impossible —',e.message);return null;});
     const _settled=await Promise.allSettled([
       // Suivi_BC: $select=*
       spFetch('sites/RseauxPlus','Suivi_BC','$select=*,Editor/Title&$expand=Editor&$orderby=ID desc'),
@@ -1960,7 +1958,6 @@ async function loadAll(){
     clients.forEach(c=>{if(c.ID&&c.Title)clientMap[c.ID]=c.Title;});
 
     DATA={suivi,lignes,dbc,devis,clients:clientMap,chantiers:chantiers||[],catalogue:catalogue||[],sessionsScan:sessionsScan||[],lignesScan:lignesScan||[],annonces:annonces||[]};
-    DATA.achats=await _achatsP;
 
     // Synchronise automatiquement "Livré" (Lignes_BC) depuis le scan réel
     // (Lignes_Scan) — aucune recopie manuelle : dès que le magasinier scanne,
@@ -2525,7 +2522,7 @@ function getBCSansBL(){
     // Article en commande, arrivage pas encore dû : on n'attend rien du vendeur,
     // pas la peine de le déranger. Si la date est dépassée, le BC redevient
     // visible — c'est le fournisseur qui traîne, pas le client.
-    const arrivage=dateArrivageAttendu(i);
+    const arrivage=f(i,'Date_Arrivage_Attendu');
     if(arrivage&&daysSince(arrivage)<0)return false;
     const dateRec=f(i,'Dateder_x00e9_ception')||dateArrivee(i);
     return dateRec&&daysSince(dateRec)>=SEUIL_RETRAIT;
@@ -2578,7 +2575,7 @@ function getRetraitDepasse(){
     if(!eta||daysLate(eta)<=0)return false;
     // Si un arrivage fournisseur est encore attendu (futur), le client ne
     // peut de toute façon pas venir récupérer — pas la peine de le relancer.
-    const arrivage=dateArrivageAttendu(i);
+    const arrivage=f(i,'Date_Arrivage_Attendu');
     if(arrivage&&daysSince(arrivage)<0)return false;
     return true;
   }).sort((a,b)=>daysLate(f(b,'DateLivraisonpr_x00e9_vue'))-daysLate(f(a,'DateLivraisonpr_x00e9_vue')));
@@ -2873,7 +2870,7 @@ function renderBandeauPriorite(){
     </tr></thead><tbody>${sansBL.slice(0,40).map(i=>{
       const dateRec=f(i,'Dateder_x00e9_ception')||dateArrivee(i);
       const j=daysSince(dateRec);
-      const arrivage=dateArrivageAttendu(i);
+      const arrivage=f(i,'Date_Arrivage_Attendu');
       const arrivageDepasse=arrivage&&daysSince(arrivage)>=0;
       const urgent=!arrivageDepasse&&j>=15;
       let badge,c,bg;
@@ -3276,156 +3273,6 @@ let _colArrivage=null; // idem pour Date_Arrivage_Attendu
 let _colBCFrs=null; // idem pour N_BC_Fournisseur (N° de commande fournisseur passée par Patricia)
 const getBCFrs=i=>String(f(i,'N_BC_Fournisseur')||'').trim();
 
-// ═══ LIEN PORTAIL ACHATS ═══
-// Relie chaque BC client aux dossiers d'arrivage du Portail Achats (site BondeCommande,
-// listes Arrivages + Lignes_Arrivage), par le n° de commande fournisseur Image :
-// N_BC_Fournisseur (BC, plusieurs n° séparés par « - ») ↔ Lignes_Arrivage.N_Commande.
-// Lecture seule : rien n'est écrit dans Suivi_BC.
-const ACH_DELAI_DEFAUT=15; // jours port → entrepôt si le dossier n'a pas de date prévue (comme le portail)
-async function fetchAchatsArrivages(){
-  // Lecture paginée par ID ; une colonne absente est retirée et la lecture relancée.
-  const lire=async(list,cols)=>{
-    let c=cols.split(',');
-    for(let essai=0;essai<12;essai++){
-      try{
-        let all=[],last=0;
-        for(let p=0;p<50;p++){
-          const b=await spFetch('sites/BondeCommande',list,`$select=${c.join(',')}&$filter=ID gt ${last}&$orderby=ID asc&$top=2000`);
-          all=all.concat(b);if(b.length<2000)break;last=b[b.length-1].ID;
-        }
-        return all;
-      }catch(e){
-        const m=String(e.message||'').replace(/\\u([0-9a-fA-F]{4})/g,(x,h)=>String.fromCharCode(parseInt(h,16)));
-        const bad=c.find((x,i)=>i>0&&new RegExp(`(^|[^A-Za-z0-9_])${x}([^A-Za-z0-9_]|$)`).test(m));
-        if(!bad)throw e;
-        console.warn(`[Portail Achats] ${list} : colonne ${bad} absente, ignorée`);c=c.filter(x=>x!==bad);
-      }
-    }
-    return [];
-  };
-  const [arr,lig,par]=await Promise.all([
-    lire('Arrivages','ID,Title,N_Dossier,Conteneur,Type_Transport,Transitaire,Date_Depart,ETA_Port,Date_Arrivee_Port,Date_Entrepot_Prevue,Date_Entrepot,Statut,Date_Saisie_Image'),
-    lire('Lignes_Arrivage','ID,ID_Arrivage,Type_Ligne,N_Commande,Fournisseur,Produits,Client_Concerne'),
-    lire('Parametres_Achats','ID,Title,Valeur').catch(()=>[])
-  ]);
-  const p=par.find(x=>x.Title==='DELAI_PORT_ENTREPOT_J');
-  const delai=p&&!isNaN(parseInt(p.Valeur))?parseInt(p.Valeur):ACH_DELAI_DEFAUT;
-  return {arr,lig:lig.filter(l=>l.Type_Ligne!=='Frais'&&l.N_Commande),delai,ts:Date.now()};
-}
-// « 8412 - 8415 », « BC 8412/8415 » → ['8412','8415'] (chiffres seuls, zéros de tête retirés)
-const achNums=s=>[...new Set((String(s||'').match(/\d{3,}/g)||[]).map(x=>x.replace(/^0+(?=\d)/,'')))];
-let _achIdx=null,_achSrc=null,_achMemo=new Map();
-function achIndex(){
-  const src=DATA.achats;if(!src)return null;
-  if(_achSrc===src)return _achIdx;
-  const byId={};src.arr.forEach(a=>byId[a.ID]=a);
-  const idx={};
-  src.lig.forEach(l=>{const a=byId[l.ID_Arrivage];if(!a)return;achNums(l.N_Commande).forEach(n=>(idx[n]=idx[n]||[]).push({l,a}));});
-  _achIdx=idx;_achSrc=src;_achMemo=new Map();return idx;
-}
-const _achD=v=>v?new Date(v):null;
-function achEntrepotPrevu(a){
-  if(a.Date_Entrepot_Prevue)return a.Date_Entrepot_Prevue;
-  if(a.ETA_Port){const d=new Date(a.ETA_Port);d.setDate(d.getDate()+((DATA.achats&&DATA.achats.delai)||ACH_DELAI_DEFAUT));return d.toISOString();}
-  return '';
-}
-// Étape du dossier vue côté vendeur. rang ≥ 3 = la marchandise est à l'entrepôt.
-function achPhase(a){
-  if(a.Statut==='Clôturé'||a.Date_Saisie_Image)
-    return {k:'pret',rang:4,ic:'✅',lbl:'Prix à jour',date:a.Date_Saisie_Image||a.Date_Entrepot,
-      txt:`Arrivé${a.Date_Entrepot?' le '+fmtDate(a.Date_Entrepot):''} — prix à jour dans Image${a.Date_Saisie_Image?' le '+fmtDate(a.Date_Saisie_Image):''} : facturable`,c:'#1b5e20',bg:'#e8f5e9',bd:'#81c784'};
-  if(['À valider Fabrice','Renvoyé à Patricia','Validé'].includes(a.Statut)||a.Date_Entrepot)
-    return {k:'entrepot',rang:3,ic:'🏬',lbl:'À l’entrepôt',date:a.Date_Entrepot,
-      txt:`Arrivé à l’entrepôt${a.Date_Entrepot?' le '+fmtDate(a.Date_Entrepot):''} — prix de revient en cours de mise à jour`,c:'#0d47a1',bg:'#e3f2fd',bd:'#90caf9'};
-  const prev=achEntrepotPrevu(a);
-  const pv=prev?` — entrepôt prévu vers le ${fmtDate(prev)}`:'';
-  if(a.Date_Arrivee_Port)
-    return {k:'port',rang:2,ic:'⚓',lbl:'Au port',date:a.Date_Arrivee_Port,prevu:prev,txt:`Arrivé au port le ${fmtDate(a.Date_Arrivee_Port)}${pv}`,c:'#4a148c',bg:'#f3e5f5',bd:'#ce93d8'};
-  if(a.Date_Depart||a.ETA_Port)
-    return {k:'mer',rang:1,ic:'🚢',lbl:'En mer',date:a.Date_Depart,prevu:prev,
-      txt:`En route${a.Date_Depart?' depuis le '+fmtDate(a.Date_Depart):''}${a.ETA_Port?' — arrivée au port prévue le '+fmtDate(a.ETA_Port):''}${pv}`,c:'#4a148c',bg:'#f3e5f5',bd:'#ce93d8'};
-  return {k:'prep',rang:0,ic:'📋',lbl:'Dossier ouvert',prevu:prev,txt:'Dossier d’arrivage ouvert, départ pas encore confirmé',c:'#5d4037',bg:'#efebe9',bd:'#bcaaa4'};
-}
-// Liens d'un BC → {nums, liens:[{num,a,ph,lignes}], absents:[n°]} ou null si aucun n° BC frs.
-function achLiens(item,valeur){
-  const brut=valeur!==undefined?valeur:getBCFrs(item);
-  const nums=achNums(brut);if(!nums.length)return null;
-  const idx=achIndex();if(!idx)return {nums,liens:[],absents:[],indispo:true};
-  const cle=(item&&item.ID)+'|'+brut;
-  if(_achMemo.has(cle))return _achMemo.get(cle);
-  // Un n° Image peut revenir des années plus tard : on écarte un arrivage terminé plus de 60 j avant la création du BC.
-  const cree=item&&item.Created?new Date(item.Created).getTime()-60*864e5:null;
-  const liens=[],absents=[];
-  nums.forEach(n=>{
-    let hits=idx[n]||[];
-    if(cree)hits=hits.filter(h=>{const fin=h.a.Date_Entrepot||h.a.Date_Saisie_Image;return !fin||new Date(fin).getTime()>=cree;});
-    if(!hits.length){absents.push(n);return;}
-    const parA={};hits.forEach(h=>(parA[h.a.ID]=parA[h.a.ID]||{num:n,a:h.a,lignes:[]}).lignes.push(h.l));
-    Object.values(parA).forEach(x=>{x.ph=achPhase(x.a);liens.push(x);});
-  });
-  const r={nums,liens,absents};_achMemo.set(cle,r);return r;
-}
-// Date d'arrivage attendue « effective » : celle du Portail Achats quand le BC frs y est suivi,
-// sinon la date saisie par le vendeur. null = plus rien n'est attendu (tout est à l'entrepôt).
-function dateArrivageAttendu(i){
-  const v=f(i,'Date_Arrivage_Attendu');
-  const L=achLiens(i);
-  if(!L||!L.liens.length)return v;
-  const attente=L.liens.filter(x=>x.ph.rang<3);
-  if(!attente.length)return L.absents.length?v:null;
-  const dates=attente.map(x=>x.ph.prevu||x.a.ETA_Port).filter(Boolean);
-  if(L.absents.length&&v)dates.push(v);
-  if(!dates.length)return v;
-  return dates.reduce((m,d)=>new Date(d)>new Date(m)?d:m);
-}
-// Tout ce qui était commandé est arrivé (≥ 1 lien, aucun n° inconnu, aucun en attente)
-function achToutArrive(i){const L=achLiens(i);return !!(L&&L.liens.length&&!L.absents.length&&L.liens.every(x=>x.ph.rang>=3));}
-function achPhaseMin(i){const L=achLiens(i);if(!L||!L.liens.length)return null;return L.liens.reduce((m,x)=>x.ph.rang<m.rang?x.ph:m,L.liens[0].ph);}
-// Petite icône dans les tableaux (remplace 📦/🚚 quand le BC frs est suivi par le Portail Achats)
-function achIconHtml(i){
-  const L=achLiens(i);if(!L||!L.liens.length)return '';
-  const ph=achPhaseMin(i);
-  const tip=L.liens.map(x=>`BC frs ${x.num} : ${x.ph.lbl} (${x.a.Conteneur||x.a.Title||'dossier'})`).concat(L.absents.map(n=>`BC frs ${n} : pas de dossier d’arrivage`)).join(' · ');
-  return ` <span title="${_escD(tip)}" style="font-size:11px">${ph.ic}</span>`;
-}
-function achBadgeHtml(ph){
-  return `<span style="font-size:11px;padding:2px 8px;border-radius:9px;background:${ph.bg};color:${ph.c};font-weight:600;white-space:nowrap">${ph.ic} ${ph.lbl}</span>`;
-}
-// Bloc détaillé (panneau BC + fenêtre Traiter)
-function achBlocHtml(item,valeur){
-  const L=achLiens(item,valeur);
-  if(!L)return '';
-  if(L.indispo)return `<div style="font-size:11.5px;color:var(--text-muted);margin:4px 0 10px">🔗 Portail Achats indisponible : statut d’arrivage non vérifié.</div>`;
-  const e=_escD;
-  const uniq=a=>[...new Set(a.map(x=>String(x||'').trim()).filter(Boolean))];
-  const rows=L.liens.sort((x,y)=>x.ph.rang-y.ph.rang).map(x=>{
-    const a=x.a,frs=uniq(x.lignes.map(l=>l.Fournisseur)).join(', ');
-    const prods=uniq(x.lignes.map(l=>l.Produits));const cli=uniq(x.lignes.map(l=>l.Client_Concerne));
-    const p=prods.join(' · ');
-    return `<div style="background:${x.ph.bg};border:1px solid ${x.ph.bd};border-radius:var(--radius-sm);padding:8px 12px;margin-bottom:6px;font-size:12.5px;color:${x.ph.c}">
-      <div style="display:flex;gap:8px;align-items:flex-start"><span style="font-size:16px;line-height:1.2">${x.ph.ic}</span><div style="flex:1;min-width:0">
-        <div><strong>BC frs ${e(x.num)}</strong>${frs?' · '+e(frs):''} — <strong>${e(x.ph.lbl)}</strong></div>
-        <div style="margin-top:2px">${e(x.ph.txt)}</div>
-        <div style="margin-top:3px;font-size:11.5px;opacity:.85">${e(a.Type_Transport||'Arrivage')} ${e(a.Conteneur||a.Title||'')}${a.N_Dossier?' · dossier Image '+e(a.N_Dossier):''}${a.Transitaire?' · '+e(a.Transitaire):''}</div>
-        ${p?`<div style="margin-top:3px;font-size:11.5px;opacity:.85" title="${e(p)}">📦 ${e(p.length>140?p.slice(0,140)+'…':p)}</div>`:''}
-        ${cli.length?`<div style="margin-top:2px;font-size:11.5px;opacity:.85">Client indiqué par Patricia : ${e(cli.join(', '))}</div>`:''}
-      </div></div></div>`;
-  }).join('');
-  const abs=L.absents.length?`<div style="font-size:11.5px;color:var(--text-muted);margin-bottom:6px">BC frs ${L.absents.map(e).join(', ')} : aucun dossier d’arrivage dans le Portail Achats (commande locale, conteneur pas encore expédié ou n° à vérifier).</div>`:'';
-  return `<div style="margin:2px 0 10px"><div style="font-size:11px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:.04em;margin-bottom:4px">🔗 Portail Achats</div>${rows}${abs}</div>`;
-}
-// Fenêtre Traiter : mise à jour en direct pendant la saisie du n° BC frs
-function achMajModal(id,valeur){
-  const el=document.getElementById('m-bcfrs-arr');if(!el)return;
-  const it=(DATA.suivi||[]).find(x=>x.ID===id)||{};
-  el.innerHTML=achBlocHtml(it,valeur);
-}
-// Texte court (aperçu au survol)
-function achResume(i){
-  const L=achLiens(i);if(!L||!L.liens.length)return '';
-  return L.liens.map(x=>`${x.ph.ic} ${x.num} ${x.ph.lbl}`).join(' · ');
-}
-
 // ── Carnet de bons : proposer « CLIENT - NUMÉRO » ──
 let _prefixePropose='';
 function appliquerPrefixe(){
@@ -3596,18 +3443,16 @@ function renderAFacturer(){
 
 function renderCommandeFournisseur(){
   const items=DATA.suivi.filter(i=>{
+    const arr=f(i,'Date_Arrivage_Attendu');
+    if(!arr)return false;
     const s=getStatut(i);
     // Exclure tout BC qui n'a plus besoin d'être relancé côté fournisseur
     const sLow=(s||'').toLowerCase();
-    if(sLow==='annulé'||sLow==='terminé'||sLow.includes('entièrement livré')||sLow==='livré'||sLow==='facturé')return false;
+    if(sLow==='annulé'||sLow==='terminé'||sLow==='terminé'||sLow.includes('entièrement livré')||sLow==='livré'||sLow==='facturé')return false;
     if(estSolde(i))return false; // BC soldé manuellement
     if(estIgnore(i))return false;
-    if(dateArrivageAttendu(i))return true;
-    // Arrivé via le Portail Achats : reste affiché 10 jours pour prévenir le vendeur
-    if(achToutArrive(i)){const d=achLiens(i).liens.map(x=>x.ph.date).filter(Boolean).sort().pop();return !!d&&daysSince(d)<=10;}
-    return false;
-  }).map(i=>({i,arr:dateArrivageAttendu(i)}))
-    .sort((a,b)=>(a.arr?new Date(a.arr):0)-(b.arr?new Date(b.arr):0)); // arrivés en tête
+    return true;
+  }).sort((a,b)=>new Date(f(a,'Date_Arrivage_Attendu'))-new Date(f(b,'Date_Arrivage_Attendu')));
   const wrap=document.getElementById('bloc-commande-wrap');
   if(wrap)wrap.style.display=items.length?'':'none';
   const el=document.getElementById('sd-commande-count');
@@ -3615,31 +3460,23 @@ function renderCommandeFournisseur(){
   const b=document.getElementById('suivi-commande-body');
   if(!b)return;
   if(!items.length)return; // rien à peindre, le bloc entier est masqué
-  b.innerHTML=items.map(({i,arr})=>{
+  b.innerHTML=items.map(i=>{
     const client=getClient(i),vendeur=f(i,'Vendeurencharge')||'—';
     const numBC=f(i,'Title')||`BC-${i.ID}`;
     const chantier=getChantier(i);
     const montantRaw=f(i,'MontantHT','Montant_HT','MontantHTTotal');
     const montantFmt=montantRaw?new Intl.NumberFormat('fr-FR',{style:'currency',currency:'EUR',minimumFractionDigits:2,maximumFractionDigits:2}).format(montantRaw):'—';
-    const ph=achPhaseMin(i);
-    const jrs=arr?daysSince(arr):0;
-    const depasse=arr&&jrs>=0;
-    let badge;
-    if(ph){
-      badge=achBadgeHtml(ph)+(arr?` <span style="font-size:10.5px;color:${depasse?'#7a3c00':'var(--text-muted)'}">${depasse?'+'+jrs+'j':'J-'+Math.abs(jrs)}</span>`:'');
-    }else{
-      badge=depasse
-        ?`<span style="font-size:11px;padding:2px 8px;border-radius:9px;background:#ffe9cc;color:#7a3c00;font-weight:600">🚚 +${jrs}j</span>`
-        :`<span style="font-size:11px;padding:2px 8px;border-radius:9px;background:var(--violet-light,#f0efff);color:var(--violet);font-weight:600">📦 J-${Math.abs(jrs)}</span>`;
-    }
-    const L=ph?achLiens(i):null;
-    const cont=L?[...new Set(L.liens.map(x=>x.a.Conteneur||x.a.Title).filter(Boolean))].join(', '):'';
-    const dateCell=arr?fmtDate(arr):(ph&&ph.date?fmtDate(ph.date):'—');
+    const arr=f(i,'Date_Arrivage_Attendu');
+    const jrs=daysSince(arr);
+    const depasse=jrs>=0;
+    const badge=depasse
+      ?`<span style="font-size:11px;padding:2px 8px;border-radius:9px;background:#ffe9cc;color:#7a3c00;font-weight:600">🚚 +${jrs}j</span>`
+      :`<span style="font-size:11px;padding:2px 8px;border-radius:9px;background:var(--violet-light,#f0efff);color:var(--violet);font-weight:600">📦 J-${Math.abs(jrs)}</span>`;
     return`<tr class="rr" data-bc-id="${i.ID}">
       <td>${badge}</td>
       <td class="ref">${numBC}${scBadge(i)}</td><td class="cname">${client}</td>
       <td style="font-size:12px;color:var(--text-secondary)">${chantier}</td>
-      <td class="mono">${dateCell}${ph?`<div style="font-size:10.5px;color:var(--text-muted);font-family:var(--font-body)" title="${_escD(achResume(i))}">🔗 ${_escD(cont||'Portail Achats')}</div>`:''}</td>
+      <td class="mono">${fmtDate(arr)}</td>
       <td class="amt" style="font-size:11.5px">${montantFmt}</td>
       <td>${vendeur}</td>
       <td><div class="btn-grp">
@@ -3682,8 +3519,7 @@ function renderBLManquant(){
     return`<tr class="rr" data-bc-id="${i.ID}">
       <td>${agePillHtml(dateRec)}</td>
       <td class="ref">${numBC}${scBadge(i)}${(()=>{
-        const ai=achIconHtml(i);if(ai)return ai;
-        const arr=dateArrivageAttendu(i);
+        const arr=f(i,'Date_Arrivage_Attendu');
         if(!arr)return'';
         const jrs=daysSince(arr);
         return jrs>=0
@@ -3756,8 +3592,7 @@ function renderHistorique(){
     return`<tr class="${urg.row}" data-bc-id="${i.ID}">
       <td><span class="urg ${urg.cls}">${urg.lbl}</span></td>
       <td class="ref">${numBC}${scBadge(i)}${(()=>{
-        const ai=achIconHtml(i);if(ai)return ai;
-        const arr=dateArrivageAttendu(i);
+        const arr=f(i,'Date_Arrivage_Attendu');
         if(!arr)return'';
         const jrs=daysSince(arr);
         return jrs>=0
@@ -4411,6 +4246,7 @@ function getMatinDevisNouvelle(){
 
 // ── Tooltips sur les boutons d'action (injectés après chaque render) ──
 const TOOLTIPS_LEFT={
+  'openTraiterModal':'Renseigner le N° BL, les dates, le montant et les articles livrés',
   'openFacturerModal':'Saisir le numéro de facture une fois la livraison complète ou partielle',
   'openLivraisonPartielle':'Enregistrer une livraison incomplète — le reste à livrer est suivi automatiquement',
   'openNouveauDBCModal':'Enregistrer un enlèvement sans bon de commande — une demande est envoyée au client par email',
@@ -4809,7 +4645,6 @@ function bcApercuHTML(bc){
   add('Livraison prévue',d('DateLivraisonpr_x00e9_vue'));
   add('Arrivage attendu',d('Date_Arrivage_Attendu'));
   if(typeof getBCFrs==='function')add('N° BC frs',e(getBCFrs(bc)));
-  if(typeof achResume==='function')add('Arrivage',e(achResume(bc)));
   const lignes=(DATA.lignes||[]).filter(l=>l.BCId===bc.ID||parseInt(l.BCId)===bc.ID);
   let artHTML='';
   if(lignes.length){
@@ -4832,7 +4667,7 @@ function bcApercuHTML(bc){
 }
 (function(){
   let tip=null,timer=null,cur=null;
-  const RE=/open(?:TraiterModal|BCPanel)\((\d+)/;
+  const RE=/openBCPanel\((\d+)/;
   let hideT=null;
   const cache=()=>{if(!tip){tip=document.createElement('div');tip.id='bc-tip';document.body.appendChild(tip);
     // La bulle reste ouverte tant que la souris est dessus (pour faire défiler les articles)
@@ -4919,7 +4754,7 @@ function renderAll(){
   document.getElementById('kpi-eta').textContent=retard;
   const kCmd=document.getElementById('kpi-commande');
   if(kCmd)kCmd.textContent=DATA.suivi.filter(i=>{
-    const arr=dateArrivageAttendu(i);
+    const arr=f(i,'Date_Arrivage_Attendu');
     if(!arr)return false;
     const s=getStatut(i);
     return s!=='Annulé'&&s!=='Terminé'&&!estIgnore(i);
@@ -9817,8 +9652,7 @@ async function openTraiterModal(id,numBC,client){
           <div class="mf"><label>Date de livraison <span style="font-weight:400;color:var(--text-muted)">(retrait client)</span></label><input id="m-eta" type="date" value="${curETA?curETA.slice(0,10):''}"></div>
           <div class="mf"><label>Arrivage attendu <span style="font-weight:400;color:var(--text-muted)">(optionnel)</span></label><input id="m-arrivage" type="date" value="${curArrivage?curArrivage.slice(0,10):''}"></div>
         </div>
-        <div class="mf"><label>N° BC fournisseur <span style="font-weight:400;color:var(--text-muted)">(n° Image, plusieurs séparés par « - » — optionnel)</span></label><input id="m-bcfrs" value="${_escD(getBCFrs(currentItem))}" placeholder="ex : 8412 - 8415" oninput="achMajModal(${currentItem.ID||0},this.value)" style="font-family:var(--font-mono)"></div>
-        <div id="m-bcfrs-arr">${achBlocHtml(currentItem)}</div>
+        <div class="mf"><label>N° BC fournisseur <span style="font-weight:400;color:var(--text-muted)">(commande passée par Patricia — optionnel)</span></label><input id="m-bcfrs" value="${_escD(getBCFrs(currentItem))}" placeholder="ex : CF-2026-0412" style="font-family:var(--font-mono)"></div>
         <div id="m-field-prep" style="border:1px solid var(--border);border-radius:var(--radius-sm);padding:10px 14px">
           <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer">
             <input type="checkbox" id="m-prep" ${curSessPrep?'checked':''} style="width:16px;height:16px">
@@ -12097,10 +11931,8 @@ async function openBCPanel(id){
         <div class="pf"><div class="pf-lbl">📅 Date de livraison (retrait client)</div><div class="pf-val mono">${dateLiv}</div></div>
       </div>
       ${(()=>{
-        const _ab=achBlocHtml(item),_L=achLiens(item);
-        if(_L&&_L.liens.length)return _ab;
         const arr=f(item,'Date_Arrivage_Attendu');
-        if(!arr)return _ab;
+        if(!arr)return'';
         const jrs=daysSince(arr);
         const depasse=jrs>=0;
         const c=depasse?'#7a3c00':'var(--violet)';
@@ -12111,7 +11943,7 @@ async function openBCPanel(id){
           <span>${depasse
             ?`<strong>Commande en retard fournisseur</strong> — attendue depuis ${jrs} jour${jrs>1?'s':''} (le ${fmtDate(arr)})`
             :`<strong>Article en commande</strong> — arrivage attendu le ${fmtDate(arr)}`}${getBCFrs(item)?` · BC frs <strong>${_escD(getBCFrs(item))}</strong>`:''}</span>
-        </div>`+_ab;
+        </div>`;
       })()}
       <hr style="border:none;border-top:1px solid var(--border);margin:4px 0 12px">`;
 
