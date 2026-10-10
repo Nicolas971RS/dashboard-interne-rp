@@ -104,6 +104,12 @@
   .sp-passage-row.init td{background:var(--grey-xlight,#f1f5f9);color:var(--text-muted);border-top:none}
   .scl-com{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:260px;cursor:help;color:var(--text-secondary)}
   .scl-com:hover{color:var(--blue)}
+  #bc-tip{position:fixed;z-index:10000;display:none;background:#fff;color:#1e293b;border:1px solid var(--border);border-radius:8px;box-shadow:0 10px 30px rgba(15,23,42,.18);padding:10px 12px;font-size:12px;line-height:1.5;max-width:380px;max-height:60vh;overflow:auto;font-family:var(--font-body);pointer-events:none}
+  #bc-tip .bt-t{font-weight:800;font-size:12.5px;margin-bottom:6px;color:var(--navy)}
+  #bc-tip table{border-collapse:collapse;width:100%}
+  #bc-tip td{padding:2px 6px 2px 0;vertical-align:top}
+  #bc-tip td.k{color:var(--text-muted);white-space:nowrap;font-size:11px;text-transform:uppercase;letter-spacing:.02em}
+  #bc-tip .bt-rem{margin-top:6px;padding-top:6px;border-top:1px dashed var(--border);white-space:pre-wrap}
   #scl-tip{position:fixed;z-index:10000;display:none;background:#fff;color:#1e293b;border:1px solid var(--border);border-radius:8px;box-shadow:0 10px 30px rgba(15,23,42,.18);padding:12px 14px;font-size:12.5px;line-height:1.55;white-space:pre-wrap;max-height:60vh;overflow:auto;font-family:var(--font-body)}
   .dv-auto{display:inline-block;margin-left:6px;font-family:var(--font-body);font-size:10.5px;font-weight:700;color:#c2410c;background:#fff7ed;border:1px solid #fdba74;border-radius:9px;padding:0 6px;white-space:nowrap}
   .dv-auto-banner{display:flex;align-items:center;gap:8px;flex-wrap:wrap;background:#fff7ed;border:1px solid #fdba74;border-left:4px solid #ea580c;border-radius:var(--radius-sm);padding:9px 12px;margin-bottom:12px;color:#7c2d12;font-size:13px}
@@ -1416,6 +1422,42 @@
 
 <!-- Fusion PDF côté navigateur (BL + Devis en un seul fichier avant envoi) -->
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf-lib/1.17.1/pdf-lib.min.js"></script>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/flatpickr/4.6.13/flatpickr.min.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/flatpickr/4.6.13/flatpickr.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/flatpickr/4.6.13/l10n/fr.js"></script>
+<script>
+// ── Dates affichées en JJ/MM/AAAA quelle que soit la langue du navigateur ──
+// Un <input type="date"> natif suit la langue de Chrome (mm/dd/yyyy en anglais).
+// Chaque champ date est doublé d'un champ visible JJ/MM/AAAA (flatpickr, calendrier FR) ;
+// le champ d'origine garde la valeur AAAA-MM-JJ : tout le code existant reste inchangé.
+(function(){
+  if(!window.flatpickr)return; // CDN indisponible : on garde les champs natifs
+  try{flatpickr.localize(flatpickr.l10ns.fr);}catch(e){}
+  const desc=Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value');
+  function frDate(el){
+    if(el._fp||el.getAttribute('type')!=='date')return;
+    const fp=flatpickr(el,{dateFormat:'Y-m-d',altInput:true,altFormat:'d/m/Y',allowInput:true,disableMobile:true,
+      minDate:el.min||null,maxDate:el.max||null,
+      onChange:()=>{el.dispatchEvent(new Event('input',{bubbles:true}));}});
+    el._fp=fp;
+    const alt=fp.altInput;
+    if(alt){
+      alt.style.cssText=el.style.cssText;
+      alt.placeholder='jj/mm/aaaa';
+      if(el.disabled)alt.disabled=true;
+      if(el.title)alt.title=el.title;
+    }
+    // Valeur fixée par le code (el.value = '2026-10-09') → l'affichage suit
+    Object.defineProperty(el,'value',{configurable:true,
+      get(){return desc.get.call(this);},
+      set(v){desc.set.call(this,v);try{fp.setDate(v||null,false);}catch(e){}}});
+  }
+  const scan=root=>{if(root.querySelectorAll)root.querySelectorAll('input[type="date"]').forEach(frDate);};
+  const go=()=>{scan(document);new MutationObserver(ms=>ms.forEach(m=>m.addedNodes.forEach(n=>{if(n.nodeType!==1)return;if(n.matches&&n.matches('input[type="date"]'))frDate(n);else scan(n);}))).observe(document.body,{childList:true,subtree:true});};
+  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',go);else go();
+})();
+</script>
+<style>.flatpickr-input[readonly]{cursor:pointer;background:#fff}.flatpickr-calendar{font-family:var(--font-body)}</style>
 
 <script>
 // ═══ CONFIG ═══
@@ -1605,7 +1647,9 @@ let DATA={suivi:[],lignes:[],dbc:[],devis:[],clients:{},chantiers:[],catalogue:[
 const TODAY=new Date();TODAY.setHours(0,0,0,0);
 const daysSince=d=>{if(!d)return 0;const dt=new Date(d);dt.setHours(0,0,0,0);return Math.floor((TODAY-dt)/86400000);};
 const daysLate=d=>{if(!d)return -999;const dt=new Date(d);dt.setHours(0,0,0,0);return Math.floor((TODAY-dt)/86400000);};
-const fmtDate=d=>{if(!d)return '—';try{return new Date(d).toLocaleDateString('fr-FR');}catch(e){return '—';}};
+// Date seule (« 2026-10-25 » ou minuit UTC « 2026-10-25T00:00:00Z », tel qu'écrit par le dashboard) :
+// affichée telle quelle — sinon la conversion en heure de Guadeloupe (UTC-4) recule d'un jour.
+const fmtDate=d=>{if(!d)return '—';const m=String(d).match(/^(\d{4})-(\d{2})-(\d{2})(?:T00:00:00(?:\.0+)?Z)?$/);if(m)return m[3]+'/'+m[2]+'/'+m[1];try{return new Date(d).toLocaleDateString('fr-FR');}catch(e){return '—';}};
 // ══ Bascule process scan ══ Tant que null : on compte tout (comportement actuel).
 // Le jour du passage en production, mettre 'AAAA-MM-JJ' (ex: '2026-07-15') :
 // les BL émis AVANT cette date sortent des compteurs et de la file d'attente Préparations Scan.
@@ -4189,7 +4233,6 @@ function getMatinDevisNouvelle(){
 
 // ── Tooltips sur les boutons d'action (injectés après chaque render) ──
 const TOOLTIPS_LEFT={
-  'openTraiterModal':'Renseigner le N° BL, les dates, le montant et les articles livrés',
   'openFacturerModal':'Saisir le numéro de facture une fois la livraison complète ou partielle',
   'openLivraisonPartielle':'Enregistrer une livraison incomplète — le reste à livrer est suivi automatiquement',
   'openNouveauDBCModal':'Enregistrer un enlèvement sans bon de commande — une demande est envoyée au client par email',
@@ -4529,6 +4572,64 @@ function sclDeplier(bcId,btn){
   enf.forEach(r=>{r.style.display=ouvrir?'':'none';});
   if(btn)btn.textContent=btn.textContent.replace(/^[▸▾]/,ouvrir?'▾':'▸');
 }
+
+// ═══ APERÇU AU SURVOL DES BOUTONS « Traiter » / « Voir BC » ═══
+// Affiche ce qui a déjà été saisi sur le BC sans ouvrir la fenêtre.
+function bcApercuHTML(bc){
+  const e=v=>_escD(String(v==null?'':v));
+  const L=[];
+  const add=(k,v)=>{if(v!==undefined&&v!==null&&String(v).trim()!==''&&String(v).trim()!=='—')L.push(`<tr><td class="k">${k}</td><td>${v}</td></tr>`);};
+  add('Client',e(getClient(bc)));
+  add('Chantier',e(getChantier(bc)));
+  add('N° devis',e(f(bc,'N_x00b0_Devis','Num_ro_Devis','NumeroDevis')));
+  add('N° BL',e(f(bc,'N_x00b0_BL')));
+  add('N° FC',e(f(bc,nFCKey())));
+  add('Statut',e(getStatut(bc)));
+  add('Vendeur',e(f(bc,'Vendeurencharge')));
+  const mt=f(bc,'MontantHT','Montant_HT','MontantHTTotal');if(mt)add('Montant HT',e(fmtMoney(mt)));
+  const d=k=>f(bc,k)?fmtDate(f(bc,k)):'';
+  add('Date BL',d('DateBL'));
+  add('Prise en charge',d('Datepriseencharge'));
+  add('Livraison prévue',d('DateLivraisonpr_x00e9_vue'));
+  add('Arrivage attendu',d('Date_Arrivage_Attendu'));
+  if(typeof getBCFrs==='function')add('N° BC frs',e(getBCFrs(bc)));
+  const lignes=(DATA.lignes||[]).filter(l=>l.BCId===bc.ID||parseInt(l.BCId)===bc.ID);
+  if(lignes.length){
+    const cmd=lignes.reduce((a,l)=>a+(parseFloat(f(l,'Quantit_x00e9_command_x00e9_e'))||0),0);
+    const liv=lignes.reduce((a,l)=>a+(parseFloat(f(l,'Quantit_x00e9_livr_x00e9_e'))||0),0);
+    add('Articles',`${lignes.length} ligne${lignes.length>1?'s':''} · ${liv}/${cmd} livré${liv>1?'s':''}`);
+  }
+  if(estSolde(bc))add('Soldé','✅ Oui');
+  const rem=String(f(bc,'Remarques')||'').trim();
+  const titre=`${e(f(bc,'Title')||'BC-'+bc.ID)}`;
+  if(!L.length&&!rem)return`<div class="bt-t">${titre}</div><div style="color:var(--text-muted)">Rien de saisi pour l'instant.</div>`;
+  return`<div class="bt-t">${titre}</div><table>${L.join('')}</table>${rem?`<div class="bt-rem"><span style="color:var(--text-muted);font-size:11px">REMARQUES</span><br>${e(rem.length>400?rem.slice(0,400)+'…':rem)}</div>`:''}`;
+}
+(function(){
+  let tip=null,timer=null,cur=null;
+  const RE=/open(?:TraiterModal|BCPanel)\((\d+)/;
+  const cache=()=>{if(!tip){tip=document.createElement('div');tip.id='bc-tip';document.body.appendChild(tip);}return tip;};
+  const hide=()=>{clearTimeout(timer);cur=null;if(tip)tip.style.display='none';};
+  document.addEventListener('mouseover',ev=>{
+    const el=ev.target.closest&&ev.target.closest('[onclick]');
+    if(!el||el===cur)return;
+    const m=String(el.getAttribute('onclick')||'').match(RE);
+    if(!m||!/^(BUTTON|A)$/.test(el.tagName)){return;}
+    cur=el;clearTimeout(timer);
+    timer=setTimeout(()=>{
+      const bc=(DATA.suivi||[]).find(x=>x.ID===parseInt(m[1]));
+      if(!bc||cur!==el)return;
+      const t=cache();t.innerHTML=bcApercuHTML(bc);t.style.display='block';
+      const r=el.getBoundingClientRect(),w=t.offsetWidth,h=t.offsetHeight;
+      let left=Math.min(r.left,window.innerWidth-w-12);left=Math.max(12,left);
+      let top=r.bottom+6;if(top+h>window.innerHeight-8)top=Math.max(8,r.top-h-6);
+      t.style.left=left+'px';t.style.top=top+'px';
+    },350);
+  });
+  document.addEventListener('mouseout',ev=>{if(cur&&(!ev.relatedTarget||!cur.contains(ev.relatedTarget)))hide();});
+  document.addEventListener('scroll',hide,true);
+  document.addEventListener('click',hide,true);
+})();
 function exportSuivisClientsCSV(){
   exportCSV(sclFiltrees(),[
     {label:'Date',fn:x=>dateHeureGP(x.e.t)},
@@ -5065,7 +5166,7 @@ function openCreerBCDepuisBPA(id){
     const body={Title:num,N_x00b0_Devis:rs,ClientId:parseInt(clientId,10),Vendeurencharge:vendeur,Statut:'Reçu',Dateder_x00e9_ception:today+'T12:00:00Z',Remarques:g('bpa-rem')||null};
     if(mt)body.MontantHT=parseFloat(mt);
     const arr=g('bpa-arrivage');
-    if(arr&&_colArrivage!==false)body.Date_Arrivage_Attendu=arr+'T00:00:00Z';
+    if(arr&&_colArrivage!==false)body.Date_Arrivage_Attendu=arr+'T12:00:00Z';
     const frs=g('bpa-bcfrs');
     if(frs&&_colBCFrs!==false)body.N_BC_Fournisseur=frs;
     let created;
@@ -9611,15 +9712,15 @@ async function openTraiterModal(id,numBC,client){
       const aBL=!!(bl||(!blRetire&&String(f(currentItem,'N_x00b0_BL')||'').trim()));
       const dBL=datebl||(aBL&&!curDateBL?today:'');
       const dPEC=datepec||(aBL&&!curDatePEC?today:'');
-      if(!blRetire&&dBL&&dBL!==(curDateBL?curDateBL.slice(0,10):''))body['DateBL']=dBL+'T00:00:00Z';
-      if(!blRetire&&dPEC&&dPEC!==(curDatePEC?curDatePEC.slice(0,10):''))body['Datepriseencharge']=dPEC+'T00:00:00Z';
+      if(!blRetire&&dBL&&dBL!==(curDateBL?curDateBL.slice(0,10):''))body['DateBL']=dBL+'T12:00:00Z';
+      if(!blRetire&&dPEC&&dPEC!==(curDatePEC?curDatePEC.slice(0,10):''))body['Datepriseencharge']=dPEC+'T12:00:00Z';
     }
-    if(eta)body['DateLivraisonpr_x00e9_vue']=eta+'T00:00:00Z';
+    if(eta&&eta!==(curETA?curETA.slice(0,10):''))body['DateLivraisonpr_x00e9_vue']=eta+'T12:00:00Z'; // seulement si modifiée (évite de réécrire la date à chaque enregistrement)
     const arrivage=document.getElementById('m-arrivage')?.value;
     // Colonne optionnelle : on écrit dessus si elle existe, sinon on l'ignore
     // silencieusement (auto-détectée à la première tentative réussie/échouée).
     if(arrivage!==undefined&&arrivage!==(curArrivage?curArrivage.slice(0,10):'')&&_colArrivage!==false){
-      body['Date_Arrivage_Attendu']=arrivage?arrivage+'T00:00:00Z':null;
+      body['Date_Arrivage_Attendu']=arrivage?arrivage+'T12:00:00Z':null;
     }
     const bcFrs=document.getElementById('m-bcfrs')?.value.trim();
     if(bcFrs!==undefined&&bcFrs!==getBCFrs(currentItem)&&_colBCFrs!==false)body['N_BC_Fournisseur']=bcFrs||null;
@@ -12810,7 +12911,7 @@ function openNouveauDBCModal(){
       'Articles':articles,
       'Statut':'En attente BC',
     };
-    if(dateEnlev)body['Date_Enl_x00e8_vement']=dateEnlev+'T00:00:00Z';
+    if(dateEnlev)body['Date_Enl_x00e8_vement']=dateEnlev+'T12:00:00Z';
     if(numbl)body['N_x00b0_BL']=numbl;
     if(chef)body['Chefdechantier']=chef;
     const numDevis=document.getElementById('d-numdevis').value.trim();
