@@ -104,11 +104,15 @@
   .sp-passage-row.init td{background:var(--grey-xlight,#f1f5f9);color:var(--text-muted);border-top:none}
   .scl-com{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:260px;cursor:help;color:var(--text-secondary)}
   .scl-com:hover{color:var(--blue)}
-  #bc-tip{position:fixed;z-index:10000;display:none;background:#fff;color:#1e293b;border:1px solid var(--border);border-radius:8px;box-shadow:0 10px 30px rgba(15,23,42,.18);padding:10px 12px;font-size:12px;line-height:1.5;max-width:380px;max-height:60vh;overflow:auto;font-family:var(--font-body);pointer-events:none}
+  #bc-tip{position:fixed;z-index:10000;display:none;background:#fff;color:#1e293b;border:1px solid var(--border);border-radius:8px;box-shadow:0 10px 30px rgba(15,23,42,.18);padding:10px 12px;font-size:12px;line-height:1.5;max-width:560px;max-height:70vh;overflow:auto;font-family:var(--font-body);pointer-events:none}
   #bc-tip .bt-t{font-weight:800;font-size:12.5px;margin-bottom:6px;color:var(--navy)}
   #bc-tip table{border-collapse:collapse;width:100%}
   #bc-tip td{padding:2px 6px 2px 0;vertical-align:top}
   #bc-tip td.k{color:var(--text-muted);white-space:nowrap;font-size:11px;text-transform:uppercase;letter-spacing:.02em}
+  #bc-tip table.bt-art{margin-top:8px;border-top:1px solid var(--border)}
+  #bc-tip table.bt-art th{font-size:10.5px;text-transform:uppercase;color:var(--text-muted);text-align:left;padding:5px 6px 3px 0;font-weight:700}
+  #bc-tip table.bt-art td{padding:3px 8px 3px 0;border-top:1px solid #f1f5f9;font-size:11.5px}
+  #bc-tip table.bt-art td.n{text-align:right;white-space:nowrap}
   #bc-tip .bt-rem{margin-top:6px;padding-top:6px;border-top:1px dashed var(--border);white-space:pre-wrap}
   #scl-tip{position:fixed;z-index:10000;display:none;background:#fff;color:#1e293b;border:1px solid var(--border);border-radius:8px;box-shadow:0 10px 30px rgba(15,23,42,.18);padding:12px 14px;font-size:12.5px;line-height:1.55;white-space:pre-wrap;max-height:60vh;overflow:auto;font-family:var(--font-body)}
   .dv-auto{display:inline-block;margin-left:6px;font-family:var(--font-body);font-size:10.5px;font-weight:700;color:#c2410c;background:#fff7ed;border:1px solid #fdba74;border-radius:9px;padding:0 6px;white-space:nowrap}
@@ -4594,16 +4598,23 @@ function bcApercuHTML(bc){
   add('Arrivage attendu',d('Date_Arrivage_Attendu'));
   if(typeof getBCFrs==='function')add('N° BC frs',e(getBCFrs(bc)));
   const lignes=(DATA.lignes||[]).filter(l=>l.BCId===bc.ID||parseInt(l.BCId)===bc.ID);
+  let artHTML='';
   if(lignes.length){
-    const cmd=lignes.reduce((a,l)=>a+(parseFloat(f(l,'Quantit_x00e9_command_x00e9_e'))||0),0);
-    const liv=lignes.reduce((a,l)=>a+(parseFloat(f(l,'Quantit_x00e9_livr_x00e9_e'))||0),0);
+    const q=(l,k)=>parseFloat(f(l,k))||0;
+    const cmd=lignes.reduce((a,l)=>a+q(l,'Quantit_x00e9_command_x00e9_e'),0);
+    const liv=lignes.reduce((a,l)=>a+q(l,'Quantit_x00e9_livr_x00e9_e'),0);
     add('Articles',`${lignes.length} ligne${lignes.length>1?'s':''} · ${liv}/${cmd} livré${liv>1?'s':''}`);
+    const MAX=15;
+    artHTML=`<table class="bt-art"><thead><tr><th>Réf.</th><th>Désignation</th><th>Cmd</th><th>Livré</th><th>RAL</th></tr></thead><tbody>`
+      +lignes.slice(0,MAX).map(l=>{const c=q(l,'Quantit_x00e9_command_x00e9_e'),lv=q(l,'Quantit_x00e9_livr_x00e9_e'),r=Math.max(c-lv,0);
+        return`<tr><td class="mono">${e(f(l,'R_x00e9_f_x00e9_rence')||'—')}</td><td>${e(f(l,'Produit_x002f_D_x00e9_signation')||'')}</td><td class="n">${c}</td><td class="n">${lv}</td><td class="n" style="${r>0?'color:#dc2626;font-weight:700':'color:#16a34a'}">${r}</td></tr>`;}).join('')
+      +`</tbody></table>${lignes.length>MAX?`<div style="font-size:11px;color:var(--text-muted);margin-top:3px">… et ${lignes.length-MAX} autre(s) ligne(s) — ouvre « Voir BC » pour tout voir</div>`:''}`;
   }
   if(estSolde(bc))add('Soldé','✅ Oui');
   const rem=String(f(bc,'Remarques')||'').trim();
   const titre=`${e(f(bc,'Title')||'BC-'+bc.ID)}`;
   if(!L.length&&!rem)return`<div class="bt-t">${titre}</div><div style="color:var(--text-muted)">Rien de saisi pour l'instant.</div>`;
-  return`<div class="bt-t">${titre}</div><table>${L.join('')}</table>${rem?`<div class="bt-rem"><span style="color:var(--text-muted);font-size:11px">REMARQUES</span><br>${e(rem.length>400?rem.slice(0,400)+'…':rem)}</div>`:''}`;
+  return`<div class="bt-t">${titre}</div><table>${L.join('')}</table>${artHTML}${rem?`<div class="bt-rem"><span style="color:var(--text-muted);font-size:11px">REMARQUES</span><br>${e(rem.length>400?rem.slice(0,400)+'…':rem)}</div>`:''}`;
 }
 (function(){
   let tip=null,timer=null,cur=null;
