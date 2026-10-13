@@ -409,6 +409,10 @@ fieldset.lockfs .btn{display:none}
 .cmd-act{display:flex;gap:12px;flex-wrap:wrap;margin:8px 0}.cmd-act label,.cmd-com{display:flex;flex-direction:column;font-size:11.5px;color:var(--text-muted);gap:3px}.cmd-act input,.cmd-act select{font-size:13px;padding:5px 7px;border:1px solid var(--border);border-radius:6px;min-width:130px}
 .cmd-com textarea{font:inherit;font-size:13px;padding:6px 8px;border:1px solid var(--border);border-radius:6px;width:100%}
 .cmd-btns{display:flex;gap:8px;flex-wrap:wrap;margin:6px 0 8px}.cmd-files{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:0 10px}
+.da-head{display:flex;gap:26px;flex-wrap:wrap;margin-bottom:12px;align-items:flex-end}.da-l{font-size:11.5px;color:var(--text-muted);font-weight:600;text-transform:uppercase;letter-spacing:.03em;margin-bottom:4px}
+.da-r{margin-right:12px;font-size:13.5px;cursor:pointer}.da-r input{width:auto;margin-right:3px}.da-head input[type=text],.da-head input:not([type]){padding:6px 8px;border:1px solid var(--border);border-radius:6px;font-size:13px}
+.da-t input{width:100%;padding:6px 8px;border:1px solid var(--border);border-radius:6px;font-size:13px}.da-t input.r{text-align:right}
+.da-t{table-layout:fixed;width:100%;min-width:0}.da-g table{table-layout:fixed;width:100%;min-width:0}#daDet table{min-width:0}.da-g input{border:1px solid var(--border);border-radius:6px;padding:4px 6px}.da-g{margin-bottom:10px}.da-gh{padding:4px 0;border-bottom:2px solid var(--teal,#0f766e);margin-bottom:2px;font-size:13.5px}
 </style>
 </head>
 <body>
@@ -540,10 +544,12 @@ const SCHEMA={
   Parametres_Achats:['ID','Title','Valeur','Description'],
   Tirelire_Mouvements:['ID','Title','Type_Mouvement','Categorie','Date_Mouvement','Montant','Motif','ID_Arrivage','ID_Facture','Created'],
   Commandes_Frs:['ID','Title','ID_Fournisseur','Fournisseur','Type_Commande','Objet','Adresse_Livraison','Date_Commande','Montant_HT','Nb_Lignes','Date_ARC','Date_BPA','Mode_BPA','Date_Dispo_Prevue','Date_Reception','Lien_BC','Statut','Commentaire','Annulee','Created','Modified'],
+  Demandes_Achat:['ID','Title','Zone','Transport','Motif','Client','N_Devis','Demandeur','Statut','Valide_Par','Date_Demande','Date_Validation','Commentaire','Created'],
+  Lignes_Demande_Achat:['ID','Title','ID_Demande','Designation','Quantite','Qte_Commandee','ID_Fournisseur','Fournisseur','N_Commande','ID_Commande_Frs'],
   Lignes_Commande_Frs:['ID','Title','ID_Commande_Frs','N_Commande','Ref_2','Designation','Quantite','Unite','Colis','Prix_Unitaire','Remise','Montant_HT','Ordre'],
   Factures_Frs:['ID','Title','ID_Fournisseur','Fournisseur','Code_Compta','Type_Piece','Date_Facture','Date_Echeance','Montant_TTC','Lien_PDF','Statut_Saisie','Source','Message_ID','Exporte_Echeancier','Statut_Paiement','Date_Paiement','Commentaire','Expediteur','Created','Modified']
 };
-const ESSENTIAL={Fournisseurs:['ID','Title'],Arrivages:['ID','Title'],Lignes_Arrivage:['ID','ID_Arrivage','Type_Ligne'],Parametres_Achats:['ID','Title','Valeur'],Factures_Frs:['ID','Title','Lien_PDF','Statut_Saisie'],Tirelire_Mouvements:['ID','Title','Montant'],Commandes_Frs:['ID','Title'],Lignes_Commande_Frs:['ID','ID_Commande_Frs']};
+const ESSENTIAL={Fournisseurs:['ID','Title'],Arrivages:['ID','Title'],Lignes_Arrivage:['ID','ID_Arrivage','Type_Ligne'],Parametres_Achats:['ID','Title','Valeur'],Factures_Frs:['ID','Title','Lien_PDF','Statut_Saisie'],Tirelire_Mouvements:['ID','Title','Montant'],Commandes_Frs:['ID','Title'],Lignes_Commande_Frs:['ID','ID_Commande_Frs'],Demandes_Achat:['ID','Title'],Lignes_Demande_Achat:['ID','ID_Demande']};
 const DATE_FIELDS=['Date_Depart','ETA_Port','Date_Arrivee_Port','Date_Entrepot_Prevue','Date_Confirmation_Locale','Date_Transporteur','Date_Entrepot','Date_Depotage','Date_Envoi_Validation','Date_Validation','Date_Saisie_Image'];
 const HEAD_EDIT=['Title','N_Dossier','Conteneur','Ref_Transitaire','Navire','Type_Transport','Categorie','ID_Transitaire','Transitaire','Date_Depart','ETA_Port','Date_Arrivee_Port','Date_Entrepot_Prevue','Date_Confirmation_Locale','Date_Transporteur','Date_Entrepot','Date_Depotage','Controle_OK','Anomalies_Depotage'];
 const TYPES_TRANSPORT=["20'","40'","40' HC",'Groupage maritime','Aérien','Départ usine','Express'];
@@ -704,6 +710,8 @@ async function loadAll(){
     spGetAll('Tirelire_Mouvements').then(r=>{TIR_ERR='';return r;}).catch(e=>{TIR_ERR=e.message;console.warn('[Tirelire_Mouvements]',e);return null;})]);
   const [cmd,lcmd]=await Promise.all(['Commandes_Frs','Lignes_Commande_Frs'].map(l=>spGetAll(l).catch(e=>{if(typeof CMD_ERR!=='undefined')CMD_ERR=e.message;console.warn('['+l+']',e);return null;})));
   DATA.cmd=cmd&&lcmd?cmd:null;DATA.lcmd=lcmd||[];
+  const [da,lda]=await Promise.all(['Demandes_Achat','Lignes_Demande_Achat'].map(l=>spGetAll(l).catch(e=>{if(typeof DA_ERR!=='undefined')DA_ERR=e.message;console.warn('['+l+']',e);return null;})));
+  DATA.da=da&&lda?da:null;DATA.lda=lda||[];
   if(fac)DATA.fac=fac;DATA.tir=tir||[];
   DATA.frs=frs.sort((a,b)=>String(a.Title).localeCompare(String(b.Title),'fr'));
   DATA.arr=arr;DATA.lig=lig;
@@ -3051,7 +3059,7 @@ async function cmdImporterListe(liste){
       catch(e){bilan.push(`✗ ${liste[i].nom} : ${e.message}`);}
     }
   }finally{CMDV.busy=false;progressionCmd(null);}
-  await reloadAll();setTab('commandes');
+  await reloadAll();setTab('commandes');if(typeof daRapprocherTout==='function')await daRapprocherTout();
   const ko=bilan.filter(b=>/⚠|✗/.test(b)).length;
   toast(`${liste.length-bilan.filter(b=>b.startsWith('✗')).length}/${liste.length} commande(s) importée(s)${ko?' · '+ko+' à vérifier':''}`,ko?'wa':'ok');
   if(ko)console.warn('[Commandes] bilan',bilan);
@@ -3072,7 +3080,7 @@ async function cmdDeposer(files){
       toast(`✓ Commande ${r.num} ${ex?'mise à jour':'importée'} (${r.lignes.length} articles), PDF rangé dans « Bon de commande »`,'ok');
     }catch(e){toast('🔴 '+f.name+' : '+e.message,'ko');}
   }
-  CMDV.fichiers=null;await reloadAll();setTab('commandes');
+  CMDV.fichiers=null;await reloadAll();setTab('commandes');if(typeof daRapprocherTout==='function')await daRapprocherTout();
 }
 
 // ── Actions de suivi ──
@@ -3135,6 +3143,7 @@ function renderCommandes(){
       const prixKo=(DATA.cmd||[]).filter(c=>c.Lien_BC&&cmdLignes(c.ID).some(l=>l.Prix_Unitaire==null&&l.Remise!=null&&l.Montant_HT!=null));
       return (vieux.length&&peutModifierCmd()?`<div class="warn-ribbon" style="border-radius:8px;margin-bottom:10px;display:flex;gap:10px;align-items:center;flex-wrap:wrap">🧹 <b>${vieux.length}</b> commande(s) encore « en cours » passée(s) il y a plus de <input type="number" id="cmdJSolde" value="${CMDV.joursSolde}" min="1" style="width:56px"> jours, sans dossier d’arrivage : probablement déjà reçues. <button class="btn sm" id="cmdSolderVieux">✔ Les solder (${vieux.length})</button><span class="muted" style="font-size:12px">Vérifie d’abord la liste avec le filtre « ARC attendu ».</span></div>`:'')
        +(prixKo.length&&peutModifierCmd()?`<div class="warn-ribbon" style="border-radius:8px;margin-bottom:10px">🔁 <b>${prixKo.length}</b> BC importé(s) avec une version précédente du lecteur : prix rangés dans la colonne remise. <button class="btn sm" id="cmdRelirePrix">Relire ces BC</button></div>`:'');})()}
+    ${typeof daBlocHtml==='function'?daBlocHtml():''}
     <div class="card" style="margin-bottom:14px"><div class="card-h"><h3>📂 Nouveaux BC dans « Bon de commande » ${aImp.length?`<span class="tag">${aImp.length}</span>`:''}</h3>
       <div style="display:flex;gap:8px;align-items:center">${F&&F.D?`<a href="${pdfAbs(F.D)}" target="_blank" rel="noopener" style="font-size:12px">Ouvrir le dossier ↗</a>`:''}
       <label style="font-size:12px;display:flex;gap:4px;align-items:center"><input type="checkbox" id="cmdTout" ${CMDV.tout?'checked':''} style="width:auto"> plus de ${CMD_JOURS_LISTE} j</label>
@@ -3188,7 +3197,7 @@ function peutModifierCmd(){return !(typeof lectureSeule==='function'&&lectureSeu
 // ── Événements ──
 document.addEventListener('click',async e=>{
   if(!e.target.closest)return;
-  const imp=e.target.closest('[data-cmdimp]');if(imp){e.preventDefault();if(CMDV.busy)return;CMDV.busy=true;try{progressionCmd('Lecture de '+facNom(imp.dataset.cmdimp)+'…');const r=await cmdImporter(imp.dataset.cmdimp);await reloadAll();setTab('commandes');CMDV.ouvert=r.id;renderCommandes();}catch(er){toast('🔴 '+er.message,'ko');}finally{CMDV.busy=false;progressionCmd(null);}return;}
+  const imp=e.target.closest('[data-cmdimp]');if(imp){e.preventDefault();if(CMDV.busy)return;CMDV.busy=true;try{progressionCmd('Lecture de '+facNom(imp.dataset.cmdimp)+'…');const r=await cmdImporter(imp.dataset.cmdimp);await reloadAll();setTab('commandes');if(typeof daRapprocherTout==='function')await daRapprocherTout();CMDV.ouvert=r.id;renderCommandes();}catch(er){toast('🔴 '+er.message,'ko');}finally{CMDV.busy=false;progressionCmd(null);}return;}
   if(e.target.closest('#cmdImpTout')){cmdImporterListe(cmdAImporter());return;}
   if(e.target.closest('#cmdRelirePrix')){cmdImporterListe((DATA.cmd||[]).filter(c=>c.Lien_BC&&cmdLignes(c.ID).some(l=>l.Prix_Unitaire==null&&l.Remise!=null&&l.Montant_HT!=null)).map(c=>({path:c.Lien_BC,nom:facNom(c.Lien_BC)})));return;}
   if(e.target.closest('#cmdSolderVieux')){cmdSolderVieux();return;}
@@ -3199,7 +3208,7 @@ document.addEventListener('click',async e=>{
     else if(a==='bpa')cmdMaj(id,{Date_BPA:toSP(todayKey()),Mode_BPA:'Courriel'},`✓ BPA envoyé pour ${c.Title}`);
     else if(a==='solde'){const s=/^Sold/i.test(c.Statut||'');try{await spPatch('Commandes_Frs',id,{Statut:s?'Commandée':'Soldée'},c);c.Statut=s?'Commandée':'Soldée';if(!s)CMDV.ouvert=null;toast(s?'Commande remise en suivi':`✓ Commande ${c.Title} soldée`,'ok');renderCommandes();}catch(er){toast('🔴 '+er.message,'ko');}}
     else if(a==='annul')cmdMaj(id,{Annulee:c.Annulee==='Oui'?'Non':'Oui'},c.Annulee==='Oui'?'Commande réactivée':'Commande annulée');
-    else if(a==='relire'){try{await cmdImporter(c.Lien_BC);await reloadAll();setTab('commandes');}catch(er){toast('🔴 '+er.message,'ko');}}
+    else if(a==='relire'){try{await cmdImporter(c.Lien_BC);await reloadAll();setTab('commandes');if(typeof daRapprocherTout==='function')await daRapprocherTout();}catch(er){toast('🔴 '+er.message,'ko');}}
     return;}
   if(e.target.closest('.cmd-d'))return;
   const r=e.target.closest('[data-cmd]');if(r){const id=+r.dataset.cmd;CMDV.ouvert=CMDV.ouvert===id?null:id;renderCommandes();}
@@ -3217,6 +3226,197 @@ document.addEventListener('change',e=>{
   if(fr){const x=matchFrs(e.target.value);if(!x){toast('Fournisseur inconnu : choisis-le dans la liste','wa');return;}cmdMaj(+fr,{ID_Fournisseur:x.ID,Fournisseur:x.Title},'✓ Fournisseur enregistré');}
 });
 document.addEventListener('input',e=>{if(e.target.id==='cmdSearch'){CMDV.q=e.target.value;clearTimeout(CMDV._t);CMDV._t=setTimeout(()=>{renderCommandes();const s=$('cmdSearch');if(s){s.focus();s.setSelectionRange(s.value.length,s.value.length);}},250);}});
+
+// ═══ DEMANDES DE COMMANDE (fiche « Commande import » de Fabrice) ═══
+// Demandes_Achat (en-tête) + Lignes_Demande_Achat (réf. Réseaux Plus, qté, fournisseur).
+// Rapprochement automatique à l'import d'un BC : même réf. Réseaux Plus (2e ligne du BC Image) et même fournisseur.
+let DA_ERR='',DAV={form:null,cat:null,catP:null,tout:false};
+const daRef=s=>String(s||'').toUpperCase().replace(/[\s.\-\/]/g,'');
+const daLignes=id=>(DATA.lda||[]).filter(l=>l.ID_Demande===id);
+function daEtat(d){
+  if(d.Statut==='Annulée')return {k:'annulee',lbl:'Annulée',cls:'st-renv'};
+  const L=daLignes(d.ID);if(!L.length)return {k:'vide',lbl:'Sans ligne',cls:'st-prep'};
+  const ok=L.filter(l=>(+l.Qte_Commandee||0)>=(+l.Quantite||0)&&(+l.Quantite||0)>0||l.N_Commande).length;
+  if(ok===L.length)return {k:'cmd',lbl:'Commandée',cls:'st-ok'};
+  if(ok)return {k:'part',lbl:`Partiellement commandée (${ok}/${L.length})`,cls:'st-valid'};
+  return {k:'afaire',lbl:'À commander',cls:'st-transit'};
+}
+const daLigneOuverte=l=>{const d=(DATA.da||[]).find(x=>x.ID===l.ID_Demande);return d&&d.Statut!=='Annulée'&&!l.N_Commande;};
+
+// ── Catalogue (Cathalogue_Produits : Title = référence, field_1 = désignation) ──
+async function daCatalogue(){
+  if(DAV.cat)return DAV.cat;
+  if(!DAV.catP)DAV.catP=(async()=>{
+    let all=[],last=0;
+    try{for(let p=0;p<30;p++){const b=await spFetch('Cathalogue_Produits',`$select=ID,Title,field_1&$filter=ID gt ${last}&$orderby=ID asc&$top=2000`);all=all.concat(b);if(b.length<2000)break;last=b[b.length-1].ID;}}
+    catch(e){console.warn('[Catalogue]',e);}
+    DAV.cat=all.filter(p=>p.Title).map(p=>({ref:String(p.Title).trim(),des:String(p.field_1||'').trim(),k:daRef(p.Title)}));
+    DAV.catIdx=new Map(DAV.cat.map(p=>[p.k,p]));return DAV.cat;
+  })();
+  return DAV.catP;
+}
+// Fournisseur habituel : dernière commande (ou demande) contenant cette référence
+function daFrsHabituel(ref){
+  const k=daRef(ref);if(!k)return null;
+  const lc=(DATA.lcmd||[]).filter(l=>daRef(l.Ref_2)===k||daRef(l.Title)===k).sort((a,b)=>b.ID-a.ID)[0];
+  if(lc){const c=(DATA.cmd||[]).find(x=>x.ID===lc.ID_Commande_Frs);if(c&&c.ID_Fournisseur)return frsById(c.ID_Fournisseur);}
+  const ld=(DATA.lda||[]).filter(l=>daRef(l.Title)===k&&l.ID_Fournisseur).sort((a,b)=>b.ID-a.ID)[0];
+  return ld?frsById(ld.ID_Fournisseur):null;
+}
+
+// ── Formulaire ──
+function daOuvrir(){
+  DAV.form={zone:'Guadeloupe',transport:'Maritime',motif:'Stock',client:'',devis:'',com:'',lignes:[{ref:'',des:'',qte:'',frs:''},{ref:'',des:'',qte:'',frs:''},{ref:'',des:'',qte:'',frs:''}]};
+  let ov=$('ovDA');if(!ov){ov=document.createElement('div');ov.className='ov';ov.id='ovDA';ov.innerHTML='<div class="modal" id="daModal" style="width:min(980px,96vw)"></div>';document.body.appendChild(ov);}
+  ov.classList.add('open');daRender();daCatalogue().then(()=>{const m=$('daCatMsg');if(m)m.textContent=DAV.cat.length?`Catalogue : ${DAV.cat.length} références`:'Catalogue indisponible : saisie libre';});
+}
+function daFermer(){const ov=$('ovDA');if(ov)ov.classList.remove('open');DAV.form=null;}
+function daRender(){
+  const F=DAV.form;if(!F)return;
+  const radio=(name,vals,cur)=>vals.map(v=>`<label class="da-r"><input type="radio" name="${name}" value="${v}" ${cur===v?'checked':''}> ${v}</label>`).join('');
+  $('daModal').innerHTML=`<div class="modal-h"><h3>📝 Demande de commande</h3><button class="btn ghost" onclick="daFermer()">✕</button></div>
+  <div class="modal-b">
+    <div class="da-head">
+      <div><div class="da-l">Destination</div>${radio('daZone',['Guadeloupe','Îles du Nord'],F.zone)}</div>
+      <div><div class="da-l">Transport</div>${radio('daTr',['Maritime','Aérien'],F.transport)}</div>
+      <div><div class="da-l">Motif</div>${radio('daMotif',['Stock','Client'],F.motif)}</div>
+      ${F.motif==='Client'?`<div><div class="da-l">Client</div><input id="daClient" value="${esc(F.client)}" placeholder="nom du client"></div><div><div class="da-l">N° devis</div><input id="daDevis" value="${esc(F.devis)}" placeholder="optionnel" style="width:120px"></div>`:''}
+    </div>
+    <datalist id="dlCat"></datalist>
+    <table class="ltable da-t"><thead><tr><th style="width:150px">Réf. Réseaux Plus</th><th>Désignation</th><th style="width:90px" class="r">Qté</th><th style="width:240px">Fournisseur</th><th style="width:30px"></th></tr></thead><tbody>
+    ${F.lignes.map((l,i)=>`<tr><td><input data-dal="${i}" data-k="ref" list="dlCat" value="${esc(l.ref)}" class="mono" autocomplete="off"></td><td><input data-dal="${i}" data-k="des" value="${esc(l.des)}"></td><td><input data-dal="${i}" data-k="qte" value="${esc(l.qte)}" inputmode="decimal" class="r"></td><td><input data-dal="${i}" data-k="frs" list="dlFrs" value="${esc(l.frs)}" placeholder="${l.frsAuto?'':'fournisseur'}">${l.frsAuto?'<div class="muted" style="font-size:11px">proposé : dernière commande</div>':''}</td><td><button class="btn ghost sm" data-dadel="${i}" title="Retirer la ligne">✕</button></td></tr>`).join('')}
+    </tbody></table>
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-top:8px"><button class="btn sm" id="daAdd">＋ Ligne</button><span class="muted" id="daCatMsg" style="font-size:12px">${DAV.cat?`Catalogue : ${DAV.cat.length} références`:'Chargement du catalogue…'}</span></div>
+    <label class="cmd-com" style="margin-top:10px">Commentaire<textarea id="daCom" rows="2">${esc(F.com)}</textarea></label>
+  </div>
+  <div class="modal-f"><span class="msg" id="daMsg">La demande est validée à l’enregistrement (remplace la signature).</span><button class="btn ghost" onclick="daFermer()">Annuler</button><button class="btn primary" id="daSave">Enregistrer la demande</button></div>`;
+}
+function daLireForm(){
+  const F=DAV.form;if(!F)return;
+  document.querySelectorAll('#daModal [data-dal]').forEach(i=>{F.lignes[+i.dataset.dal][i.dataset.k]=i.value;});
+  const r=n=>{const x=document.querySelector(`#daModal input[name="${n}"]:checked`);return x?x.value:null;};
+  F.zone=r('daZone')||F.zone;F.transport=r('daTr')||F.transport;F.motif=r('daMotif')||F.motif;
+  if($('daClient'))F.client=$('daClient').value;if($('daDevis'))F.devis=$('daDevis').value;if($('daCom'))F.com=$('daCom').value;
+}
+async function daEnregistrer(){
+  daLireForm();const F=DAV.form;
+  const L=F.lignes.filter(l=>l.ref.trim()||l.des.trim());
+  const err=[];if(!L.length)err.push('au moins une ligne');
+  L.forEach((l,i)=>{if(!l.ref.trim())err.push(`réf. ligne ${i+1}`);if(!(parseNum(l.qte)>0))err.push(`qté ligne ${i+1}`);});
+  if(F.motif==='Client'&&!F.client.trim())err.push('nom du client');
+  if(err.length){$('daMsg').textContent='Manque : '+err.join(', ');$('daMsg').style.color='var(--red)';return;}
+  const btn=$('daSave');btn.disabled=true;btn.textContent='Enregistrement…';
+  try{
+    const t=todayKey(),pre='DA-'+t.slice(2).replace(/-/g,'');const n=(DATA.da||[]).filter(d=>String(d.Title||'').startsWith(pre)).length+1;
+    const u=sessionStorage.getItem('user_name')||'';
+    const d=await spPost('Demandes_Achat',{Title:`${pre}-${n}`,Zone:F.zone,Transport:F.transport,Motif:F.motif,Client:F.motif==='Client'?F.client.trim():null,N_Devis:F.devis.trim()||null,
+      Demandeur:_trunc(u),Statut:'Validée',Valide_Par:_trunc(u),Date_Demande:toSP(t),Date_Validation:toSP(t),Commentaire:F.com.trim()||null});
+    for(const l of L){const fr=l.frs?matchFrs(l.frs):null;
+      await spPostSilencieux('Lignes_Demande_Achat',sansVide({Title:_trunc(l.ref.trim().toUpperCase()),ID_Demande:d.ID,Designation:_trunc(l.des.trim()),Quantite:parseNum(l.qte),ID_Fournisseur:fr?fr.ID:null,Fournisseur:fr?fr.Title:(l.frs.trim()||null)}));}
+    daFermer();await reloadAll();setTab('commandes');
+    const n2=await daRapprocherTout();
+    toast(`✓ Demande ${d.Title} enregistrée (${L.length} ligne${L.length>1?'s':''})${n2?` · ${n2} déjà sur un BC importé`:''}`,'ok');
+  }catch(e){toast('🔴 '+e.message,'ko');btn.disabled=false;btn.textContent='Enregistrer la demande';}
+}
+
+// ── Rapprochement BC ↔ demandes ──
+async function daRapprocher(cmdId){
+  const c=(DATA.cmd||[]).find(x=>x.ID===cmdId);if(!c||!DATA.lda)return 0;
+  const lc=cmdLignes(cmdId);let n=0;
+  for(const b of lc){
+    const k=daRef(b.Ref_2),k1=daRef(b.Title);if(!k&&!k1)continue;
+    const cand=DATA.lda.filter(l=>daLigneOuverte(l)&&(daRef(l.Title)===k||(!k&&daRef(l.Title)===k1))&&(!l.ID_Fournisseur||!c.ID_Fournisseur||l.ID_Fournisseur===c.ID_Fournisseur)).sort((x,y)=>x.ID-y.ID);
+    const l=cand[0];if(!l)continue;
+    const body={N_Commande:cmdNum(c.Title),ID_Commande_Frs:c.ID,Qte_Commandee:Math.min(+b.Quantite||0,+l.Quantite||0)||(+b.Quantite||0)};
+    if(!l.ID_Fournisseur&&c.ID_Fournisseur){body.ID_Fournisseur=c.ID_Fournisseur;body.Fournisseur=c.Fournisseur;}
+    try{await spPatch('Lignes_Demande_Achat',l.ID,body,l);Object.assign(l,body);n++;}catch(e){console.warn('[rapprochement]',e);}
+  }
+  return n;
+}
+async function daRapprocherTout(){
+  if(!DATA.cmd||!DATA.lda||!DATA.lda.some(daLigneOuverte))return 0;
+  let n=0;for(const c of DATA.cmd.filter(c=>c.Annulee!=='Oui'))n+=await daRapprocher(c.ID);
+  if(n&&typeof renderCommandes==='function')renderCommandes();return n;
+}
+async function daLierManuel(lid,num){
+  const l=(DATA.lda||[]).find(x=>x.ID===lid);if(!l)return;
+  const v=cmdNum(num);const c=v?cmdByNum(v):null;
+  const body=v?{N_Commande:v,ID_Commande_Frs:c?c.ID:null,Qte_Commandee:+l.Quantite||null}:{N_Commande:null,ID_Commande_Frs:null,Qte_Commandee:null};
+  try{await spPatch('Lignes_Demande_Achat',lid,body,l);Object.assign(l,body);toast(v?`✓ Ligne ${l.Title} liée à la commande ${v}`:'Lien retiré','ok');renderCommandes();}catch(e){toast('🔴 '+e.message,'ko');}
+}
+async function daAnnuler(id){
+  const d=(DATA.da||[]).find(x=>x.ID===id);if(!d)return;
+  if(!await showConfirm('Annuler la demande',`Annuler la demande <b>${esc(d.Title)}</b> ? Ses lignes sortent de « À commander ».`,'Annuler la demande','danger'))return;
+  try{await spPatch('Demandes_Achat',id,{Statut:'Annulée'},d);d.Statut='Annulée';renderCommandes();}catch(e){toast('🔴 '+e.message,'ko');}
+}
+
+// ── Rendu (dans l'onglet Commandes) ──
+function daBlocHtml(){
+  if(!DATA.da)return `<div class="warn-ribbon" style="border-radius:8px;margin-bottom:12px">⚠️ Listes <b>Demandes_Achat</b> / <b>Lignes_Demande_Achat</b> non disponibles : ${esc(DA_ERR.slice(0,160))}</div>`;
+  const ouv=(DATA.lda||[]).filter(daLigneOuverte);
+  const parFrs={};ouv.forEach(l=>{const k=l.Fournisseur||'Fournisseur à choisir';(parFrs[k]=parFrs[k]||[]).push(l);});
+  const ed=!(typeof lectureSeule==='function'&&lectureSeule());
+  const dem=id=>(DATA.da||[]).find(x=>x.ID===id)||{};
+  const groupes=Object.entries(parFrs).sort((a,b)=>a[0]==='Fournisseur à choisir'?1:b[0]==='Fournisseur à choisir'?-1:a[0].localeCompare(b[0],'fr'));
+  const liste=(DATA.da||[]).slice().sort((a,b)=>b.ID-a.ID).filter(d=>DAV.tout||daEtat(d).k!=='cmd'&&d.Statut!=='Annulée');
+  return `<div class="card" style="margin-bottom:14px"><div class="card-h"><h3>📝 À commander ${ouv.length?`<span class="tag">${ouv.length} ligne${ouv.length>1?'s':''}</span>`:''}</h3>
+    <div style="display:flex;gap:8px"><button class="btn sm" id="daRappr" title="Relie les lignes aux BC déjà importés (même réf. Réseaux Plus)">🔗 Rapprocher avec les BC</button><button class="btn sm primary" onclick="daOuvrir()">＋ Demande de commande</button></div></div>
+    <div class="card-b">${groupes.length?groupes.map(([f,L])=>`<div class="da-g"><div class="da-gh"><b>${esc(f)}</b> <span class="muted">${L.length} article${L.length>1?'s':''}</span></div>
+      <table class="ltable"><tbody>${L.map(l=>{const d=dem(l.ID_Demande);return `<tr><td class="mono" style="width:130px"><b>${esc(l.Title)}</b></td><td>${esc(l.Designation||'')}</td><td class="r" style="width:70px">${fmtN(l.Quantite,0)}</td>
+        <td class="muted" style="font-size:12px;width:260px">${esc(d.Title||'')} · ${esc(d.Motif==='Client'?'Client '+(d.Client||''):'Stock')} · ${esc([d.Zone==='Îles du Nord'?'IDN':'',d.Transport==='Aérien'?'aérien':''].filter(Boolean).join(' '))} ${fmtD(dk(d,'Date_Demande'))}</td>
+        <td style="width:150px">${ed?`<input data-dalier="${l.ID}" placeholder="n° BC si déjà passé" style="width:140px;font-size:12px">`:''}</td></tr>`;}).join('')}</tbody></table></div>`).join('')
+      :'<span class="muted">✓ Rien à commander. Les demandes de Fabrice arrivent ici, groupées par fournisseur.</span>'}
+    ${(DATA.da||[]).length?`<details style="margin-top:10px" ${DAV.ouvertListe?'open':''} id="daDet"><summary class="muted" style="cursor:pointer">Demandes (${(DATA.da||[]).length})</summary>
+      <label style="font-size:12px;display:inline-flex;gap:4px;align-items:center;margin:6px 0"><input type="checkbox" id="daTout" ${DAV.tout?'checked':''} style="width:auto"> afficher les commandées et annulées</label>
+      <table class="ltable"><thead><tr><th>N°</th><th>Date</th><th>Motif</th><th>Destination</th><th>Demandeur</th><th>Lignes</th><th>État</th><th></th></tr></thead><tbody>
+      ${liste.map(d=>{const e=daEtat(d);const L=daLignes(d.ID);return `<tr><td class="mono">${esc(d.Title)}</td><td>${fmtD(dk(d,'Date_Demande'))}</td><td>${esc(d.Motif==='Client'?'Client : '+(d.Client||'')+(d.N_Devis?' (devis '+d.N_Devis+')':''):'Stock')}</td><td>${esc((d.Zone||'')+' · '+(d.Transport||''))}</td><td>${esc(d.Demandeur||'')}</td>
+        <td style="font-size:12px">${L.map(l=>`${esc(l.Title)} ×${fmtN(l.Quantite,0)}${l.N_Commande?` <span class="frs-ok">→ ${esc(l.N_Commande)}</span>`:''}`).join('<br>')}</td><td><span class="st ${e.cls}">${esc(e.lbl)}</span></td>
+        <td>${ed&&d.Statut!=='Annulée'&&e.k!=='cmd'?`<button class="btn ghost sm" data-daannul="${d.ID}" title="Annuler la demande">✕</button>`:''}</td></tr>`;}).join('')||'<tr><td colspan="8" class="muted">Aucune demande en cours.</td></tr>'}
+      </tbody></table></details>`:''}
+    </div></div>`;
+}
+
+// ── Événements ──
+document.addEventListener('click',e=>{
+  if(!e.target.closest)return;
+  if(e.target.closest('#daAdd')){daLireForm();DAV.form.lignes.push({ref:'',des:'',qte:'',frs:''});daRender();return;}
+  const del=e.target.closest('[data-dadel]');if(del){daLireForm();DAV.form.lignes.splice(+del.dataset.dadel,1);if(!DAV.form.lignes.length)DAV.form.lignes.push({ref:'',des:'',qte:'',frs:''});daRender();return;}
+  if(e.target.closest('#daSave')){daEnregistrer();return;}
+  if(e.target.closest('#daRappr')){(async()=>{const n=await daRapprocherTout();toast(n?`✓ ${n} ligne(s) rapprochée(s) avec un BC`:'Aucune ligne à rapprocher pour l’instant',n?'ok':'wa');renderCommandes();})();return;}
+  const an=e.target.closest('[data-daannul]');if(an){daAnnuler(+an.dataset.daannul);return;}
+  if(e.target.closest('#daDet summary')){DAV.ouvertListe=!$('daDet').open;}
+});
+document.addEventListener('change',e=>{
+  if(!e.target.closest)return;
+  if(e.target.id==='daTout'){DAV.tout=e.target.checked;DAV.ouvertListe=true;renderCommandes();return;}
+  if(e.target.name&&/^da(Zone|Tr|Motif)$/.test(e.target.name)){daLireForm();daRender();return;}
+  const li=e.target.dataset&&e.target.dataset.dalier;if(li){daLierManuel(+li,e.target.value);return;}
+  const i=e.target.dataset&&e.target.dataset.dal;
+  if(i!==undefined&&DAV.form){
+    const L=DAV.form.lignes[+i];L[e.target.dataset.k]=e.target.value;
+    if(e.target.dataset.k==='ref'){
+      const p=DAV.catIdx&&DAV.catIdx.get(daRef(e.target.value));
+      if(p){L.ref=p.ref;if(!L.des)L.des=p.des;}
+      if(!L.frs){const f=daFrsHabituel(L.ref);if(f){L.frs=f.Title;L.frsAuto=true;}}
+      daLireFormSauf(i);daRender();
+      const n=document.querySelector(`#daModal [data-dal="${i}"][data-k="qte"]`);if(n)n.focus();
+    }
+    if(e.target.dataset.k==='frs')L.frsAuto=false;
+  }
+});
+function daLireFormSauf(i){const F=DAV.form;document.querySelectorAll('#daModal [data-dal]').forEach(x=>{if(x.dataset.dal!==String(i))F.lignes[+x.dataset.dal][x.dataset.k]=x.value;});
+  const r=n=>{const x=document.querySelector(`#daModal input[name="${n}"]:checked`);return x?x.value:null;};F.zone=r('daZone')||F.zone;F.transport=r('daTr')||F.transport;F.motif=r('daMotif')||F.motif;
+  if($('daClient'))F.client=$('daClient').value;if($('daDevis'))F.devis=$('daDevis').value;if($('daCom'))F.com=$('daCom').value;}
+// Suggestions catalogue pendant la frappe (3 caractères mini, 30 propositions)
+document.addEventListener('input',e=>{
+  if(!e.target.dataset||e.target.dataset.k!=='ref'||!DAV.cat)return;
+  const q=daRef(e.target.value);const dl=$('dlCat');if(!dl)return;
+  if(q.length<3){dl.innerHTML='';return;}
+  const qd=e.target.value.trim().toLowerCase();
+  const res=DAV.cat.filter(p=>p.k.startsWith(q)).slice(0,30);
+  if(res.length<30)DAV.cat.filter(p=>!p.k.startsWith(q)&&(p.k.includes(q)||p.des.toLowerCase().includes(qd))).slice(0,30-res.length).forEach(p=>res.push(p));
+  dl.innerHTML=res.map(p=>`<option value="${esc(p.ref)}">${esc(p.des)}</option>`).join('');
+});
 
 // ═══ DÉMARRAGE ═══
 async function init(){
