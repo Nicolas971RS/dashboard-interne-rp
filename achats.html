@@ -2859,7 +2859,7 @@ document.addEventListener('click',e=>{const b=e.target.closest&&e.target.closest
 // Source : les PDF « Bon de commande » sortis d'Image, rangés dans « Dossier partage/Bon de commande ».
 // Le portail lit le PDF (n°, fournisseur, date, articles) → Commandes_Frs + Lignes_Commande_Frs.
 // Suivi : Commandée → ARC reçu → BPA envoyé → Dispo annoncée → Expédiée (extrait SIFA) → Reçue. Statut calculé.
-let CMD_ERR='',CMDV={filtre:'cours',q:'',ouvert:null,tout:false,fichiers:null,busy:false,att:{}};
+let CMD_ERR='',CMDV={joursSolde:21,filtre:'cours',q:'',ouvert:null,tout:false,fichiers:null,busy:false,att:{}};
 const CMD_JOURS_LISTE=60;
 const cmdNum=s=>{const m=String(s||'').match(/\d{4,6}/);return m?m[0].replace(/^0+(?=\d)/,''):'';};
 
@@ -2913,8 +2913,10 @@ function cmdAnalyse(pages){
       const t=cmdTxt(row);
       if(/D[ée]signation/i.test(t)&&/Qt[ée]/i.test(t)){
         const c=re=>{const it=row.items.find(i=>re.test(i.s));return it?it.x+it.w/2:null;};
+        const gx=re=>{const it=row.items.find(i=>re.test(i.s));return it?it.x:null;};
         const it0=row.items[0];const des=row.items.find(i=>/D[ée]signation/i.test(i.s));
-        cols={refX:it0.x,desX:des?des.x:it0.x+100,qte:c(/^Qt/i),uni:c(/^Uni/i),colis:c(/^Colis/i),prix:c(/^Prix/i),rem:c(/%\s*R|^Rem/i),mtt:c(/^Mtt|^Montant/i)};
+        cols={refX:it0.x,desX:des?des.x:it0.x+100,qte:c(/^Qt/i),uni:c(/^Uni/i),colis:c(/^Colis/i),prix:c(/^Prix/i),rem:c(/%\s*R|^Rem/i),mtt:c(/^Mtt|^Montant/i),
+          xs:[['qte',gx(/^Qt/i)],['uni',gx(/^Uni/i)],['colis',gx(/^Colis/i)],['prix',gx(/^Prix/i)],['rem',gx(/%\s*R|^Rem/i)],['mtt',gx(/^Mtt|^Montant/i)]].filter(x=>x[1]!=null)};
         dansTable=true;continue;
       }
       if(!dansTable||!cols)continue;
@@ -2927,7 +2929,7 @@ function cmdAnalyse(pages){
         const cx=i.x+i.w/2;
         if(i.x<cols.desX-6){ref.push(i.s);continue;}
         const estNum=RX_NUM_FR.test(i.s.replace(/%$/,''));
-        if(estNum&&cols.qte!=null&&cx>cols.qte-35){const k=numCols.reduce((b,x)=>Math.abs(x[1]-cx)<Math.abs(b[1]-cx)?x:b)[0];num[k]=cmdNombre(i.s.replace(/%$/,''));continue;}
+        if(estNum&&cols.qte!=null&&cx>cols.qte-35){const fin=i.x+i.w;let k=null;for(let j=0;j<cols.xs.length;j++){const nx=cols.xs[j+1];if(nx==null||fin<=nx[1]+4){k=cols.xs[j][0];break;}}if(k==='uni')k='qte';if(k){num[k]=cmdNombre(i.s.replace(/%$/,''));continue;}}
         if(!estNum&&cols.uni!=null&&Math.abs(cx-cols.uni)<18){uni=i.s;continue;}
         des.push(i.s);
       }
@@ -2976,6 +2978,7 @@ function cmdEtat(c){
   if(dk(c,'Date_Reception'))return {k:'recue',lbl:`Reçue le ${fmtD(dk(c,'Date_Reception'))}`,cls:'st-ok',ouverte:false};
   if(a&&dk(a,'Date_Entrepot'))return {k:'recue',lbl:`Reçue le ${fmtD(dk(a,'Date_Entrepot'))} (${a.Title})`,cls:'st-ok',ouverte:false,a};
   if(a){const eta=dk(a,'ETA_Port');return {k:'route',lbl:`Expédiée · ${a.Title}${eta?' · ETA '+fmtD(eta):''}`,cls:'st-transit',ouverte:true,a};}
+  if(/^Sold/i.test(c.Statut||''))return {k:'recue',lbl:'Soldée',cls:'st-ok',ouverte:false};
   if(dk(c,'Date_Dispo_Prevue')){const dd=dk(c,'Date_Dispo_Prevue');const ret=dd<t;return {k:'dispo',lbl:`Dispo annoncée le ${fmtD(dd)}`,cls:'st-prep',ouverte:true,alerte:ret?{lvl:'a',txt:`Dispo annoncée dépassée de ${daysBetween(dd,t)} j, pas encore dans un extrait`}:null};}
   if(dk(c,'Date_BPA'))return {k:'bpa',lbl:imp?'BPA envoyé · dispo à confirmer':'BPA envoyé · livraison attendue',cls:'st-prep',ouverte:true};
   if(dk(c,'Date_ARC')){const j=daysBetween(dk(c,'Date_ARC'),t);return {k:'arc',lbl:'ARC reçu · BPA à envoyer',cls:'st-valid',ouverte:true,alerte:j>=param('SEUIL_BPA_J')?{lvl:j>=2*param('SEUIL_BPA_J')?'r':'a',txt:`ARC reçu il y a ${j} j, BPA pas encore envoyé`}:null};}
@@ -3097,6 +3100,16 @@ async function cmdAttachments(id){
   return CMDV.att[id];
 }
 
+async function cmdSolderVieux(){
+  const t=todayKey(),lim=addDays(t,-CMDV.joursSolde);
+  const L=(DATA.cmd||[]).map(c=>({c,e:cmdEtat(c)})).filter(x=>x.e.ouverte&&['cmd','arc','bpa','dispo'].includes(x.e.k)&&(dk(x.c,'Date_Commande')||t)<lim).map(x=>x.c);
+  if(!L.length||CMDV.busy)return;
+  if(!await showConfirm('Solder les anciennes commandes',`Solder <b>${L.length}</b> commande(s) passée(s) avant le <b>${fmtD(lim)}</b> ?<br>Elles sortent du suivi. Réversible une par une avec « Remettre en suivi ».`,'Solder'))return;
+  CMDV.busy=true;let n=0;
+  try{for(const c of L){progressionCmd(`Solde ${++n}/${L.length} : ${c.Title}`);try{await spPatch('Commandes_Frs',c.ID,{Statut:'Soldée'},c);c.Statut='Soldée';}catch(e){console.warn(e);}}}
+  finally{CMDV.busy=false;progressionCmd(null);}
+  toast(`✓ ${n} commande(s) soldée(s)`,'ok');renderCommandes();
+}
 // ── Rendu ──
 function renderCommandes(){
   const box=$('cmdBox');if(!box)return;
@@ -3118,6 +3131,10 @@ function renderCommandes(){
       {l:'BPA à envoyer',v:k.bpa,h:'ARC reçu, bon pour accord à donner',c:'var(--violet)'},
       {l:'En route',v:k.route,h:'BPA envoyé, chez le transitaire ou en mer',c:'var(--blue)'},
       {l:'Alertes',v:k.al,h:'relance ou BPA en retard',c:'var(--red)'}].map(x=>`<div class="kpi" style="--c:${x.c}"><div class="lab">${x.l}</div><div class="val">${x.v}</div><div class="hint">${x.h}</div></div>`).join('')}</div>
+    ${(()=>{const lim=addDays(t,-CMDV.joursSolde);const vieux=ouv.filter(x=>['cmd','arc','bpa','dispo'].includes(x.e.k)&&(dk(x.c,'Date_Commande')||t)<lim);
+      const prixKo=(DATA.cmd||[]).filter(c=>c.Lien_BC&&cmdLignes(c.ID).some(l=>l.Prix_Unitaire==null&&l.Remise!=null&&l.Montant_HT!=null));
+      return (vieux.length&&peutModifierCmd()?`<div class="warn-ribbon" style="border-radius:8px;margin-bottom:10px;display:flex;gap:10px;align-items:center;flex-wrap:wrap">🧹 <b>${vieux.length}</b> commande(s) encore « en cours » passée(s) il y a plus de <input type="number" id="cmdJSolde" value="${CMDV.joursSolde}" min="1" style="width:56px"> jours, sans dossier d’arrivage : probablement déjà reçues. <button class="btn sm" id="cmdSolderVieux">✔ Les solder (${vieux.length})</button><span class="muted" style="font-size:12px">Vérifie d’abord la liste avec le filtre « ARC attendu ».</span></div>`:'')
+       +(prixKo.length&&peutModifierCmd()?`<div class="warn-ribbon" style="border-radius:8px;margin-bottom:10px">🔁 <b>${prixKo.length}</b> BC importé(s) avec une version précédente du lecteur : prix rangés dans la colonne remise. <button class="btn sm" id="cmdRelirePrix">Relire ces BC</button></div>`:'');})()}
     <div class="card" style="margin-bottom:14px"><div class="card-h"><h3>📂 Nouveaux BC dans « Bon de commande » ${aImp.length?`<span class="tag">${aImp.length}</span>`:''}</h3>
       <div style="display:flex;gap:8px;align-items:center">${F&&F.D?`<a href="${pdfAbs(F.D)}" target="_blank" rel="noopener" style="font-size:12px">Ouvrir le dossier ↗</a>`:''}
       <label style="font-size:12px;display:flex;gap:4px;align-items:center"><input type="checkbox" id="cmdTout" ${CMDV.tout?'checked':''} style="width:auto"> plus de ${CMD_JOURS_LISTE} j</label>
@@ -3158,11 +3175,12 @@ function cmdDetailHtml(c,e){
       <label class="btn sm">📎 Joindre l’ARC<input type="file" data-cmdj="ARC" accept=".pdf,image/*" hidden></label>
       <label class="btn sm">📎 Joindre le BPA signé<input type="file" data-cmdj="BPA" accept=".pdf,image/*" hidden></label>
       ${c.Lien_BC?`<button class="btn sm" data-cmdq="relire" title="Relit le PDF du BC (après modification dans Image)">🔁 Relire le BC</button>`:''}
+      <button class="btn sm" data-cmdq="solde" title="Commande déjà reçue ou terminée, sorte du suivi">${/^Sold/i.test(c.Statut||'')?'↺ Remettre en suivi':'✔ Solder (déjà reçue)'}</button>
       <button class="btn sm ${c.Annulee==='Oui'?'':'danger'}" data-cmdq="annul">${c.Annulee==='Oui'?'↺ Réactiver':'✕ Annuler la commande'}</button>
     </div>`:''}
     <label class="cmd-com">Commentaire<textarea data-cmdd="Commentaire" rows="2" ${dis} placeholder="Échanges avec le fournisseur, reliquats…">${esc(c.Commentaire||'')}</textarea></label>
-    <div class="tblwrap" style="max-height:340px;margin-top:8px"><table class="ltable"><thead><tr><th>Réf.</th><th>Réf. 2</th><th>Désignation</th><th class="r">Qté</th><th>Unité</th><th class="r">Prix</th><th class="r">Rem.</th><th class="r">Montant HT</th></tr></thead><tbody>
-      ${L.length?L.map(l=>`<tr><td class="mono">${esc(l.Title)}</td><td class="mono muted">${esc(l.Ref_2||'')}</td><td>${esc(l.Designation||'')}</td><td class="r">${fmtN(l.Quantite,2)}</td><td>${esc(l.Unite||'')}</td><td class="r">${l.Prix_Unitaire!=null?fmtN(l.Prix_Unitaire,2):'—'}</td><td class="r">${l.Remise?fmtN(l.Remise,1)+' %':''}</td><td class="r">${l.Montant_HT!=null?fmtEur(l.Montant_HT):'—'}</td></tr>`).join(''):'<tr><td colspan="8" class="muted">Aucun article enregistré.</td></tr>'}
+    <div class="tblwrap" style="max-height:340px;margin-top:8px"><table class="ltable"><thead><tr><th>Réf. fournisseur</th><th>Réf. Réseaux Plus</th><th>Désignation</th><th class="r">Qté</th><th>Unité</th><th class="r">Prix</th><th class="r">Rem.</th><th class="r">Montant HT</th></tr></thead><tbody>
+      ${L.length?L.map(l=>`<tr><td class="mono muted">${esc(l.Title)}</td><td class="mono"><b>${esc(l.Ref_2||'')}</b></td><td>${esc(l.Designation||'')}</td><td class="r">${fmtN(l.Quantite,2)}</td><td>${esc(l.Unite||'')}</td><td class="r">${l.Prix_Unitaire!=null?fmtN(l.Prix_Unitaire,2):'—'}</td><td class="r">${l.Remise?fmtN(l.Remise,1)+' %':''}</td><td class="r">${l.Montant_HT!=null?fmtEur(l.Montant_HT):'—'}</td></tr>`).join(''):'<tr><td colspan="8" class="muted">Aucun article enregistré.</td></tr>'}
     </tbody></table></div></div>`;
 }
 function peutModifierCmd(){return !(typeof lectureSeule==='function'&&lectureSeule());}
@@ -3172,11 +3190,14 @@ document.addEventListener('click',async e=>{
   if(!e.target.closest)return;
   const imp=e.target.closest('[data-cmdimp]');if(imp){e.preventDefault();if(CMDV.busy)return;CMDV.busy=true;try{progressionCmd('Lecture de '+facNom(imp.dataset.cmdimp)+'…');const r=await cmdImporter(imp.dataset.cmdimp);await reloadAll();setTab('commandes');CMDV.ouvert=r.id;renderCommandes();}catch(er){toast('🔴 '+er.message,'ko');}finally{CMDV.busy=false;progressionCmd(null);}return;}
   if(e.target.closest('#cmdImpTout')){cmdImporterListe(cmdAImporter());return;}
+  if(e.target.closest('#cmdRelirePrix')){cmdImporterListe((DATA.cmd||[]).filter(c=>c.Lien_BC&&cmdLignes(c.ID).some(l=>l.Prix_Unitaire==null&&l.Remise!=null&&l.Montant_HT!=null)).map(c=>({path:c.Lien_BC,nom:facNom(c.Lien_BC)})));return;}
+  if(e.target.closest('#cmdSolderVieux')){cmdSolderVieux();return;}
   const f=e.target.closest('[data-cmdf]');if(f){CMDV.filtre=f.dataset.cmdf;renderCommandes();return;}
   const q=e.target.closest('[data-cmdq]');
   if(q){const id=CMDV.ouvert;const c=cmdById(id);if(!c)return;const a=q.dataset.cmdq;
     if(a==='arc')cmdMaj(id,{Date_ARC:toSP(todayKey())},`✓ ARC reçu pour ${c.Title}`);
     else if(a==='bpa')cmdMaj(id,{Date_BPA:toSP(todayKey()),Mode_BPA:'Courriel'},`✓ BPA envoyé pour ${c.Title}`);
+    else if(a==='solde'){const s=/^Sold/i.test(c.Statut||'');try{await spPatch('Commandes_Frs',id,{Statut:s?'Commandée':'Soldée'},c);c.Statut=s?'Commandée':'Soldée';if(!s)CMDV.ouvert=null;toast(s?'Commande remise en suivi':`✓ Commande ${c.Title} soldée`,'ok');renderCommandes();}catch(er){toast('🔴 '+er.message,'ko');}}
     else if(a==='annul')cmdMaj(id,{Annulee:c.Annulee==='Oui'?'Non':'Oui'},c.Annulee==='Oui'?'Commande réactivée':'Commande annulée');
     else if(a==='relire'){try{await cmdImporter(c.Lien_BC);await reloadAll();setTab('commandes');}catch(er){toast('🔴 '+er.message,'ko');}}
     return;}
@@ -3185,6 +3206,7 @@ document.addEventListener('click',async e=>{
 });
 document.addEventListener('change',e=>{
   if(!e.target.closest)return;
+  if(e.target.id==='cmdJSolde'){CMDV.joursSolde=Math.max(1,parseInt(e.target.value)||21);renderCommandes();return;}
   if(e.target.id==='cmdTout'){CMDV.tout=e.target.checked;renderCommandes();return;}
   if(e.target.id==='cmdUpload'&&e.target.files.length){cmdDeposer([...e.target.files]);e.target.value='';return;}
   const d=e.target.dataset&&e.target.dataset.cmdd;
