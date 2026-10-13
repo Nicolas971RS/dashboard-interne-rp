@@ -2779,6 +2779,118 @@ async function voirPhotoBL(sessionId){
   }catch(e){toast('🔴 Photo inaccessible : '+e.message,'ko');}
 }
 
+// ═══ SUIVI VENDEURS ↔ MAGASIN : LIVRAISONS BLOQUÉES ET ÉCARTS À TRAITER ═══
+// Revue du process (oct. 2026) : les BL qui traînent n'étaient visibles qu'au
+// portail scan (côté magasiniers, qui ne décident pas) et une clôture « Écarts
+// détectés » n'entrait dans aucune file d'action (cas 157013-A : 2 × 040V63
+// perdus). Ces deux blocs donnent au vendeur la liste et l'action.
+const SEUIL_BL_ATTENTE=3;      // jours en « BL Émis » sans prise en charge
+const SEUIL_SCAN_OUVERT=2;     // jours en « En cours de scan » sans clôture
+const ECARTS_FENETRE_J=45;     // écarts plus anciens : historique, hors bloc
+const _estLivraisonClient=s=>_normTxt(f(s,'Type_Operation'))==='livraison client';
+const _dateFr=d=>{try{return new Date(d).toLocaleDateString('fr-FR');}catch(e){return '';}};
+function getLivraisonsBloquees(){
+  const auj=new Date();auj.setHours(0,0,0,0);
+  const res=[];
+  (DATA.sessionsScan||[]).forEach(s=>{
+    const st=_normTxt(f(s,'Statut'));
+    const num=String(f(s,'Numero_BL')||'');
+    const type=_normTxt(f(s,'Type_Operation'));
+    if(type==='inventaire physique')return;
+    if(estHorsProc(s))return; // déjà dans le bloc hors procédure
+    const prevue=f(s,'Date_Livraison_Prevue')?new Date(f(s,'Date_Livraison_Prevue')):null;
+    const prep=f(s,'Preparation_Avance')===true||f(s,'Preparation_Avance')==='Yes'||f(s,'Preparation_Avance')===1;
+    const dateDep=prevue&&prevue<auj;
+    if(st==='bl emis'){
+      const j=daysSince(f(s,'Date_Emission'));
+      if(prep&&dateDep)res.push({s,j,depuis:f(s,'Date_Livraison_Prevue'),situation:`Préparation à l'avance — client prévu le ${_dateFr(prevue)}`,afaire:'Appeler le client : nouvelle date, ou supprimer le BL s\'il ne vient plus.'});
+      else if(!prep&&j>=SEUIL_BL_ATTENTE)res.push({s,j,depuis:f(s,'Date_Emission'),situation:`Pas pris en charge depuis ${j} j`,afaire:'Le client vient-il ? Relancer, ou supprimer si le BL est annulé.'});
+    }else if(st==='en cours de scan'){
+      const d=f(s,'Date_Scan')||f(s,'Date_Emission')||f(s,'Created');
+      const j=daysSince(d);
+      if(prep&&!dateDep)return; // préparation normale, dans les temps
+      if(prep&&dateDep)res.push({s,j,depuis:d,situation:`Préparation — client prévu le ${_dateFr(prevue)} (dépassé)`,afaire:'Appeler le client, puis faire terminer ou annuler la préparation.'});
+      else if(j>=SEUIL_SCAN_OUVERT){
+        const nb=lignesDeSession(s.ID).filter(l=>Number(f(l,'Quantite_Scannee')||0)>0).length;
+        res.push({s,j,depuis:d,situation:`Pris en charge par ${f(s,'Magasinier')||'?'} il y a ${j} j, pas clôturé${nb?'':' — rien scanné'}`,afaire:nb?'Le client est-il parti ? Faire clôturer par le magasin.':'Client jamais venu ? Supprimer la session, sinon la faire clôturer.'});
+      }
+    }else if(st==='prete a livrer'||st==='prête à livrer'){
+      if(dateDep)res.push({s,j:daysSince(f(s,'Date_Livraison_Prevue')),depuis:f(s,'Date_Livraison_Prevue'),situation:`Prête — client attendu le ${_dateFr(prevue)}`,afaire:'Relancer le client pour qu\'il vienne chercher sa commande.'});
+    }
+  });
+  return res.sort((a,b)=>b.j-a.j);
+}
+// ── Écarts de livraison non traités ──
+function ecartTraite(s){return histoLire(s).some(e=>e.k==='ecart_traite');}
+function lignesEcart(s){
+  const verr=l=>{const v=f(l,'Verrouille');return v===true||v==='Oui'||v==='1'||v===1;};
+  return lignesDeSession(s.ID).filter(l=>!verr(l)).map(l=>({l,ref:f(l,'Reference_Article')||'',des:f(l,'Designation')||'',att:Number(f(l,'Quantite_Attendue')||0),sc:Number(f(l,'Quantite_Scannee')||0)}))
+    .filter(x=>x.att!==x.sc);
+}
+function getEcartsATraiter(){
+  return (DATA.sessionsScan||[]).filter(s=>{
+    if(!_estLivraisonClient(s))return false;
+    if(!_normTxt(f(s,'Statut')).includes('ecart'))return false;
+    const d=f(s,'Date_Scan')||f(s,'Created');
+    if(d&&daysSince(d)>ECARTS_FENETRE_J)return false;
+    if(ecartTraite(s))return false;
+    return lignesEcart(s).length>0; // statut « écart » mais lignes complètes : le bloc ne s'en occupe pas
+  }).sort((a,b)=>new Date(f(a,'Date_Scan')||f(a,'Created')||0)-new Date(f(b,'Date_Scan')||f(b,'Created')||0));
+}
+// Prochain N° de reste à livrer : racine-A, -B… (même règle que le flux de clôture partielle)
+function prochainNumeroReste(s){
+  const num=String(f(s,'Numero_BL')||'');
+  const racine=String(f(s,'BL_Racine')||'').trim()||num.replace(/-[A-Z]$/,'');
+  const pris=new Set((DATA.sessionsScan||[]).map(x=>String(f(x,'Numero_BL')||'')));
+  for(let i=0;i<26;i++){const c=racine+'-'+String.fromCharCode(65+i);if(!pris.has(c))return{racine,numero:c};}
+  return{racine,numero:racine+'-Z'+Date.now()%100};
+}
+function openTraiterEcart(id){
+  const s=(DATA.sessionsScan||[]).find(x=>x.ID===id);
+  if(!s)return;
+  if(!_historiqueDispo){toast('🔴 Colonne Historique absente de Sessions_Scan — impossible d\'enregistrer le traitement.','ko');return;}
+  const ec=lignesEcart(s);
+  const manque=ec.filter(x=>x.sc<x.att);
+  const prochain=prochainNumeroReste(s);
+  const e=v=>_escD(String(v==null?'':v));
+  const gl='display:grid;grid-template-columns:90px 1fr 50px 50px 60px;gap:6px;padding:7px 8px;align-items:center';
+  const table=`<div style="border:1px solid var(--border);border-radius:var(--radius-sm);margin:8px 0 12px;font-size:12.5px;overflow:hidden"><div style="${gl};background:#f8fafd;font-size:11px;font-weight:700;color:var(--text-muted);text-transform:uppercase"><span>Réf.</span><span>Désignation</span><span style="text-align:right">BL</span><span style="text-align:right">Livré</span><span style="text-align:right">Écart</span></div>${ec.map(x=>`<div style="${gl};border-top:1px solid var(--border)"><span style="font-family:var(--font-mono);font-weight:600">${e(x.ref)}</span><span>${e(x.des)}</span><span style="text-align:right">${x.att}</span><span style="text-align:right">${x.sc}</span><span style="text-align:right;font-weight:800;font-size:14px;color:${x.sc<x.att?'#c2410c':'#b91c1c'}">${x.sc-x.att>0?'+':''}${x.sc-x.att}</span></div>`).join('')}</div>`;
+  const opt=(v,t,sous,checked)=>`<label class="ec-opt" style="display:block;border:2px solid var(--border);border-radius:var(--radius-sm);padding:10px 12px;margin-bottom:8px;cursor:pointer"><input type="radio" name="ec-choix" value="${v}" ${checked?'checked':''} style="margin-right:8px">${t}<div style="font-size:11.5px;color:var(--text-muted);margin:3px 0 0 24px">${sous}</div></label>`;
+  openModal(`🟠 Écart de livraison — ${f(s,'Numero_BL')}`,`
+    <div style="font-size:12.5px;color:var(--text-secondary)">${e(f(s,'Client')||'')} · clôturé par ${e(f(s,'Magasinier')||'?')} le ${_dateFr(f(s,'Date_Scan')||f(s,'Created'))}</div>
+    ${table}
+    ${manque.length?opt('reste',`<strong>➕ Créer le reste à livrer (${prochain.numero})</strong>`,`Le client revient : un BL ${prochain.numero} part dans « BL en attente » au magasin avec ${manque.length} article(s). Rien à refaire dans Image : le BL d'origine couvre déjà ces quantités.`,true):''}
+    ${opt('nonvenu','<strong>Le client ne reviendra pas</strong>','À régulariser dans Image (avoir ou BL corrigé).',!manque.length)}
+    ${opt('erreur','<strong>Erreur de comptage</strong>','Le client a bien tout eu : la quantité scannée était fausse.',false)}
+    ${opt('autre','<strong>Autre</strong>','Préciser ci-dessous.',false)}
+    <div class="mf"><label>Commentaire</label><textarea id="ec-com" rows="2" placeholder="Facultatif (obligatoire pour « Autre »)"></textarea></div>`,
+  async()=>{
+    const choix=document.querySelector('input[name="ec-choix"]:checked')?.value;
+    const com=(document.getElementById('ec-com')?.value||'').trim();
+    if(!choix)throw new Error('Choisis une option.');
+    if(choix==='autre'&&!com)throw new Error('Précise le motif dans le commentaire.');
+    const libelles={nonvenu:'Client ne reviendra pas — à régulariser dans Image',erreur:'Erreur de comptage — le client a tout eu',autre:'Autre'};
+    if(choix==='reste'){
+      const p=prochainNumeroReste(s);
+      const created=await spPost('sites/BondeCommande','Sessions_Scan',{
+        Title:`${p.numero} - ${f(s,'Client')||''}`.trim(),Type_Operation:'Livraison client',Numero_BL:p.numero,BL_Racine:p.racine,
+        Client:f(s,'Client')||'',Vendeur_Emetteur:f(s,'Vendeur_Emetteur')||vendeurConnecte()||'',
+        Date_Emission:new Date().toISOString().slice(0,10)+'T12:00:00Z',Statut:'BL Émis'});
+      const newId=created?.ID??created?.Id;
+      if(!newId)throw new Error('Le BL de reste n\'a pas pu être créé — réessaie.');
+      for(const x of manque){
+        await spPost('sites/BondeCommande','Lignes_Scan',{Session_ScanId:newId,Reference_Article:x.ref,Designation:x.des,Quantite_Attendue:x.att-x.sc,Quantite_Scannee:0});
+      }
+      await histoAjouter(s.ID,[histoEntree(s,'ecart_traite',`Reste à livrer créé : ${p.numero}${com?' — '+com:''}`)]);
+      try{renderBandeauPriorite();}catch(err){}
+      return `${p.numero} créé — visible au magasin dans « BL en attente »`;
+    }
+    await histoAjouter(s.ID,[histoEntree(s,'ecart_traite',libelles[choix]+(com?' — '+com:''))]);
+    try{renderBandeauPriorite();}catch(err){}
+    return `Écart ${f(s,'Numero_BL')} classé`;
+  });
+}
+
 function renderBandeauPriorite(){
   const aFact=getBLAFacturer(),aComp=getBCACompleter(),sansBL=getBCSansBL(),retrait=getRetraitDepasse(),aSolder=getBCASolder();
   const host=document.getElementById('bandeau-priorite');
@@ -2973,8 +3085,40 @@ function renderBandeauPriorite(){
         </td>
       </tr>`;}).join('')}</tbody></table></div>`;
 
+  // 🚚 Livraisons bloquées / 🟠 écarts à traiter (revue process vendeurs ↔ magasin)
+  const bloq=getLivraisonsBloquees();
+  const ecarts=getEcartsATraiter();
+  const pillsV=list=>{const m={};list.forEach(s=>{const v=f(s,'Vendeur_Emetteur')||'Non indiqué';m[v]=(m[v]||0)+1;});
+    return`<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:9px">${Object.entries(m).sort((a,b)=>b[1]-a[1]).map(([v,n])=>`<span style="background:#fff;border:1px solid currentColor;border-radius:11px;padding:3px 10px;font-size:11.5px;font-weight:700">${_escD(v)} : ${n}</span>`).join('')}</div>`;};
+  const htmlBloq=`<div style="font-size:11.5px;color:#7c2d12;margin-bottom:8px">BL sortis d'Image mais pas encore livrés. Tant qu'ils traînent, le stock Image et le stock réel ne concordent pas. <strong>Une action par ligne</strong> : relancer le client, faire clôturer, ou supprimer le BL s'il est annulé (👁 puis 🗑).</div>
+    <div style="color:#c2410c">${pillsV(bloq.map(x=>x.s))}</div>
+    <div class="tc" style="max-height:290px;overflow-y:auto"><table><thead><tr><th>Depuis</th><th>N° BL / FC</th><th>Client</th><th>Vendeur</th><th>Situation</th><th>À faire</th><th></th></tr></thead><tbody>
+    ${bloq.slice(0,60).map(x=>`<tr style="cursor:pointer" onclick="openSessionPanel(${x.s.ID})">
+      <td>${agePillHtml(x.depuis)}</td>
+      <td style="font-family:var(--font-mono);font-weight:700">${iconBLFC(f(x.s,'Numero_BL'))} ${_escD(f(x.s,'Numero_BL')||'—')}</td>
+      <td>${_escD(f(x.s,'Client')||'—')}</td>
+      <td style="font-weight:600">${_escD(f(x.s,'Vendeur_Emetteur')||'—')}</td>
+      <td style="font-size:11.5px">${_escD(x.situation)}</td>
+      <td style="font-size:11.5px;color:#7c2d12">${_escD(x.afaire)}</td>
+      <td><button class="btn" style="height:26px" onclick="event.stopPropagation();openSessionPanel(${x.s.ID})">👁</button></td>
+    </tr>`).join('')}</tbody></table></div>`;
+  const htmlEcarts=`<div style="font-size:11.5px;color:#7c2d12;margin-bottom:8px">Livraisons clôturées avec des quantités différentes du BL (${ECARTS_FENETRE_J} derniers jours). Pour chacune : <strong>créer le reste à livrer</strong> si le client revient, sinon indiquer pourquoi.</div>
+    <div style="color:#c2410c">${pillsV(ecarts)}</div>
+    <div class="tc" style="max-height:290px;overflow-y:auto"><table><thead><tr><th>Clôturé</th><th>N° BL / FC</th><th>Client</th><th>Vendeur</th><th>Écarts</th><th style="text-align:center">Action</th></tr></thead><tbody>
+    ${ecarts.slice(0,60).map(s=>{const ec=lignesEcart(s);return`<tr>
+      <td>${agePillHtml(f(s,'Date_Scan')||f(s,'Created'))}</td>
+      <td style="font-family:var(--font-mono);font-weight:700">${iconBLFC(f(s,'Numero_BL'))} ${_escD(f(s,'Numero_BL')||'—')}</td>
+      <td>${_escD(f(s,'Client')||'—')}</td>
+      <td style="font-weight:600">${_escD(f(s,'Vendeur_Emetteur')||'—')}</td>
+      <td style="font-size:11.5px">${ec.slice(0,3).map(x=>`<span style="font-family:var(--font-mono)">${_escD(x.ref)}</span> <strong style="color:${x.sc<x.att?'#c2410c':'#b91c1c'}">${x.sc-x.att>0?'+':''}${x.sc-x.att}</strong>`).join(' · ')}${ec.length>3?` · +${ec.length-3}`:''}</td>
+      <td style="white-space:nowrap;text-align:center"><button class="btn" style="height:26px" title="Voir les articles" onclick="openSessionPanel(${s.ID})">👁</button>
+        <button class="btn" style="height:26px;margin-left:4px;background:#ea580c;color:#fff;border-color:#ea580c" onclick="openTraiterEcart(${s.ID})">Traiter l'écart</button></td>
+    </tr>`;}).join('')}</tbody></table></div>`;
+
   const contenu=
     bloc('hp','#b91c1c','#fef2f2','#fecaca','🚨 Livraisons hors procédure — à régulariser','BL/FC remis au client sans saisie au bureau',horsProc.length,null,htmlHP)+
+    bloc('ecarts','#ea580c','#fff7ed','#fdba74','🟠 Écarts de livraison à traiter','Livré ≠ BL : reste à livrer ou motif',ecarts.length,null,htmlEcarts)+
+    bloc('bloq','#c2410c','#fff1e6','#fdba8c','🚚 Livraisons bloquées','BL en attente, scans non clôturés, dates client dépassées',bloq.length,null,htmlBloq)+
     bloc('fact','var(--red)','#ffebee','#ffcdd2','💰 BL livrés à facturer',`Depuis plus de ${SEUIL_FACTURATION} jours`,aFact.length,totalMontant(aFact),htmlFact)+
     bloc('solde','var(--green)','var(--green-light)','#b7dfc0','✅ BC livrés — à confirmer soldé','Reste à livrer = 0, facturation à confirmer',aSolder.length,totalMontant(aSolder),htmlSolde)+
     bloc('retrait','#c2410c','#fff1e6','#fdba8c','📞 Retrait client en retard','Date de livraison dépassée, à relancer',retrait.length,totalMontant(retrait),htmlRetrait)+
@@ -7078,7 +7222,7 @@ function histoBlocHTML(s){
   const h=histoLire(s);
   const esc=v=>String(v??'').replace(/&/g,'&amp;').replace(/</g,'&lt;');
   const dh=iso=>{try{return dateHeureGP(iso);}catch(e){return fmtDate(iso);}};
-  const ico={reouverture:'🔓',ajout:'➕',fusion:'➕',modif:'✏️',suppr:'🗑️',prep:'📦',verrou:'🔒'};
+  const ico={reouverture:'🔓',ajout:'➕',fusion:'➕',modif:'✏️',suppr:'🗑️',prep:'📦',verrou:'🔒',ecart_traite:'🟠'};
   const items=[];
   items.push(`<li><span class="hc-ic">📄</span><div><strong>BL émis</strong>${f(s,'Vendeur_Emetteur')?' par '+esc(f(s,'Vendeur_Emetteur')):''}<div class="hc-d">${fmtDate(f(s,'Date_Emission')||f(s,'Created'))}</div></div></li>`);
   h.forEach(e=>{
