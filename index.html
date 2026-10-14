@@ -10413,9 +10413,20 @@ async function openTraiterModal(id,numBC,client){
     // modale Traiter (1900ms : laisse le temps au message de succès + fermeture de
     // s'exécuter proprement, cf. submitModal qui ferme à 1800ms). Seulement si un
     // N° BL est renseigné et que la case "BC soldé" n'a pas été cochée.
-    const blRempli=!!(document.getElementById('m-bl')?.value.trim());
+    // Retour terrain : l'alerte sortait à chaque enregistrement avec un BL
+    // (préparation à l'avance, simple correction de remarque…) et des « NON »
+    // réflexes créaient des livraisons partielles parasites. Elle ne sort plus
+    // que s'il y a eu une VRAIE livraison : la session de scan de ce BL est
+    // clôturée par le magasin (Terminée / écart / partiel). Et une seule fois
+    // par BL : on ne repose pas la question à chaque modification.
+    const blVal=(document.getElementById('m-bl')?.value||'').trim();
     const soldeCoche=document.getElementById('m-solde')?.checked;
-    if(blRempli&&!soldeCoche){
+    const sessBL=blVal?findSessionByBL(blVal):null;
+    const livreParMagasin=!!(sessBL&&_estStatutFinal(sessBL));
+    let dejaDemande=false;
+    try{dejaDemande=localStorage.getItem('rp_solde_q_'+id)===blVal;}catch(e){}
+    if(blVal&&!soldeCoche&&livreParMagasin&&!dejaDemande){
+      try{localStorage.setItem('rp_solde_q_'+id,blVal);}catch(e){}
       setTimeout(()=>alerteBCSolde(id,titre||numBC),1900);
     }
 
