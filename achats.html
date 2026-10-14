@@ -412,7 +412,7 @@ fieldset.lockfs .btn{display:none}
 .da-head{display:flex;gap:26px;flex-wrap:wrap;margin-bottom:12px;align-items:flex-end}.da-l{font-size:11.5px;color:var(--text-muted);font-weight:600;text-transform:uppercase;letter-spacing:.03em;margin-bottom:4px}
 .da-r{margin-right:12px;font-size:13.5px;cursor:pointer}.da-r input{width:auto;margin-right:3px}.da-head input[type=text],.da-head input:not([type]){padding:6px 8px;border:1px solid var(--border);border-radius:6px;font-size:13px}
 .da-t input{width:100%;padding:6px 8px;border:1px solid var(--border);border-radius:6px;font-size:13px}.da-t input.r{text-align:right}
-.da-t{table-layout:fixed;width:100%;min-width:0}.da-g table{table-layout:fixed;width:100%;min-width:0}#daDet table{min-width:0}.da-g input{border:1px solid var(--border);border-radius:6px;padding:4px 6px}.da-g{margin-bottom:10px}.da-gh{padding:4px 0;border-bottom:2px solid var(--teal,#0f766e);margin-bottom:2px;font-size:13.5px}
+.da-t{table-layout:fixed;width:100%;min-width:0}.da-g table{table-layout:fixed;width:100%;min-width:0}#daDet table{min-width:0}#daDet td{vertical-align:top}.da-g input{border:1px solid var(--border);border-radius:6px;padding:4px 6px}.da-g{margin-bottom:10px}.da-gh{padding:4px 0;border-bottom:2px solid var(--teal,#0f766e);margin-bottom:2px;font-size:13.5px}
 </style>
 </head>
 <body>
@@ -3370,7 +3370,8 @@ function daBlocHtml(){
       <label style="font-size:12px;display:inline-flex;gap:4px;align-items:center;margin:6px 0"><input type="checkbox" id="daTout" ${DAV.tout?'checked':''} style="width:auto"> afficher les commandées et annulées</label>
       <table class="ltable"><thead><tr><th>N°</th><th>Date</th><th>Motif</th><th>Destination</th><th>Demandeur</th><th>Lignes</th><th>État</th><th></th></tr></thead><tbody>
       ${liste.map(d=>{const e=daEtat(d);const L=daLignes(d.ID);return `<tr><td class="mono">${esc(d.Title)}</td><td>${fmtD(dk(d,'Date_Demande'))}</td><td>${esc(d.Motif==='Client'?'Client : '+(d.Client||'')+(d.N_Devis?' (devis '+d.N_Devis+')':''):'Stock')}</td><td>${esc((d.Zone||'')+' · '+(d.Transport||''))}</td><td>${esc(d.Demandeur||'')}</td>
-        <td style="font-size:12px">${L.map(l=>`${esc(l.Title)} ×${fmtN(l.Quantite,0)}${l.N_Commande?` <span class="frs-ok">→ ${esc(l.N_Commande)}</span>`:''}`).join('<br>')}</td><td><span class="st ${e.cls}">${esc(e.lbl)}</span></td>
+        <td style="font-size:12px;line-height:1.5">${L.map(l=>{const c=l.ID_Commande_Frs?cmdById(l.ID_Commande_Frs):(l.N_Commande?cmdByNum(l.N_Commande):null);const e=c?cmdEtat(c):null;
+          return `<div><b class="mono">${esc(l.Title)}</b> ${esc(l.Designation||'')} <span class="muted">×${fmtN(l.Quantite,0)}</span>${l.N_Commande?` → ${c?`<a href="#" data-cmdgo="${c.ID}" title="Ouvrir la commande">${esc(l.N_Commande)}</a> <span class="muted">${esc(c.Fournisseur||'')} · ${esc(e.lbl)}</span>`:`<b>${esc(l.N_Commande)}</b> <span class="muted">(BC pas encore importé)</span>`}`:' <span style="color:#b45309">à commander</span>'}</div>`;}).join('')}</td><td><span class="st ${e.cls}">${esc(e.lbl)}</span></td>
         <td>${ed&&d.Statut!=='Annulée'&&e.k!=='cmd'?`<button class="btn ghost sm" data-daannul="${d.ID}" title="Annuler la demande">✕</button>`:''}</td></tr>`;}).join('')||'<tr><td colspan="8" class="muted">Aucune demande en cours.</td></tr>'}
       </tbody></table></details>`:''}
     </div></div>`;
@@ -3383,6 +3384,7 @@ document.addEventListener('click',e=>{
   const del=e.target.closest('[data-dadel]');if(del){daLireForm();DAV.form.lignes.splice(+del.dataset.dadel,1);if(!DAV.form.lignes.length)DAV.form.lignes.push({ref:'',des:'',qte:'',frs:''});daRender();return;}
   if(e.target.closest('#daSave')){daEnregistrer();return;}
   if(e.target.closest('#daRappr')){(async()=>{const n=await daRapprocherTout();toast(n?`✓ ${n} ligne(s) rapprochée(s) avec un BC`:'Aucune ligne à rapprocher pour l’instant',n?'ok':'wa');renderCommandes();})();return;}
+  const go=e.target.closest('[data-cmdgo]');if(go){e.preventDefault();CMDV.filtre='tout';CMDV.q='';CMDV.ouvert=+go.dataset.cmdgo;renderCommandes();const r=document.querySelector(`[data-cmd="${go.dataset.cmdgo}"]`);if(r)r.scrollIntoView({behavior:'smooth',block:'center'});return;}
   const an=e.target.closest('[data-daannul]');if(an){daAnnuler(+an.dataset.daannul);return;}
   if(e.target.closest('#daDet summary')){DAV.ouvertListe=!$('daDet').open;}
 });
