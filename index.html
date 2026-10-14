@@ -9980,7 +9980,14 @@ async function openTraiterModal(id,numBC,client){
   const suiviVide=!currentV&&!curMontant;
   const articlesVide=lignesExistantes.length===0;
   const badgeVide=`<span style="background:var(--amber-light);color:var(--amber);font-weight:700;padding:1px 7px;border-radius:9px;font-size:10.5px;margin-left:6px;white-space:nowrap">⚠️ À compléter</span>`;
+  // BC arrivé par mail alors que des BC provisoires (BPA / accord client) existent :
+  // le rattachement se fait dans « Compléter le BC » — on y renvoie depuis Traiter.
+  const _provDispo=!estBCProvisoire(currentItem)&&bcManques(currentItem).length>0?bcProvisoiresOuverts().filter(b=>b.ID!==currentItem.ID):[];
   openModal(`🔧 Traiter — ${numBC} · ${client}`,`
+    ${_provDispo.length?`<div style="background:#fff7ed;border:1px solid #fdba74;border-left:4px solid #ea580c;border-radius:var(--radius-sm);padding:10px 12px;margin-bottom:12px;display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+      <div style="flex:1;min-width:220px;font-size:12.5px;color:#7c2d12"><strong>📌 Ce BC remplace-t-il un BC provisoire ?</strong><br>${_provDispo.slice(0,4).map(b=>`<span style="font-family:var(--font-mono)">${_escD(f(b,'Title'))}</span> ${_escD(getClient(b)||'')}`).join(' · ')}${_provDispo.length>4?' …':''}</div>
+      <button type="button" class="btn" style="height:30px;background:#ea580c;color:#fff;border-color:#ea580c" onclick="closeModal();openCompleterBC(${currentItem.ID})">🔗 Rattacher au provisoire</button>
+    </div>`:''}
     <div class="mf"><label>Client</label>
       <div style="position:relative">
         <input id="m-client-search" autocomplete="off" placeholder="Tapez 3 caractères..." style="${acInput}" value="${(client&&client!=='—'?client:'').replace(/"/g,'&quot;')}">
