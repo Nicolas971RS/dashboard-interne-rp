@@ -2465,8 +2465,8 @@ function renderTirelire(){
   const cats=[...CATEGORIES.filter(c=>c in sol),...Object.keys(sol).filter(c=>!CATEGORIES.includes(c))];
   const tot=E.reduce((s,e)=>s+e.montant,0);
   const col=v=>v<0?'var(--red)':'var(--green)';
-  const tiles=`<div class="tir-tiles"><div class="tir-tile tot"><div class="lab">Solde global</div><div class="val">${(tot>0?'+':'')+fmtN(tot,0)} €</div><div class="hint">${E.length} écritures</div></div>`+
-    cats.map(c=>`<button class="tir-tile ${TIRF.cat===c?'on':''}" data-tircat="${esc(c)}" style="--c:${CAT_COUL[c]||'#546e7a'}"><div class="lab">${esc(c)}</div><div class="val" style="color:${col(sol[c])}">${(sol[c]>0?'+':'')+fmtN(sol[c],0)} €</div><div class="hint">${E.filter(e=>e.cat===c).length} écritures</div></button>`).join('')+`</div>`;
+  const tiles=`<div class="tir-tiles"><div class="tir-tile tot"><div class="lab">Solde global</div><div class="val">${(tot>0?'+':'')+fmtN(tot,2)} €</div><div class="hint">${E.length} écritures</div></div>`+
+    cats.map(c=>`<button class="tir-tile ${TIRF.cat===c?'on':''}" data-tircat="${esc(c)}" style="--c:${CAT_COUL[c]||'#546e7a'}"><div class="lab">${esc(c)}</div><div class="val" style="color:${col(sol[c])}">${(sol[c]>0?'+':'')+fmtN(sol[c],2)} €</div><div class="hint">${E.filter(e=>e.cat===c).length} écritures</div></button>`).join('')+`</div>`;
   // courbes
   const tms=k=>Date.parse((k||'2025-01-01')+'T12:00:00Z');
   const series=cats.map(c=>{let s=0;return {color:CAT_COUL[c]||'#546e7a',pts:E.filter(e=>e.cat===c).map(e=>[tms(e.date),s+=e.montant])};});
@@ -2479,7 +2479,7 @@ function renderTirelire(){
   const rows=J.slice(0,400).map(e=>`<tr ${e.type==='Dossier'&&e.id?`data-open="${e.id}" class="clk"`:''}><td class="mono">${fmtD(e.date)}</td><td><span class="cat-dot" style="--c:${CAT_COUL[e.cat]||'#546e7a'}"></span>${esc(e.cat)}</td>
     <td>${esc(e.label)}${e.comm?`<div class="muted" style="font-size:11.5px">${esc(e.comm)}</div>`:''}${edit&&e.cat===CAT_VIDE&&(e.type==='Dossier'||e.mid)?`<div style="margin-top:4px"><select class="sel sm" data-reclass="${e.type==='Dossier'?'A'+e.id:'M'+e.mid}"><option value="">Classer dans…</option>${CATEGORIES.map(c=>`<option>${esc(c)}</option>`).join('')}</select></div>`:''}</td>
     <td>${e.type==='Dossier'?(e.montant<0?'<span class="tag-tir neg">Perte financée par la tirelire</span>':'<span class="tag-tir pos">Gain du dossier</span>'):`<span class="tag-tir">${esc(e.type)}</span>`}</td>
-    <td class="r mono" style="color:${col(e.montant)};font-weight:600">${(e.montant>0?'+':'')+fmtN(e.montant)}</td><td class="r mono">${fmtN(e.soldeCat,0)}</td>
+    <td class="r mono" style="color:${col(e.montant)};font-weight:600">${(e.montant>0?'+':'')+fmtN(e.montant)}</td><td class="r mono">${fmtN(e.soldeCat,2)}</td>
     <td class="r">${edit&&e.mid&&e.manuel?`<button class="rm" data-delmvt="${e.mid}" title="Supprimer ce mouvement">🗑</button>`:''}</td></tr>`).join('');
   el.innerHTML=`${TIR_ERR?`<div class="warn-ribbon" style="border-radius:8px;margin-bottom:12px">⚠️ Liste <b>Tirelire_Mouvements</b> introuvable : les mouvements manuels et le report 2024 ne sont pas affichés. Crée la liste sur le site BondeCommande (voir les instructions).</div>`:''}
     ${tiles}
@@ -2599,13 +2599,13 @@ function renderStats(){
   // 4. catégories
   const C={};D.forEach(x=>{const o=C[x.cat]||(C[x.cat]={n:0,vm:0,tot:0,gp:0});o.n++;o.vm+=x.vm;o.tot+=x.total;o.gp+=x.gp;});
   const cCat=`<div class="card"><div class="card-h"><h3>🗂 Catégories</h3></div><div class="card-b tblwrap" style="padding:6px 10px 10px"><table class="ltable stat-t"><thead><tr><th>Catégorie</th><th class="r">Dossiers</th><th class="r">Valeur</th><th class="r">Revient moyen</th><th class="r">Gain / perte</th></tr></thead>
-    <tbody>${Object.entries(C).sort((p,q)=>q[1].vm-p[1].vm).map(([k,o])=>`<tr><td><span class="cat-dot" style="--c:${CAT_COUL[k]||'#546e7a'}"></span>${esc(k)}</td><td class="r">${o.n}</td><td class="r mono">${eur0(o.vm)}</td><td class="r mono"><b>${fmtCoef(o.vm?o.tot/o.vm:null)}</b></td><td class="r mono" style="color:${o.gp<0?'var(--red)':'var(--green)'}">${(o.gp>0?'+':'')+fmtN(o.gp,0)} €</td></tr>`).join('')}</tbody></table></div></div>`;
+    <tbody>${Object.entries(C).sort((p,q)=>q[1].vm-p[1].vm).map(([k,o])=>`<tr><td><span class="cat-dot" style="--c:${CAT_COUL[k]||'#546e7a'}"></span>${esc(k)}</td><td class="r">${o.n}</td><td class="r mono">${eur0(o.vm)}</td><td class="r mono"><b>${fmtCoef(o.vm?o.tot/o.vm:null)}</b></td><td class="r mono" style="color:${o.gp<0?'var(--red)':'var(--green)'}">${(o.gp>0?'+':'')+fmtN(o.gp,2)} €</td></tr>`).join('')}</tbody></table></div></div>`;
 
   // 5. fournisseurs
   const F={};D.forEach(x=>x.mar.forEach(l=>{const k=prestNom(l);const o=F[k]||(F[k]={dos:new Set(),vm:0,vc:0,vmc:0,gp:0});const v=lineVMnette(l);o.dos.add(x.a.ID);o.vm+=v;if(n0(l.Coef_Applique)>0){o.vc+=v*l.Coef_Applique;o.vmc+=v;}if(x.valide)o.gp+=n0(l.Gain_Perte);}));
   const FL=Object.entries(F).sort((p,q)=>q[1].vm-p[1].vm).slice(0,15);const mxV=FL.length?FL[0][1].vm:0;
   const cFrs=`<div class="card"><div class="card-h"><h3>🏭 Fournisseurs — 15 premiers par valeur</h3></div><div class="card-b tblwrap" style="padding:6px 10px 10px"><table class="ltable stat-t"><thead><tr><th>Fournisseur</th><th class="r">Dossiers</th><th class="r">Valeur achetée</th><th style="width:18%"></th><th class="r">% du total</th><th class="r">Revient appliqué moyen</th><th class="r">Gain / perte</th></tr></thead>
-    <tbody>${FL.map(([k,o])=>`<tr><td><b>${esc(k)}</b></td><td class="r">${o.dos.size}</td><td class="r mono">${eur0(o.vm)}</td><td>${barre(o.vm,mxV,'var(--blue)')}</td><td class="r mono">${pct(vm?o.vm/vm:null)}</td><td class="r mono"><b>${o.vmc?fmtN(o.vc/o.vmc,2):'—'}</b></td><td class="r mono" style="color:${o.gp<0?'var(--red)':'var(--green)'}">${o.gp?(o.gp>0?'+':'')+fmtN(o.gp,0)+' €':'—'}</td></tr>`).join('')}</tbody></table></div></div>`;
+    <tbody>${FL.map(([k,o])=>`<tr><td><b>${esc(k)}</b></td><td class="r">${o.dos.size}</td><td class="r mono">${eur0(o.vm)}</td><td>${barre(o.vm,mxV,'var(--blue)')}</td><td class="r mono">${pct(vm?o.vm/vm:null)}</td><td class="r mono"><b>${o.vmc?fmtN(o.vc/o.vmc,2):'—'}</b></td><td class="r mono" style="color:${o.gp<0?'var(--red)':'var(--green)'}">${o.gp?(o.gp>0?'+':'')+fmtN(o.gp,2)+' €':'—'}</td></tr>`).join('')}</tbody></table></div></div>`;
 
   const A=D.filter(x=>x.vm>0&&(x.nego/x.vm>0.5||!x.prest.length)).sort((p,q)=>(q.nego/q.vm)-(p.nego/p.vm));
   const cAno=A.length?`<div class="card acc closed" id="accAno"><div class="card-h" data-acc="accAno"><h3>⚠️ Dossiers à vérifier <span class="tag">${A.length}</span></h3><span class="muted" style="font-size:12px">frais négociables > 50 % de la valeur, ou aucune facture de frais · <span class="chev">▾</span></span></div>
@@ -3118,6 +3118,15 @@ async function cmdSolderVieux(){
   finally{CMDV.busy=false;progressionCmd(null);}
   toast(`✓ ${n} commande(s) soldée(s)`,'ok');renderCommandes();
 }
+// N° cherché qui n'est pas dans Commandes_Frs : on le cherche dans les dossiers d'arrivage
+function cmdHorsSuivi(q){
+  const n=cmdNum(q);if(!n)return '';
+  const L=DATA.lig.filter(l=>l.Type_Ligne!=='Frais'&&bccNums(l.N_Commande).includes(n));
+  if(!L.length)return `<div style="margin-top:6px">Le n° ${esc(n)} n’apparaît dans aucun dossier d’arrivage non plus. Si le BC existe, son PDF n’est pas (ou plus de 60 j) dans « Bon de commande » : coche « plus de 60 j » ou dépose-le.</div>`;
+  const A=[...new Set(L.map(l=>l.ID_Arrivage))].map(id=>DATA.arr.find(a=>a.ID===id)).filter(Boolean);
+  const frs=[...new Set(L.map(l=>l.Fournisseur).filter(Boolean))].join(', ');
+  return `<div style="margin-top:8px;color:var(--text-primary)">Commande <b>${esc(n)}</b>${frs?' ('+esc(frs)+')':''} : pas de BC importé, mais elle figure dans ${A.map(a=>`<a href="#" data-open="${a.ID}">🚢 ${esc(a.Title)}</a> · ${esc(statutAuto(a))}`).join(', ')}.<div class="muted" style="font-size:12px">Elle est donc arrivée avec ce conteneur. Pour voir ses articles ici, dépose son PDF (coche « plus de 60 j » s’il est ancien).</div></div>`;
+}
 // ── Rendu ──
 function renderCommandes(){
   const box=$('cmdBox');if(!box)return;
@@ -3154,7 +3163,7 @@ function renderCommandes(){
     <div class="card"><div class="tblwrap"><table class="ltable cmd-t"><thead><tr><th>N°</th><th>Fournisseur</th><th>Objet</th><th>Date</th><th>Étapes</th><th>Où en est-elle</th><th class="r">Articles</th><th class="r">Montant HT</th></tr></thead><tbody>
     ${rows.length?rows.map(({c,e})=>`<tr class="cmd-r ${CMDV.ouvert===c.ID?'sel':''}" data-cmd="${c.ID}"><td class="mono"><b>${esc(c.Title)}</b></td><td>${esc(c.Fournisseur||'?')}${c.ID_Fournisseur?'':' <span class="frs-ko" title="Fournisseur non reconnu">⚠</span>'}</td><td class="muted">${esc(c.Objet||'')}</td><td>${fmtD(dk(c,'Date_Commande'))}</td><td>${cmdPastilles(c,e)}</td>
       <td><span class="st ${e.cls}">${esc(e.lbl)}</span>${e.alerte?`<div style="font-size:12px;margin-top:2px;color:${e.alerte.lvl==='r'?'var(--red)':'#b45309'}">⚠ ${esc(e.alerte.txt)}</div>`:''}</td><td class="r">${c.Nb_Lignes??cmdLignes(c.ID).length}</td><td class="r">${c.Montant_HT?fmtEur(c.Montant_HT):'—'}</td></tr>
-      ${CMDV.ouvert===c.ID?`<tr class="cmd-d"><td colspan="8">${cmdDetailHtml(c,e)}</td></tr>`:''}`).join(''):`<tr><td colspan="8" class="muted" style="text-align:center;padding:18px">Aucune commande${q?' pour cette recherche':''}.</td></tr>`}
+      ${CMDV.ouvert===c.ID?`<tr class="cmd-d"><td colspan="8">${cmdDetailHtml(c,e)}</td></tr>`:''}`).join(''):`<tr><td colspan="8" class="muted" style="text-align:center;padding:18px">Aucune commande suivie${q?' pour cette recherche':''}.${cmdHorsSuivi(q)}</td></tr>`}
     </tbody></table></div></div>`;
   if(!F&&CUR_TAB==='commandes')cmdFichiers().then(()=>{if(CUR_TAB==='commandes')renderCommandes();});
   if(CMDV.ouvert)cmdAttachments(CMDV.ouvert).then(a=>{const el=$('cmdAtt');if(el)el.innerHTML=a.length?a.map(f=>`<a href="${esc(f.ServerRelativeUrl&&f.ServerRelativeUrl.startsWith('/')?C.spRoot+f.ServerRelativeUrl:f.ServerRelativeUrl)}" target="_blank" rel="noopener">📎 ${esc(f.FileName)}</a>`).join(' '):'<span class="muted">Aucune pièce jointe</span>';});
