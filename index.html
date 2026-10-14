@@ -3278,6 +3278,67 @@ async function supprimerPJ(itemId,fileName,rowIdx){
   }
 }
 
+
+// ── Vrai BC client reçu pour un BC provisoire (BPA / accord client) ──
+// Le BC arrive par la boîte partagée → le flux crée une NOUVELLE fiche Suivi_BC.
+// Sans rattachement, on aurait deux BC pour la même commande. Le provisoire
+// porte déjà tout (devis lié, BL, lignes, livraisons, suivi client) : on lui
+// transfère le N° réel, les pièces jointes et le courriel, puis on supprime la
+// fiche arrivée par e-mail.
+function bcProvisoiresOuverts(){
+  return (DATA.suivi||[]).filter(b=>estBCProvisoire(b)&&!/annul/i.test(String(f(b,'Statut')||'')));
+}
+function blocRattacherProvisoire(nouveau,clientNom){
+  const prov=bcProvisoiresOuverts().filter(b=>b.ID!==nouveau.ID);
+  if(!prov.length)return'';
+  const cn=_normTxt(clientNom);
+  const memeClient=b=>cn&&_normTxt(getClient(b))===cn;
+  prov.sort((a,b)=>(memeClient(b)?1:0)-(memeClient(a)?1:0));
+  return`<div style="background:#fff7ed;border:1px solid #fdba74;border-left:4px solid #ea580c;border-radius:var(--radius-sm);padding:10px 12px;margin-bottom:12px">
+    <div style="font-size:12.5px;font-weight:700;color:#9a3412;margin-bottom:6px">📌 Ce BC remplace-t-il un BC provisoire (accord / BPA) ?</div>
+    <div style="font-size:11.5px;color:#7c2d12;margin-bottom:8px">Saisis d'abord le <strong>N° de BC</strong> ci-dessous, puis rattache : le provisoire prend ce N°, le PDF et le courriel, et cette fiche est supprimée (pas de doublon).</div>
+    ${prov.slice(0,6).map(b=>`<div style="display:flex;align-items:center;gap:8px;margin-top:5px;${memeClient(b)?'font-weight:700':''}">
+      <span style="font-family:var(--font-mono)">${_escD(f(b,'Title'))}</span><span style="flex:1;font-size:12px">${_escD(getClient(b)||'—')} · devis ${_escD(f(b,'N_x00b0_Devis')||'—')}${f(b,'N_x00b0_BL')?' · BL '+_escD(f(b,'N_x00b0_BL')):''}</span>
+      <button type="button" class="btn" style="height:28px;background:#ea580c;color:#fff;border-color:#ea580c" onclick="rattacherAuProvisoire(${nouveau.ID},${b.ID})">🔗 Rattacher</button></div>`).join('')}
+  </div>`;
+}
+async function rattacherAuProvisoire(nouveauId,provId){
+  const nv=(DATA.suivi||[]).find(x=>x.ID===nouveauId),pv=(DATA.suivi||[]).find(x=>x.ID===provId);
+  if(!nv||!pv){toast('🔴 BC introuvable — actualise','ko');return;}
+  const num=(document.getElementById('c-num')?.value||'').trim();
+  if(!num||estBCProvisoire({Title:num})){toast('Saisis d\'abord le vrai N° de BC du client dans le formulaire.','ko');document.getElementById('c-num')?.focus();return;}
+  if((DATA.suivi||[]).some(b=>b.ID!==nouveauId&&String(f(b,'Title')||'').trim().toUpperCase()===num.toUpperCase())){toast('🔴 Un BC « '+num+' » existe déjà.','ko');return;}
+  const ok=await showConfirm('🔗 Rattacher au BC provisoire',`<strong>${_escD(f(pv,'Title'))}</strong> (${_escD(getClient(pv)||'')}) devient <strong>${_escD(num)}</strong>.<br>Le PDF et le courriel reçus y sont copiés, puis la fiche arrivée par e-mail est supprimée.<br><br>Devis, BL, livraisons et suivi client restent sur ce BC.`,'🔗 Rattacher','submit');
+  if(!ok)return;
+  try{
+    // 1. Pièces jointes : copiées AVANT toute suppression
+    const pjs=await getAttachments('sites/RseauxPlus','Suivi_BC',nouveauId);
+    const dejaLa=new Set((await getAttachments('sites/RseauxPlus','Suivi_BC',provId)).map(a=>a.FileName));
+    for(const a of pjs){
+      const rel=a.ServerRelativeUrl||'';
+      const r=await fetch(`${C.spRoot}/_api/web/GetFileByServerRelativeUrl(@u)/$value?@u='${encodeURIComponent(rel)}'`,{headers:{'Authorization':`Bearer ${getToken()}`}});
+      if(!r.ok)throw new Error(`lecture de ${a.FileName} : HTTP ${r.status}`);
+      let nom=a.FileName;if(dejaLa.has(nom))nom='BC_'+num.replace(/[^\w-]/g,'_')+'_'+nom;
+      await spAddAttachment('sites/RseauxPlus','Suivi_BC',provId,nom,await r.arrayBuffer());
+    }
+    // 2. Le provisoire prend le N° réel, le courriel et la trace
+    const ancien=f(pv,'Title');
+    const quand=new Date().toLocaleDateString('fr-FR',{timeZone:'America/Guadeloupe'});
+    const rem=String(f(pv,'Remarques')||'');
+    const body={Title:num,Remarques:(rem?rem+'\n':'')+`[${quand}] BC client ${num} reçu — remplace ${ancien}.`};
+    if(!f(pv,'Contenu_Email')&&f(nv,'Contenu_Email'))body.Contenu_Email=f(nv,'Contenu_Email');
+    if(!f(pv,'Email_Client')&&f(nv,'Email_Client'))body.Email_Client=f(nv,'Email_Client');
+    await spPatch('sites/RseauxPlus','Suivi_BC',provId,body);
+    Object.assign(pv,body);
+    // 3. Fiche arrivée par e-mail : supprimée (son contenu est sur le BC)
+    await spDelete('sites/RseauxPlus','Suivi_BC',nouveauId);
+    DATA.suivi=(DATA.suivi||[]).filter(x=>x.ID!==nouveauId);
+    closeModal();
+    toast(`✅ ${ancien} → ${num} : BC rattaché, doublon supprimé`,'ok');
+    renderBandeauPriorite();renderAll();updateBadges();
+  }catch(e){toast('🔴 Rattachement interrompu : '+e.message+' — rien n\'a été supprimé.','ko');}
+}
+
 // ── Micro-action « Compléter le BC » — 3 champs, 15 secondes ──
 async function openCompleterBC(id){
   const i=DATA.suivi.find(x=>x.ID===id);
@@ -3293,6 +3354,7 @@ async function openCompleterBC(id){
       Arrivé le ${fmtDate(dateArrivee(i))}${email?` · <span style="font-family:var(--font-mono);font-size:11px">${email}</span>`:''}
     </div>
     <div id="c-pj" style="margin-bottom:10px;font-size:12px;color:var(--text-muted)">📎 Recherche du document joint...</div>
+    ${blocRattacherProvisoire(i,clientAct||(sug?sug.nom:''))}
     ${(()=>{
       // Le corps du courriel est souvent le seul moyen de savoir s'il s'agit d'un
       // vrai BC : un logo de signature arrive aussi en pièce jointe.
