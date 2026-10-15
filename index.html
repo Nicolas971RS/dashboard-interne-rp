@@ -1609,15 +1609,19 @@ async function spFetch(site,list,qs){
 // est posé. On pagine donc manuellement : tranche de 2000 filtrée sur ID > dernier ID reçu,
 // trié par ID croissant, jusqu'à ce qu'une tranche revienne avec moins de 2000 items.
 // ID est la colonne indexée native → pas de risque de seuil de vue (5000).
+// Stock_Image (colonne du catalogue) : optionnelle — si SharePoint la refuse,
+// on recharge sans elle plutôt que de perdre tout le catalogue.
+let _catStockDispo=true;
 async function chargerCatalogue(){
   let all=[];
   let lastId=0;
   let guard=0;
   while(guard<50){ // garde-fou : 50 tranches = 100 000 items max
-    const qs=`$select=ID,Title,field_1,field_3,field_4,field_7&$filter=ID gt ${lastId}&$orderby=ID asc&$top=2000`;
+    const qs=`$select=ID,Title,field_1,field_3,field_4,field_7${_catStockDispo?',Stock_Image':''}&$filter=ID gt ${lastId}&$orderby=ID asc&$top=2000`;
     const url=`${C.spRoot}/sites/BondeCommande/_api/web/lists/getbytitle('Cathalogue_Produits')/items?${qs}`;
     const r=await fetch(url,{headers:{'Authorization':`Bearer ${getToken()}`,'Accept':'application/json;odata=nometadata'}});
     if(r.status===401){sessionStorage.clear();location.reload();throw new Error('401');}
+    if(!r.ok&&_catStockDispo&&lastId===0){_catStockDispo=false;console.warn('[Catalogue] colonne Stock_Image refusée — chargement sans le stock.');continue;}
     if(!r.ok){const t=await r.text().catch(()=>'');throw new Error(`Catalogue: ${r.status} — ${t.substring(0,200)}`);}
     const d=await r.json();
     const batch=d.value||[];
@@ -9620,13 +9624,23 @@ function dvRapprocher(l){
   [...essais].forEach(e=>{essais.push(ocr(e));essais.push(ocr2(e));});
   for(let i=0;i<essais.length;i++){
     const p=idx.get(essais[i]);
-    if(p)return {...l,ref:f(p,'Title'),desCat:f(p,'field_1')||'',statut:i===0&&essais[i]===String(l.brut).toUpperCase()?'ok':'corrigee'};
+    if(p)return {...l,ref:f(p,'Title'),desCat:f(p,'field_1')||'',stock:dvStock(p),statut:i===0&&essais[i]===String(l.brut).toUpperCase()?'ok':'corrigee'};
   }
   // Désignation identique au catalogue (réf illisible)
   const d=_normTxt(l.des);
   const parDes=cat.find(p=>_normTxt(f(p,'field_1'))===d);
-  if(parDes)return {...l,ref:f(parDes,'Title'),desCat:f(parDes,'field_1')||'',statut:'corrigee'};
-  return {...l,ref:propre,desCat:'',statut:'inconnue'};
+  if(parDes)return {...l,ref:f(parDes,'Title'),desCat:f(parDes,'field_1')||'',stock:dvStock(parDes),statut:'corrigee'};
+  return {...l,ref:propre,desCat:'',stock:null,statut:'inconnue'};
+}
+// Stock Image du catalogue (null si la colonne n'est pas chargée)
+function dvStock(p){const v=p&&p.Stock_Image;return v===undefined||v===null||v===''?null:Number(v);}
+// Pastille de disponibilité pour une quantité demandée
+function dvStockHtml(stock,qte){
+  if(stock==null||isNaN(stock))return'<span style="color:var(--text-muted)">—</span>';
+  const n=String(+stock.toFixed(2)).replace('.',',');
+  if(stock>=qte)return`<span title="Stock Image : ${n}" style="color:var(--green);font-weight:700;white-space:nowrap">🟢 ${n}</span>`;
+  if(stock>0)return`<span title="Stock Image : ${n} — il en manque ${String(+(qte-stock).toFixed(2)).replace('.',',')}" style="color:#c2410c;font-weight:700;white-space:nowrap">🟠 ${n}</span>`;
+  return`<span title="Stock Image : 0 — à commander" style="color:#b91c1c;font-weight:700;white-space:nowrap">🔴 0</span>`;
 }
 function devisDuNumero(num){
   const n=String(num||'').replace(/\D/g,'');
@@ -9705,9 +9719,11 @@ async function dvRemplirPanneau(devis){
     const badge=l=>l.statut==='ok'?'✅':l.statut==='corrigee'?`<span title="Lue « ${_escD(l.brut)} »">🟠</span>`:'<span title="Absente du catalogue — à vérifier">❔</span>';
     z.style.color='';
     z.innerHTML=`<div style="font-size:11.5px;margin-bottom:6px;${complet?'color:var(--green)':'color:#9a3412'}">${complet?`✅ ${r.lignes.length} lignes · ${fmtMoney(somme)} = total HT net du devis`:`⚠️ ${r.lignes.length} lignes · ${fmtMoney(somme)}${r.totalNet!=null?' — total du devis '+fmtMoney(r.totalNet):''} : vérifie avec le PDF`}${r.methode==='ocr'?' · lu par reconnaissance de caractères':''}</div>
-      <table class="ltable"><thead><tr><th></th><th>Référence</th><th>Désignation</th><th style="text-align:right">Qté</th><th style="text-align:right">PU net</th><th style="text-align:right">Montant</th></tr></thead><tbody>
-      ${r.lignes.map(l=>`<tr><td>${badge(l)}</td><td class="mono">${_escD(l.ref)}</td><td>${_escD(l.desCat||l.des)}</td><td style="text-align:right">${l.qte}</td><td style="text-align:right;white-space:nowrap">${l.pu!=null?fmtMoney(l.pu):'—'}</td><td style="text-align:right;white-space:nowrap">${fmtMoney(l.montant)}</td></tr>`).join('')}
-      </tbody></table>
+      ${(()=>{const g='display:grid;grid-template-columns:18px 72px minmax(0,1fr) 34px 78px 48px;gap:4px;align-items:center;padding:5px 2px';
+        return`<div style="font-size:12px">
+        <div style="${g};font-size:10.5px;font-weight:700;color:var(--text-muted);text-transform:uppercase;background:var(--grey-xlight);border-radius:4px"><span></span><span>Réf.</span><span>Désignation</span><span style="text-align:right">Qté</span><span style="text-align:right">Montant</span><span style="text-align:center" title="Stock Image (catalogue)">Stock</span></div>
+        ${r.lignes.map(l=>`<div style="${g};border-bottom:1px solid #f0f3f8"><span>${badge(l)}</span><span class="mono" style="overflow:hidden;text-overflow:ellipsis">${_escD(l.ref)}</span><span>${_escD(l.desCat||l.des)}</span><span style="text-align:right">${l.qte}</span><span style="text-align:right;white-space:nowrap" title="${l.pu!=null?'PU net '+fmtMoney(l.pu):''}">${fmtMoney(l.montant)}</span><span style="text-align:center">${dvStockHtml(l.stock,l.qte)}</span></div>`).join('')}
+        <div style="${g};font-weight:800;border-top:2px solid var(--border)"><span></span><span></span><span style="text-align:right">Total HT net</span><span></span><span style="text-align:right;white-space:nowrap">${fmtMoney(somme)}</span><span></span></div></div>`;})()}${r.lignes.some(l=>l.stock!=null&&l.stock<l.qte)?`<div style="font-size:11.5px;color:#9a3412;margin-top:6px">🟠🔴 ${r.lignes.filter(l=>l.stock!=null&&l.stock<l.qte).length} article(s) en stock insuffisant d'après le dernier stock Image — à commander si le client valide.</div>`:''}
       <div style="font-size:11px;color:var(--text-muted);margin-top:5px">À la réception du BC : <strong>Traiter → Articles → « 📄 Reprendre les articles du devis »</strong>, tu coches ce que le client commande.</div>`;
   }catch(e){
     const z=zone();if(z)z.innerHTML=`<span style="color:var(--red)">Lecture impossible : ${_escD(e.message)}</span>`;
@@ -9745,14 +9761,15 @@ function dvAfficher(r,num){
   const b=document.getElementById('dv-body');
   b.innerHTML=`<div style="font-size:12px;color:var(--text-muted);margin-bottom:8px">${r.methode==='ocr'?'🔎 Lu par reconnaissance de caractères (PDF sans texte) — vérifie les lignes 🟠 et ❔.':'📄 Lu depuis le PDF du devis.'} Fichier : ${_escD(r.fichier||'')}</div>
     ${r.totalNet!=null?`<div style="font-size:12.5px;padding:7px 10px;border-radius:8px;margin-bottom:10px;${complet?'background:var(--green-light);color:var(--green)':'background:#fff7ed;color:#9a3412'}">${complet?`✅ Lecture complète : ${r.lignes.length} lignes = ${fmtMoney(somme)}, comme le total HT net du devis.`:`⚠️ Lignes lues : ${fmtMoney(somme)} — total du devis : ${fmtMoney(r.totalNet)}. Une ligne a peut-être été mal lue : compare avec le PDF.`}</div>`:''}
-    <table style="width:100%;min-width:0!important;font-size:12.5px"><thead><tr><th style="padding:6px;width:28px"><input type="checkbox" id="dv-all" checked></th><th style="padding:6px">Réf.</th><th style="padding:6px">Désignation</th><th style="padding:6px;text-align:right;width:80px">Qté</th><th style="padding:6px;text-align:right">PU net</th><th style="padding:6px;text-align:right">Montant</th></tr></thead><tbody>
+    <table style="width:100%;min-width:0!important;font-size:12.5px"><thead><tr><th style="padding:6px;width:28px"><input type="checkbox" id="dv-all" checked></th><th style="padding:6px">Réf.</th><th style="padding:6px">Désignation</th><th style="padding:6px;text-align:right;width:80px">Qté</th><th style="padding:6px;text-align:right">PU net</th><th style="padding:6px;text-align:right">Montant</th><th style="padding:6px;text-align:center">Stock</th></tr></thead><tbody>
     ${r.lignes.map((l,i)=>{const deja=dejaRefs.has(String(l.ref).toUpperCase());return`<tr${deja?' style="opacity:.55"':''}>
       <td style="padding:6px"><input type="checkbox" class="dv-ck" data-i="${i}" ${deja?'':'checked'}></td>
       <td style="padding:6px;white-space:nowrap;font-family:var(--font-mono);font-weight:700">${badge(l)} <input class="dv-ref" data-i="${i}" value="${_escD(l.ref)}" style="width:96px;font-family:var(--font-mono);font-weight:700;border:1px solid ${l.statut==='inconnue'?'#fca5a5':'var(--border)'};border-radius:5px;padding:3px 5px"></td>
       <td style="padding:6px">${_escD(l.desCat||l.des)}${deja?' <span style="font-size:11px;color:var(--text-muted)">(déjà dans le BC)</span>':''}</td>
       <td style="padding:6px;text-align:right"><input type="number" class="dv-qte" data-i="${i}" min="0" step="any" value="${l.qte}" style="width:70px;text-align:right;border:1px solid var(--border);border-radius:5px;padding:3px 5px"></td>
       <td style="padding:6px;text-align:right;font-family:var(--font-mono);white-space:nowrap">${l.pu!=null?fmtMoney(l.pu):'—'}</td>
-      <td style="padding:6px;text-align:right;font-family:var(--font-mono);white-space:nowrap" class="dv-mt" data-i="${i}"></td></tr>`;}).join('')}
+      <td style="padding:6px;text-align:right;font-family:var(--font-mono);white-space:nowrap" class="dv-mt" data-i="${i}"></td>
+      <td style="padding:6px;text-align:center">${dvStockHtml(l.stock,l.qte)}</td></tr>`;}).join('')}
     </tbody></table>`;
   const montantVide=!(parseFloat(document.getElementById('m-montant')?.value)>0);
   document.getElementById('dv-foot').innerHTML=`<div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
