@@ -850,6 +850,7 @@
           <select id="filter-vendeur-ral" onchange="renderRALTable()" class="fs"><option value="all">Tous les vendeurs</option></select>
           <select id="filter-client-ral" onchange="renderRALTable()" class="fs"><option value="all">Tous les clients</option></select>
           <button class="btn" style="border-color:rgba(255,255,255,.3);color:rgba(255,255,255,.7);background:none" onclick="exportRALCSV()">⬇ CSV</button>
+          <button class="btn" id="ral-btn-livrables" style="display:none;white-space:nowrap" title="Reste à livrer entièrement couvert par le stock Image : appeler le client pour qu'il passe" onclick="_ralLivrables=!_ralLivrables;renderRALTable()">📦 Livrables en stock</button>
           <span id="ral-count-label" style="font-size:11px;color:rgba(255,255,255,.5)"></span>
         </div>
       </div>
@@ -858,8 +859,8 @@
         <div id="ral-scrolltop-inner" style="height:1px"></div>
       </div>
       <div class="tc" id="ral-tablewrap" onscroll="document.getElementById('ral-scrolltop').scrollLeft=this.scrollLeft"><table>
-        <thead><tr><th>N° BC</th><th>Date BC</th><th>Ligne</th><th>Client</th><th>Chantier</th><th>Référence</th><th>Désignation</th><th>Cmd</th><th>Livré</th><th>RAL</th><th>Unité</th><th>BL</th><th>Ancienneté</th><th>Action</th></tr></thead>
-        <tbody id="ral-body"><tr class="empty-row"><td colspan="14">Chargement...</td></tr></tbody>
+        <thead><tr><th>N° BC</th><th>Date BC</th><th>Ligne</th><th>Client</th><th>Chantier</th><th>Référence</th><th>Désignation</th><th>Cmd</th><th>Livré</th><th>RAL</th><th title="Stock Image (catalogue) comparé au reste à livrer : 🟢 livrable maintenant · 🟠 en partie · 🔴 rien en stock">Stock</th><th>Unité</th><th>BL</th><th>Ancienneté</th><th>Action</th></tr></thead>
+        <tbody id="ral-body"><tr class="empty-row"><td colspan="15">Chargement...</td></tr></tbody>
       </table></div>
 
       <!-- ══ COMPLÈTEMENT LIVRÉ ══ -->
@@ -6130,6 +6131,7 @@ function openDossierBC(racine,silencieux){
   if(!silencieux)host.scrollIntoView({behavior:'smooth',block:'start'});
 }
 
+let _ralLivrables=false;
 function renderRALTable(){
   {const _dh=document.getElementById('ral-dossier');if(_dh&&_dh.dataset.racine&&_dh.style.display!=='none')openDossierBC(_dh.dataset.racine,true);}
   const ralData=getRALLignes();
@@ -6158,6 +6160,18 @@ function renderRALTable(){
     const chantier=f(x.ligne,'Chantier')||'';
     return [x.info.numBC,ref,design,chantier,x.info.client].some(v=>String(v).toLowerCase().includes(q));
   });
+  // Reste à livrer entièrement couvert par le stock Image → le client peut être appelé
+  const _livrable=x=>{const st=stockImageRef(f(x.ligne,'R_x00e9_f_x00e9_rence'));return st!=null&&st>=x.ral&&x.ral>0;};
+  const nLivr=enriched.filter(_livrable).length;
+  const btnL=document.getElementById('ral-btn-livrables');
+  if(btnL){
+    btnL.textContent=`📦 Livrables en stock (${nLivr})`;
+    btnL.style.display=nLivr||_ralLivrables?'':'none';
+    btnL.style.background=_ralLivrables?'var(--green)':'none';
+    btnL.style.color=_ralLivrables?'#fff':'#86efac';
+    btnL.style.borderColor=_ralLivrables?'var(--green)':'#86efac';
+  }
+  if(_ralLivrables)enriched=enriched.filter(_livrable);
 
   const b=document.getElementById('ral-body');
   if(b){
@@ -6180,6 +6194,7 @@ function renderRALTable(){
         <td style="text-align:right;font-weight:600">${x.qc}</td>
         <td style="text-align:right;color:var(--green)">${x.ql}</td>
         <td style="text-align:right;font-weight:700;color:var(--red)">${x.ral}</td>
+        <td style="text-align:right;font-size:12px">${dvStockHtml(stockImageRef(f(l,'R_x00e9_f_x00e9_rence')),x.ral)}</td>
         <td style="text-align:center;font-size:11px">${unite||'—'}</td>
         <td style="font-size:12px;font-family:var(--font-mono)">${bl==='—'?'—':(()=>{
           const items=parseBLHistorique(bl);
@@ -6199,7 +6214,7 @@ function renderRALTable(){
           </div>
         </td>
       </tr>`;
-    }).join(''):'<tr class="empty-row"><td colspan="14">Aucune ligne avec reste à livrer 🎉</td></tr>';
+    }).join(''):'<tr class="empty-row"><td colspan="15">'+(_ralLivrables?'Aucun reste à livrer couvert par le stock Image':'Aucune ligne avec reste à livrer 🎉')+'</td></tr>';
   }
   _syncScrollBarTop('ral-tablewrap','ral-scrolltop-inner');
 
@@ -7729,6 +7744,7 @@ function exportRALCSV(){
     {label:'Qté commandée', fn:x=>x.qc},
     {label:'Qté livrée', fn:x=>x.ql},
     {label:'RAL', fn:x=>x.ral},
+    {label:'Stock Image', fn:x=>{const st=stockImageRef(f(x.ligne,'R_x00e9_f_x00e9_rence'));return st==null?'':st;}},
     {label:'BL', fn:x=>f(x.ligne,'BLSign_x00e9_')||''},
   ], `livraisons_partielles_${new Date().toISOString().slice(0,10)}.csv`);
 }
@@ -8573,6 +8589,7 @@ function _retourRemoveLine(i){
 }
 
 function openModal(title,html,onSubmit){
+  if(!/^🔧 Traiter/.test(title))_traiterOuvertId=null; // un autre modal remplace Traiter
   document.getElementById('modal-title').textContent=title;
   document.getElementById('modal-body').innerHTML=html+'<div class="modal-msg" id="modal-msg"></div>';
   const btn=document.getElementById('modal-submit');
@@ -8592,6 +8609,7 @@ function openModal(title,html,onSubmit){
 }
 
 function closeModal(){
+  _traiterOuvertId=null;
   if(typeof libererVerrouBC==='function')libererVerrouBC();
   document.getElementById('modal-ov').classList.remove('open');
   _onSubmit=null;_modalSnap='';
@@ -9829,8 +9847,15 @@ function mStockCellHtml(ref,qc,ql){
   if(!String(ref||'').trim())return'';
   const st=stockImageRef(ref);
   if(st==null||isNaN(st))return'<span title="Réf. absente du catalogue ou stock non chargé" style="color:var(--text-muted)">—</span>';
-  if(_traiterCurBL){const n=String(+st.toFixed(2)).replace('.',',');return`<span title="Stock Image restant — ce BL est déjà déduit dans Image" style="color:var(--text-secondary);font-weight:600">${n}</span>`;}
   const reste=Math.max(0,(Number(qc)||0)-(Number(ql)||0));
+  // Tout est livré sur un BL déjà émis : Image a déjà déduit ces quantités,
+  // un 0 est donc normal → pastille grise, pas de fausse alerte rouge.
+  if(_traiterCurBL&&!reste){
+    const n=String(+st.toFixed(2)).replace('.',',');
+    return st>0?`<span title="Stock Image restant (ce BL est déjà déduit)" style="color:var(--green);font-weight:700;white-space:nowrap">🟢 ${n}</span>`
+               :`<span title="Stock Image : 0 — normal, ce BL est déjà déduit dans Image" style="color:var(--text-muted);font-weight:700;white-space:nowrap">⚪ 0</span>`;
+  }
+  // Reste à livrer (ou BL pas encore émis) : le stock doit couvrir ce qui reste
   return dvStockHtml(st,reste||Number(qc)||0);
 }
 function mMajStockRow(row){
@@ -10351,10 +10376,16 @@ function libererVerrouBC(keepalive){
 }
 window.addEventListener('pagehide',()=>libererVerrouBC(true));
 
-async function openTraiterModal(id,numBC,client){
-  // ── Verrou : un autre vendeur traite déjà ce BC ? ──
-  let _lk=await prendreVerrouBC(id,false);
-  if(!_lk.ok){
+// Le verrou demandait 3 allers-retours SharePoint AVANT d'ouvrir Traiter (1 à 3 s
+// de latence à chaque clic). Le modal s'ouvre maintenant tout de suite et le
+// verrou est vérifié en parallèle : si un collègue a la main, l'avertissement
+// apparaît par-dessus dans la seconde, avant toute saisie réelle.
+let _traiterOuvertId=null;
+function _verifierVerrouTraiter(id,numBC){
+  prendreVerrouBC(id,false).then(async _lk=>{
+    const ouvert=()=>_traiterOuvertId===id&&document.getElementById('modal-ov').classList.contains('open');
+    if(!ouvert()){if(_lk.ok&&_verrouBC&&_verrouBC.bcId===id)libererVerrouBC();return;}
+    if(_lk.ok)return;
     const _it=(DATA.suivi||[]).find(x=>x.ID===id||x.ID===parseInt(id));
     const _num=numBC||(_it?(f(_it,'Title')||('BC-'+id)):('BC-'+id));
     const _min=Math.max(1,Math.round(_lk.ageMin||0));
@@ -10363,9 +10394,11 @@ async function openTraiterModal(id,numBC,client){
       +`Patiente qu'il ait terminé ou demande-lui directement. La fenêtre se libère dès qu'il enregistre ou ferme Traiter.<br><br>`
       +`<span style="font-size:12px;color:var(--text-muted)">Forcer l'ouverture uniquement si tu es sûr qu'il n'y travaille plus : s'il enregistre après toi, vos saisies s'écraseront.</span>`,
       "Forcer l'ouverture",'delete','⏳ Patienter');
-    if(!forcer)return;
-    _lk=await prendreVerrouBC(id,true);
-  }
+    if(!forcer){if(ouvert())closeModal();return;}
+    if(ouvert())await prendreVerrouBC(id,true);
+  });
+}
+async function openTraiterModal(id,numBC,client){
   if(!numBC||!client){
     const item=(DATA.suivi||[]).find(x=>x.ID===id||x.ID===parseInt(id));
     if(item){numBC=numBC||f(item,'Title')||('BC-'+id);client=client||getClient(item);}
@@ -10430,6 +10463,7 @@ async function openTraiterModal(id,numBC,client){
   // BC arrivé par mail alors que des BC provisoires (BPA / accord client) existent :
   // le rattachement se fait dans « Compléter le BC » — on y renvoie depuis Traiter.
   const _provDispo=!estBCProvisoire(currentItem)&&bcManques(currentItem).length>0?bcProvisoiresOuverts().filter(b=>b.ID!==currentItem.ID):[];
+  _traiterOuvertId=id;_verifierVerrouTraiter(id,numBC);
   openModal(`🔧 Traiter — ${numBC} · ${client}`,`
     ${_provDispo.length?`<div style="background:#fff7ed;border:1px solid #fdba74;border-left:4px solid #ea580c;border-radius:var(--radius-sm);padding:10px 12px;margin-bottom:12px;display:flex;align-items:center;gap:10px;flex-wrap:wrap">
       <div style="flex:1;min-width:220px;font-size:12.5px;color:#7c2d12"><strong>📌 Ce BC remplace-t-il un BC provisoire ?</strong><br>${_provDispo.slice(0,4).map(b=>`<span style="font-family:var(--font-mono)">${_escD(f(b,'Title'))}</span> ${_escD(getClient(b)||'')}`).join(' · ')}${_provDispo.length>4?' …':''}</div>
