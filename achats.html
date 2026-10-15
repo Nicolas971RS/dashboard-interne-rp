@@ -2867,7 +2867,7 @@ document.addEventListener('click',e=>{const b=e.target.closest&&e.target.closest
 // Source : les PDF « Bon de commande » sortis d'Image, rangés dans « Dossier partage/Bon de commande ».
 // Le portail lit le PDF (n°, fournisseur, date, articles) → Commandes_Frs + Lignes_Commande_Frs.
 // Suivi : Commandée → ARC reçu → BPA envoyé → Dispo annoncée → Expédiée (extrait SIFA) → Reçue. Statut calculé.
-let CMD_ERR='',CMDV={joursSolde:21,filtre:'cours',q:'',ouvert:null,tout:false,fichiers:null,busy:false,att:{}};
+let CMD_ERR='',CMDV={joursSolde:21,filtre:'cours',q:'',ouvert:null,tout:false,fichiers:null,busy:false,att:{},arc:{}};
 const CMD_JOURS_LISTE=60;
 const cmdNum=s=>{const m=String(s||'').match(/\d{4,6}/);return m?m[0].replace(/^0+(?=\d)/,''):'';};
 
@@ -2964,6 +2964,129 @@ function cmdAnalyse(pages){
 }
 async function cmdLirePdf(buf){return cmdAnalyse(await cmdRangees(buf));}
 
+// ── Contrôle de l'ARC fournisseur (PDF avec texte) ──
+// Lit : n° d'ARC, notre n° de commande, date de livraison annoncée, total HT, et chaque ligne du BC retrouvée par sa référence.
+// PDF scanné (sans texte) → {texte:false} : le fichier est simplement joint.
+const ARC_MOIS={janvier:1,'février':2,fevrier:2,mars:3,avril:4,mai:5,juin:6,juillet:7,'août':8,aout:8,septembre:9,octobre:10,novembre:11,'décembre':12,decembre:12};
+function arcDate(s){
+  s=String(s||'');let m=s.match(/(\d{1,2})[\/.\-](\d{1,2})[\/.\-](\d{2,4})/);
+  if(m){const a=m[3].length===2?'20'+m[3]:m[3];return `${a}-${m[2].padStart(2,'0')}-${m[1].padStart(2,'0')}`;}
+  m=s.toLowerCase().match(/(\d{1,2})(?:er)?\s+(janvier|f[ée]vrier|mars|avril|mai|juin|juillet|ao[uû]t|septembre|octobre|novembre|d[ée]cembre)\s+(\d{4})/);
+  if(m){const k=m[2].replace('û','u');const mo=ARC_MOIS[k]||ARC_MOIS[k.replace('e','é')];if(mo)return `${m[3]}-${String(mo).padStart(2,'0')}-${m[1].padStart(2,'0')}`;}
+  return '';
+}
+// « 8,00 pc », « 7 387,40 € », « 3 436,56 » → nombre ; sinon null
+function arcNum(s){
+  const m=String(s||'').trim().match(/^(-?\d{1,3}(?:[  .]\d{3})*(?:,\d+)?|-?\d+(?:[.,]\d+)?)\s*([a-zA-Z€%²³]{0,4}\.?)$/);
+  return m?cmdNombre(m[1]):null;
+}
+const arcNorm=s=>String(s||'').toUpperCase().replace(/[\s.\-\/]/g,'');
+function arcAnalyse(pages,c){
+  const rows=pages.flat();const txt=rows.map(cmdTxt);
+  const nbCar=txt.join('').length;
+  if(nbCar<80)return {texte:false};
+  const r={texte:true,numArc:'',dateArc:'',dispo:'',numTrouve:false,totalHT:null,lignes:[],enPlus:[]};
+  const notre=cmdNum(c.Title);
+  r.numTrouve=!!notre&&txt.some(t=>new RegExp(`(^|[^\\d])0*${notre}([^\\d]|$)`).test(t));
+  // n° d'ARC : sur la ligne « Confirmation de commande / Accusé de réception », sinon la ligne suivante
+  const RX_TIT=/confirmation de commande|accus[ée] de r[ée]ception|accus[ée] r[ée]ception|confirmation d.?ordre|order confirmation/i;
+  const RX_NUM=/(?:n°|no|num[ée]ro|nr)?\s*:?\s*([A-Z]{0,5}[-\s]?\d{4,}[A-Z0-9\-\/]*)/i;
+  for(let i=0;i<rows.length&&!r.numArc;i++){
+    if(!RX_TIT.test(txt[i]))continue;
+    const reste=txt[i].replace(RX_TIT,'¤').split('¤').slice(1).join(' ');
+    const m=reste.match(RX_NUM);if(m&&cmdNum(m[1])!==notre){r.numArc=m[1].trim();const d=arcDate(reste);if(d)r.dateArc=d;break;}
+    for(const t of txt.slice(i+1,i+3)){const m2=t.match(/^([A-Z]{0,5}-?\d{4,}[A-Z0-9\-\/]*)$/i)||t.match(/^(?:n°|no)\s*:?\s*([A-Z0-9\-\/]{4,})/i);if(m2){r.numArc=m2[1];break;}}
+  }
+  if(!r.dateArc){for(const t of txt.slice(0,25)){if(/^date\b/i.test(t)&&!/livr|factur|command/i.test(t)){const d=arcDate(t);if(d){r.dateArc=d;break;}}}}
+  // date de livraison / dispo annoncée
+  const RX_LIV=/livraison|livrable|dispo|exp[ée]di|d[ée]part|enl[eè]vement|chargement|mise [àa] disposition/i;
+  const cand=txt.map(t=>({t,d:RX_LIV.test(t)&&!/factur|paiement|[ée]ch[ée]ance/i.test(t)?arcDate(t):''})).filter(x=>x.d);
+  const pref=cand.find(x=>/accept|confirm|pr[ée]vision|pr[ée]vu|annonc/i.test(x.t))||cand[0];if(pref)r.dispo=pref.d;
+  // total HT
+  const RX_TOT=[/H\.?\s?T\.?\s*Total|Total\s*H\.?\s?T/i,/Montant\s*H\.?\s?T|Net\s*H\.?\s?T|Total\s*net|H\.?\s?T\.?\s*\(?\s*hors/i];
+  for(const rx of RX_TOT){if(r.totalHT!=null)break;for(let i=0;i<rows.length;i++){if(!rx.test(txt[i])||/T\.?T\.?C|T\.?V\.?A/i.test(txt[i]))continue;
+    const ns=rows[i].items.map(it=>arcNum(it.s)).filter(n=>n!=null);if(ns.length){r.totalHT=ns[ns.length-1];break;}}}
+  // lignes : chaque ligne du BC cherchée par sa réf. fournisseur (puis réf. Réseaux Plus)
+  const pris=new Set();
+  const lireLigne=(row,refs)=>{
+    const its=row.items.filter(it=>!refs.includes(arcNorm(it.s)));
+    const ns=its.map(it=>arcNum(it.s)).filter(n=>n!=null);
+    const des=its.filter(it=>arcNum(it.s)==null).map(it=>it.s).join(' ');
+    return {ns,des};
+  };
+  for(const l of cmdLignes(c.ID)){
+    const refs=[l.Title,l.Ref_2].filter(x=>x&&x!=='(sans réf.)').map(arcNorm).filter(x=>x.length>=3);
+    let idx=-1;
+    for(let i=0;i<rows.length;i++){if(pris.has(i))continue;if(rows[i].items.some(it=>refs.includes(arcNorm(it.s))||refs.some(rf=>arcNorm(it.s.split(/\s+/)[0])===rf))){idx=i;break;}}
+    const qb=l.Quantite,mb=l.Montant_HT,pb=l.Prix_Unitaire!=null?l.Prix_Unitaire*(1-(l.Remise||0)/100):(mb!=null&&qb?mb/qb:null);
+    const o={ref:l.Title,ref2:l.Ref_2||'',des:l.Designation||'',qb,pb,mb,trouve:idx>=0,qa:null,pa:null,ma:null,ecarts:[]};
+    if(idx>=0){
+      pris.add(idx);const {ns}=lireLigne(rows[idx],refs);
+      if(ns.length){
+        const ma=ns[ns.length-1];let best=null;
+        for(let a=0;a<ns.length-1;a++)for(let b=0;b<ns.length-1;b++){if(a===b||!ns[a]||!ns[b])continue;const q=ns[a],p=ns[b];
+          if(Math.abs(q*p-ma)<=Math.max(0.02,ma*0.001)){const sc=Math.abs(q-(qb||0))+(a<b?0:0.001);if(!best||sc<best.sc)best={q,p,sc};}}
+        o.ma=ma;
+        if(best){o.qa=best.q;o.pa=best.p;}
+        else{const q=ns.slice(0,-1).find(n=>qb&&Math.abs(n-qb)<0.001);if(q){o.qa=q;o.pa=Math.round(ma/q*10000)/10000;}}
+      }
+      if(o.qa!=null&&qb!=null&&Math.abs(o.qa-qb)>0.001)o.ecarts.push('qte');
+      if(o.pa!=null&&pb!=null&&Math.abs(o.pa-pb)>Math.max(0.01,pb*0.001))o.ecarts.push('prix');
+      if(o.ma!=null&&mb!=null&&Math.abs(o.ma-mb)>0.05&&!o.ecarts.length)o.ecarts.push('mtt');
+    }
+    r.lignes.push(o);
+  }
+  // lignes de l'ARC absentes du BC (ex. palettes consignées, frais)
+  rows.forEach((row,i)=>{
+    if(pris.has(i)||!row.items.length)return;const t0=row.items[0].s;
+    if(!/^[A-Z0-9][A-Z0-9.\-\/]{1,20}$/i.test(t0)||/^(total|page|date|tva|n°)$/i.test(t0))return;
+    const dec=row.items.filter(it=>/\d,\d{2}/.test(it.s)&&arcNum(it.s)!=null);if(dec.length<2)return;
+    if(!row.items.some(it=>arcNum(it.s)==null&&/[a-zA-Z]{3,}/.test(it.s)))return;
+    if(RX_TOT.some(rx=>rx.test(txt[i]))||/T\.?V\.?A|T\.?T\.?C|base/i.test(txt[i]))return;
+    const ns=row.items.map(it=>arcNum(it.s)).filter(n=>n!=null);
+    r.enPlus.push({ref:t0,des:row.items.slice(1).filter(it=>arcNum(it.s)==null).map(it=>it.s).join(' '),ma:ns[ns.length-1]});
+  });
+  const L=r.lignes;
+  r.nbEcarts=L.filter(l=>l.ecarts.length).length;r.nbAbsents=L.filter(l=>!l.trouve).length;
+  r.totalBC=c.Montant_HT!=null?c.Montant_HT:Math.round(L.reduce((s,l)=>s+(l.mb||0),0)*100)/100;
+  r.ecartTotal=r.totalHT!=null&&r.totalBC!=null?Math.round((r.totalHT-r.totalBC)*100)/100:null;
+  r.conforme=r.numTrouve&&!r.nbEcarts&&!r.nbAbsents&&(r.ecartTotal==null||Math.abs(r.ecartTotal)<0.05)&&!r.enPlus.some(x=>x.ma);
+  return r;
+}
+async function cmdControleArc(c,buf){return arcAnalyse(await cmdRangees(buf),c);}
+const arcEur=v=>v==null?'—':fmtEur(v);
+const arcPx=v=>v==null?'—':fmtN(v,v%1&&String(v).split('.')[1]?.length>2?4:2);
+function arcResume(r){
+  if(!r.texte)return '';
+  const p=[];
+  if(r.conforme)p.push('conforme au BC');
+  else{
+    if(!r.numTrouve)p.push('notre n° de commande absent de l’ARC');
+    r.lignes.filter(l=>l.ecarts.length).forEach(l=>{const x=[];if(l.ecarts.includes('qte'))x.push(`qté ${fmtN(l.qa,2)} au lieu de ${fmtN(l.qb,2)}`);if(l.ecarts.includes('prix'))x.push(`prix ${arcPx(l.pa)} au lieu de ${arcPx(l.pb)}`);if(l.ecarts.includes('mtt'))x.push(`montant ${arcEur(l.ma)} au lieu de ${arcEur(l.mb)}`);p.push(`${l.ref} ${x.join(', ')}`);});
+    r.lignes.filter(l=>!l.trouve).forEach(l=>p.push(`${l.ref} absent de l’ARC`));
+    r.enPlus.filter(x=>x.ma).forEach(x=>p.push(`${x.ref} en plus sur l’ARC (${arcEur(x.ma)})`));
+    if(r.ecartTotal&&Math.abs(r.ecartTotal)>=0.05)p.push(`total ${arcEur(r.totalHT)} (${r.ecartTotal>0?'+':''}${fmtEur(r.ecartTotal)} vs BC)`);
+  }
+  return `[ARC] ${r.conforme?'✓':'⚠'} ${r.numArc?r.numArc+' ':''}${r.dateArc?'du '+fmtD(r.dateArc)+' ':''}: ${p.join(' ; ')}${r.dispo?' · livraison annoncée '+fmtD(r.dispo):''}`;
+}
+function arcHtml(c,r){
+  if(!r.texte)return `<p>Ce PDF est une image (scan) : le portail ne peut pas le lire. Il est joint à la commande ; contrôle-le à l’œil.</p>`;
+  const cl=e=>e?'style="color:var(--red);font-weight:700"':'';
+  const tete=`<div style="display:flex;gap:18px;flex-wrap:wrap;margin-bottom:8px;font-size:13px">
+    <div><span class="muted">ARC</span> <b>${esc(r.numArc||'?')}</b>${r.dateArc?' du '+fmtD(r.dateArc):''}</div>
+    <div>${r.numTrouve?`✓ cite notre n° <b>${esc(c.Title)}</b>`:`<span style="color:var(--red)">⚠ notre n° ${esc(c.Title)} n’y figure pas : bon fichier ?</span>`}</div>
+    <div><span class="muted">Livraison annoncée</span> <b>${r.dispo?fmtD(r.dispo):'non trouvée'}</b></div></div>`;
+  const lig=r.lignes.map(l=>`<tr ${l.ecarts.length||!l.trouve?'style="background:#fef2f2"':''}><td class="mono">${esc(l.ref)}${l.ref2?`<div class="muted" style="font-size:11px">${esc(l.ref2)}</div>`:''}</td><td style="font-size:12px">${esc(l.des)}</td>
+    ${l.trouve?`<td class="r">${fmtN(l.qb,2)}</td><td class="r" ${cl(l.ecarts.includes('qte'))}>${l.qa!=null?fmtN(l.qa,2):'?'}</td><td class="r">${arcPx(l.pb)}</td><td class="r" ${cl(l.ecarts.includes('prix'))}>${arcPx(l.pa)}</td><td class="r">${arcEur(l.mb)}</td><td class="r" ${cl(l.ecarts.length)}>${arcEur(l.ma)}</td>`
+    :`<td class="r">${fmtN(l.qb,2)}</td><td colspan="5" style="color:var(--red)">absent de l’ARC (ou référence différente chez le fournisseur)</td>`}</tr>`).join('');
+  const plus=r.enPlus.map(x=>`<tr style="background:#fffbeb"><td class="mono">${esc(x.ref)}</td><td style="font-size:12px">${esc(x.des)} <span class="tag">en plus sur l’ARC</span></td><td colspan="5"></td><td class="r">${arcEur(x.ma)}</td></tr>`).join('');
+  const dt=r.ecartTotal;
+  return `${tete}<div class="tblwrap" style="max-height:330px"><table class="ltable" style="min-width:0;font-size:12.5px"><thead><tr><th>Réf.</th><th>Désignation (BC)</th><th class="r">Qté BC</th><th class="r">Qté ARC</th><th class="r">Prix BC</th><th class="r">Prix ARC</th><th class="r">Mtt BC</th><th class="r">Mtt ARC</th></tr></thead>
+    <tbody>${lig}${plus}</tbody><tfoot><tr><td colspan="6" class="r"><b>Total HT</b></td><td class="r"><b>${arcEur(r.totalBC)}</b></td><td class="r" ${cl(dt&&Math.abs(dt)>=0.05)}><b>${arcEur(r.totalHT)}</b></td></tr></tfoot></table></div>
+    <div style="margin-top:10px;font-weight:600;color:${r.conforme?'var(--green)':'var(--red)'}">${r.conforme?'✓ ARC conforme au BC.':`⚠ ${[r.nbEcarts?r.nbEcarts+' ligne(s) en écart':'',r.nbAbsents?r.nbAbsents+' ligne(s) non retrouvée(s)':'',dt&&Math.abs(dt)>=0.05?`total ${dt>0?'+':''}${fmtEur(dt)}`:''].filter(Boolean).join(' · ')||'à vérifier'} : à régler avec le fournisseur avant le BPA (et mettre Image à jour si son prix est le bon).`}</div>
+    ${r.lignes.some(l=>l.trouve&&(l.ecarts.includes('qte')))?'<div class="muted" style="font-size:12px;margin-top:4px">Un écart de quantité peut venir d’une unité différente (mètres au lieu de barres, carton au lieu de pièce).</div>':''}`;
+}
+
 // ── Données ──
 const cmdLignes=id=>(DATA.lcmd||[]).filter(l=>l.ID_Commande_Frs===id).sort((a,b)=>(a.Ordre||0)-(b.Ordre||0)||a.ID-b.ID);
 const cmdByNum=n=>(DATA.cmd||[]).find(c=>cmdNum(c.Title)===n);
@@ -2989,6 +3112,7 @@ function cmdEtat(c){
   if(/^Sold/i.test(c.Statut||''))return {k:'recue',lbl:'Soldée',cls:'st-ok',ouverte:false};
   if(dk(c,'Date_Dispo_Prevue')){const dd=dk(c,'Date_Dispo_Prevue');const ret=dd<t;return {k:'dispo',lbl:`Dispo annoncée le ${fmtD(dd)}`,cls:'st-prep',ouverte:true,alerte:ret?{lvl:'a',txt:`Dispo annoncée dépassée de ${daysBetween(dd,t)} j, pas encore dans un extrait`}:null};}
   if(dk(c,'Date_BPA'))return {k:'bpa',lbl:imp?'BPA envoyé · dispo à confirmer':'BPA envoyé · livraison attendue',cls:'st-prep',ouverte:true};
+  if(dk(c,'Date_ARC')&&/^\[ARC\] ⚠/m.test(c.Commentaire||''))return {k:'arc',lbl:'ARC reçu · BPA à envoyer',cls:'st-valid',ouverte:true,alerte:{lvl:'r',txt:'ARC différent du BC : à régler avant le BPA'}};
   if(dk(c,'Date_ARC')){const j=daysBetween(dk(c,'Date_ARC'),t);return {k:'arc',lbl:'ARC reçu · BPA à envoyer',cls:'st-valid',ouverte:true,alerte:j>=param('SEUIL_BPA_J')?{lvl:j>=2*param('SEUIL_BPA_J')?'r':'a',txt:`ARC reçu il y a ${j} j, BPA pas encore envoyé`}:null};}
   const j=dc?daysBetween(dc,t):0;
   return {k:'cmd',lbl:'Commandée · ARC attendu',cls:'st-prep',ouverte:true,alerte:j>=param('SEUIL_ARC_J')?{lvl:j>=2*param('SEUIL_ARC_J')?'r':'a',txt:`Pas d’ARC depuis ${j} j : relancer le fournisseur`}:null};
@@ -3100,7 +3224,47 @@ async function cmdJoindre(id,file,quoi){
     await spAddAttachment('Commandes_Frs',id,`${cmdNum(c.Title)} - ${quoi}${ext}`,buf);delete CMDV.att[id];
     const body=quoi==='ARC'?(dk(c,'Date_ARC')?{}:{Date_ARC:toSP(todayKey())}):(dk(c,'Date_BPA')?{Mode_BPA:'BPA signé'}:{Date_BPA:toSP(todayKey()),Mode_BPA:'BPA signé'});
     if(quoi==='BPA'&&!dk(c,'Date_ARC'))body.Date_ARC=toSP(todayKey());
-    await cmdMaj(id,body,`✓ ${quoi} joint à la commande ${c.Title}`);
+    // contrôle automatique si le PDF contient du texte (l'ARC signé = BPA est contrôlé aussi)
+    let r=null;
+    if(/\.pdf$/i.test(ext)){try{r=await cmdControleArc(c,buf);}catch(e){console.warn('[ARC]',e);}}
+    if(r&&r.texte){Object.assign(body,cmdArcMaj(c,r));CMDV.arc[id]=r;}
+    await cmdMaj(id,body,r&&r.texte?null:`✓ ${quoi} joint à la commande ${c.Title}${r&&!r.texte?' (scan : pas de contrôle automatique)':''}`);
+    if(r&&r.texte)cmdArcAfficher(c,r,`${quoi} joint à la commande ${c.Title}`);
+  }catch(e){toast('🔴 '+e.message,'ko');}
+}
+// Champs mis à jour par le contrôle : date d'ARC lue, dispo annoncée (si vide), ligne [ARC] du commentaire
+function cmdArcMaj(c,r){
+  const b={};
+  if(r.dateArc&&!dk(c,'Date_ARC'))b.Date_ARC=toSP(r.dateArc);
+  if(r.dispo&&cmdEstImport(c)&&!dk(c,'Date_Dispo_Prevue')&&!dk(c,'Date_Reception'))b.Date_Dispo_Prevue=toSP(r.dispo);
+  const lignes=String(c.Commentaire||'').split('\n').filter(l=>!/^\[ARC\]/.test(l));
+  b.Commentaire=[arcResume(r),...lignes].join('\n').trim();
+  return b;
+}
+async function cmdArcAfficher(c,r,titre){
+  const no=$('cNo');const v=no.style.display;no.style.display='none';
+  const box=document.querySelector('#ovConfirm .cbox');const w=box?[box.style.width,box.style.top]:null;if(box){box.style.width='min(900px,95vw)';box.style.top='6%';}
+  await showConfirm(`${r.conforme?'✓':'⚠'} Contrôle de l’ARC · ${c.Fournisseur||''} ${c.Title}`,(titre?`<div class="muted" style="font-size:12px;margin-bottom:6px">${esc(titre)}</div>`:'')+arcHtml(c,r),'OK');
+  no.style.display=v;if(box){box.style.width=w[0];box.style.top=w[1];}
+}
+// Contenu d'une pièce jointe de Commandes_Frs (site BondeCommande)
+async function cmdPjGet(id,nom){
+  const r=await fetch(`${listUrl('Commandes_Frs')}(${id})/AttachmentFiles('${encodeURIComponent(nom.replace(/'/g,"''"))}')/$value`,{headers:{'Authorization':`Bearer ${getToken()}`}});
+  await _check(r,'Lecture de la pièce jointe');return r.arrayBuffer();
+}
+// Relit la dernière pièce jointe ARC / BPA de la commande
+async function cmdRecontroler(id){
+  const c=cmdById(id);if(!c)return;
+  const att=(await cmdAttachments(id)).filter(f=>/\.pdf$/i.test(f.FileName)&&/ARC|BPA/i.test(f.FileName));
+  if(!att.length){toast('Aucun ARC / BPA en PDF joint à cette commande','wa');return;}
+  try{
+    for(const f of att.slice().reverse()){          // la plus récente d'abord ; on saute les scans
+      const u=f.ServerRelativeUrl||'';
+      const buf=/^(blob:|https?:)/.test(u)?await (await fetch(u)).arrayBuffer():await cmdPjGet(id,f.FileName);
+      const r=await cmdControleArc(c,buf);if(!r.texte)continue;
+      CMDV.arc[id]=r;await cmdMaj(id,cmdArcMaj(c,r),null);cmdArcAfficher(c,r,f.FileName);return;
+    }
+    toast('Les ARC / BPA joints sont des scans : contrôle automatique impossible','wa');
   }catch(e){toast('🔴 '+e.message,'ko');}
 }
 async function cmdAttachments(id){
@@ -3193,6 +3357,7 @@ function cmdDetailHtml(c,e){
       ${dk(c,'Date_ARC')&&!dk(c,'Date_BPA')?`<button class="btn sm primary" data-cmdq="bpa">✅ BPA envoyé par courriel</button>`:''}
       <label class="btn sm">📎 Joindre l’ARC<input type="file" data-cmdj="ARC" accept=".pdf,image/*" hidden></label>
       <label class="btn sm">📎 Joindre le BPA signé<input type="file" data-cmdj="BPA" accept=".pdf,image/*" hidden></label>
+      <button class="btn sm" data-cmdq="ctrl" title="Compare l’ARC joint (PDF avec texte) au BC : quantités, prix, total, date de livraison">🔍 Contrôler l’ARC</button>
       ${c.Lien_BC?`<button class="btn sm" data-cmdq="relire" title="Relit le PDF du BC (après modification dans Image)">🔁 Relire le BC</button>`:''}
       <button class="btn sm" data-cmdq="solde" title="Commande déjà reçue ou terminée, sorte du suivi">${/^Sold/i.test(c.Statut||'')?'↺ Remettre en suivi':'✔ Solder (déjà reçue)'}</button>
       <button class="btn sm ${c.Annulee==='Oui'?'':'danger'}" data-cmdq="annul">${c.Annulee==='Oui'?'↺ Réactiver':'✕ Annuler la commande'}</button>
@@ -3217,6 +3382,7 @@ document.addEventListener('click',async e=>{
     if(a==='arc')cmdMaj(id,{Date_ARC:toSP(todayKey())},`✓ ARC reçu pour ${c.Title}`);
     else if(a==='bpa')cmdMaj(id,{Date_BPA:toSP(todayKey()),Mode_BPA:'Courriel'},`✓ BPA envoyé pour ${c.Title}`);
     else if(a==='solde'){const s=/^Sold/i.test(c.Statut||'');try{await spPatch('Commandes_Frs',id,{Statut:s?'Commandée':'Soldée'},c);c.Statut=s?'Commandée':'Soldée';if(!s)CMDV.ouvert=null;toast(s?'Commande remise en suivi':`✓ Commande ${c.Title} soldée`,'ok');renderCommandes();}catch(er){toast('🔴 '+er.message,'ko');}}
+    else if(a==='ctrl')cmdRecontroler(id);
     else if(a==='annul')cmdMaj(id,{Annulee:c.Annulee==='Oui'?'Non':'Oui'},c.Annulee==='Oui'?'Commande réactivée':'Commande annulée');
     else if(a==='relire'){try{await cmdImporter(c.Lien_BC);await reloadAll();setTab('commandes');if(typeof daRapprocherTout==='function')await daRapprocherTout();}catch(er){toast('🔴 '+er.message,'ko');}}
     return;}
