@@ -413,6 +413,7 @@ fieldset.lockfs .btn{display:none}
 .da-r{margin-right:12px;font-size:13.5px;cursor:pointer}.da-r input{width:auto;margin-right:3px}.da-head input[type=text],.da-head input:not([type]){padding:6px 8px;border:1px solid var(--border);border-radius:6px;font-size:13px}
 .da-t input{width:100%;padding:6px 8px;border:1px solid var(--border);border-radius:6px;font-size:13px}.da-t input.r{text-align:right}
 .da-t{table-layout:fixed;width:100%;min-width:0}.da-g table{table-layout:fixed;width:100%;min-width:0}#daDet table{min-width:0}#daDet td{vertical-align:top}.da-g input{border:1px solid var(--border);border-radius:6px;padding:4px 6px}.da-g{margin-bottom:10px}.da-gh{padding:4px 0;border-bottom:2px solid var(--teal,#0f766e);margin-bottom:2px;font-size:13.5px}
+.cmd-pj{display:inline-flex;align-items:center;gap:2px;margin-right:6px}.cmd-pjdel{border:0;background:none;color:var(--text-muted,#94a3b8);cursor:pointer;font-size:12px;padding:0 3px;border-radius:4px}.cmd-pjdel:hover{color:var(--red);background:#fef2f2}
 </style>
 </head>
 <body>
@@ -700,6 +701,11 @@ async function spAddAttachment(list,id,fileName,buf){
   const safe=encodeURIComponent(fileName.replace(/['"#%&]/g,'_'));
   const r=await fetch(`${listUrl(list)}(${id})/AttachmentFiles/add(FileName='${safe}')`,{method:'POST',headers:{'Authorization':`Bearer ${getToken()}`,'Accept':'application/json;odata=nometadata'},body:buf});
   await _check(r,'Ajout pièce jointe');
+}
+async function spDelAttachment(list,id,fileName){
+  const r=await fetch(`${listUrl(list)}(${id})/AttachmentFiles/getByFileName('${encodeURIComponent(fileName.replace(/'/g,"''"))}')`,{method:'POST',headers:{'Authorization':`Bearer ${getToken()}`,'Accept':'application/json;odata=nometadata','X-HTTP-Method':'DELETE','IF-MATCH':'*'}});
+  await _check(r,'Suppression de la pièce jointe');
+  logAction('DELETE',list,id,'Pièce jointe',fileName,'','','');
 }
 
 // ═══ CHARGEMENT ═══
@@ -1394,10 +1400,11 @@ function installFakeSharePoint(){
       if(suite==='/$value'){if(files[p]===null){const r=await real('demo/'+encodeURIComponent(p.split('/').pop()));if(!r.ok)return json({error:'PDF de démonstration absent'},404);files[p]=await r.arrayBuffer();}return new Response(files[p].slice(0),{status:200,headers:{'Content-Type':'application/pdf'}});}
       const mv=suite.match(/^\/MoveTo\(newurl=@b,flags=(\d)\)$/);if(mv){const d=al('b');if(d in files&&mv[1]!=='1')return json({error:'Un fichier portant ce nom existe déjà'},400);files[d]=files[p];delete files[p];return new Response(null,{status:200});}
       if(suite==='/recycle()'){delete files[p];return json({value:'ok'});}}
-    const m=path.match(/getbytitle\('([^']+)'\)\/items(?:\((\d+)\))?(\/AttachmentFiles(?:\/add\(FileName='([^']+)'\))?)?/);
+    const m=path.match(/getbytitle\('([^']+)'\)\/items(?:\((\d+)\))?(\/AttachmentFiles(?:\/add\(FileName='([^']+)'\)|\/getByFileName\('([^']+)'\))?)?/);
     if(!m)return json({error:'route inconnue'},404);
-    const [,list,id,attPart,fname]=m;const arr=store[list]||(store[list]=[]);
+    const [,list,id,attPart,fname,fdel]=m;const arr=store[list]||(store[list]=[]);
     if(attPart){const k=list+':'+id;
+      if(fdel){const n=decodeURIComponent(fdel).replace(/''/g,"'");const L=att[k]||[];const i=L.findIndex(x=>x.FileName===n);if(i<0)return json({error:'pièce jointe introuvable'},404);L.splice(i,1);return new Response(null,{status:200});}
       if(fname){const blob=new Blob([opt.body]);(att[k]=att[k]||[]).push({FileName:decodeURIComponent(fname),ServerRelativeUrl:URL.createObjectURL(blob)});const it=arr.find(x=>x.ID==id);if(it)it.Attachments=true;return json({FileName:fname});}
       return json({value:att[k]||[]});}
     if(method==='GET'){
@@ -3256,7 +3263,8 @@ async function cmdPjGet(id,nom){
 async function cmdRecontroler(id){
   const c=cmdById(id);if(!c)return;
   const att=(await cmdAttachments(id)).filter(f=>/\.pdf$/i.test(f.FileName)&&/ARC|BPA/i.test(f.FileName));
-  if(!att.length){toast('Aucun ARC / BPA en PDF joint à cette commande','wa');return;}
+  const choisir=msg=>{toast(msg,'wa');const i=$('cmdCtlFile');if(i)i.click();};
+  if(!att.length){choisir('Aucun ARC en PDF joint : choisis le PDF reçu par courriel');return;}
   try{
     for(const f of att.slice().reverse()){          // la plus récente d'abord ; on saute les scans
       const u=f.ServerRelativeUrl||'';
@@ -3264,7 +3272,7 @@ async function cmdRecontroler(id){
       const r=await cmdControleArc(c,buf);if(!r.texte)continue;
       CMDV.arc[id]=r;await cmdMaj(id,cmdArcMaj(c,r),null);cmdArcAfficher(c,r,f.FileName);return;
     }
-    toast('Les ARC / BPA joints sont des scans : contrôle automatique impossible','wa');
+    choisir('Les ARC / BPA joints sont des scans (signés ou imprimés) : choisis l’ARC d’origine reçu par courriel');
   }catch(e){toast('🔴 '+e.message,'ko');}
 }
 async function cmdAttachments(id){
@@ -3331,7 +3339,7 @@ function renderCommandes(){
       ${CMDV.ouvert===c.ID?`<tr class="cmd-d"><td colspan="8">${cmdDetailHtml(c,e)}</td></tr>`:''}`).join(''):`<tr><td colspan="8" class="muted" style="text-align:center;padding:18px">Aucune commande suivie${q?' pour cette recherche':''}.${cmdHorsSuivi(q)}</td></tr>`}
     </tbody></table></div></div>`;
   if(!F&&CUR_TAB==='commandes')cmdFichiers().then(()=>{if(CUR_TAB==='commandes')renderCommandes();});
-  if(CMDV.ouvert)cmdAttachments(CMDV.ouvert).then(a=>{const el=$('cmdAtt');if(el)el.innerHTML=a.length?a.map(f=>`<a href="${esc(f.ServerRelativeUrl&&f.ServerRelativeUrl.startsWith('/')?C.spRoot+f.ServerRelativeUrl:f.ServerRelativeUrl)}" target="_blank" rel="noopener">📎 ${esc(f.FileName)}</a>`).join(' '):'<span class="muted">Aucune pièce jointe</span>';});
+  if(CMDV.ouvert)cmdAttachments(CMDV.ouvert).then(a=>{const el=$('cmdAtt');if(el)el.innerHTML=a.length?a.map(f=>`<span class="cmd-pj"><a href="${esc(f.ServerRelativeUrl&&f.ServerRelativeUrl.startsWith('/')?C.spRoot+f.ServerRelativeUrl:f.ServerRelativeUrl)}" target="_blank" rel="noopener">📎 ${esc(f.FileName)}</a>${peutModifierCmd()?`<button class="cmd-pjdel" data-cmdpjdel="${esc(f.FileName)}" title="Supprimer cette pièce jointe">✕</button>`:''}</span>`).join(' '):'<span class="muted">Aucune pièce jointe</span>';});
 }
 function cmdDetailHtml(c,e){
   const L=cmdLignes(c.ID);const ed=peutModifierCmd();const dis=ed?'':'disabled';
@@ -3357,7 +3365,7 @@ function cmdDetailHtml(c,e){
       ${dk(c,'Date_ARC')&&!dk(c,'Date_BPA')?`<button class="btn sm primary" data-cmdq="bpa">✅ BPA envoyé par courriel</button>`:''}
       <label class="btn sm">📎 Joindre l’ARC<input type="file" data-cmdj="ARC" accept=".pdf,image/*" hidden></label>
       <label class="btn sm">📎 Joindre le BPA signé<input type="file" data-cmdj="BPA" accept=".pdf,image/*" hidden></label>
-      <button class="btn sm" data-cmdq="ctrl" title="Compare l’ARC joint (PDF avec texte) au BC : quantités, prix, total, date de livraison">🔍 Contrôler l’ARC</button>
+      <button class="btn sm" data-cmdq="ctrl" title="Compare l’ARC joint (PDF avec texte) au BC : quantités, prix, total, date de livraison">🔍 Contrôler l’ARC</button><input type="file" id="cmdCtlFile" accept=".pdf" hidden>
       ${c.Lien_BC?`<button class="btn sm" data-cmdq="relire" title="Relit le PDF du BC (après modification dans Image)">🔁 Relire le BC</button>`:''}
       <button class="btn sm" data-cmdq="solde" title="Commande déjà reçue ou terminée, sorte du suivi">${/^Sold/i.test(c.Statut||'')?'↺ Remettre en suivi':'✔ Solder (déjà reçue)'}</button>
       <button class="btn sm ${c.Annulee==='Oui'?'':'danger'}" data-cmdq="annul">${c.Annulee==='Oui'?'↺ Réactiver':'✕ Annuler la commande'}</button>
@@ -3386,6 +3394,11 @@ document.addEventListener('click',async e=>{
     else if(a==='annul')cmdMaj(id,{Annulee:c.Annulee==='Oui'?'Non':'Oui'},c.Annulee==='Oui'?'Commande réactivée':'Commande annulée');
     else if(a==='relire'){try{await cmdImporter(c.Lien_BC);await reloadAll();setTab('commandes');if(typeof daRapprocherTout==='function')await daRapprocherTout();}catch(er){toast('🔴 '+er.message,'ko');}}
     return;}
+  const pd=e.target.closest('[data-cmdpjdel]');
+  if(pd){e.preventDefault();const id=CMDV.ouvert;const c=cmdById(id);const n=pd.dataset.cmdpjdel;if(!c)return;
+    if(!await showConfirm('Supprimer la pièce jointe',`Supprimer <b>${esc(n)}</b> de la commande ${esc(c.Title)} ?<br><span class="muted">Les dates (ARC, BPA) ne changent pas : corrige-les si besoin.</span>`,'Supprimer','danger'))return;
+    try{await spDelAttachment('Commandes_Frs',id,n);delete CMDV.att[id];toast(`✓ ${n} supprimé`,'ok');renderCommandes();}catch(er){toast('🔴 '+er.message,'ko');}
+    return;}
   if(e.target.closest('.cmd-d'))return;
   const r=e.target.closest('[data-cmd]');if(r){const id=+r.dataset.cmd;CMDV.ouvert=CMDV.ouvert===id?null:id;renderCommandes();}
 });
@@ -3395,7 +3408,11 @@ document.addEventListener('change',e=>{
   if(e.target.id==='cmdTout'){CMDV.tout=e.target.checked;renderCommandes();return;}
   if(e.target.id==='cmdUpload'&&e.target.files.length){cmdDeposer([...e.target.files]);e.target.value='';return;}
   const d=e.target.dataset&&e.target.dataset.cmdd;
-  if(d&&CMDV.ouvert){const v=e.target.value;cmdMaj(CMDV.ouvert,{[d]:d.startsWith('Date_')?(v?toSP(v):null):(v||null)},'✓ Enregistré');return;}
+  if(d&&CMDV.ouvert){const v=e.target.value;const body={[d]:d.startsWith('Date_')?(v?toSP(v):null):(v||null)};
+    const c=cmdById(CMDV.ouvert);let msg='✓ Enregistré';
+    if(d==='Date_BPA'&&v&&c&&!dk(c,'Date_ARC')){body.Date_ARC=toSP(v);msg='✓ BPA enregistré · ARC reçu le même jour';}   // ARC et BPA souvent le même jour
+    cmdMaj(CMDV.ouvert,body,msg);return;}
+  if(e.target.id==='cmdCtlFile'&&CMDV.ouvert&&e.target.files[0]){cmdJoindre(CMDV.ouvert,e.target.files[0],'ARC');e.target.value='';return;}
   const j=e.target.dataset&&e.target.dataset.cmdj;
   if(j&&CMDV.ouvert&&e.target.files[0]){cmdJoindre(CMDV.ouvert,e.target.files[0],j);return;}
   const fr=e.target.dataset&&e.target.dataset.cmdfrs;
