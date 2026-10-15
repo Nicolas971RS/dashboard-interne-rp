@@ -3019,7 +3019,8 @@ function cmdAImporter(){
     const c=cmdByNum(f.num);
     if(!c)return CMDV.tout||!f.date||f.date>=lim;
     const lien=String(c.Lien_BC||'');
-    return facNom(lien)!==f.nom&&(!f.date||f.date>(c.Created||''));   // version modifiée (« … MODIF », « … AJOUT »)
+    if(facNom(lien)===f.nom)return !!(f.date&&c.Modified&&f.date>c.Modified);   // même nom, fichier écrasé après la dernière lecture
+    return !f.date||f.date>(c.Created||'');   // version modifiée (« … MODIF », « … AJOUT »)
   }).map(f=>({...f,maj:!!cmdByNum(f.num)})).sort((a,b)=>String(b.date).localeCompare(String(a.date)));
 }
 
