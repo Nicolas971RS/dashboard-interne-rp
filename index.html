@@ -436,6 +436,9 @@
 /* ── Champs obligatoires ── */
 .field-required{border-color:var(--red)!important;background:#fff8f8!important;}
 .field-ok{border-color:#16a34a!important;background:#f0fdf4!important;}
+
+  /* En-têtes du tableau d'articles du panneau Livraison Magasin : le panneau est étroit, les libellés majuscules espacés se chevauchaient */
+  tr.sp-th th{font-size:10.5px;letter-spacing:0;padding:8px 4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 </style>
 </head>
 <body>
@@ -7236,13 +7239,13 @@ function openSessionPanel(id){
       </div>
     </div>
     <div class="tc" style="overflow:visible"><table style="table-layout:fixed;width:100%;min-width:420px">
-      <thead><tr>
-        <th style="width:16%">Référence</th>
-        <th style="width:26%">Désignation</th>
-        <th style="width:12%;text-align:center">Attendu</th>
-        <th style="width:11%;text-align:center">Scanné</th>
-        <th style="width:16%;text-align:center">Écart</th>
-        <th style="width:10%;text-align:center" title="Verrouiller la ligne pour le magasinier">🔒</th>
+      <thead><tr class="sp-th">
+        <th style="width:19%">Réf.</th>
+        <th style="width:29%">Désignation</th>
+        <th style="width:12%;text-align:center" title="Quantité attendue (BL)">Att.</th>
+        <th style="width:11%;text-align:center" title="Quantité scannée par le magasin">Scan</th>
+        <th style="width:11%;text-align:center" title="Écart scanné − attendu">Écart</th>
+        <th style="width:9%;text-align:center" title="Verrouiller la ligne pour le magasinier">🔒</th>
         <th style="width:9%"></th>
       </tr></thead>
       <tbody id="sp-lignes-edit-${id}">${rowsExist||'<tr class="empty-row"><td colspan="7">Aucun article — utilisez « Ajouter un article »</td></tr>'}</tbody>
