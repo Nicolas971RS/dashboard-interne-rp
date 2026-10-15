@@ -1405,7 +1405,7 @@ function installFakeSharePoint(){
     const [,list,id,attPart,fname,fdel]=m;const arr=store[list]||(store[list]=[]);
     if(attPart){const k=list+':'+id;
       if(fdel){const n=decodeURIComponent(fdel).replace(/''/g,"'");const L=att[k]||[];const i=L.findIndex(x=>x.FileName===n);if(i<0)return json({error:'pièce jointe introuvable'},404);L.splice(i,1);return new Response(null,{status:200});}
-      if(fname){const blob=new Blob([opt.body]);(att[k]=att[k]||[]).push({FileName:decodeURIComponent(fname),ServerRelativeUrl:URL.createObjectURL(blob)});const it=arr.find(x=>x.ID==id);if(it)it.Attachments=true;return json({FileName:fname});}
+      if(fname){if((att[k]||[]).some(x=>x.FileName===decodeURIComponent(fname)))return json({'odata.error':{code:'-2130575257, Microsoft.SharePoint.SPException',message:{value:'Le nom spécifié est déjà utilisé.'}}},400);const blob=new Blob([opt.body]);(att[k]=att[k]||[]).push({FileName:decodeURIComponent(fname),ServerRelativeUrl:URL.createObjectURL(blob)});const it=arr.find(x=>x.ID==id);if(it)it.Attachments=true;return json({FileName:fname});}
       return json({value:att[k]||[]});}
     if(method==='GET'){
       const s=(u.searchParams.get('$select')||'').split(',');
@@ -3228,7 +3228,12 @@ async function cmdJoindre(id,file,quoi){
   const c=cmdById(id);if(!c)return;
   try{
     const buf=await file.arrayBuffer();const ext=(file.name.match(/\.[^.]+$/)||['.pdf'])[0];
-    await spAddAttachment('Commandes_Frs',id,`${cmdNum(c.Title)} - ${quoi}${ext}`,buf);delete CMDV.att[id];
+    // nom libre : « 8732 - BPA.pdf », sinon « 8732 - BPA 2.pdf »… (SharePoint refuse deux pièces jointes du même nom)
+    delete CMDV.att[id];const pris=new Set((await cmdAttachments(id)).map(f=>String(f.FileName).toLowerCase()));
+    const base=`${cmdNum(c.Title)} - ${quoi}`;let nom=base+ext;for(let k=2;pris.has(nom.toLowerCase())&&k<50;k++)nom=`${base} ${k}${ext}`;
+    try{await spAddAttachment('Commandes_Frs',id,nom,buf);}
+    catch(e){if(!/d[ée]j[àa]|already|2130575257/i.test(e.message))throw e;nom=`${base} ${new Date().toISOString().slice(0,19).replace(/\D/g,'')}${ext}`;await spAddAttachment('Commandes_Frs',id,nom,buf);}
+    delete CMDV.att[id];
     const body=quoi==='ARC'?(dk(c,'Date_ARC')?{}:{Date_ARC:toSP(todayKey())}):(dk(c,'Date_BPA')?{Mode_BPA:'BPA signé'}:{Date_BPA:toSP(todayKey()),Mode_BPA:'BPA signé'});
     if(quoi==='BPA'&&!dk(c,'Date_ARC'))body.Date_ARC=toSP(todayKey());
     // contrôle automatique si le PDF contient du texte (l'ARC signé = BPA est contrôlé aussi)
