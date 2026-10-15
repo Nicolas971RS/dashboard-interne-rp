@@ -3509,15 +3509,116 @@ async function fetchAchatsArrivages(){
     }
     return [];
   };
-  const [arr,lig,par,cmd]=await Promise.all([
+  const [arr,lig,par,cmd,da,lda]=await Promise.all([
     lire('Arrivages','ID,Title,N_Dossier,Conteneur,Type_Transport,Transitaire,Date_Depart,ETA_Port,Date_Arrivee_Port,Date_Entrepot_Prevue,Date_Entrepot,Statut,Date_Saisie_Image'),
     lire('Lignes_Arrivage','ID,ID_Arrivage,Type_Ligne,N_Commande,Fournisseur,Produits,Client_Concerne'),
     lire('Parametres_Achats','ID,Title,Valeur').catch(()=>[]),
-    lire('Commandes_Frs','ID,Title,Fournisseur,Date_Commande,Date_ARC,Date_BPA,Date_Dispo_Prevue,Date_Reception,Annulee').catch(()=>[])
+    lire('Commandes_Frs','ID,Title,Fournisseur,Date_Commande,Date_ARC,Date_BPA,Date_Dispo_Prevue,Date_Reception,Annulee').catch(()=>[]),
+    lire('Demandes_Achat','ID,Title,Zone,Transport,Motif,Client,Demandeur,Statut,Date_Demande,Commentaire,ID_BC_Client').catch(()=>null),
+    lire('Lignes_Demande_Achat','ID,Title,ID_Demande,Designation,Quantite,N_Commande').catch(()=>null)
   ]);
   const p=par.find(x=>x.Title==='DELAI_PORT_ENTREPOT_J');
   const delai=p&&!isNaN(parseInt(p.Valeur))?parseInt(p.Valeur):ACH_DELAI_DEFAUT;
-  return {arr,lig:lig.filter(l=>l.Type_Ligne!=='Frais'&&l.N_Commande),cmd:(cmd||[]).filter(c=>c.Annulee!=='Oui'),delai,ts:Date.now()};
+  return {arr,lig:lig.filter(l=>l.Type_Ligne!=='Frais'&&l.N_Commande),cmd:(cmd||[]).filter(c=>c.Annulee!=='Oui'),da:da&&da.filter(d=>d.ID_BC_Client),lda:lda||[],delai,ts:Date.now()};
+}
+// ═══ DEMANDES DE COMMANDE FOURNISSEUR (vendeur → Fabrice → achats) ═══
+// Le vendeur demande depuis le panneau d'un BC : la demande part « À valider » dans la liste
+// Demandes_Achat (site BondeCommande), Fabrice la valide ou la refuse dans le Portail Achats.
+// Le flux Power Automate envoie le mail (Notif = « À valider » → Fabrice).
+const DAV_ZONES=['Guadeloupe','Saint-Martin','Saint-Barthélemy'];
+const davDemandes=item=>((DATA.achats&&DATA.achats.da)||[]).filter(d=>+d.ID_BC_Client===+item.ID).sort((a,b)=>b.ID-a.ID);
+const davLignes=d=>((DATA.achats&&DATA.achats.lda)||[]).filter(l=>+l.ID_Demande===+d.ID);
+function davEtat(d){
+  const L=davLignes(d);
+  if(d.Statut==='Annulée')return {lbl:'Annulée',c:'#616161',bg:'#f5f5f5'};
+  if(d.Statut==='Refusée'){const m=String(d.Commentaire||'').match(/\[Refus[^\]]*\]\s*([^\n]*)/);return {lbl:'Refusée'+(m&&m[1]?' : '+m[1]:''),c:'#b71c1c',bg:'#ffebee'};}
+  if(d.Statut==='À valider')return {lbl:'En attente de validation (Fabrice)',c:'#7a3c00',bg:'#fff3e0'};
+  const nums=[...new Set(L.map(l=>l.N_Commande).filter(Boolean))];
+  if(L.length&&nums.length&&L.every(l=>l.N_Commande))return {lbl:'Commandée · BC frs '+nums.join(' - '),c:'#1b5e20',bg:'#e8f5e9',nums};
+  if(nums.length)return {lbl:'En partie commandée · BC frs '+nums.join(' - '),c:'#0d47a1',bg:'#e3f2fd',nums};
+  return {lbl:'Validée · commande à passer',c:'#0d47a1',bg:'#e3f2fd'};
+}
+function davBlocHtml(item){
+  if(!DATA.achats||!DATA.achats.da)return '';
+  const D=davDemandes(item);
+  const cmdTxt=n=>{const c=(achSrcCmd()||[]).find(x=>achNums(x.Title)[0]===n);return c?achPhaseCmd(c).txt:'';};
+  return `<div style="border:1px solid var(--border);border-radius:var(--radius-sm);padding:8px 12px;margin-bottom:10px;font-size:12.5px">
+    <div style="display:flex;justify-content:space-between;align-items:center;gap:8px"><strong>🛒 Demandes de commande fournisseur</strong>
+      <button onclick="openDemandeVendeur(${item.ID})" style="background:var(--navy);color:#fff;border:0;border-radius:6px;padding:4px 10px;font-size:12px;cursor:pointer">＋ Demander une commande</button></div>
+    ${D.length?D.map(d=>{const e=davEtat(d);const L=davLignes(d);return `<div style="margin-top:8px;padding:6px 8px;border-radius:6px;background:${e.bg}">
+      <div style="color:${e.c};font-weight:700">${_escD(d.Title)} · ${_escD(e.lbl)} <span style="font-weight:400;color:var(--text-muted)">· ${fmtDate(d.Date_Demande)} · ${_escD(d.Demandeur||'')}</span></div>
+      ${L.map(l=>`<div class="mono" style="font-size:11.5px">${_escD(l.Title)} ${_escD(l.Designation||'')} ×${_escD(l.Quantite)}${l.N_Commande?` → BC frs <b>${_escD(l.N_Commande)}</b> <span style="font-family:var(--font-sans,inherit);color:var(--text-muted)">${_escD(cmdTxt(achNums(l.N_Commande)[0]))}</span>`:''}</div>`).join('')}
+    </div>`;}).join(''):'<div style="color:var(--text-muted);margin-top:4px">Aucune demande. Un article à faire venir pour ce BC ? Demande-le ici : Fabrice valide, puis les achats commandent.</div>'}
+  </div>`;
+}
+let _davLignes=0;
+function davLigneHtml(i,l){
+  l=l||{};
+  return `<tr data-davl="${i}"><td><input class="dav-ref" list="dav-cat" value="${_escD(l.ref||'')}" placeholder="réf." style="width:100%;font-family:var(--font-mono);padding:6px 8px;border:1px solid var(--border);border-radius:6px;font-size:13px;box-sizing:border-box" oninput="davRefChange(this)"></td>
+    <td><input class="dav-des" value="${_escD(l.des||'')}" placeholder="désignation" style="width:100%;padding:6px 8px;border:1px solid var(--border);border-radius:6px;font-size:13px;box-sizing:border-box"></td>
+    <td><input class="dav-qte" value="${_escD(l.qte||'')}" inputmode="decimal" style="width:100%;text-align:right;padding:6px 8px;border:1px solid var(--border);border-radius:6px;font-size:13px;box-sizing:border-box"></td>
+    <td><button type="button" onclick="this.closest('tr').remove()" style="background:none;border:0;cursor:pointer;color:var(--text-muted)">✕</button></td></tr>`;
+}
+function davRefChange(inp){
+  const v=inp.value.trim().toUpperCase();const p=(DATA.catalogue||[]).find(c=>String(c.Title||'').trim().toUpperCase()===v);
+  if(p){const d=inp.closest('tr').querySelector('.dav-des');if(d&&!d.value)d.value=p.field_1||'';}
+}
+function davAjouterLigne(l){const tb=document.getElementById('dav-lignes');if(tb)tb.insertAdjacentHTML('beforeend',davLigneHtml(_davLignes++,l));}
+function davReprendreBC(id){
+  const L=(DATA.lignes||[]).filter(l=>+l.BCId===+id);
+  if(!L.length){toast('Aucune ligne sur ce BC','warn');return;}
+  const tb=document.getElementById('dav-lignes');[...tb.querySelectorAll('tr')].forEach(tr=>{if(!tr.querySelector('.dav-ref').value.trim())tr.remove();});
+  L.forEach(l=>{const qc=parseFloat(f(l,'Quantit_x00e9_command_x00e9_e'))||0,ql=parseFloat(f(l,'Quantit_x00e9_livr_x00e9_e'))||0;const r=Math.max(0,qc-ql);
+    if(r>0)davAjouterLigne({ref:f(l,'R_x00e9_f_x00e9_rence')||'',des:f(l,'Produit_x002f_D_x00e9_signation')||'',qte:String(r)});});
+}
+function openDemandeVendeur(id){
+  const item=DATA.suivi.find(i=>i.ID===id);if(!item)return;
+  const cli=getClient(item)||'';const radio=(n,opts,v)=>opts.map(o=>`<label style="display:inline-flex;gap:4px;align-items:center;margin-right:12px;font-size:13px;text-transform:none;letter-spacing:0;font-weight:500"><input type="radio" name="${n}" value="${_escD(o)}" ${o===v?'checked':''}> ${_escD(o)}</label>`).join('');
+  _davLignes=0;
+  openModal(`🛒 Demande de commande — ${f(item,'Title')||'BC'}`,`
+    <style>.dav-t th,.dav-t td{padding:2px 4px!important;background:none!important;border:0!important}</style><datalist id="dav-cat">${(DATA.catalogue||[]).slice(0,6000).map(c=>`<option value="${_escD(c.Title)}">${_escD(c.field_1||'')}</option>`).join('')}</datalist>
+    <div style="display:flex;flex-wrap:wrap;gap:16px;margin-bottom:10px">
+      <div class="mf"><label>Destination</label><div>${radio('dav-zone',DAV_ZONES,'Guadeloupe')}</div></div>
+      <div class="mf"><label>Transport</label><div>${radio('dav-tr',['Maritime','Aérien'],'Maritime')}</div></div>
+      <div class="mf"><label>Pour</label><div>${radio('dav-motif',['Client','Stock'],'Client')}</div></div>
+    </div>
+    <div class="mf" style="margin-bottom:8px"><label>Client</label><input id="dav-client" value="${_escD(cli)}"></div>
+    <table style="width:100%;border-collapse:separate;border-spacing:0 4px;font-size:13px;table-layout:fixed;min-width:0" class="dav-t"><colgroup><col style="width:130px"><col><col style="width:76px"><col style="width:30px"></colgroup><thead><tr style="text-align:left;color:var(--text-muted);font-size:11px"><th>RÉF.</th><th>DÉSIGNATION</th><th>QTÉ</th><th></th></tr></thead><tbody id="dav-lignes"></tbody></table>
+    <div style="display:flex;gap:8px;margin:8px 0">
+      <button type="button" onclick="davAjouterLigne()" style="border:1px solid var(--border);background:#fff;border-radius:6px;padding:4px 10px;cursor:pointer">＋ Ligne</button>
+      <button type="button" onclick="davReprendreBC(${id})" style="border:1px solid var(--border);background:#fff;border-radius:6px;padding:4px 10px;cursor:pointer">↧ Reprendre les articles non livrés du BC</button>
+    </div>
+    <div class="mf"><label>Commentaire</label><textarea id="dav-com" rows="2" placeholder="Délai souhaité, précisions pour Fabrice…"></textarea></div>
+    <div style="font-size:12px;color:var(--text-muted);margin-top:6px">La demande part à Fabrice pour validation. Tu suivras ici son statut puis la commande fournisseur.</div>`,
+    ()=>davEnregistrer(item));
+  davAjouterLigne();davAjouterLigne();
+}
+async function davEnregistrer(item){
+  const v=n=>{const x=document.querySelector(`input[name="${n}"]:checked`);return x?x.value:'';};
+  const zone=v('dav-zone'),tr=v('dav-tr'),motif=v('dav-motif');
+  const client=(document.getElementById('dav-client').value||'').trim();const com=(document.getElementById('dav-com').value||'').trim();
+  const L=[...document.querySelectorAll('#dav-lignes tr')].map(t=>({ref:t.querySelector('.dav-ref').value.trim().toUpperCase(),des:t.querySelector('.dav-des').value.trim(),qte:parseFloat(String(t.querySelector('.dav-qte').value).replace(',','.'))})).filter(l=>l.ref||l.des||l.qte);
+  const err=[];if(!L.length)err.push('au moins un article');
+  L.forEach((l,i)=>{if(!l.ref)err.push(`réf. ligne ${i+1}`);if(!(l.qte>0))err.push(`quantité ligne ${i+1}`);});
+  if(motif==='Client'&&!client)err.push('le client');
+  if(err.length)throw new Error('Manque : '+err.join(', '));
+  const u=sessionStorage.getItem('user_name')||vendeurConnecte()||'';
+  const t=new Date();const pre='DA-'+String(t.getFullYear()).slice(2)+String(t.getMonth()+1).padStart(2,'0')+String(t.getDate()).padStart(2,'0');
+  let n=1;try{const ex=await spFetch('sites/BondeCommande','Demandes_Achat',`$select=ID,Title&$filter=startswith(Title,'${pre}')&$top=500`);n=ex.length+1;}catch(e){n=((DATA.achats.da||[]).filter(d=>String(d.Title).startsWith(pre)).length)+1;}
+  const num=`${pre}-${n}`,bc=f(item,'Title')||('BC-'+item.ID);
+  const td='style="border:1px solid #d1d5db;padding:4px 8px"';
+  const portail=location.origin+location.pathname.replace(/[^\/]*$/,'')+'achats.html';
+  const resume=`<p><b>${_escD(u)}</b> demande une commande fournisseur (<b>${_escD(num)}</b>) pour le BC <b>${_escD(bc)}</b>. <b>Elle attend ta validation.</b></p>
+<p>Pour : <b>${motif==='Client'?'Client '+_escD(client):'Stock'}</b><br>Destination : <b>${_escD(zone)}</b> · Transport : <b>${_escD(tr)}</b></p>
+<table style="border-collapse:collapse;font-family:Arial;font-size:13px"><tr style="background:#f1f5f9"><th ${td}>Réf.</th><th ${td}>Désignation</th><th ${td}>Qté</th></tr>
+${L.map(l=>`<tr><td ${td}><b>${_escD(l.ref)}</b></td><td ${td}>${_escD(l.des)}</td><td ${td} align="right">${l.qte}</td></tr>`).join('')}</table>
+${com?`<p>Commentaire : ${_escD(com)}</p>`:''}<p><a href="${_escD(portail)}">Valider ou refuser dans le Portail Achats › Commandes</a></p>`;
+  const today=t.toISOString().slice(0,10)+'T12:00:00Z';
+  const d=await spPost('sites/BondeCommande','Demandes_Achat',{Title:num,Zone:zone,Transport:tr,Motif:motif,Client:motif==='Client'?client:null,
+    Demandeur:u,Statut:'À valider',Date_Demande:today,Commentaire:com||null,ID_BC_Client:item.ID,Notif:'À valider',Resume_Notif:resume});
+  const id=d.Id??d.ID;
+  for(const l of L)await spPost('sites/BondeCommande','Lignes_Demande_Achat',{Title:l.ref,ID_Demande:id,Designation:l.des||null,Quantite:l.qte});
+  return `Demande ${num} envoyée à Fabrice pour validation`;
 }
 // « 8412 - 8415 », « BC 8412/8415 » → ['8412','8415'] (chiffres seuls, zéros de tête retirés)
 const achNums=s=>[...new Set((String(s||'').match(/\d{3,}/g)||[]).map(x=>x.replace(/^0+(?=\d)/,'')))];
@@ -12337,7 +12438,7 @@ async function openBCPanel(id){
         <div class="pf"><div class="pf-lbl">📅 Date de livraison (retrait client)</div><div class="pf-val mono">${dateLiv}</div></div>
       </div>
       ${(()=>{
-        const _ab=achBlocHtml(item),_L=achLiens(item);
+        const _ab=achBlocHtml(item)+davBlocHtml(item),_L=achLiens(item);
         if(_L&&_L.liens.length)return _ab;
         const arr=f(item,'Date_Arrivage_Attendu');
         if(!arr)return _ab;
