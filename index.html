@@ -2866,6 +2866,8 @@ function openTraiterEcart(id){
   openModal(`🟠 Écart de livraison — ${f(s,'Numero_BL')}`,`
     <div style="font-size:12.5px;color:var(--text-secondary)">${e(f(s,'Client')||'')} · clôturé par ${e(f(s,'Magasinier')||'?')} le ${_dateFr(f(s,'Date_Scan')||f(s,'Created'))}</div>
     ${table}
+    ${(()=>{const enSt=manque.map(x=>({x,st:stockImageRef(x.ref)})).filter(o=>o.st>0);
+      return enSt.length?`<div style="background:#fff7ed;border:1px solid #fdba74;border-radius:var(--radius-sm);padding:8px 10px;margin:-4px 0 12px;font-size:12.5px;color:#9a3412"><strong>📦 Image indique encore du stock</strong> pour : ${enSt.map(o=>`<span class="mono">${e(o.x.ref)}</span> (${String(+o.st.toFixed(2)).replace('.',',')})`).join(', ')}.<br>Le magasin a déclaré manquant — fais vérifier en rayon avant de créer le reste à livrer.</div>`:'';})()}
     ${manque.length?opt('reste',`<strong>➕ Créer le reste à livrer (${prochain.numero})</strong>`,`Le client revient : un BL ${prochain.numero} part dans « BL en attente » au magasin avec ${manque.length} article(s). Rien à refaire dans Image : le BL d'origine couvre déjà ces quantités.`,true):''}
     ${opt('nonvenu','<strong>Le client ne reviendra pas</strong>','À régulariser dans Image (avoir ou BL corrigé).',!manque.length)}
     ${opt('erreur','<strong>Erreur de comptage</strong>','Le client a bien tout eu : la quantité scannée était fausse.',false)}
@@ -9812,6 +9814,36 @@ function dvAfficher(r,num){
 
 // ── Lignes d'articles éditées inline dans la modale Traiter ──
 let _mLigneNewCount=0;
+// ── Stock Image dans les lignes d'articles de « Traiter » ──
+// Index ref → stock reconstruit seulement quand le catalogue change.
+let _stkIdx=null,_stkSrc=null;
+function stockImageRef(ref){
+  const cat=DATA.catalogue||[];
+  if(_stkSrc!==cat){_stkSrc=cat;_stkIdx=new Map();cat.forEach(p=>{const r=String(f(p,'Title')||'').trim().toUpperCase();if(r&&!_stkIdx.has(r))_stkIdx.set(r,dvStock(p));});}
+  const v=_stkIdx.get(String(ref||'').trim().toUpperCase());
+  return v===undefined?null:v;
+}
+// Image décompte le stock dès l'émission du BL : si le BC a déjà un BL,
+// le stock affiché exclut déjà ces quantités → on n'en tire pas de couleur.
+function mStockCellHtml(ref,qc,ql){
+  if(!String(ref||'').trim())return'';
+  const st=stockImageRef(ref);
+  if(st==null||isNaN(st))return'<span title="Réf. absente du catalogue ou stock non chargé" style="color:var(--text-muted)">—</span>';
+  if(_traiterCurBL){const n=String(+st.toFixed(2)).replace('.',',');return`<span title="Stock Image restant — ce BL est déjà déduit dans Image" style="color:var(--text-secondary);font-weight:600">${n}</span>`;}
+  const reste=Math.max(0,(Number(qc)||0)-(Number(ql)||0));
+  return dvStockHtml(st,reste||Number(qc)||0);
+}
+function mMajStockRow(row){
+  const c=row&&row.querySelector('.m-l-stock');if(!c)return;
+  const v=cl=>row.querySelector(cl)?.value;
+  c.innerHTML=mStockCellHtml(v('.m-l-ref-new')??v('.m-l-ref'),v('.m-l-qc-new')??v('.m-l-qc'),v('.m-l-ql-new')??v('.m-l-ql'));
+}
+// Grille à 6 colonnes : les champs doivent pouvoir rétrécir, sinon la ligne déborde du modal
+document.head.insertAdjacentHTML('beforeend','<style>.m-ligne-row>*,.m-ligne-new>*{min-width:0}.m-ligne-row>input{width:100%}</style>');
+['input','focusin'].forEach(ev=>document.addEventListener(ev,e=>{
+  const row=e.target&&e.target.closest&&e.target.closest('.m-ligne-row,.m-ligne-new');
+  if(row)mMajStockRow(row);
+}));
 function mAddLigneRow(){
   const idx=_mLigneNewCount++;
   const container=document.getElementById('m-lignes-new');
@@ -9819,7 +9851,7 @@ function mAddLigneRow(){
   const row=document.createElement('div');
   row.className='m-ligne-new';
   row.id='m-ligne-new-'+idx;
-  row.style.cssText='display:grid;grid-template-columns:1fr 1.4fr 55px 55px 26px;gap:6px;margin-bottom:6px;align-items:center;position:relative';
+  row.style.cssText='display:grid;grid-template-columns:1fr 1.4fr 55px 55px 50px 26px;gap:6px;margin-bottom:6px;align-items:center;position:relative';
   row.innerHTML=`
     <div style="position:relative">
       <input class="m-l-ref-new" id="m-l-search-new-${idx}" autocomplete="off" placeholder="Réf." style="width:100%;padding:5px 7px;border:1px solid var(--border);border-radius:5px;font-size:12px;font-family:var(--font-mono);box-sizing:border-box">
@@ -9828,8 +9860,10 @@ function mAddLigneRow(){
     <input class="m-l-design-new" placeholder="Désignation" style="padding:5px 7px;border:1px solid var(--border);border-radius:5px;font-size:12px;box-sizing:border-box">
     <input class="m-l-qc-new" type="number" min="0" step="1" placeholder="0" title="Qté commandée" style="padding:5px 4px;border:1px solid var(--border);border-radius:5px;font-size:12px;box-sizing:border-box;text-align:center">
     <input class="m-l-ql-new" type="number" min="0" step="1" placeholder="0" title="Qté livrée" style="padding:5px 4px;border:1px solid var(--border);border-radius:5px;font-size:12px;box-sizing:border-box;text-align:center">
+    <div class="m-l-stock" style="text-align:center;font-size:11.5px"></div>
     <button type="button" onclick="document.getElementById('m-ligne-new-${idx}').remove()" title="Retirer" style="background:none;border:none;color:var(--red);font-size:14px;cursor:pointer;padding:4px">✕</button>`;
   container.appendChild(row);
+  mMajStockRow(row);
 
   const inp=document.getElementById('m-l-search-new-'+idx);
   const drop=document.getElementById('m-l-drop-new-'+idx);
@@ -9889,7 +9923,7 @@ function mAddLigneRowPrefilled(ref,design,qte,opt){
   const row=document.createElement('div');
   row.className='m-ligne-new';
   row.id='m-ligne-new-'+idx;
-  row.style.cssText='display:grid;grid-template-columns:1fr 1.4fr 55px 55px 26px;gap:6px;margin-bottom:6px;align-items:center;position:relative;background:var(--green-light);border-radius:5px;padding:2px';
+  row.style.cssText='display:grid;grid-template-columns:1fr 1.4fr 55px 55px 50px 26px;gap:6px;margin-bottom:6px;align-items:center;position:relative;background:var(--green-light);border-radius:5px;padding:2px';
   const refEsc=(ref||'').replace(/"/g,'&quot;');
   const desEsc=(design||'').replace(/"/g,'&quot;');
   row.innerHTML=`
@@ -9900,8 +9934,10 @@ function mAddLigneRowPrefilled(ref,design,qte,opt){
     <input class="m-l-design-new" value="${desEsc}" placeholder="Désignation" title="${titreImport}" style="padding:5px 7px;border:1px solid var(--green);border-radius:5px;font-size:12px;box-sizing:border-box">
     <input class="m-l-qc-new" type="number" min="0" step="1" value="${qte}" title="Qté commandée — reprend la qté scannée, à ajuster si différente" style="padding:5px 4px;border:1px solid var(--green);border-radius:5px;font-size:12px;box-sizing:border-box;text-align:center">
     <input class="m-l-ql-new" type="number" min="0" step="1" value="${qLivre}" title="Qté livrée" style="padding:5px 4px;border:1px solid var(--green);border-radius:5px;font-size:12px;box-sizing:border-box;text-align:center">
+    <div class="m-l-stock" style="text-align:center;font-size:11.5px"></div>
     <button type="button" onclick="document.getElementById('m-ligne-new-${idx}').remove()" title="Retirer" style="background:none;border:none;color:var(--red);font-size:14px;cursor:pointer;padding:4px">✕</button>`;
   container.appendChild(row);
+  mMajStockRow(row);
   // Recherche toujours disponible si la personne veut corriger la référence
   const inp=document.getElementById('m-l-search-new-'+idx);
   const drop=document.getElementById('m-l-drop-new-'+idx);
@@ -10374,11 +10410,12 @@ async function openTraiterModal(id,numBC,client){
     const design=(f(l,'Produit_x002f_D_x00e9_signation')||'').replace(/"/g,'&quot;');
     const qc=f(l,'Quantit_x00e9_command_x00e9_e')||0;
     const ql=f(l,'Quantit_x00e9_livr_x00e9_e')||0;
-    return`<div class="m-ligne-row m-ligne-existing" data-line-id="${lid}" style="display:grid;grid-template-columns:1fr 1.4fr 55px 55px 26px;gap:6px;margin-bottom:6px;align-items:center">
+    return`<div class="m-ligne-row m-ligne-existing" data-line-id="${lid}" style="display:grid;grid-template-columns:1fr 1.4fr 55px 55px 50px 26px;gap:6px;margin-bottom:6px;align-items:center">
       <input class="m-l-ref" value="${ref}" placeholder="Réf." style="padding:5px 7px;border:1px solid var(--border);border-radius:5px;font-size:12px;font-family:var(--font-mono);box-sizing:border-box">
       <input class="m-l-design" value="${design}" placeholder="Désignation" style="padding:5px 7px;border:1px solid var(--border);border-radius:5px;font-size:12px;box-sizing:border-box">
       <input class="m-l-qc" type="number" min="0" step="1" value="${qc}" title="Qté commandée" style="padding:5px 4px;border:1px solid var(--border);border-radius:5px;font-size:12px;box-sizing:border-box;text-align:center">
       <input class="m-l-ql" type="number" min="0" step="1" value="${ql}" title="Qté livrée" style="padding:5px 4px;border:1px solid var(--border);border-radius:5px;font-size:12px;box-sizing:border-box;text-align:center">
+      <div class="m-l-stock" style="text-align:center;font-size:11.5px">${mStockCellHtml(f(l,'R_x00e9_f_x00e9_rence'),qc,ql)}</div>
       <button type="button" onclick="mDeleteLigneRow(${lid})" title="Supprimer" style="background:none;border:none;color:var(--red);font-size:14px;cursor:pointer;padding:4px">🗑</button>
     </div>`;
   };
@@ -10513,11 +10550,12 @@ async function openTraiterModal(id,numBC,client){
       </div>
       <div class="sec-body">
         <div style="font-size:11.5px;color:var(--text-muted);margin-bottom:2px">Référence, désignation, quantité — sert au suivi RAL</div>
-        <div style="display:grid;grid-template-columns:1fr 1.4fr 55px 55px 26px;gap:6px;margin-bottom:4px">
+        <div style="display:grid;grid-template-columns:1fr 1.4fr 55px 55px 50px 26px;gap:6px;margin-bottom:4px">
           <div style="font-size:11.5px;font-weight:700;color:var(--text-muted);text-transform:uppercase">Réf.</div>
           <div style="font-size:11.5px;font-weight:700;color:var(--text-muted);text-transform:uppercase">Désignation</div>
           <div style="font-size:11.5px;font-weight:700;color:var(--text-muted);text-transform:uppercase;text-align:center">Cmdé</div>
           <div style="font-size:11.5px;font-weight:700;color:var(--text-muted);text-transform:uppercase;text-align:center">Livré</div>
+          <div title="Stock Image (catalogue)" style="font-size:11.5px;font-weight:700;color:var(--text-muted);text-transform:uppercase;text-align:center">Stock</div>
           <div></div>
         </div>
         <div id="m-lignes-list">${lignesExistantes.map(mLigneRowHtml).join('')}</div>
