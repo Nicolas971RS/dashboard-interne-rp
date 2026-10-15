@@ -697,8 +697,8 @@
         </div>
         <div class="acc-body" id="acc-commande" style="margin-bottom:4px">
           <div class="tc"><table>
-            <thead><tr><th>Statut</th><th>N° BC</th><th>Client</th><th>Chantier</th><th>Arrivage attendu</th><th>Montant HT</th><th>Vendeur</th><th>Actions</th></tr></thead>
-            <tbody id="suivi-commande-body"><tr class="empty-row"><td colspan="8">Chargement...</td></tr></tbody>
+            <thead><tr><th>Statut</th><th>N° BC</th><th>Client</th><th>Chantier</th><th>BC fournisseur</th><th>Arrivage attendu</th><th>Montant HT</th><th>Vendeur</th><th>Actions</th></tr></thead>
+            <tbody id="suivi-commande-body"><tr class="empty-row"><td colspan="9">Chargement...</td></tr></tbody>
           </table></div>
         </div>
       </div>
@@ -3539,7 +3539,7 @@ function davEtat(d){
   return {lbl:'Validée · commande à passer',c:'#0d47a1',bg:'#e3f2fd'};
 }
 function davBlocHtml(item){
-  if(!DATA.achats||!DATA.achats.da)return '';
+  if(!DATA.achats)return '';
   const D=davDemandes(item);
   const cmdTxt=n=>{const c=(achSrcCmd()||[]).find(x=>achNums(x.Title)[0]===n);return c?achPhaseCmd(c).txt:'';};
   return `<div style="border:1px solid var(--border);border-radius:var(--radius-sm);padding:8px 12px;margin-bottom:10px;font-size:12.5px">
@@ -3619,6 +3619,17 @@ ${com?`<p>Commentaire : ${_escD(com)}</p>`:''}<p><a href="${_escD(portail)}">Val
   const id=d.Id??d.ID;
   for(const l of L)await spPost('sites/BondeCommande','Lignes_Demande_Achat',{Title:l.ref,ID_Demande:id,Designation:l.des||null,Quantite:l.qte});
   return `Demande ${num} envoyée à Fabrice pour validation`;
+}
+
+// Demandes encore « vivantes » d'un BC (ni refusées, ni annulées, pas encore toutes sur un BC frs)
+const davOuvertes=item=>davDemandes(item).filter(d=>!['Refusée','Annulée'].includes(d.Statut)&&!davLignes(d).every(l=>l.N_Commande));
+// Colonne « BC fournisseur » du tableau En commande : chaque n° avec son étape, + demandes en cours
+function cmdFrsCell(i){
+  const L=achLiens(i);const out=[];
+  if(L){L.nums.forEach(n=>{const x=L.liens.find(y=>y.num===n);
+    out.push(`<div style="white-space:nowrap;margin:1px 0"><b class="mono" style="font-size:12px">${_escD(n)}</b> ${x?achBadgeHtml(x.ph):'<span style="font-size:10.5px;color:var(--text-muted)">non suivi au Portail</span>'}</div>`);});}
+  davOuvertes(i).forEach(d=>{const e=davEtat(d);out.push(`<div style="white-space:nowrap;margin:1px 0"><span style="font-size:11px;padding:2px 8px;border-radius:9px;background:${e.bg};color:${e.c};font-weight:600">🛒 ${_escD(d.Title)} · ${_escD(d.Statut==='À valider'?'à valider':'à commander')}</span></div>`);});
+  return out.join('')||'<span style="color:var(--text-muted)">—</span>';
 }
 // « 8412 - 8415 », « BC 8412/8415 » → ['8412','8415'] (chiffres seuls, zéros de tête retirés)
 const achNums=s=>[...new Set((String(s||'').match(/\d{3,}/g)||[]).map(x=>x.replace(/^0+(?=\d)/,'')))];
@@ -3923,6 +3934,8 @@ function renderCommandeFournisseur(){
     if(estSolde(i))return false; // BC soldé manuellement
     if(estIgnore(i))return false;
     if(dateArrivageAttendu(i))return true;
+    if(davOuvertes(i).length)return true;
+    {const _p=achPhaseMin(i);if(_p&&_p.rang<3)return true;} // BC frs suivi au Portail, pas encore arrivé (même sans date)
     // Arrivé via le Portail Achats : reste affiché 10 jours pour prévenir le vendeur
     if(achToutArrive(i)){const d=achLiens(i).liens.map(x=>x.ph.date).filter(Boolean).sort().pop();return !!d&&daysSince(d)<=10;}
     return false;
@@ -3947,19 +3960,22 @@ function renderCommandeFournisseur(){
     let badge;
     if(ph){
       badge=achBadgeHtml(ph)+(arr?` <span style="font-size:10.5px;color:${depasse?'#7a3c00':'var(--text-muted)'}">${depasse?'+'+jrs+'j':'J-'+Math.abs(jrs)}</span>`:'');
+    }else if(!arr){
+      badge=`<span style="font-size:11px;padding:2px 8px;border-radius:9px;background:#fff3e0;color:#7a3c00;font-weight:600">🛒 Demandée</span>`;
     }else{
       badge=depasse
         ?`<span style="font-size:11px;padding:2px 8px;border-radius:9px;background:#ffe9cc;color:#7a3c00;font-weight:600">🚚 +${jrs}j</span>`
         :`<span style="font-size:11px;padding:2px 8px;border-radius:9px;background:var(--violet-light,#f0efff);color:var(--violet);font-weight:600">📦 J-${Math.abs(jrs)}</span>`;
     }
     const L=ph?achLiens(i):null;
-    const cont=L?[...new Set(L.liens.map(x=>x.a.Conteneur||x.a.Title).filter(Boolean))].join(', '):'';
+    const cont=L?[...new Set(L.liens.map(x=>x.a.Conteneur||(x.cmd?'':x.a.Title)).filter(Boolean))].join(', '):'';
     const dateCell=arr?fmtDate(arr):(ph&&ph.date?fmtDate(ph.date):'—');
     return`<tr class="rr" data-bc-id="${i.ID}">
       <td>${badge}</td>
       <td class="ref">${numBC}${scBadge(i)}</td><td class="cname">${client}</td>
       <td style="font-size:12px;color:var(--text-secondary)">${chantier}</td>
-      <td class="mono">${dateCell}${ph?`<div style="font-size:10.5px;color:var(--text-muted);font-family:var(--font-body)" title="${_escD(achResume(i))}">🔗 ${_escD(cont||'Portail Achats')}</div>`:''}</td>
+      <td>${cmdFrsCell(i)}</td>
+      <td class="mono">${dateCell}${cont?`<div style="font-size:10.5px;color:var(--text-muted);font-family:var(--font-body)" title="${_escD(achResume(i))}">🚢 ${_escD(cont)}</div>`:''}</td>
       <td class="amt" style="font-size:11.5px">${montantFmt}</td>
       <td>${vendeur}</td>
       <td><div class="btn-grp">
