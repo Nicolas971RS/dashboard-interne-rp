@@ -3305,6 +3305,29 @@ function blocRattacherProvisoire(nouveau,clientNom){
       <button type="button" class="btn" style="height:28px;background:#ea580c;color:#fff;border-color:#ea580c" onclick="rattacherAuProvisoire(${nouveau.ID},${b.ID})">🔗 Rattacher</button></div>`).join('')}
   </div>`;
 }
+// Contenu binaire d'une pièce jointe de liste. Le fichier vit dans le sous-site
+// (/sites/RseauxPlus) : lu depuis le web racine, SharePoint répond 404 (cas
+// PO0047626004663.pdf, 15/10). On passe par la liste du sous-site, puis on
+// essaie les autres syntaxes avant d'abandonner.
+async function lirePieceJointe(site,list,itemId,a){
+  const nomQ=encodeURIComponent(String(a.FileName||'').replace(/'/g,"''"));
+  const rel=encodeURIComponent(a.ServerRelativeUrl||'');
+  const essais=[
+    `${C.spRoot}/${site}/_api/web/lists/getbytitle('${list}')/items(${itemId})/AttachmentFiles('${nomQ}')/$value`,
+    `${C.spRoot}/${site}/_api/web/lists/getbytitle('${list}')/items(${itemId})/AttachmentFiles/getByFileName('${nomQ}')/$value`,
+    `${C.spRoot}/${site}/_api/web/GetFileByServerRelativeUrl(@u)/$value?@u='${rel}'`,
+    `${C.spRoot}/_api/web/GetFileByServerRelativeUrl(@u)/$value?@u='${rel}'`
+  ];
+  let dernier='';
+  for(const u of essais){
+    try{
+      const r=await fetch(u,{headers:{'Authorization':`Bearer ${getToken()}`}});
+      if(r.ok)return await r.arrayBuffer();
+      dernier='HTTP '+r.status;
+    }catch(e){dernier=e.message;}
+  }
+  throw new Error(`lecture de ${a.FileName} : ${dernier}`);
+}
 async function rattacherAuProvisoire(nouveauId,provId){
   const nv=(DATA.suivi||[]).find(x=>x.ID===nouveauId),pv=(DATA.suivi||[]).find(x=>x.ID===provId);
   if(!nv||!pv){toast('🔴 BC introuvable — actualise','ko');return;}
@@ -3318,11 +3341,9 @@ async function rattacherAuProvisoire(nouveauId,provId){
     const pjs=await getAttachments('sites/RseauxPlus','Suivi_BC',nouveauId);
     const dejaLa=new Set((await getAttachments('sites/RseauxPlus','Suivi_BC',provId)).map(a=>a.FileName));
     for(const a of pjs){
-      const rel=a.ServerRelativeUrl||'';
-      const r=await fetch(`${C.spRoot}/_api/web/GetFileByServerRelativeUrl(@u)/$value?@u='${encodeURIComponent(rel)}'`,{headers:{'Authorization':`Bearer ${getToken()}`}});
-      if(!r.ok)throw new Error(`lecture de ${a.FileName} : HTTP ${r.status}`);
+      const buf=await lirePieceJointe('sites/RseauxPlus','Suivi_BC',nouveauId,a);
       let nom=a.FileName;if(dejaLa.has(nom))nom='BC_'+num.replace(/[^\w-]/g,'_')+'_'+nom;
-      await spAddAttachment('sites/RseauxPlus','Suivi_BC',provId,nom,await r.arrayBuffer());
+      await spAddAttachment('sites/RseauxPlus','Suivi_BC',provId,nom,buf);
     }
     // 2. Le provisoire prend le N° réel, le courriel et la trace
     const ancien=f(pv,'Title');
@@ -3365,7 +3386,7 @@ async function openCompleterBC(id){
       if(!raw)return`<div style="background:var(--bg);border:1px dashed var(--border);border-radius:var(--radius-sm);padding:9px 12px;font-size:11.5px;color:var(--text-muted);margin-bottom:14px">📧 Contenu du courriel non disponible (chargé depuis le cache hors-ligne).</div>`;
       const clean=raw.replace(/<style[^>]*>[\s\S]*?<\/style>/gi,'').replace(/<script[^>]*>[\s\S]*?<\/script>/gi,'')
         .replace(/<[^>]*>/g,' ').replace(/&nbsp;/g,' ').replace(/&lt;/g,'<').replace(/&gt;/g,'>').replace(/&amp;/g,'&')
-        .replace(/&#39;|&apos;/g,"'").replace(/&quot;/g,'"').replace(/\s{3,}/g,' ').trim();
+        .replace(/&#39;|&apos;/g,"'").replace(/&quot;/g,'"').replace(/&#(\d+);/g,(m,n)=>String.fromCharCode(+n)).replace(/\s{3,}/g,' ').trim();
       const esc=t=>t.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
       return`<div style="margin-bottom:14px">
         <div onclick="var d=document.getElementById('c-mail-body');var c=document.getElementById('c-mail-chev');var o=d.style.display!=='none';d.style.display=o?'none':'block';c.textContent=o?'▶':'▼';"
@@ -5101,7 +5122,7 @@ function emailTexte(raw){
     .replace(/<br\s*\/?>/gi,'\n').replace(/<\/(p|div|tr|li|h\d|table)>/gi,'\n')
     .replace(/<[^>]*>/g,' ').replace(/&nbsp;|&#160;/g,' ').replace(/&lt;/g,'<').replace(/&gt;/g,'>')
     .replace(/&#39;|&apos;|&rsquo;/g,"'").replace(/&quot;/g,'"').replace(/&eacute;/g,'é').replace(/&egrave;/g,'è')
-    .replace(/&agrave;/g,'à').replace(/&ccedil;/g,'ç').replace(/&amp;/g,'&')
+    .replace(/&agrave;/g,'à').replace(/&ccedil;/g,'ç').replace(/&#(\d+);/g,(m,n)=>String.fromCharCode(+n)).replace(/&amp;/g,'&')
     .split('\n').map(l=>l.replace(/[ \t ]+/g,' ').trim()).join('\n').replace(/\n{3,}/g,'\n\n').trim();
 }
 const _EM_STOP=/^(?:bien\s+)?(?:cordialement|cdlt|salutations|sinc[eè]res salutations|bien [aà] vous|best regards|regards|kind regards|bonne (?:journ[ée]e|soir[ée]e|fin de journ[ée]e)|a\+|merci(?: d'avance| par avance| beaucoup| bien)?[\s.,!]*$)|^(?:-{2,}|_{3,})\s*$|^-+ ?(?:message d'origine|original message)|^(?:de|from)\s*:\s|^envoy[ée] (?:de|depuis) mon|^le .{5,80} a [ée]crit\s*:?$/i;
