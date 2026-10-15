@@ -9692,6 +9692,27 @@ async function lireArticlesDevis(devis,etat){
   _dvCache.set(devis.ID,meilleur);
   return meilleur;
 }
+
+// Panneau du devis : articles lus dans le PDF (même lecteur que Traiter, résultat en cache)
+async function dvRemplirPanneau(devis){
+  const zone=()=>{const z=document.getElementById('dv-panel-art');return z&&String(z.dataset.id)===String(devis.ID)?z:null;};
+  const etat=t=>{const z=zone();if(z)z.textContent='⏳ '+t;};
+  try{
+    const r=await lireArticlesDevis(devis,etat);
+    const z=zone();if(!z)return;
+    const somme=r.lignes.reduce((s,l)=>s+(l.montant||0),0);
+    const complet=r.totalNet!=null&&Math.abs(somme-r.totalNet)<0.05;
+    const badge=l=>l.statut==='ok'?'✅':l.statut==='corrigee'?`<span title="Lue « ${_escD(l.brut)} »">🟠</span>`:'<span title="Absente du catalogue — à vérifier">❔</span>';
+    z.style.color='';
+    z.innerHTML=`<div style="font-size:11.5px;margin-bottom:6px;${complet?'color:var(--green)':'color:#9a3412'}">${complet?`✅ ${r.lignes.length} lignes · ${fmtMoney(somme)} = total HT net du devis`:`⚠️ ${r.lignes.length} lignes · ${fmtMoney(somme)}${r.totalNet!=null?' — total du devis '+fmtMoney(r.totalNet):''} : vérifie avec le PDF`}${r.methode==='ocr'?' · lu par reconnaissance de caractères':''}</div>
+      <table class="ltable"><thead><tr><th></th><th>Référence</th><th>Désignation</th><th style="text-align:right">Qté</th><th style="text-align:right">PU net</th><th style="text-align:right">Montant</th></tr></thead><tbody>
+      ${r.lignes.map(l=>`<tr><td>${badge(l)}</td><td class="mono">${_escD(l.ref)}</td><td>${_escD(l.desCat||l.des)}</td><td style="text-align:right">${l.qte}</td><td style="text-align:right;white-space:nowrap">${l.pu!=null?fmtMoney(l.pu):'—'}</td><td style="text-align:right;white-space:nowrap">${fmtMoney(l.montant)}</td></tr>`).join('')}
+      </tbody></table>
+      <div style="font-size:11px;color:var(--text-muted);margin-top:5px">À la réception du BC : <strong>Traiter → Articles → « 📄 Reprendre les articles du devis »</strong>, tu coches ce que le client commande.</div>`;
+  }catch(e){
+    const z=zone();if(z)z.innerHTML=`<span style="color:var(--red)">Lecture impossible : ${_escD(e.message)}</span>`;
+  }
+}
 async function dvOuvrirReprise(){
   const num=(document.getElementById('m-numdevis')?.value||'').trim();
   if(!num){toast('Saisis d’abord le N° de devis dans Traiter.','ko');document.getElementById('m-numdevis')?.focus();return;}
@@ -12938,8 +12959,13 @@ async function openDevisPanel(id){
         </tr>`;
       });
       html+=`</tbody></table></div>`;
-    }else{
-      html+=`<div class="pf"><div class="pf-lbl">Articles</div><div class="pf-val" style="color:var(--grey);font-style:italic">Aucune ligne trouvée</div></div>`;
+    }
+    // Devis arrivé par mail (Fabrice) : pas de lignes saisies, on lit le PDF joint
+    const _pdfDevis=attachments.filter(a=>/\.pdf$/i.test(a.FileName||''));
+    if(_pdfDevis.length){
+      html+=`<div class="pf"><div class="pf-lbl">📄 Articles du devis (lus dans le PDF)</div><div id="dv-panel-art" data-id="${id}" style="font-size:12.5px;color:var(--text-muted)">⏳ Lecture du devis PDF…</div></div>`;
+    }else if(!lignes.length){
+      html+=`<div class="pf"><div class="pf-lbl">Articles</div><div class="pf-val" style="color:var(--grey);font-style:italic">Aucune ligne trouvée — joins le PDF du devis pour voir ses articles</div></div>`;
     }
     html+=`<div class="pf"><div class="pf-lbl">📎 Pièces jointes — Devis PDF (${attachments.length})</div>`;
     if(attachments.length){
@@ -12975,6 +13001,7 @@ async function openDevisPanel(id){
       <button class="pbtn grey" onclick="closePanel()">Fermer</button>
     </div>`;
     document.getElementById('panel-body').innerHTML=html;
+    if(document.getElementById('dv-panel-art'))dvRemplirPanneau(item);
   }catch(e){
     document.getElementById('panel-body').innerHTML=`<div style="background:var(--red-light);color:var(--red);padding:10px;border-radius:6px;font-size:12px">❌ ${e.message}</div>`;
   }
