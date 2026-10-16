@@ -9838,6 +9838,280 @@ let _mLigneNewCount=0;
 // ── Stock Image dans les lignes d'articles de « Traiter » ──
 // Index ref → stock reconstruit seulement quand le catalogue change.
 let _stkIdx=null,_stkSrc=null;
+// ═══ LECTURE DU BC CLIENT (pièce jointe) → Client, N° BC, Chantier, Devis, Montant ═══
+// Un profil par client fréquent : on ne propose RIEN sur un BC inconnu (un
+// « commande n° » attrapé au hasard donnerait un faux N° BC). Rien n'est écrit :
+// le vendeur voit la proposition dans Traiter et clique « Appliquer ».
+// Les mentions de Réseaux Plus (destinataire) sont ignorées pour la détection.
+const _bcluMontantRe=/\d{1,3}(?:[  ]\d{3})*,\d{2}(?!\d)/;
+function _bcluNum(s){const m=String(s||'').match(_bcluMontantRe);return m?parseFloat(m[0].replace(/[  ]/g,'').replace(',','.')):null;}
+// BMJ : chaque texte est répété 2 à 4 fois sur la même ligne
+function _bcluDedoublonner(l){
+  const w=String(l||'').trim().split(/\s+/);
+  for(const k of [4,3,2]){
+    if(w.length%k)continue;
+    const n=w.length/k,c=w.slice(0,n).join(' ');
+    let ok=true;for(let i=1;i<k;i++)if(w.slice(i*n,(i+1)*n).join(' ')!==c){ok=false;break;}
+    if(ok)return c;
+  }
+  return w.join(' ');
+}
+function _bcluLignes(t){return String(t||'').split('\n').map(l=>l.replace(/\s+/g,' ').trim()).filter(Boolean);}
+// Montant sur la ligne du libellé (après lui), sinon la suivante, sinon la précédente
+function _bcluTotal(lignes,re){
+  for(let i=0;i<lignes.length;i++){
+    const m=lignes[i].match(re);if(!m)continue;
+    const apres=lignes[i].slice(m.index+m[0].length),avant=lignes[i].slice(0,m.index);
+    const v=_bcluNum(apres)??_bcluNum(avant)??_bcluNum(lignes[i+1])??_bcluNum(lignes[i-1]);
+    if(v!=null)return v;
+  }
+  return null;
+}
+function _bcluCherche(t,re,g=1){const m=String(t||'').match(re);return m?String(m[g]).replace(/\s+/g,' ').trim():'';}
+// Coupe une valeur au début d'un texte de la colonne de droite (même ligne visuelle)
+function _bcluCouper(v,stops){
+  let s=String(v||'');
+  for(const st of stops){const i=s.search(st);if(i>0)s=s.slice(0,i);}
+  return s.replace(/[\s:|,;-]+$/,'').trim();
+}
+
+// PDF AQUA TP : accents décodés de travers (« rÈseau », « PÈrou »)
+function _bcluAccents(s){return String(s||'').replace(/È/g,'é').replace(/Ë/g,'è').replace(/Í/g,'ê').replace(/‡/g,'à').replace(/Ä/g,'€');}
+const BC_PROFILS=[
+  {cle:'EDT',client:'E.D.T',
+   detecte:t=>/edt-btp\.com|EDT-HOLDING|SAS EDT/i.test(t),
+   lire(t,L){return{
+     numBC:_bcluCherche(t,/N\/REF\s*:\s*(\d{6,})/i),
+     chantier:_bcluCherche(t,/Informations Affaire\s*:\s*\n\s*([^\n]+)/i),
+     montant:_bcluTotal(L,/^Total HT\b/i)};}},
+  {cle:'BMJ',client:'BETON MOBILE JANKY',
+   detecte:t=>/bmj-gp\.fr|BMJ - Service/i.test(t),
+   lire(t,L){
+     // La valeur est imprimée juste au-dessus (ou au-dessous) de son libellé
+     const voisin=(re,ok)=>{const i=L.findIndex(l=>re.test(l));if(i<0)return'';
+       for(const j of [i-1,i+1]){const v=_bcluDedoublonner(L[j]);if(v&&ok(v))return v;}return'';};
+     const affaire=voisin(/^Affaire\s*:/i,v=>/\d{2}-\d{3}/.test(v)&&!/:/.test(v));
+     const lib=voisin(/^Chantier\s*:/i,v=>!/:/.test(v)&&!/\d{2}\/\d{2}\/\d{2}/.test(v));
+     // Libellé tronqué par BMJ (« …_M... ») : on retire le morceau coupé
+     const libPropre=/\.{2,}$/.test(lib)?lib.replace(/\.{2,}$/,'').replace(/_[^_]*$/,'').trim():lib;
+     return{
+       numBC:_bcluCherche(t,/Commande fournisseur n°\s*(BC\d{4,})/i),
+       chantier:[affaire,libPropre].filter(Boolean).join(' '),
+       montant:_bcluTotal(L,/Total H\.?T\b/i)};}},
+  {cle:'GETELEC',client:t=>/SAINT[- ]MARTIN|97150|Hope Estate/i.test(t)?'GETELEC TP SAINT MARTIN':'GETELEC TP SAS',
+   detecte:t=>/GETELEC\s*TP/i.test(t),
+   lire(t,L){return{
+     numBC:_bcluCherche(t,/\b(PO\d{10,})\b/),
+     chantier:_bcluCouper(_bcluCherche(t,/(?:^|\n)\s*Imputation\s+(\d{5,}[^\n]*)/i),[/RESEAUX PLUS/i,/BONS DE COMMANDE/i]),
+     montant:_bcluTotal(L,/Montant HT\b/i)};}},
+  {cle:'EIFFAGE',client:'EIFFAGE INFRA ANTILLES',
+   detecte:t=>/EIFFAGE INFRA ANTILLES/i.test(t),
+   lire(t,L){return{
+     numBC:_bcluCherche(t,/Bon de commande N°\s*(C\d{6,})/i)||_bcluCherche(t,/Commande\s*:\s*(C\d{6,})/i),
+     chantier:_bcluCherche(t,/Activit[ée]\s*:\s*([^\d\s][^\n]*)/i),
+     // Le devis du commentaire est le bon ; « Numéro de devis » d'en-tête en second choix
+     devis:[_bcluCherche(t,/Commentaire\s*:[^\n]*?Devis\s*n°?\s*(\d{6})/i),_bcluCherche(t,/Num[ée]ro de devis\s*:\s*(\d{6})/i)],
+     montant:_bcluTotal(L,/^Total HT\b/i)};}},
+  // GTDOM et TRAPEG : même formulaire (groupe), souvent scanné → OCR
+  {cle:'GJD',client:t=>/\bTRA\s?\d{2}-\d{2,4}\b|TRAPEG/i.test(t)?'SAS TRAPEG':'G.T.DOM',
+   detecte:t=>/GTDOM|G\.T\.DOM|TRAPEG|\b(?:GTD|TRA)\s?\d{2}-\d{2,4}\b/i.test(t)&&/Chantier N/i.test(t),
+   lire(t,L){
+     const i=L.findIndex(l=>/^Chantier N/i.test(l));
+     let chantier='';
+     // La ligne « Commentaire » est suivie du nom du chantier (colonne de gauche)
+     for(let j=i+1;j>0&&j<Math.min(L.length,i+4);j++){
+       if(/^Commentaire/i.test(L[j])||/^RESEAUX PLUS/i.test(L[j]))continue;
+       chantier=_bcluCouper(L[j],[/\b15 lot Via Verde/i,/RESEAUX PLUS/i,/SELON DEVIS/i]);break;
+     }
+     return{
+       numBC:_bcluCherche(t,/\b((?:GTD|TRA)\s?\d{2}-\d{2,4})\b/i).replace(/\s/g,'').toUpperCase(),
+       chantier,
+       devis:[_bcluCherche(t,/DEVIS\s*N\s*°?\s*(\d{6})/i)],
+       montant:_bcluTotal(L,/Total HT\s*:/i)};}},
+  {cle:'SOGETRA',client:'SOGETRA',
+   detecte:t=>/SOGETRA/i.test(t),
+   lire(t,L){
+     const i=L.findIndex(l=>/^A livrer [àa]\s*:/i.test(l));
+     return{
+       numBC:_bcluCherche(t,/N° de Commande\s*:\s*(PR\d{6,})/i)||_bcluCherche(t,/COMMANDE N°\s*(PR\d{6,})/i),
+       chantier:i>=0?_bcluCouper(L[i+1],[/Code adressage/i,/Factures/i]):'',
+       devis:[_bcluCherche(t,/Selon devis\s*n?°?\s*(\d{6})/i)],
+       montant:_bcluTotal(L,/Montant H\.T\.\s*:/i)};}},
+  {cle:'SAUR',client:t=>/SAUR\s+(?:SAINT|ST)[- ]BARTH/i.test(t)?'SAUR SAINT BARTHELEMY':/SAUR\s+(?:SAINT|ST)[- ]MARTIN/i.test(t)?'SAUR ST MARTIN':'SAUR GUADELOUPE',
+   detecte:t=>/SAUR (GUADELOUPE|ST|SAINT)/i.test(t)&&/BdC/i.test(t),
+   lire(t,L){return{
+     numBC:_bcluCherche(t,/NUM[ÉE]RO DU BdC\s*([A-Z]{3,5}-\d{6,})/i)||_bcluCherche(t,/\b(S[A-Z]{3}-\d{7,})\b/),
+     chantier:'',
+     montant:_bcluTotal(L,/EUR HT\b/i)??null};}},
+  {cle:'AQUATP',client:'AQUA TP',
+   detecte:t=>/35408427900075|354\s?084\s?279|AQUA\s?TP/i.test(t),
+   lire(t,L){
+     // Accents mal codés dans ce PDF (« RÈfÈrence ») : on n'en dépend pas
+     const ch=_bcluCherche(t,/(?:^|\n)\s*Chantier\s+([A-Z0-9]{3,}\b[^\n]*)/);
+     return{
+       numBC:_bcluCherche(t,/R.f.rence Commande\s*:\s*(\d{5,})/i),
+       chantier:_bcluAccents(ch).replace(/\s+BC\d{4}\/\S+\s*-?\s*/,' ').replace(/\s+/g,' ').trim(),
+       montant:_bcluTotal(L,/TOTAL HT\b/i)};}}
+];
+// Numéros de devis Réseaux Plus (format 7xxxxx) cités n'importe où
+function _bcluDevisLibres(t){return [...new Set((String(t||'').match(/(?<![\d/.,])7\d{5}(?![\d,.])/g)||[]))];}
+
+// texte → proposition {profil, client, numBC, chantier, devis[], montant}
+function bcluAnalyser(texte){
+  const t=String(texte||'');
+  const p=BC_PROFILS.find(x=>x.detecte(t));
+  if(!p)return null;
+  const L=_bcluLignes(t);
+  const r=p.lire(t,L)||{};
+  const devis=[...(r.devis||[]).filter(Boolean)];
+  _bcluDevisLibres(t).forEach(d=>{if(!devis.includes(d))devis.push(d);});
+  return{profil:p.cle,client:typeof p.client==='function'?p.client(t):p.client,
+    numBC:r.numBC||'',chantier:(r.chantier||'').slice(0,120),devis,montant:r.montant??null};
+}
+// Cadre du bandeau de lecture du BC
+const _BCLU_BOX='border:1px solid #ddd6fe;border-radius:var(--radius-sm);padding:9px 12px;margin-bottom:12px;font-size:12.5px;';
+// ── Lecture de la pièce jointe (même lecteur que les devis : texte, sinon OCR) ──
+async function bcluLireTexte(buf,etat){
+  const pdfjsLib=await chargerPdfjs();
+  const pdf=await pdfjsLib.getDocument({data:new Uint8Array(buf)}).promise;
+  let texte='';
+  for(let p=1;p<=Math.min(pdf.numPages,2);p++){
+    const tc=await (await pdf.getPage(p)).getTextContent();
+    const rows=new Map();
+    tc.items.forEach(it=>{if(!it.str||!it.str.trim())return;const y=Math.round(it.transform[5]/2)*2;(rows.get(y)||rows.set(y,[]).get(y)).push(it);});
+    texte+=[...rows.entries()].sort((a,b)=>b[0]-a[0]).map(([,its])=>its.sort((a,b)=>a.transform[4]-b.transform[4]).map(i=>i.str).join(' ')).join('\n')+'\n';
+  }
+  if(texte.split(/\s+/).filter(Boolean).length>=25)return{texte,methode:'texte'};
+  // Scan (GTDOM, TRAPEG…) : reconnaissance de caractères sur la 1re page
+  if(etat)etat('Lecture du scan…');
+  return{texte:await dvTexteOCR(await pdf.getPage(1),etat),methode:'ocr'};
+}
+const _bcluCache=new Map();
+async function bcluLirePJ(bcId,etat){
+  if(_bcluCache.has(bcId))return _bcluCache.get(bcId);
+  const pjs=(await getAttachments('sites/RseauxPlus','Suivi_BC',bcId)).filter(a=>/\.pdf$/i.test(a.FileName||''));
+  if(!pjs.length)return{absent:true};
+  let res={inconnu:true,fichiers:pjs.map(a=>a.FileName)};
+  for(const a of pjs){
+    if(etat)etat(`Lecture de ${a.FileName}…`);
+    try{
+      const {texte,methode}=await bcluLireTexte(await lirePieceJointe('sites/RseauxPlus','Suivi_BC',bcId,a),etat);
+      const r=bcluAnalyser(texte);
+      if(r){res={...r,methode,fichier:a.FileName};break;}
+    }catch(e){console.warn('[Lecture BC]',a.FileName,e.message);}
+  }
+  _bcluCache.set(bcId,res);
+  return res;
+}
+// Client du profil → fiche Base_Clients (nom exact, sinon nom contenu)
+function bcluClient(nom){
+  const n=_normTxt(nom).replace(/[^a-z0-9]/g,'');
+  if(!n)return null;
+  const tous=Object.entries(DATA.clients||{}).map(([id,name])=>({id,name,k:_normTxt(name).replace(/[^a-z0-9]/g,'')}));
+  return tous.find(c=>c.k===n)||tous.find(c=>c.k.includes(n))||null;
+}
+// Chantier existant : même code d'affaire / d'imputation, ou même nom
+function bcluChantier(nom,clientId){
+  const n=_normTxt(nom);
+  if(!n)return null;
+  const liste=(DATA.chantiers||[]).map(c=>({id:String(c.ID),name:f(c,'Title')||'',cli:String(c.ClientId||''),k:_normTxt(f(c,'Title'))})).filter(c=>c.k);
+  const ordre=a=>a.sort((x,y)=>(y.cli===String(clientId))-(x.cli===String(clientId)));
+  const code=(n.match(/\b(?=[a-z0-9_-]*\d)[a-z0-9_-]{4,}\b/)||[])[0];
+  if(code){const m=ordre(liste.filter(c=>new RegExp('(^|[^a-z0-9])'+code.replace(/[-_]/g,'[-_ ]?')+'([^a-z0-9]|$)').test(c.k)));if(m.length)return m[0];}
+  const m=ordre(liste.filter(c=>c.k===n||(c.k.length>=8&&n.includes(c.k))||(n.length>=8&&c.k.includes(n))));
+  return m[0]||null;
+}
+function _bcluTitreEstNumBC(t,num){
+  const a=String(t||'').replace(/\s/g,'').toUpperCase(),b=String(num||'').replace(/\s/g,'').toUpperCase();
+  return !!b&&a===b;
+}
+// Bandeau de proposition dans Traiter
+async function bcluTraiter(bcId,curTitre,auto){
+  const box=document.getElementById('m-bclu');
+  if(!box)return;
+  const item=(DATA.suivi||[]).find(x=>x.ID===bcId)||{};
+  const etat=t=>{if(document.getElementById('m-bclu')===box)box.innerHTML=`<div style="${_BCLU_BOX}color:var(--text-muted)">⏳ ${_escD(t)}</div>`;};
+  if(!auto)etat('Lecture du BC joint…');
+  let r;
+  try{r=await bcluLirePJ(bcId,auto?null:etat);}
+  catch(e){if(!auto)box.innerHTML=`<div style="${_BCLU_BOX}color:var(--red)">Lecture impossible : ${_escD(e.message)}</div>`;return;}
+  if(document.getElementById('m-bclu')!==box)return; // modale fermée entre-temps
+  const relire=`<button type="button" class="btn" style="height:24px;font-size:11px" onclick="_bcluCache.delete(${bcId});bcluTraiter(${bcId},document.getElementById('m-bclu')?.dataset.titre||'',false)">↻ Relire</button>`;
+  if(r.absent){box.innerHTML=auto?'':`<div style="${_BCLU_BOX}color:var(--text-muted)">Aucun PDF joint à lire.</div>`;return;}
+  if(r.inconnu){box.innerHTML=auto?'':`<div style="${_BCLU_BOX}color:var(--text-muted)">📄 Modèle de BC non reconnu (${_escD(r.fichiers.join(', '))}) — à saisir à la main.</div>`;return;}
+
+  const cli=bcluClient(r.client);
+  const curCliId=document.getElementById('m-client-id')?.value||'';
+  const titreAct=(document.getElementById('m-titre')?.value||'').trim();
+  // Devis : ceux du BC (ordre du profil) + ceux de l'objet du mail ; on garde ceux
+  // qui existent dans l'onglet Devis, sinon le premier cité explicitement sur le BC
+  const candidats=[...r.devis,...((String(curTitre||'').match(/(?<![\d/.,])7\d{5}(?![\d,.])/g))||[])];
+  const devisOk=[...new Set(candidats)].filter(d=>devisDuNumero(d));
+  const devis=devisOk[0]||r.devis[0]||'';
+  const devisAct=(document.getElementById('m-numdevis')?.value||'').trim();
+  const ch=r.chantier?bcluChantier(r.chantier,cli?.id):null;
+  const chAct=(document.getElementById('m-chantier-id')?.value||'').trim();
+  const montantAct=(document.getElementById('m-montant')?.value||'').trim();
+  const montant=r.methode==='ocr'?null:r.montant; // l'OCR lit mal les chiffres : pas de montant
+  const lignes=[];
+  const L=(k,lib,val,coche,note)=>lignes.push({k,lib,val,coche,note});
+  if(cli)L('client','Client',cli.name,String(cli.id)!==String(curCliId),String(cli.id)===String(curCliId)?'déjà saisi':'');
+  else L('client','Client',r.client,false,'<span style="color:var(--red)">introuvable dans Base_Clients — à choisir à la main</span>');
+  if(r.numBC)L('numBC','N° BC',r.numBC,!_bcluTitreEstNumBC(titreAct,r.numBC),_bcluTitreEstNumBC(titreAct,r.numBC)?'déjà saisi':(titreAct&&!/^BC-\d+$/.test(titreAct)?'l\'objet actuel passe dans les Remarques':''));
+  if(r.chantier)L('chantier','Chantier',ch?ch.name:r.chantier,!chAct||chAct==='__clear__',ch?'chantier existant':'<span style="color:#b45309">nouveau chantier — à créer</span>');
+  if(devis)L('devis','N° Devis',devis,!devisAct,devisAct?(devisAct===devis?'déjà saisi':'remplacera '+_escD(devisAct)):(devisDuNumero(devis)?'devis trouvé':'<span style="color:#b45309">absent de l\'onglet Devis</span>'));
+  if(montant!=null)L('montant','Montant HT',fmtMoney(montant),!montantAct,montantAct?'déjà saisi':'');
+  if(!lignes.some(l=>l.coche)){
+    box.innerHTML=`<div style="${_BCLU_BOX}color:var(--green)">📄 BC ${_escD(r.client)} lu : les champs correspondent déjà. ${relire}</div>`;
+    return;
+  }
+  window._bcluProp={bcId,curTitre,r,cli,ch,devis,montant};
+  box.innerHTML=`<div style="${_BCLU_BOX}border-left:4px solid #7c3aed;background:#f5f3ff">
+    <div style="font-weight:700;color:#5b21b6;margin-bottom:6px">📄 Lu dans le BC joint${r.methode==='ocr'?' (scan, lecture par reconnaissance de caractères : vérifie)':''}</div>
+    ${lignes.map(l=>`<label style="display:flex;align-items:baseline;gap:8px;margin:3px 0;cursor:pointer;text-transform:none;letter-spacing:0;font-size:12.5px;color:var(--text-primary)">
+      <input type="checkbox" data-bclu="${l.k}" ${l.coche?'checked':''} ${l.k==='client'&&!cli?'disabled':''} style="width:15px;height:15px;flex-shrink:0">
+      <span style="min-width:78px;color:var(--text-muted)">${l.lib}</span><strong style="font-family:${l.k==='numBC'||l.k==='devis'?'var(--font-mono)':'inherit'}">${_escD(l.val)}</strong>${l.note?`<span style="font-size:11px;color:var(--text-muted)">· ${l.note}</span>`:''}</label>`).join('')}
+    <div style="display:flex;gap:8px;margin-top:8px;align-items:center;flex-wrap:wrap">
+      <button type="button" class="btn" style="height:28px;font-size:12px;background:#7c3aed;color:#fff;border-color:#7c3aed;font-weight:700" onclick="bcluAppliquer()">Appliquer</button>
+      ${relire}<span style="font-size:11px;color:var(--text-muted)">Rien n'est enregistré avant « Enregistrer ».</span>
+    </div></div>`;
+}
+function bcluAppliquer(){
+  const P=window._bcluProp;if(!P)return;
+  const box=document.getElementById('m-bclu');
+  const coche=k=>!!box?.querySelector(`input[data-bclu="${k}"]`)?.checked;
+  const set=(id,v,ev)=>{const el=document.getElementById(id);if(!el)return;el.value=v;if(ev)el.dispatchEvent(new Event(ev));el.style.background='#f5f3ff';};
+  const faits=[];
+  if(coche('client')&&P.cli){
+    set('m-client-search',P.cli.name);set('m-client-id',String(P.cli.id));
+    document.getElementById('m-client-search')?.classList.remove('err');
+    const nc=document.getElementById('m-chantier-new-client');if(nc)nc.textContent=P.cli.name;
+    faits.push('client');
+  }
+  if(coche('numBC')&&P.r.numBC){
+    const ancien=(document.getElementById('m-titre')?.value||'').trim();
+    // L'objet du mail (souvent avec le n° de devis) n'est pas perdu : il passe en tête des Remarques
+    if(ancien&&!/^BC-\d+$/.test(ancien)&&!_bcluTitreEstNumBC(ancien,P.r.numBC)){
+      const rem=document.getElementById('m-rem');
+      if(rem&&!rem.value.includes(ancien))rem.value=`Objet du mail : ${ancien}`+(rem.value.trim()?'\n'+rem.value:'');
+    }
+    set('m-titre',P.r.numBC,'input');faits.push('N° BC');
+  }
+  if(coche('devis')&&P.devis){set('m-numdevis',P.devis,'change');faits.push('devis');}
+  if(coche('montant')&&P.montant!=null){set('m-montant',P.montant.toFixed(2));faits.push('montant');}
+  if(coche('chantier')&&P.r.chantier){
+    if(P.ch){set('m-chantier-search',P.ch.name);set('m-chantier-id',P.ch.id);faits.push('chantier');}
+    else{
+      // Pas créé d'office : le panneau « Nouveau chantier » s'ouvre pré-rempli
+      const panel=document.getElementById('m-chantier-new-panel');
+      if(panel&&panel.style.display==='none')toggleChantierInline();
+      const nom=document.getElementById('m-chantier-new-nom');if(nom)nom.value=P.r.chantier;
+      faits.push('chantier à créer (bouton « Créer et sélectionner »)');
+    }
+  }
+  if(box)box.innerHTML=`<div style="${_BCLU_BOX}color:#5b21b6">✅ Repris du BC : ${faits.join(', ')||'rien'}. Vérifie puis <strong>Enregistrer</strong>.</div>`;
+}
+
 function stockImageRef(ref){
   const cat=DATA.catalogue||[];
   if(_stkSrc!==cat){_stkSrc=cat;_stkIdx=new Map();cat.forEach(p=>{const r=String(f(p,'Title')||'').trim().toUpperCase();if(r&&!_stkIdx.has(r))_stkIdx.set(r,dvStock(p));});}
@@ -10472,6 +10746,7 @@ async function openTraiterModal(id,numBC,client){
       <div style="flex:1;min-width:220px;font-size:12.5px;color:#7c2d12"><strong>📌 Ce BC remplace-t-il un BC provisoire ?</strong><br>${_provDispo.slice(0,4).map(b=>`<span style="font-family:var(--font-mono)">${_escD(f(b,'Title'))}</span> ${_escD(getClient(b)||'')}`).join(' · ')}${_provDispo.length>4?' …':''}</div>
       <button type="button" class="btn" style="height:30px;background:#ea580c;color:#fff;border-color:#ea580c" onclick="closeModal();openCompleterBC(${currentItem.ID})">🔗 Rattacher au provisoire</button>
     </div>`:''}
+    <div id="m-bclu" data-titre="${_escD(curTitre)}"></div>
     <div class="mf"><label>Client</label>
       <div style="position:relative">
         <input id="m-client-search" autocomplete="off" placeholder="Tapez 3 caractères..." style="${acInput}" value="${(client&&client!=='—'?client:'').replace(/"/g,'&quot;')}">
@@ -10928,6 +11203,12 @@ async function openTraiterModal(id,numBC,client){
     const clientData=Object.entries(DATA.clients||{}).map(([cid,cname])=>({id:cid,name:cname}));
     setupAC('m-client-search','m-client-id','m-client-drop',clientData,()=>checkDoublonBC(document.getElementById('m-titre').value,id));
     mBcPjCharger(id);
+    // Lecture du BC joint : automatique tant que le client ou le N° BC manque
+    // (titre vide ou objet de mail), sinon sur demande
+    {const _t=String(curTitre||'').trim();
+     const _aLire=!currentItem.ClientId||!_t||/\s/.test(_t)||!/\d/.test(_t)||/^BC-\d+$/.test(_t);
+     if(_aLire)bcluTraiter(id,curTitre,true);
+     else{const b=document.getElementById('m-bclu');if(b)b.innerHTML=`<div style="text-align:right;margin:-4px 0 8px"><button type="button" class="btn" style="height:24px;font-size:11px;background:#ede9fe;color:#5b21b6;border-color:#c4b5fd" onclick="bcluTraiter(${id},this.closest('#m-bclu').dataset.titre,false)">📄 Lire le BC joint</button></div>`;}}
     // Champs obligatoires rouge/vert
     setupRequiredField(document.getElementById('m-bl'));
     setupRequiredField(document.getElementById('m-client-search'));
