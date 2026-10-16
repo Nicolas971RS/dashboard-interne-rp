@@ -416,6 +416,7 @@ fieldset.lockfs .btn{display:none}
 .cmd-pj{display:inline-flex;align-items:center;gap:2px;margin-right:6px}.cmd-pjdel{border:0;background:none;color:var(--text-muted,#94a3b8);cursor:pointer;font-size:12px;padding:0 3px;border-radius:4px}.cmd-pjdel:hover{color:var(--red);background:#fef2f2}
 .da-aval{border:1px solid #fcd34d;background:#fffbeb;border-radius:10px;padding:10px 12px;margin-bottom:12px}.da-av-i{display:flex;justify-content:space-between;gap:12px;align-items:flex-start;padding:8px 0;border-top:1px solid #fde68a}.da-av-i:first-of-type{border-top:0}.da-av-b{display:flex;gap:6px;flex-shrink:0}
 .da-cli{display:flex;flex-wrap:wrap;gap:4px;align-items:center}.da-chip{display:inline-flex;align-items:center;gap:2px;background:#e0f2fe;color:#075985;border-radius:12px;padding:2px 4px 2px 10px;font-size:12.5px;font-weight:600}.da-chip button{border:0;background:none;cursor:pointer;color:#0369a1;font-size:11px;padding:0 4px}
+.fac-orph{border-top:1px dashed var(--border);margin-top:6px;padding:8px 8px 4px;background:#fffbeb;border-radius:8px}
 </style>
 </head>
 <body>
@@ -471,7 +472,7 @@ fieldset.lockfs .btn{display:none}
     </section>
     <section class="section" id="sec-factures">
       <div class="page-head"><div><h1>Factures fournisseurs</h1><div class="sub">Vérifie les champs lus dans le PDF, valide : la facture est renommée, rangée dans « Factures Fournisseurs » et rattachée à son dossier.</div></div>
-        <div style="display:flex;gap:8px"><button class="btn" id="btnDiag" onclick="facDiagnostic()">🔧 Diagnostic</button><button class="btn" onclick="reloadAll()">↻ Actualiser</button><button class="btn" id="btnSansPdf">📝 ＋ Pièce sans PDF</button><label class="btn primary">⬆️ Déposer des PDF<input type="file" id="facUpload" accept="application/pdf,.pdf" multiple hidden></label></div></div>
+        <div style="display:flex;gap:8px"><button class="btn" id="btnDiag" onclick="facDiagnostic()">🔧 Diagnostic</button><button class="btn" onclick="FAC_ORPH=null;FAC_NOMS=null;reloadAll()">↻ Actualiser</button><button class="btn" id="btnSansPdf">📝 ＋ Pièce sans PDF</button><label class="btn primary">⬆️ Déposer des PDF<input type="file" id="facUpload" accept="application/pdf,.pdf" multiple hidden></label></div></div>
       <div id="facErr"></div>
       <div class="kpis" id="facKpis"></div>
       <div class="fac-wrap">
@@ -1409,7 +1410,7 @@ function installFakeSharePoint(){
     const al=k=>{const v=u.searchParams.get('@'+k);return v==null?null:v.replace(/^'|'$/g,'').replace(/''/g,"'");};
     const ref=(re)=>{const m0=path.match(re);if(!m0)return null;const a=m0[1];return a.startsWith('@')?al(a.slice(1)):q(a.replace(/^decodedurl=/,'').replace(/^'|'$/g,''));};
     const reDos=/GetFolderByServerRelative(?:Path|Url)\(((?:decodedurl=)?(?:'(?:[^']|'')*'|@\w))\)/, reFic=/GetFileByServerRelative(?:Path|Url)\(((?:decodedurl=)?(?:'(?:[^']|'')*'|@\w))\)/;
-    if(reDos.test(path)&&/\/Files$/.test(path)){const p=ref(reDos);return json({value:Object.keys(files).filter(f=>f.startsWith(p+'/')&&!f.slice(p.length+1).includes('/')).map(f=>({Name:f.split('/').pop()}))});}
+    if(reDos.test(path)&&/\/Files$/.test(path)){const p=ref(reDos);return json({value:Object.keys(files).filter(f=>f.startsWith(p+'/')&&!f.slice(p.length+1).includes('/')).map(f=>({Name:f.split('/').pop(),ServerRelativeUrl:f,...((window.__FAKE_DATES__||{})[f]?{TimeLastModified:window.__FAKE_DATES__[f]}:{})}))});}
     if(reDos.test(path)){const p=ref(reDos);const add=path.match(/\/Files\/(?:add\(url=|AddUsingPath\(decodedurl=)((?:'(?:[^']|'')*'|@\w)),overwrite=(\w+)\)$/);
       if(add){const n=add[1].startsWith('@')?al(add[1].slice(1)):q(add[1].replace(/^'|'$/g,''));const fp=p+'/'+n;if(fp in files&&add[2]!=='true')return json({error:'existe'},400);files[fp]=await new Response(opt.body).arrayBuffer();return json({ServerRelativeUrl:fp});}
       return json({Exists:Object.keys(files).some(f=>f.startsWith(p+'/'))||/^\/sites\/RseauxPlus\/commercial\/Shared Documents\/.*Factures Fournisseurs(\/_A_TRAITER)?$/.test(p)});}
@@ -1714,6 +1715,51 @@ function loadPdfJs(){
   return _pdfjsP;
 }
 
+// ═══ PDF RANGÉS À LA MAIN DANS « Factures Fournisseurs » SANS FICHE ═══
+// Patricia enregistre parfois directement dans le dossier final : le portail les retrouve
+// (fichiers modifiés depuis le début de l'utilisation du portail, non liés à une facture) et propose de les traiter sur place.
+let FAC_ORPH=null,FAC_ORPH_P=null;
+async function facOrphelins(force){
+  if(FAC_ORPH&&!force)return FAC_ORPH;
+  if(FAC_ORPH_P&&!force)return FAC_ORPH_P;
+  FAC_ORPH_P=(async()=>{
+    try{
+      const D=await facDossierReel();
+      const r=await spTry('dossier',D,'/Files','$select=Name,ServerRelativeUrl,TimeLastModified&$top=5000',{});
+      if(!r.ok){FAC_ORPH=[];return FAC_ORPH;}
+      const L=((await r.json()).value||[]).filter(x=>/\.pdf$/i.test(x.Name));
+      const lies=new Set(DATA.fac.map(f=>facNom(lienPdf(f)).toLowerCase()).filter(Boolean));
+      const debut=DATA.fac.map(f=>dkey(f.Created||'')).filter(Boolean).sort()[0]||addDays(todayKey(),-15);
+      FAC_ORPH=L.filter(x=>!lies.has(String(x.Name).toLowerCase())&&dkey(x.TimeLastModified||'')>=debut)
+        .map(x=>({nom:x.Name,path:x.ServerRelativeUrl||(D+'/'+x.Name),date:x.TimeLastModified}))
+        .sort((a,b)=>String(a.date).localeCompare(String(b.date)));
+    }catch(e){console.warn('[Factures sans fiche]',e);FAC_ORPH=[];}
+    FAC_ORPH_P=null;return FAC_ORPH;
+  })();
+  return FAC_ORPH_P;
+}
+async function facTraiterOrphelin(path){
+  try{
+    const it=await facEcrire(null,{Title:'(à compléter)',Statut_Saisie:FAC_AF,Source:'Saisie manuelle',Lien_PDF:lienBody(path)});
+    it.Lien_PDF=path;it.Created=new Date().toISOString();DATA.fac.push(it);
+    FAC_ORPH=(FAC_ORPH||[]).filter(x=>x.path!==path);FACV.filtre='af';renderAll();openFacture(it.ID);
+  }catch(e){toast('🔴 '+e.message,'ko');}
+}
+async function facTraiterTousOrphelins(){
+  const L=(FAC_ORPH||[]).slice();if(!L.length)return;
+  if(!await showConfirm('Mettre en file les PDF du dossier',`Créer <b>${L.length}</b> facture(s) « à compléter » à partir des PDF rangés à la main ?<br><span class="muted">Les PDF restent où ils sont ; ils seront renommés à la validation si besoin.</span>`,'Mettre en file'))return;
+  let n=0;
+  for(const o of L){try{const it=await facEcrire(null,{Title:'(à compléter)',Statut_Saisie:FAC_AF,Source:'Saisie manuelle',Lien_PDF:lienBody(o.path)});it.Lien_PDF=o.path;it.Created=new Date().toISOString();DATA.fac.push(it);n++;}catch(e){toast(`🔴 ${o.nom} : ${e.message}`,'ko');}}
+  FAC_ORPH=[];FACV.filtre='af';renderAll();toast(`✓ ${n} facture(s) à compléter`,'ok');
+  const s=facAF().sort((a,b)=>a.ID-b.ID)[0];if(s)openFacture(s.ID);
+}
+function facOrphHtml(){
+  const L=FAC_ORPH||[];if(!L.length||FACV.filtre!=='af')return '';
+  return `<div class="fac-orph"><div style="display:flex;justify-content:space-between;align-items:center;gap:6px"><b>📂 Rangées à la main, sans fiche (${L.length})</b><button class="btn sm" id="facOrphTout">Tout mettre en file</button></div>
+    <div class="muted" style="font-size:11.5px;margin:2px 0 6px">PDF enregistrés directement dans « Factures Fournisseurs ». Clique pour la traiter.</div>
+    ${L.slice(0,60).map(o=>`<div class="fac-i" data-facorph="${esc(o.path)}"><div class="t">${esc(o.nom.replace(/\.pdf$/i,''))}</div><div class="d">${relDay(dkey(o.date||''))}</div></div>`).join('')}</div>`;
+}
+
 // ═══ RENDU ONGLET FACTURES ═══
 function renderFactures(){
   const af=facAF();const cnt=$('cntFactures');if(cnt){cnt.style.display=af.length?'':'none';cnt.textContent=af.length;}
@@ -1746,6 +1792,7 @@ function renderFacListe(){
     const sous=f.Statut_Saisie===FAC_OK?`${fmtD(dk(f,'Date_Facture'))} · <b>${fmtEur(f.Montant_TTC)}</b>`:`${src(f)} ${esc(facNom(lienPdf(f))).slice(0,46)}`;
     return `<div class="fac-i ${FACV.sel===f.ID?'on':''}" data-fac="${f.ID}"><div class="t">${titre}</div><div class="s">${sous}</div><div class="d">${relDay(dkey(f.Created||f.Modified||''))}</div></div>`;
   }).join(''):`<div class="todo-none" style="padding:26px 10px">${FACV.filtre==='af'?'✓ Aucune facture en attente.<br><span class="muted" style="font-size:12px">Les factures reçues par mail arrivent ici automatiquement. Tu peux aussi glisser des PDF sur cette page.</span>':'Aucune facture trouvée.'}</div>`;
+  if(FACV.filtre==='af'){if(FAC_ORPH)$('facListe').insertAdjacentHTML(af.length?'beforeend':'afterbegin',facOrphHtml());else facOrphelins().then(()=>{if(CUR_TAB==='factures'&&FAC_ORPH&&FAC_ORPH.length)renderFacListe();});}
   if(FACV.sel&&FACV.sel!==-1&&!DATA.fac.some(f=>f.ID===FACV.sel)){FACV.sel=null;}
   if(!FACV.sel){$('facView').innerHTML=`<div class="fac-vide"><div style="font-size:42px">🧾</div><div>Choisis une facture dans la liste${facAF().length?'':' ou dépose des PDF'}.</div></div>`;$('facForm').innerHTML='';}
 }
@@ -2011,6 +2058,8 @@ async function facDeposer(files){
 document.addEventListener('click',e=>{
   if(!e.target.closest('#sec-factures'))return;
   const it=e.target.closest('[data-fac]');if(it){openFacture(+it.dataset.fac);return;}
+  const orp=e.target.closest('[data-facorph]');if(orp){facTraiterOrphelin(orp.dataset.facorph);return;}
+  if(e.target.closest('#facOrphTout')){facTraiterTousOrphelins();return;}
   const ch=e.target.closest('[data-facf]');if(ch){FACV.filtre=ch.dataset.facf;renderFacListe();return;}
   const ty=e.target.closest('[data-fft]');if(ty&&FACV.form){facLireForm();FACV.form.type=ty.dataset.fft;FACV.form.src.type='';renderFacForm();return;}
   if(e.target.closest('#btnFacOk')){validerFacture();return;}
