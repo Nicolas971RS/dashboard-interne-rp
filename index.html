@@ -3610,7 +3610,7 @@ function openDemandeVendeur(id){
     <style>.dav-t th,.dav-t td{padding:2px 4px!important;background:none!important;border:0!important}</style><datalist id="dav-cat">${(DATA.catalogue||[]).slice(0,6000).map(c=>`<option value="${_escD(c.Title)}">${_escD(c.field_1||'')}</option>`).join('')}</datalist>
     <div style="display:flex;flex-wrap:wrap;gap:16px;margin-bottom:10px">
       <div class="mf"><label>Destination</label><div>${radio('dav-zone',DAV_ZONES,'Guadeloupe')}</div></div>
-      <div class="mf"><label>Transport</label><div>${radio('dav-tr',['Maritime','Aérien'],'Maritime')}</div></div>
+      <div class="mf"><label>Transport</label><div>${radio('dav-tr',['Maritime','Aérien','Local'],'Maritime')}</div></div>
       <div class="mf"><label>Pour</label><div>${radio('dav-motif',['Client','Stock'],'Client')}</div></div>
     </div>
     <div class="mf" style="margin-bottom:8px"><label>Client</label><input id="dav-client" value="${_escD(cli)}"></div>
