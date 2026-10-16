@@ -3363,6 +3363,7 @@ function renderCommandes(){
       <td><span class="st ${e.cls}">${esc(e.lbl)}</span>${e.alerte?`<div style="font-size:12px;margin-top:2px;color:${e.alerte.lvl==='r'?'var(--red)':'#b45309'}">⚠ ${esc(e.alerte.txt)}</div>`:''}</td><td class="r">${c.Nb_Lignes??cmdLignes(c.ID).length}</td><td class="r">${c.Montant_HT?fmtEur(c.Montant_HT):'—'}</td></tr>
       ${CMDV.ouvert===c.ID?`<tr class="cmd-d"><td colspan="8">${cmdDetailHtml(c,e)}</td></tr>`:''}`).join(''):`<tr><td colspan="8" class="muted" style="text-align:center;padding:18px">Aucune commande suivie${q?' pour cette recherche':''}.${cmdHorsSuivi(q)}</td></tr>`}
     </tbody></table></div></div>`;
+  if(CUR_TAB==='commandes'&&typeof daCompleterDesignations==='function')daCompleterDesignations();
   if(!F&&CUR_TAB==='commandes')cmdFichiers().then(()=>{if(CUR_TAB==='commandes')renderCommandes();});
   if(CMDV.ouvert)cmdAttachments(CMDV.ouvert).then(a=>{const el=$('cmdAtt');if(el)el.innerHTML=a.length?a.map(f=>`<span class="cmd-pj"><a href="${esc(f.ServerRelativeUrl&&f.ServerRelativeUrl.startsWith('/')?C.spRoot+f.ServerRelativeUrl:f.ServerRelativeUrl)}" target="_blank" rel="noopener">📎 ${esc(f.FileName)}</a>${peutModifierCmd()?`<button class="cmd-pjdel" data-cmdpjdel="${esc(f.FileName)}" title="Supprimer cette pièce jointe">✕</button>`:''}</span>`).join(' '):'<span class="muted">Aucune pièce jointe</span>';});
 }
@@ -3464,6 +3465,17 @@ function daEtat(d){
 const daLigneOuverte=l=>{const d=(DATA.da||[]).find(x=>x.ID===l.ID_Demande);return d&&!['Annulée','À valider','Refusée'].includes(d.Statut)&&!l.N_Commande;};
 
 // ── Catalogue (Cathalogue_Produits : Title = référence, field_1 = désignation) ──
+// Désignation d'une ligne : celle saisie, sinon celle du catalogue (article ajouté au catalogue après la demande)
+function daDes(l){if(l.Designation)return l.Designation;const p=DAV.catIdx&&DAV.catIdx.get(daRef(l.Title));return p?p.des:'';}
+// Complète dans SharePoint les désignations vides dès que l'article existe au catalogue (une fois par chargement)
+let DA_COMPL=false;
+async function daCompleterDesignations(){
+  if(!DATA.lda||DA_COMPL===DATA.lda)return;const vides=DATA.lda.filter(l=>!l.Designation&&l.Title);if(!vides.length)return;
+  DA_COMPL=DATA.lda;await daCatalogue();let n=0;const ed=!(typeof lectureSeule==='function'&&lectureSeule());
+  for(const l of vides){const p=DAV.catIdx&&DAV.catIdx.get(daRef(l.Title));if(!p||!p.des)continue;
+    n++;if(ed){try{await spPatch('Lignes_Demande_Achat',l.ID,{Designation:_trunc(p.des)},l);l.Designation=p.des;}catch(e){console.warn('[DA désignation]',e);}}}
+  if(n&&CUR_TAB==='commandes')renderCommandes();
+}
 async function daCatalogue(){
   if(DAV.cat)return DAV.cat;
   if(!DAV.catP)DAV.catP=(async()=>{
@@ -3613,14 +3625,14 @@ function daBlocAValider(){
   return `<div class="da-aval"><div class="da-gh"><b>⏳ Demandes des vendeurs à valider (${A.length})</b> <span class="muted">${v?'':'en attente de Fabrice'}</span></div>
     ${A.map(d=>`<div class="da-av-i"><div><b class="mono">${esc(d.Title)}</b> · <b>${esc(d.Demandeur||'?')}</b> · ${esc(d.Motif==='Client'?'Client '+(d.Client||''):'Stock')}${daBcClient(d)?' · BC '+esc(daBcClient(d)):''} · ${esc(d.Zone||'')} ${esc(d.Transport||'')} · ${fmtD(dk(d,'Date_Demande'))}
       ${d.Commentaire?`<div class="muted" style="font-size:12px">💬 ${esc(d.Commentaire)}</div>`:''}
-      <div style="font-size:12.5px;margin-top:3px">${daLignes(d.ID).map(l=>`<div><b class="mono">${esc(l.Title)}</b> ${esc(l.Designation||'')} <span class="muted">×${fmtN(l.Quantite,0)}</span></div>`).join('')}</div></div>
+      <div style="font-size:12.5px;margin-top:3px">${daLignes(d.ID).map(l=>`<div><b class="mono">${esc(l.Title)}</b> ${esc(daDes(l))} <span class="muted">×${fmtN(l.Quantite,0)}</span></div>`).join('')}</div></div>
       ${v?`<div class="da-av-b"><button class="btn sm primary" data-daval="${d.ID}">✓ Valider</button><button class="btn sm danger" data-darefus="${d.ID}">✕ Refuser</button></div>`:''}</div>`).join('')}</div>`;
 }
 function daResumeStocke(d,titre){
   const td='style="border:1px solid #d1d5db;padding:4px 8px"';const bc=daBcClient(d);
   return `<p>${titre}</p><p>Demande <b>${esc(d.Title)}</b> de <b>${esc(d.Demandeur||'?')}</b>${bc?' (BC '+esc(bc)+')':''} · Pour : <b>${d.Motif==='Client'?'Client '+esc(d.Client||''):'Stock'}</b><br>Destination : <b>${esc(d.Zone||'')}</b> · Transport : <b>${esc(d.Transport||'')}</b></p>
 <table style="border-collapse:collapse;font-family:Arial;font-size:13px"><tr style="background:#f1f5f9"><th ${td}>Réf.</th><th ${td}>Désignation</th><th ${td}>Qté</th>${daLignes(d.ID).some(l=>l.Client)?`<th ${td}>Client</th>`:''}<th ${td}>Fournisseur</th></tr>
-${daLignes(d.ID).map(l=>`<tr><td ${td}><b>${esc(l.Title)}</b></td><td ${td}>${esc(l.Designation||'')}</td><td ${td} align="right">${esc(String(l.Quantite??''))}</td>${daLignes(d.ID).some(x=>x.Client)?`<td ${td}>${esc(l.Client||'')}</td>`:''}<td ${td}>${esc(l.Fournisseur||'à choisir')}</td></tr>`).join('')}</table>
+${daLignes(d.ID).map(l=>`<tr><td ${td}><b>${esc(l.Title)}</b></td><td ${td}>${esc(daDes(l))}</td><td ${td} align="right">${esc(String(l.Quantite??''))}</td>${daLignes(d.ID).some(x=>x.Client)?`<td ${td}>${esc(l.Client||'')}</td>`:''}<td ${td}>${esc(l.Fournisseur||'à choisir')}</td></tr>`).join('')}</table>
 <p><a href="${esc(location.origin+location.pathname)}">Ouvrir le Portail Achats › Commandes</a></p>`;
 }
 async function daValider(id){
@@ -3658,7 +3670,7 @@ function daBlocHtml(){
   return `<div class="card" style="margin-bottom:14px"><div class="card-h"><h3>📝 À commander ${ouv.length?`<span class="tag">${ouv.length} ligne${ouv.length>1?'s':''}</span>`:''}</h3>
     <div style="display:flex;gap:8px"><button class="btn sm" id="daRappr" title="Relie les lignes aux BC déjà importés (même réf. Réseaux Plus)">🔗 Rapprocher avec les BC</button><button class="btn sm primary" onclick="daOuvrir()">＋ Demande de commande</button></div></div>
     <div class="card-b">${avNotif}${daBlocAValider()}${groupes.length?groupes.map(([f,L])=>`<div class="da-g"><div class="da-gh"><b>${esc(f)}</b> <span class="muted">${L.length} article${L.length>1?'s':''}</span></div>
-      <table class="ltable"><tbody>${L.map(l=>{const d=dem(l.ID_Demande);return `<tr><td class="mono" style="width:130px"><b>${esc(l.Title)}</b></td><td>${esc(l.Designation||'')}</td><td class="r" style="width:70px">${fmtN(l.Quantite,0)}</td>
+      <table class="ltable"><tbody>${L.map(l=>{const d=dem(l.ID_Demande);return `<tr><td class="mono" style="width:130px"><b>${esc(l.Title)}</b></td><td>${esc(daDes(l))}</td><td class="r" style="width:70px">${fmtN(l.Quantite,0)}</td>
         <td class="muted" style="font-size:12px;width:260px">${esc(d.Title||'')} · ${esc(d.Motif==='Client'?'Client '+(l.Client||d.Client||''):'Stock')} · ${esc([({'Îles du Nord':'IDN','Saint-Martin':'St-Martin','Saint-Barthélemy':'St-Barth'})[d.Zone]||'',d.Transport==='Aérien'?'aérien':d.Transport==='Local'?'local':''].filter(Boolean).join(' '))} ${fmtD(dk(d,'Date_Demande'))}</td>
         <td style="width:150px">${ed?`<input data-dalier="${l.ID}" placeholder="n° BC si déjà passé" style="width:140px;font-size:12px">`:''}</td></tr>`;}).join('')}</tbody></table></div>`).join('')
       :'<span class="muted">✓ Rien à commander. Les demandes validées arrivent ici, groupées par fournisseur.</span>'}
@@ -3667,7 +3679,7 @@ function daBlocHtml(){
       <table class="ltable"><thead><tr><th>N°</th><th>Date</th><th>Motif</th><th>Destination</th><th>Demandeur</th><th>Lignes</th><th>État</th><th></th></tr></thead><tbody>
       ${liste.map(d=>{const e=daEtat(d);const L=daLignes(d.ID);return `<tr><td class="mono">${esc(d.Title)}</td><td>${fmtD(dk(d,'Date_Demande'))}</td><td>${esc(d.Motif==='Client'?'Client : '+(d.Client||'')+(d.N_Devis?' (devis '+d.N_Devis+')':''):'Stock')}</td><td>${esc((d.Zone||'')+' · '+(d.Transport||''))}</td><td>${esc(d.Demandeur||'')}</td>
         <td style="font-size:12px;line-height:1.5">${L.map(l=>{const c=l.ID_Commande_Frs?cmdById(l.ID_Commande_Frs):(l.N_Commande?cmdByNum(l.N_Commande):null);const e=c?cmdEtat(c):null;
-          return `<div><b class="mono">${esc(l.Title)}</b> ${esc(l.Designation||'')} <span class="muted">×${fmtN(l.Quantite,0)}</span>${l.Client&&/;/.test(d.Client||'')?` <span class="tag">${esc(l.Client)}</span>`:''}${l.N_Commande?` → ${c?`<a href="#" data-cmdgo="${c.ID}" title="Ouvrir la commande">${esc(l.N_Commande)}</a> <span class="muted">${esc(c.Fournisseur||'')} · ${esc(e.lbl)}</span>`:`<b>${esc(l.N_Commande)}</b> <span class="muted">(BC pas encore importé)</span>`}`:' <span style="color:#b45309">à commander</span>'}</div>`;}).join('')}</td><td><span class="st ${e.cls}">${esc(e.lbl)}</span></td>
+          return `<div><b class="mono">${esc(l.Title)}</b> ${esc(daDes(l))} <span class="muted">×${fmtN(l.Quantite,0)}</span>${l.Client&&/;/.test(d.Client||'')?` <span class="tag">${esc(l.Client)}</span>`:''}${l.N_Commande?` → ${c?`<a href="#" data-cmdgo="${c.ID}" title="Ouvrir la commande">${esc(l.N_Commande)}</a> <span class="muted">${esc(c.Fournisseur||'')} · ${esc(e.lbl)}</span>`:`<b>${esc(l.N_Commande)}</b> <span class="muted">(BC pas encore importé)</span>`}`:' <span style="color:#b45309">à commander</span>'}</div>`;}).join('')}</td><td><span class="st ${e.cls}">${esc(e.lbl)}</span></td>
         <td>${ed&&d.Statut!=='Annulée'&&e.k!=='cmd'?`<button class="btn ghost sm" data-daannul="${d.ID}" title="Annuler la demande">✕</button>`:''}</td></tr>`;}).join('')||'<tr><td colspan="8" class="muted">Aucune demande en cours.</td></tr>'}
       </tbody></table></details>`:''}
     </div></div>`;
