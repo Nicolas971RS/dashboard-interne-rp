@@ -415,6 +415,7 @@ fieldset.lockfs .btn{display:none}
 .da-t{table-layout:fixed;width:100%;min-width:0}.da-g table{table-layout:fixed;width:100%;min-width:0}#daDet table{min-width:0}#daDet td{vertical-align:top}.da-g input{border:1px solid var(--border);border-radius:6px;padding:4px 6px}.da-g{margin-bottom:10px}.da-gh{padding:4px 0;border-bottom:2px solid var(--teal,#0f766e);margin-bottom:2px;font-size:13.5px}
 .cmd-pj{display:inline-flex;align-items:center;gap:2px;margin-right:6px}.cmd-pjdel{border:0;background:none;color:var(--text-muted,#94a3b8);cursor:pointer;font-size:12px;padding:0 3px;border-radius:4px}.cmd-pjdel:hover{color:var(--red);background:#fef2f2}
 .da-aval{border:1px solid #fcd34d;background:#fffbeb;border-radius:10px;padding:10px 12px;margin-bottom:12px}.da-av-i{display:flex;justify-content:space-between;gap:12px;align-items:flex-start;padding:8px 0;border-top:1px solid #fde68a}.da-av-i:first-of-type{border-top:0}.da-av-b{display:flex;gap:6px;flex-shrink:0}
+.da-cli{display:flex;flex-wrap:wrap;gap:4px;align-items:center}.da-chip{display:inline-flex;align-items:center;gap:2px;background:#e0f2fe;color:#075985;border-radius:12px;padding:2px 4px 2px 10px;font-size:12.5px;font-weight:600}.da-chip button{border:0;background:none;cursor:pointer;color:#0369a1;font-size:11px;padding:0 4px}
 </style>
 </head>
 <body>
@@ -440,6 +441,7 @@ fieldset.lockfs .btn{display:none}
     <div class="topbar-date" id="currentDate"></div>
     <div class="topbar-user"><div class="avatar" id="userInitials">RP</div><span id="userName"></span></div>
     <button class="tb-btn" id="btnGrand" onclick="toggleGrandFormat()">🔎 Grand format</button>
+    <button class="tb-btn" onclick="voirErreurs()" title="Dernières erreurs rencontrées sur ce poste">⚠ Erreurs</button>
     <button class="tb-btn" onclick="logout()">Déconnexion</button>
   </div>
   <div id="ribbons"></div>
@@ -547,7 +549,7 @@ const SCHEMA={
   Tirelire_Mouvements:['ID','Title','Type_Mouvement','Categorie','Date_Mouvement','Montant','Motif','ID_Arrivage','ID_Facture','Created'],
   Commandes_Frs:['ID','Title','ID_Fournisseur','Fournisseur','Type_Commande','Objet','Adresse_Livraison','Date_Commande','Montant_HT','Nb_Lignes','Date_ARC','Date_BPA','Mode_BPA','Date_Dispo_Prevue','Date_Reception','Lien_BC','Statut','Commentaire','Annulee','Created','Modified'],
   Demandes_Achat:['ID','Title','Zone','Transport','Motif','Client','N_Devis','Demandeur','Statut','Valide_Par','Date_Demande','Date_Validation','Commentaire','Notif','Resume_Notif','ID_BC_Client','Created'],
-  Lignes_Demande_Achat:['ID','Title','ID_Demande','Designation','Quantite','Qte_Commandee','ID_Fournisseur','Fournisseur','N_Commande','ID_Commande_Frs'],
+  Lignes_Demande_Achat:['ID','Title','ID_Demande','Designation','Quantite','Qte_Commandee','ID_Fournisseur','Fournisseur','N_Commande','ID_Commande_Frs','Client'],
   Lignes_Commande_Frs:['ID','Title','ID_Commande_Frs','N_Commande','Ref_2','Designation','Quantite','Unite','Colis','Prix_Unitaire','Remise','Montant_HT','Ordre'],
   Factures_Frs:['ID','Title','ID_Fournisseur','Fournisseur','Code_Compta','Type_Piece','Date_Facture','Date_Echeance','Montant_TTC','Lien_PDF','Statut_Saisie','Source','Message_ID','Exporte_Echeancier','Statut_Paiement','Date_Paiement','Commentaire','Expediteur','Created','Modified']
 };
@@ -1362,7 +1364,23 @@ function showConfirm(title,body,okLabel='Confirmer',kind='primary'){
     y.onclick=()=>done(true);n.onclick=()=>done(false);
   });
 }
-function toast(msg,type='ok'){const t=document.createElement('div');t.className='toast '+type;t.textContent=msg;$('toasts').appendChild(t);setTimeout(()=>t.remove(),type==='ko'?9000:4200);}
+// ── Journal des erreurs : mémorisé dans le navigateur + Journal_Actions (TypeAction = ERREUR) ──
+const ERR_KEY='achats_erreurs';
+function noterErreur(msg,ctx){
+  try{
+    msg=String(msg||'').replace(/^🔴\s*/,'').slice(0,900);if(!msg||msg==='401')return;
+    const L=JSON.parse(localStorage.getItem(ERR_KEY)||'[]');L.unshift({t:new Date().toISOString(),m:msg,c:ctx||(typeof CUR_TAB!=='undefined'?CUR_TAB:'')});localStorage.setItem(ERR_KEY,JSON.stringify(L.slice(0,30)));
+    if(typeof DEMO!=='undefined'&&!DEMO&&typeof logAction==='function')logAction('ERREUR','Portail Achats','-','',ctx||'',msg.slice(0,255),msg,'');
+  }catch(e){}
+}
+window.addEventListener('error',e=>noterErreur((e.message||'Erreur JS')+(e.filename?` (${e.lineno}:${e.colno})`:''),'js'));
+window.addEventListener('unhandledrejection',e=>noterErreur('Promesse : '+((e.reason&&e.reason.message)||e.reason),'js'));
+function voirErreurs(){
+  let L=[];try{L=JSON.parse(localStorage.getItem(ERR_KEY)||'[]');}catch(e){}
+  const no=$('cNo');no.style.display='none';
+  showConfirm('Dernières erreurs (ce poste)',L.length?`<div style="max-height:360px;overflow:auto;font-size:12px">${L.map(x=>`<div style="border-top:1px solid var(--border);padding:6px 0"><b>${new Date(x.t).toLocaleString('fr-FR')}</b> <span class="muted">${esc(x.c||'')}</span><div style="word-break:break-word">${esc(x.m)}</div></div>`).join('')}</div><div class="muted" style="font-size:11px;margin-top:6px">Aussi enregistrées dans la liste Journal_Actions (type ERREUR).</div>`:'Aucune erreur enregistrée sur ce poste.','OK').then(()=>{no.style.display='';});
+}
+function toast(msg,type='ok'){if(type==='ko')noterErreur(msg);const t=document.createElement('div');t.className='toast '+type;t.textContent=msg;$('toasts').appendChild(t);setTimeout(()=>t.remove(),type==='ko'?9000:4200);}
 
 // ═══ MODE DÉMO : SharePoint simulé en mémoire ═══
 let SAMPLE_SIFA=null;
@@ -3483,7 +3501,7 @@ async function daClients(){
 }
 function daDlClients(){let dl=$('dlDaCli');if(!dl){dl=document.createElement('datalist');dl.id='dlDaCli';document.body.appendChild(dl);}dl.innerHTML=(DAV.cli||[]).map(c=>`<option value="${esc(c)}">`).join('');}
 function daOuvrir(){
-  DAV.form={zone:'Guadeloupe',transport:'Maritime',motif:'Stock',client:'',devis:'',com:'',lignes:[{ref:'',des:'',qte:'',frs:''},{ref:'',des:'',qte:'',frs:''},{ref:'',des:'',qte:'',frs:''}]};
+  DAV.form={zone:'Guadeloupe',transport:'Maritime',motif:'Stock',client:'',clients:[],devis:'',com:'',lignes:[{ref:'',des:'',qte:'',frs:''},{ref:'',des:'',qte:'',frs:''},{ref:'',des:'',qte:'',frs:''}]};
   let ov=$('ovDA');if(!ov){ov=document.createElement('div');ov.className='ov';ov.id='ovDA';ov.innerHTML='<div class="modal" id="daModal" style="width:min(980px,96vw)"></div>';document.body.appendChild(ov);}
   ov.classList.add('open');daRender();daClients().then(daDlClients);daCatalogue().then(()=>{const m=$('daCatMsg');if(m)m.textContent=DAV.cat.length?`Catalogue : ${DAV.cat.length} références`:'Catalogue indisponible : saisie libre';});
 }
@@ -3497,17 +3515,19 @@ function daRender(){
       <div><div class="da-l">Destination</div>${radio('daZone',['Guadeloupe','Saint-Martin','Saint-Barthélemy'],F.zone)}</div>
       <div><div class="da-l">Transport</div>${radio('daTr',['Maritime','Aérien'],F.transport)}</div>
       <div><div class="da-l">Motif</div>${radio('daMotif',['Stock','Client'],F.motif)}</div>
-      ${F.motif==='Client'?`<div><div class="da-l">Client</div><input id="daClient" value="${esc(F.client)}" placeholder="client (liste ou saisie libre)" list="dlDaCli" autocomplete="off" style="width:240px"></div><div><div class="da-l">N° devis</div><input id="daDevis" value="${esc(F.devis)}" placeholder="optionnel" style="width:120px"></div>`:''}
+      ${F.motif==='Client'?`<div><div class="da-l">Client(s)</div><div class="da-cli">${F.clients.map((c,i)=>`<span class="da-chip">${esc(c)} <button type="button" data-dacliout="${i}" title="Retirer">✕</button></span>`).join('')}<input id="daClient" value="${esc(F.client)}" placeholder="${F.clients.length?'autre client…':'client (liste ou saisie libre)'}" list="dlDaCli" autocomplete="off" style="width:220px"><button type="button" class="btn sm" id="daCliAdd" title="Ajouter ce client (plusieurs clients possibles)">＋</button></div>${F.clients.length>1?'<div class="muted" style="font-size:11px">Choisis le client de chaque article dans la colonne Client.</div>':''}</div><div><div class="da-l">N° devis</div><input id="daDevis" value="${esc(F.devis)}" placeholder="optionnel" style="width:120px"></div>`:''}
     </div>
     <datalist id="dlCat"></datalist>
-    <table class="ltable da-t"><thead><tr><th style="width:150px">Réf. Réseaux Plus</th><th>Désignation</th><th style="width:90px" class="r">Qté</th><th style="width:240px">Fournisseur</th><th style="width:30px"></th></tr></thead><tbody>
-    ${F.lignes.map((l,i)=>`<tr><td><input data-dal="${i}" data-k="ref" list="dlCat" value="${esc(l.ref)}" class="mono" autocomplete="off"></td><td><input data-dal="${i}" data-k="des" value="${esc(l.des)}"></td><td><input data-dal="${i}" data-k="qte" value="${esc(l.qte)}" inputmode="decimal" class="r"></td><td><input data-dal="${i}" data-k="frs" list="dlFrs" value="${esc(l.frs)}" placeholder="${l.frsAuto?'':'fournisseur'}">${l.frsAuto?'<div class="muted" style="font-size:11px">proposé : dernière commande</div>':''}</td><td><button class="btn ghost sm" data-dadel="${i}" title="Retirer la ligne">✕</button></td></tr>`).join('')}
+    <table class="ltable da-t"><thead><tr><th style="width:150px">Réf. Réseaux Plus</th><th>Désignation</th><th style="width:90px" class="r">Qté</th>${daMulti(F)?'<th style="width:170px">Client</th>':''}<th style="width:220px">Fournisseur</th><th style="width:30px"></th></tr></thead><tbody>
+    ${F.lignes.map((l,i)=>`<tr><td><input data-dal="${i}" data-k="ref" list="dlCat" value="${esc(l.ref)}" class="mono" autocomplete="off"></td><td><input data-dal="${i}" data-k="des" value="${esc(l.des)}"></td><td><input data-dal="${i}" data-k="qte" value="${esc(l.qte)}" inputmode="decimal" class="r"></td>${daMulti(F)?`<td><select data-dal="${i}" data-k="cli"><option value="">— client —</option>${F.clients.map(c=>`<option ${l.cli===c?'selected':''}>${esc(c)}</option>`).join('')}</select></td>`:''}<td><input data-dal="${i}" data-k="frs" list="dlFrs" value="${esc(l.frs)}" placeholder="${l.frsAuto?'':'fournisseur'}">${l.frsAuto?'<div class="muted" style="font-size:11px">proposé : dernière commande</div>':''}</td><td><button class="btn ghost sm" data-dadel="${i}" title="Retirer la ligne">✕</button></td></tr>`).join('')}
     </tbody></table>
     <div style="display:flex;justify-content:space-between;align-items:center;margin-top:8px"><button class="btn sm" id="daAdd">＋ Ligne</button><span class="muted" id="daCatMsg" style="font-size:12px">${DAV.cat?`Catalogue : ${DAV.cat.length} références`:'Chargement du catalogue…'}</span></div>
     <label class="cmd-com" style="margin-top:10px">Commentaire<textarea id="daCom" rows="2">${esc(F.com)}</textarea></label>
   </div>
   <div class="modal-f"><span class="msg" id="daMsg">La demande est validée à l’enregistrement (remplace la signature).</span><button class="btn ghost" onclick="daFermer()">Annuler</button><button class="btn primary" id="daSave">Enregistrer la demande</button></div>`;
 }
+const daMulti=F=>F.motif==='Client'&&F.clients.length>1;
+function daAjouterClient(){const F=DAV.form;if(!F)return;daLireForm();const v=F.client.trim();if(v&&!F.clients.some(c=>c.toLowerCase()===v.toLowerCase()))F.clients.push(v);F.client='';daRender();const i=$('daClient');if(i)i.focus();}
 function daLireForm(){
   const F=DAV.form;if(!F)return;
   document.querySelectorAll('#daModal [data-dal]').forEach(i=>{F.lignes[+i.dataset.dal][i.dataset.k]=i.value;});
@@ -3520,16 +3540,20 @@ async function daEnregistrer(){
   const L=F.lignes.filter(l=>l.ref.trim()||l.des.trim());
   const err=[];if(!L.length)err.push('au moins une ligne');
   L.forEach((l,i)=>{if(!l.ref.trim())err.push(`réf. ligne ${i+1}`);if(!(parseNum(l.qte)>0))err.push(`qté ligne ${i+1}`);});
-  if(F.motif==='Client'&&!F.client.trim())err.push('nom du client');
-  if(err.length){$('daMsg').textContent='Manque : '+err.join(', ');$('daMsg').style.color='var(--red)';return;}
+  if(F.motif==='Client'&&F.client.trim()&&!F.clients.some(c=>c.toLowerCase()===F.client.trim().toLowerCase())){F.clients.push(F.client.trim());F.client='';}
+  if(F.motif==='Client'&&!F.clients.length)err.push('nom du client');
+  if(daMulti(F))L.forEach((l,i)=>{if(!l.cli)err.push(`client ligne ${i+1}`);});
+  if(F.motif==='Client'&&F.clients.length===1)L.forEach(l=>l.cli=F.clients[0]);
+  if(F.motif!=='Client')L.forEach(l=>l.cli='');
+  if(err.length){daRender();$('daMsg').textContent='Manque : '+err.join(', ');$('daMsg').style.color='var(--red)';return;}
   const btn=$('daSave');btn.disabled=true;btn.textContent='Enregistrement…';
   try{
     const t=todayKey(),pre='DA-'+t.slice(2).replace(/-/g,'');const n=(DATA.da||[]).filter(d=>String(d.Title||'').startsWith(pre)).length+1;
     const u=sessionStorage.getItem('user_name')||'';
-    const d=await spPost('Demandes_Achat',{Title:`${pre}-${n}`,Zone:F.zone,Transport:F.transport,Motif:F.motif,Client:F.motif==='Client'?F.client.trim():null,N_Devis:F.devis.trim()||null,
+    const d=await spPost('Demandes_Achat',{Title:`${pre}-${n}`,Zone:F.zone,Transport:F.transport,Motif:F.motif,Client:F.motif==='Client'?_trunc(F.clients.join(' ; ')):null,N_Devis:F.devis.trim()||null,
       Demandeur:_trunc(u),Statut:'Validée',Valide_Par:_trunc(u),Date_Demande:toSP(t),Date_Validation:toSP(t),Commentaire:F.com.trim()||null});
     for(const l of L){const fr=l.frs?matchFrs(l.frs):null;
-      await spPostSilencieux('Lignes_Demande_Achat',sansVide({Title:_trunc(l.ref.trim().toUpperCase()),ID_Demande:d.ID,Designation:_trunc(l.des.trim()),Quantite:parseNum(l.qte),ID_Fournisseur:fr?fr.ID:null,Fournisseur:fr?fr.Title:(l.frs.trim()||null)}));}
+      await spPostSilencieux('Lignes_Demande_Achat',sansVide({Title:_trunc(l.ref.trim().toUpperCase()),ID_Demande:d.ID,Designation:_trunc(l.des.trim()+(daMulti(F)&&MISSING.Lignes_Demande_Achat&&MISSING.Lignes_Demande_Achat.has('Client')?' · '+l.cli:'')),Quantite:parseNum(l.qte),ID_Fournisseur:fr?fr.ID:null,Fournisseur:fr?fr.Title:(l.frs.trim()||null),Client:F.motif==='Client'&&l.cli?_trunc(l.cli):null}));}
     // Notification : le flux Power Automate envoie Resume_Notif par mail quand Notif = « À envoyer », puis met « Envoyée »
     try{await spPatch('Demandes_Achat',d.ID,{Notif:'À envoyer',Resume_Notif:daResumeMail(d.Title,F,L,u)});}catch(e){console.warn('[DA notif]',e);}
     daFermer();await reloadAll();setTab('commandes');
@@ -3542,9 +3566,9 @@ function daResumeMail(num,F,L,u){
   const td='style="border:1px solid #d1d5db;padding:4px 8px"';
   const lien=location.origin+location.pathname;
   return `<p><b>${esc(u||'?')}</b> a fait la demande de commande <b>${esc(num)}</b> :</p>
-<p>Motif : <b>${F.motif==='Client'?'Client '+esc(F.client.trim())+(F.devis.trim()?' (devis '+esc(F.devis.trim())+')':''):'Stock'}</b><br>Destination : <b>${esc(F.zone)}</b> · Transport : <b>${esc(F.transport)}</b></p>
-<table style="border-collapse:collapse;font-family:Arial;font-size:13px"><tr style="background:#f1f5f9"><th ${td}>Réf.</th><th ${td}>Désignation</th><th ${td}>Qté</th><th ${td}>Fournisseur</th></tr>
-${L.map(l=>{const fr=l.frs?matchFrs(l.frs):null;return `<tr><td ${td}><b>${esc(l.ref.trim().toUpperCase())}</b></td><td ${td}>${esc(l.des.trim())}</td><td ${td} align="right">${esc(String(parseNum(l.qte)))}</td><td ${td}>${esc(fr?fr.Title:(l.frs.trim()||'à choisir'))}</td></tr>`;}).join('')}</table>
+<p>Motif : <b>${F.motif==='Client'?'Client '+esc(F.clients.join(', '))+(F.devis.trim()?' (devis '+esc(F.devis.trim())+')':''):'Stock'}</b><br>Destination : <b>${esc(F.zone)}</b> · Transport : <b>${esc(F.transport)}</b></p>
+<table style="border-collapse:collapse;font-family:Arial;font-size:13px"><tr style="background:#f1f5f9"><th ${td}>Réf.</th><th ${td}>Désignation</th><th ${td}>Qté</th>${daMulti(F)?`<th ${td}>Client</th>`:''}<th ${td}>Fournisseur</th></tr>
+${L.map(l=>{const fr=l.frs?matchFrs(l.frs):null;return `<tr><td ${td}><b>${esc(l.ref.trim().toUpperCase())}</b></td><td ${td}>${esc(l.des.trim())}</td><td ${td} align="right">${esc(String(parseNum(l.qte)))}</td>${daMulti(F)?`<td ${td}>${esc(l.cli||'')}</td>`:''}<td ${td}>${esc(fr?fr.Title:(l.frs.trim()||'à choisir'))}</td></tr>`;}).join('')}</table>
 ${F.com.trim()?`<p>Commentaire : ${esc(F.com.trim())}</p>`:''}<p><a href="${esc(lien)}">Ouvrir le Portail Achats › Commandes</a></p>`;
 }
 
@@ -3595,8 +3619,8 @@ function daBlocAValider(){
 function daResumeStocke(d,titre){
   const td='style="border:1px solid #d1d5db;padding:4px 8px"';const bc=daBcClient(d);
   return `<p>${titre}</p><p>Demande <b>${esc(d.Title)}</b> de <b>${esc(d.Demandeur||'?')}</b>${bc?' (BC '+esc(bc)+')':''} · Pour : <b>${d.Motif==='Client'?'Client '+esc(d.Client||''):'Stock'}</b><br>Destination : <b>${esc(d.Zone||'')}</b> · Transport : <b>${esc(d.Transport||'')}</b></p>
-<table style="border-collapse:collapse;font-family:Arial;font-size:13px"><tr style="background:#f1f5f9"><th ${td}>Réf.</th><th ${td}>Désignation</th><th ${td}>Qté</th><th ${td}>Fournisseur</th></tr>
-${daLignes(d.ID).map(l=>`<tr><td ${td}><b>${esc(l.Title)}</b></td><td ${td}>${esc(l.Designation||'')}</td><td ${td} align="right">${esc(String(l.Quantite??''))}</td><td ${td}>${esc(l.Fournisseur||'à choisir')}</td></tr>`).join('')}</table>
+<table style="border-collapse:collapse;font-family:Arial;font-size:13px"><tr style="background:#f1f5f9"><th ${td}>Réf.</th><th ${td}>Désignation</th><th ${td}>Qté</th>${daLignes(d.ID).some(l=>l.Client)?`<th ${td}>Client</th>`:''}<th ${td}>Fournisseur</th></tr>
+${daLignes(d.ID).map(l=>`<tr><td ${td}><b>${esc(l.Title)}</b></td><td ${td}>${esc(l.Designation||'')}</td><td ${td} align="right">${esc(String(l.Quantite??''))}</td>${daLignes(d.ID).some(x=>x.Client)?`<td ${td}>${esc(l.Client||'')}</td>`:''}<td ${td}>${esc(l.Fournisseur||'à choisir')}</td></tr>`).join('')}</table>
 <p><a href="${esc(location.origin+location.pathname)}">Ouvrir le Portail Achats › Commandes</a></p>`;
 }
 async function daValider(id){
@@ -3623,7 +3647,8 @@ async function daRefuser(id){
 function daBlocHtml(){
   if(!DATA.da)return `<div class="warn-ribbon" style="border-radius:8px;margin-bottom:12px">⚠️ Listes <b>Demandes_Achat</b> / <b>Lignes_Demande_Achat</b> non disponibles : ${esc(DA_ERR.slice(0,160))}</div>`;
   const sansNotif=typeof MISSING!=='undefined'&&MISSING.Demandes_Achat&&(MISSING.Demandes_Achat.has('Notif')||MISSING.Demandes_Achat.has('Resume_Notif'));
-  const avNotif=sansNotif&&!(typeof lectureSeule==='function'&&lectureSeule())?`<div class="muted" style="font-size:12px;margin:-4px 0 8px">✉ Mail à Patricia inactif : crée les colonnes <b>Notif</b> (texte) et <b>Resume_Notif</b> (texte multiligne) dans Demandes_Achat.</div>`:'';
+  const sansCliL=typeof MISSING!=='undefined'&&MISSING.Lignes_Demande_Achat&&MISSING.Lignes_Demande_Achat.has('Client');
+  const avNotif=(sansCliL&&!(typeof lectureSeule==='function'&&lectureSeule())?`<div class="muted" style="font-size:12px;margin:-4px 0 8px">👥 Demandes multi-clients : crée la colonne <b>Client</b> (texte) dans Lignes_Demande_Achat (en attendant, le client est ajouté à la désignation).</div>`:'')+(sansNotif&&!(typeof lectureSeule==='function'&&lectureSeule())?`<div class="muted" style="font-size:12px;margin:-4px 0 8px">✉ Mail à Patricia inactif : crée les colonnes <b>Notif</b> (texte) et <b>Resume_Notif</b> (texte multiligne) dans Demandes_Achat.</div>`:'');
   const ouv=(DATA.lda||[]).filter(daLigneOuverte);
   const parFrs={};ouv.forEach(l=>{const k=l.Fournisseur||'Fournisseur à choisir';(parFrs[k]=parFrs[k]||[]).push(l);});
   const ed=!(typeof lectureSeule==='function'&&lectureSeule());
@@ -3634,7 +3659,7 @@ function daBlocHtml(){
     <div style="display:flex;gap:8px"><button class="btn sm" id="daRappr" title="Relie les lignes aux BC déjà importés (même réf. Réseaux Plus)">🔗 Rapprocher avec les BC</button><button class="btn sm primary" onclick="daOuvrir()">＋ Demande de commande</button></div></div>
     <div class="card-b">${avNotif}${daBlocAValider()}${groupes.length?groupes.map(([f,L])=>`<div class="da-g"><div class="da-gh"><b>${esc(f)}</b> <span class="muted">${L.length} article${L.length>1?'s':''}</span></div>
       <table class="ltable"><tbody>${L.map(l=>{const d=dem(l.ID_Demande);return `<tr><td class="mono" style="width:130px"><b>${esc(l.Title)}</b></td><td>${esc(l.Designation||'')}</td><td class="r" style="width:70px">${fmtN(l.Quantite,0)}</td>
-        <td class="muted" style="font-size:12px;width:260px">${esc(d.Title||'')} · ${esc(d.Motif==='Client'?'Client '+(d.Client||''):'Stock')} · ${esc([({'Îles du Nord':'IDN','Saint-Martin':'St-Martin','Saint-Barthélemy':'St-Barth'})[d.Zone]||'',d.Transport==='Aérien'?'aérien':''].filter(Boolean).join(' '))} ${fmtD(dk(d,'Date_Demande'))}</td>
+        <td class="muted" style="font-size:12px;width:260px">${esc(d.Title||'')} · ${esc(d.Motif==='Client'?'Client '+(l.Client||d.Client||''):'Stock')} · ${esc([({'Îles du Nord':'IDN','Saint-Martin':'St-Martin','Saint-Barthélemy':'St-Barth'})[d.Zone]||'',d.Transport==='Aérien'?'aérien':''].filter(Boolean).join(' '))} ${fmtD(dk(d,'Date_Demande'))}</td>
         <td style="width:150px">${ed?`<input data-dalier="${l.ID}" placeholder="n° BC si déjà passé" style="width:140px;font-size:12px">`:''}</td></tr>`;}).join('')}</tbody></table></div>`).join('')
       :'<span class="muted">✓ Rien à commander. Les demandes validées arrivent ici, groupées par fournisseur.</span>'}
     ${(DATA.da||[]).length?`<details style="margin-top:10px" ${DAV.ouvertListe?'open':''} id="daDet"><summary class="muted" style="cursor:pointer">Demandes (${(DATA.da||[]).length})</summary>
@@ -3642,7 +3667,7 @@ function daBlocHtml(){
       <table class="ltable"><thead><tr><th>N°</th><th>Date</th><th>Motif</th><th>Destination</th><th>Demandeur</th><th>Lignes</th><th>État</th><th></th></tr></thead><tbody>
       ${liste.map(d=>{const e=daEtat(d);const L=daLignes(d.ID);return `<tr><td class="mono">${esc(d.Title)}</td><td>${fmtD(dk(d,'Date_Demande'))}</td><td>${esc(d.Motif==='Client'?'Client : '+(d.Client||'')+(d.N_Devis?' (devis '+d.N_Devis+')':''):'Stock')}</td><td>${esc((d.Zone||'')+' · '+(d.Transport||''))}</td><td>${esc(d.Demandeur||'')}</td>
         <td style="font-size:12px;line-height:1.5">${L.map(l=>{const c=l.ID_Commande_Frs?cmdById(l.ID_Commande_Frs):(l.N_Commande?cmdByNum(l.N_Commande):null);const e=c?cmdEtat(c):null;
-          return `<div><b class="mono">${esc(l.Title)}</b> ${esc(l.Designation||'')} <span class="muted">×${fmtN(l.Quantite,0)}</span>${l.N_Commande?` → ${c?`<a href="#" data-cmdgo="${c.ID}" title="Ouvrir la commande">${esc(l.N_Commande)}</a> <span class="muted">${esc(c.Fournisseur||'')} · ${esc(e.lbl)}</span>`:`<b>${esc(l.N_Commande)}</b> <span class="muted">(BC pas encore importé)</span>`}`:' <span style="color:#b45309">à commander</span>'}</div>`;}).join('')}</td><td><span class="st ${e.cls}">${esc(e.lbl)}</span></td>
+          return `<div><b class="mono">${esc(l.Title)}</b> ${esc(l.Designation||'')} <span class="muted">×${fmtN(l.Quantite,0)}</span>${l.Client&&/;/.test(d.Client||'')?` <span class="tag">${esc(l.Client)}</span>`:''}${l.N_Commande?` → ${c?`<a href="#" data-cmdgo="${c.ID}" title="Ouvrir la commande">${esc(l.N_Commande)}</a> <span class="muted">${esc(c.Fournisseur||'')} · ${esc(e.lbl)}</span>`:`<b>${esc(l.N_Commande)}</b> <span class="muted">(BC pas encore importé)</span>`}`:' <span style="color:#b45309">à commander</span>'}</div>`;}).join('')}</td><td><span class="st ${e.cls}">${esc(e.lbl)}</span></td>
         <td>${ed&&d.Statut!=='Annulée'&&e.k!=='cmd'?`<button class="btn ghost sm" data-daannul="${d.ID}" title="Annuler la demande">✕</button>`:''}</td></tr>`;}).join('')||'<tr><td colspan="8" class="muted">Aucune demande en cours.</td></tr>'}
       </tbody></table></details>`:''}
     </div></div>`;
@@ -3651,6 +3676,8 @@ function daBlocHtml(){
 // ── Événements ──
 document.addEventListener('click',e=>{
   if(!e.target.closest)return;
+  if(e.target.closest('#daCliAdd')){daAjouterClient();return;}
+  const co=e.target.closest('[data-dacliout]');if(co){daLireForm();const F=DAV.form;const c=F.clients.splice(+co.dataset.dacliout,1)[0];F.lignes.forEach(l=>{if(l.cli===c)l.cli='';});daRender();return;}
   if(e.target.closest('#daAdd')){daLireForm();DAV.form.lignes.push({ref:'',des:'',qte:'',frs:''});daRender();return;}
   const del=e.target.closest('[data-dadel]');if(del){daLireForm();DAV.form.lignes.splice(+del.dataset.dadel,1);if(!DAV.form.lignes.length)DAV.form.lignes.push({ref:'',des:'',qte:'',frs:''});daRender();return;}
   if(e.target.closest('#daSave')){daEnregistrer();return;}
@@ -3664,6 +3691,7 @@ document.addEventListener('click',e=>{
 document.addEventListener('change',e=>{
   if(!e.target.closest)return;
   if(e.target.id==='daTout'){DAV.tout=e.target.checked;DAV.ouvertListe=true;renderCommandes();return;}
+  if(e.target.id==='daClient'&&e.target.value.trim()){daAjouterClient();return;}
   if(e.target.name&&/^da(Zone|Tr|Motif)$/.test(e.target.name)){daLireForm();daRender();return;}
   const li=e.target.dataset&&e.target.dataset.dalier;if(li){daLierManuel(+li,e.target.value);return;}
   const i=e.target.dataset&&e.target.dataset.dal;
@@ -3692,6 +3720,8 @@ document.addEventListener('input',e=>{
   if(res.length<30)DAV.cat.filter(p=>!p.k.startsWith(q)&&(p.k.includes(q)||p.des.toLowerCase().includes(qd))).slice(0,30-res.length).forEach(p=>res.push(p));
   dl.innerHTML=res.map(p=>`<option value="${esc(p.ref)}">${esc(p.des)}</option>`).join('');
 });
+
+document.addEventListener('keydown',e=>{if(e.target&&e.target.id==='daClient'&&e.key==='Enter'){e.preventDefault();daAjouterClient();}});
 
 // ═══ DÉMARRAGE ═══
 async function init(){
