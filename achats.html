@@ -415,7 +415,7 @@ fieldset.lockfs .btn{display:none}
 .da-t{table-layout:fixed;width:100%;min-width:0}.da-g table{table-layout:fixed;width:100%;min-width:0}#daDet table{min-width:0}#daDet td{vertical-align:top}.da-g input{border:1px solid var(--border);border-radius:6px;padding:4px 6px}.da-g{margin-bottom:10px}.da-gh{padding:4px 0;border-bottom:2px solid var(--teal,#0f766e);margin-bottom:2px;font-size:13.5px}
 .cmd-pj{display:inline-flex;align-items:center;gap:2px;margin-right:6px}.cmd-pjdel{border:0;background:none;color:var(--text-muted,#94a3b8);cursor:pointer;font-size:12px;padding:0 3px;border-radius:4px}.cmd-pjdel:hover{color:var(--red);background:#fef2f2}
 .da-aval{border:1px solid #fcd34d;background:#fffbeb;border-radius:10px;padding:10px 12px;margin-bottom:12px}.da-av-i{display:flex;justify-content:space-between;gap:12px;align-items:flex-start;padding:8px 0;border-top:1px solid #fde68a}.da-av-i:first-of-type{border-top:0}.da-av-b{display:flex;gap:6px;flex-shrink:0}
-.da-cli{display:flex;flex-wrap:wrap;gap:4px;align-items:center}.da-chip{display:inline-flex;align-items:center;gap:2px;background:#e0f2fe;color:#075985;border-radius:12px;padding:2px 4px 2px 10px;font-size:12.5px;font-weight:600}.da-chip button{border:0;background:none;cursor:pointer;color:#0369a1;font-size:11px;padding:0 4px}
+.da-cli-r{display:flex;align-items:center;gap:6px;margin-bottom:4px}.da-cli{display:flex;flex-wrap:wrap;gap:4px;align-items:center}.da-chip{display:inline-flex;align-items:center;gap:2px;background:#e0f2fe;color:#075985;border-radius:12px;padding:2px 4px 2px 10px;font-size:12.5px;font-weight:600}.da-chip button{border:0;background:none;cursor:pointer;color:#0369a1;font-size:11px;padding:0 4px}
 .fac-orph{border-top:1px dashed var(--border);margin-top:6px;padding:8px 8px 4px;background:#fffbeb;border-radius:8px}
 #netBar{position:fixed;top:0;left:0;right:0;height:3px;z-index:9999;pointer-events:none;opacity:0;transition:opacity .2s;background:linear-gradient(90deg,transparent,var(--teal-mid,#0d9488),transparent);background-size:40% 100%;background-repeat:no-repeat}
 #netBar.on{opacity:1;animation:netbar 1.1s linear infinite}
@@ -3592,7 +3592,7 @@ async function daClients(){
 }
 function daDlClients(){let dl=$('dlDaCli');if(!dl){dl=document.createElement('datalist');dl.id='dlDaCli';document.body.appendChild(dl);}dl.innerHTML=(DAV.cli||[]).map(c=>`<option value="${esc(c)}">`).join('');}
 function daOuvrir(){
-  DAV.form={zone:'Guadeloupe',transport:'Maritime',motif:'Stock',client:'',clients:[],devis:'',devisFrs:'',com:'',lignes:[{ref:'',des:'',qte:'',frs:''},{ref:'',des:'',qte:'',frs:''},{ref:'',des:'',qte:'',frs:''}]};
+  DAV.form={zone:'Guadeloupe',transport:'Maritime',motif:'Stock',client:'',clients:[],devisCli:{},devisFrs:'',com:'',lignes:[{ref:'',des:'',qte:'',frs:''},{ref:'',des:'',qte:'',frs:''},{ref:'',des:'',qte:'',frs:''}]};
   let ov=$('ovDA');if(!ov){ov=document.createElement('div');ov.className='ov';ov.id='ovDA';ov.innerHTML='<div class="modal" id="daModal" style="width:min(980px,96vw)"></div>';document.body.appendChild(ov);}
   ov.classList.add('open');daRender();daClients().then(daDlClients);daCatalogue().then(()=>{const m=$('daCatMsg');if(m)m.textContent=DAV.cat.length?`Catalogue : ${DAV.cat.length} références`:'Catalogue indisponible : saisie libre';});
 }
@@ -3601,7 +3601,7 @@ function daPeutModifier(d){if(!d||d.Statut==='Annulée'||daEtat(d).k==='cmd')ret
 function daModifier(id){
   const d=(DATA.da||[]).find(x=>x.ID===id);if(!daPeutModifier(d))return;
   const cl=String(d.Client||'').split(/\s*;\s*/).filter(Boolean);
-  DAV.form={editId:id,num:d.Title,zone:d.Zone||'Guadeloupe',transport:d.Transport||'Maritime',motif:d.Motif||'Stock',client:'',clients:cl,devis:d.N_Devis||'',devisFrs:d.N_Devis_Frs||'',com:d.Commentaire||'',
+  DAV.form={editId:id,num:d.Title,zone:d.Zone||'Guadeloupe',transport:d.Transport||'Maritime',motif:d.Motif||'Stock',client:'',clients:cl,devisCli:daDevisParse(d.N_Devis,cl),devisFrs:d.N_Devis_Frs||'',com:d.Commentaire||'',
     lignes:daLignes(id).map(l=>({id:l.ID,lock:!!l.N_Commande,ref:l.Title||'',des:daDes(l),qte:String(l.Quantite??''),frs:l.Fournisseur||'',cli:l.Client||(cl.length===1?cl[0]:'')}))};
   if(!DAV.form.lignes.length)DAV.form.lignes.push({ref:'',des:'',qte:'',frs:''});
   let ov=$('ovDA');if(!ov){ov=document.createElement('div');ov.className='ov';ov.id='ovDA';ov.innerHTML='<div class="modal" id="daModal" style="width:min(980px,96vw)"></div>';document.body.appendChild(ov);}
@@ -3616,49 +3616,55 @@ function daRender(){
     <div class="da-head">
       <div><div class="da-l">Destination</div>${radio('daZone',['Guadeloupe','Saint-Martin','Saint-Barthélemy'],F.zone)}</div>
       <div><div class="da-l">Transport</div>${radio('daTr',['Maritime','Aérien','Local'],F.transport)}</div>
-      <div><div class="da-l">Motif</div>${radio('daMotif',['Stock','Client'],F.motif)}</div>
-      ${F.motif==='Client'?`<div><div class="da-l">Client(s)</div><div class="da-cli">${F.clients.map((c,i)=>`<span class="da-chip">${esc(c)} <button type="button" data-dacliout="${i}" title="Retirer">✕</button></span>`).join('')}<input id="daClient" value="${esc(F.client)}" placeholder="${F.clients.length?'autre client…':'client (liste ou saisie libre)'}" list="dlDaCli" autocomplete="off" style="width:220px"><button type="button" class="btn sm" id="daCliAdd" title="Ajouter ce client (plusieurs clients possibles)">＋</button></div>${F.clients.length>1?'<div class="muted" style="font-size:11px">Choisis le client de chaque article dans la colonne Client.</div>':''}</div><div><div class="da-l">N° devis client</div><input id="daDevis" value="${esc(F.devis)}" placeholder="ex. D2610-12 ; D2610-15" style="width:190px" title="Plusieurs n° : sépare-les par ; ou ,"></div>`:''}
+      <div><div class="da-l">Pour</div>${['Stock','Client'].map(v=>`<label class="da-r"><input type="checkbox" name="daMotifC" value="${v}" ${(v==='Client'?daHasCli(F.motif):daHasStock(F.motif)&&F.motif!=='Client')?'checked':''}> ${v}</label>`).join('')}</div>
+      ${daHasCli(F.motif)?`<div><div class="da-l">Client(s) et n° de devis client</div>${F.clients.map((c,i)=>`<div class="da-cli-r"><span class="da-chip">${esc(c)} <button type="button" data-dacliout="${i}" title="Retirer">✕</button></span><input data-dadevis="${esc(c)}" value="${esc((F.devisCli||{})[c]||'')}" placeholder="n° devis (plusieurs : ; )" style="width:170px"></div>`).join('')}<div class="da-cli"><input id="daClient" value="${esc(F.client)}" placeholder="${F.clients.length?'autre client…':'client (liste ou saisie libre)'}" list="dlDaCli" autocomplete="off" style="width:220px"><button type="button" class="btn sm" id="daCliAdd" title="Ajouter ce client (plusieurs clients possibles)">＋</button></div>${daMulti(F)?'<div class="muted" style="font-size:11px">Choisis pour chaque article : un client ou Stock (colonne « Pour »).</div>':''}</div>`:''}
       <div><div class="da-l">N° devis fournisseur</div><input id="daDevisFrs" value="${esc(F.devisFrs)}" placeholder="ex. OFF-4512 ; Q2026-88" style="width:190px" title="Plusieurs n° : sépare-les par ; ou ,"></div>
     </div>
     <datalist id="dlCat"></datalist>
-    <table class="ltable da-t"><thead><tr><th style="width:150px">Réf. Réseaux Plus</th><th>Désignation</th><th style="width:90px" class="r">Qté</th>${daMulti(F)?'<th style="width:170px">Client</th>':''}<th style="width:220px">Fournisseur</th><th style="width:30px"></th></tr></thead><tbody>
-    ${F.lignes.map((l,i)=>`<tr><td><input ${l.lock?'disabled':''} data-dal="${i}" data-k="ref" list="dlCat" value="${esc(l.ref)}" class="mono" autocomplete="off"></td><td><input ${l.lock?'disabled':''} data-dal="${i}" data-k="des" value="${esc(l.des)}"></td><td><input ${l.lock?'disabled':''} data-dal="${i}" data-k="qte" value="${esc(l.qte)}" inputmode="decimal" class="r"></td>${daMulti(F)?`<td><select ${l.lock?'disabled':''} data-dal="${i}" data-k="cli"><option value="">— client —</option>${F.clients.map(c=>`<option ${l.cli===c?'selected':''}>${esc(c)}</option>`).join('')}</select></td>`:''}<td><input ${l.lock?'disabled':''} data-dal="${i}" data-k="frs" list="dlFrs" value="${esc(l.frs)}" placeholder="${l.frsAuto?'':'fournisseur'}">${l.frsAuto?'<div class="muted" style="font-size:11px">proposé : dernière commande</div>':''}</td><td>${l.lock?'<span title="Déjà commandée">🔒</span>':`<button class="btn ghost sm" data-dadel="${i}" title="Retirer la ligne">✕</button>`}</td></tr>`).join('')}
+    <table class="ltable da-t"><thead><tr><th style="width:150px">Réf. Réseaux Plus</th><th>Désignation</th><th style="width:90px" class="r">Qté</th>${daMulti(F)?'<th style="width:170px">Pour</th>':''}<th style="width:220px">Fournisseur</th><th style="width:30px"></th></tr></thead><tbody>
+    ${F.lignes.map((l,i)=>`<tr><td><input ${l.lock?'disabled':''} data-dal="${i}" data-k="ref" list="dlCat" value="${esc(l.ref)}" class="mono" autocomplete="off"></td><td><input ${l.lock?'disabled':''} data-dal="${i}" data-k="des" value="${esc(l.des)}"></td><td><input ${l.lock?'disabled':''} data-dal="${i}" data-k="qte" value="${esc(l.qte)}" inputmode="decimal" class="r"></td>${daMulti(F)?`<td><select ${l.lock?'disabled':''} data-dal="${i}" data-k="cli"><option value="">— choisir —</option>${daCibles(F).map(c=>`<option ${l.cli===c?'selected':''}>${esc(c)}</option>`).join('')}</select></td>`:''}<td><input ${l.lock?'disabled':''} data-dal="${i}" data-k="frs" list="dlFrs" value="${esc(l.frs)}" placeholder="${l.frsAuto?'':'fournisseur'}">${l.frsAuto?'<div class="muted" style="font-size:11px">proposé : dernière commande</div>':''}</td><td>${l.lock?'<span title="Déjà commandée">🔒</span>':`<button class="btn ghost sm" data-dadel="${i}" title="Retirer la ligne">✕</button>`}</td></tr>`).join('')}
     </tbody></table>
     <div style="display:flex;justify-content:space-between;align-items:center;margin-top:8px"><button class="btn sm" id="daAdd">＋ Ligne</button><span class="muted" id="daCatMsg" style="font-size:12px">${DAV.cat?`Catalogue : ${DAV.cat.length} références`:'Chargement du catalogue…'}</span></div>
     <label class="cmd-com" style="margin-top:10px">Commentaire<textarea id="daCom" rows="2">${esc(F.com)}</textarea></label>
   </div>
   <div class="modal-f"><span class="msg" id="daMsg">${F.editId?'Les lignes déjà commandées ne sont pas modifiables.':'La demande est validée à l’enregistrement (remplace la signature).'}</span><button class="btn ghost" onclick="daFermer()">Annuler</button><button class="btn primary" id="daSave">${F.editId?'Enregistrer les modifications':'Enregistrer la demande'}</button></div>`;
 }
+const daHasCli=m=>/Client/.test(m||''),daHasStock=m=>/Stock/.test(m||'')||!m;
+// N_Devis : « D1 ; D2 » (un client) ou « CLIENT A : D1 ; D2 | CLIENT B : D3 » (plusieurs)
+function daDevisParse(v,clients){const o={};v=String(v||'');if(/ : /.test(v)){v.split(/\s*\|\s*/).forEach(x=>{const i=x.indexOf(' : ');if(i>0)o[x.slice(0,i).trim()]=x.slice(i+3).trim();});}else if(v&&clients.length)o[clients[0]]=v;return o;}
+function daDevisTxt(F){const L=F.clients.map(c=>[c,daNums((F.devisCli||{})[c])]).filter(x=>x[1]);if(!L.length)return '';return F.clients.length===1?L[0][1]:L.map(x=>x[0]+' : '+x[1]).join(' | ');}
+const daPour=(d,l)=>{const c=l&&l.Client;if(c==='Stock')return 'Stock';if(daHasCli(d.Motif))return 'Client '+(c||d.Client||'')+(daHasStock(d.Motif)&&!c?' + stock':'');return 'Stock';};
 const daNums=v=>String(v||'').split(/\s*[;,\n]\s*|\s{2,}/).map(x=>x.trim()).filter(Boolean).join(' ; ');
-const daMulti=F=>F.motif==='Client'&&F.clients.length>1;
+const daMulti=F=>daHasCli(F.motif)&&(F.clients.length>1||daHasStock(F.motif));
+const daCibles=F=>[...F.clients,...(daHasStock(F.motif)?['Stock']:[])];
 function daAjouterClient(){const F=DAV.form;if(!F)return;daLireForm();const v=F.client.trim();if(v&&!F.clients.some(c=>c.toLowerCase()===v.toLowerCase()))F.clients.push(v);F.client='';daRender();const i=$('daClient');if(i)i.focus();}
 function daLireForm(){
   const F=DAV.form;if(!F)return;
   document.querySelectorAll('#daModal [data-dal]').forEach(i=>{F.lignes[+i.dataset.dal][i.dataset.k]=i.value;});
   const r=n=>{const x=document.querySelector(`#daModal input[name="${n}"]:checked`);return x?x.value:null;};
-  F.zone=r('daZone')||F.zone;F.transport=r('daTr')||F.transport;F.motif=r('daMotif')||F.motif;
-  if($('daClient'))F.client=$('daClient').value;if($('daDevis'))F.devis=$('daDevis').value;if($('daDevisFrs'))F.devisFrs=$('daDevisFrs').value;if($('daCom'))F.com=$('daCom').value;
+  F.zone=r('daZone')||F.zone;F.transport=r('daTr')||F.transport;{const mc=[...document.querySelectorAll('#daModal input[name="daMotifC"]:checked')].map(x=>x.value);if(document.querySelector('#daModal input[name="daMotifC"]'))F.motif=mc.includes('Client')?(mc.includes('Stock')?'Client + Stock':'Client'):'Stock';}document.querySelectorAll('#daModal [data-dadevis]').forEach(i=>{(F.devisCli=F.devisCli||{})[i.dataset.dadevis]=i.value;});
+  if($('daClient'))F.client=$('daClient').value;if($('daDevisFrs'))F.devisFrs=$('daDevisFrs').value;if($('daCom'))F.com=$('daCom').value;
 }
 async function daEnregistrer(){
   daLireForm();const F=DAV.form;
   const L=F.lignes.filter(l=>l.ref.trim()||l.des.trim());
   const err=[];if(!L.length)err.push('au moins une ligne');
   L.forEach((l,i)=>{if(!l.ref.trim())err.push(`réf. ligne ${i+1}`);if(!(parseNum(l.qte)>0))err.push(`qté ligne ${i+1}`);});
-  if(F.motif==='Client'&&F.client.trim()&&!F.clients.some(c=>c.toLowerCase()===F.client.trim().toLowerCase())){F.clients.push(F.client.trim());F.client='';}
-  if(F.motif==='Client'&&!F.clients.length)err.push('nom du client');
-  if(daMulti(F))L.forEach((l,i)=>{if(!l.cli)err.push(`client ligne ${i+1}`);});
-  if(F.motif==='Client'&&F.clients.length===1)L.forEach(l=>l.cli=F.clients[0]);
-  if(F.motif!=='Client')L.forEach(l=>l.cli='');
+  if(daHasCli(F.motif)&&F.client.trim()&&!F.clients.some(c=>c.toLowerCase()===F.client.trim().toLowerCase())){F.clients.push(F.client.trim());F.client='';}
+  if(daHasCli(F.motif)&&!F.clients.length)err.push('nom du client');
+  if(daMulti(F))L.forEach((l,i)=>{if(!l.cli)err.push(`client ou stock ligne ${i+1}`);});
+  if(daHasCli(F.motif)&&!daMulti(F)&&F.clients.length===1)L.forEach(l=>l.cli=F.clients[0]);
+  if(!daHasCli(F.motif))L.forEach(l=>l.cli='');
   if(err.length){daRender();$('daMsg').textContent='Manque : '+err.join(', ');$('daMsg').style.color='var(--red)';return;}
   const btn=$('daSave');btn.disabled=true;btn.textContent='Enregistrement…';
   if(F.editId)return daEnregistrerModif(F,L,btn);
   try{
     const t=todayKey(),pre='DA-'+t.slice(2).replace(/-/g,'');const n=(DATA.da||[]).filter(d=>String(d.Title||'').startsWith(pre)).length+1;
     const u=sessionStorage.getItem('user_name')||'';
-    const d=await spPost('Demandes_Achat',{Title:`${pre}-${n}`,Zone:F.zone,Transport:F.transport,Motif:F.motif,Client:F.motif==='Client'?_trunc(F.clients.join(' ; ')):null,N_Devis:F.motif==='Client'&&daNums(F.devis)?_trunc(daNums(F.devis)):null,N_Devis_Frs:daNums(F.devisFrs)?_trunc(daNums(F.devisFrs)):null,
+    const d=await spPost('Demandes_Achat',{Title:`${pre}-${n}`,Zone:F.zone,Transport:F.transport,Motif:F.motif,Client:daHasCli(F.motif)?_trunc(F.clients.join(' ; ')):null,N_Devis:daHasCli(F.motif)&&daDevisTxt(F)?_trunc(daDevisTxt(F)):null,N_Devis_Frs:daNums(F.devisFrs)?_trunc(daNums(F.devisFrs)):null,
       Demandeur:_trunc(u),Statut:'Validée',Valide_Par:_trunc(u),Date_Demande:toSP(t),Date_Validation:toSP(t),Commentaire:F.com.trim()||null});
     for(const l of L){const fr=l.frs?matchFrs(l.frs):null;
-      await spPostSilencieux('Lignes_Demande_Achat',sansVide({Title:_trunc(l.ref.trim().toUpperCase()),ID_Demande:d.ID,Designation:_trunc(l.des.trim()+(daMulti(F)&&MISSING.Lignes_Demande_Achat&&MISSING.Lignes_Demande_Achat.has('Client')?' · '+l.cli:'')),Quantite:parseNum(l.qte),ID_Fournisseur:fr?fr.ID:null,Fournisseur:fr?fr.Title:(l.frs.trim()||null),Client:F.motif==='Client'&&l.cli?_trunc(l.cli):null}));}
+      await spPostSilencieux('Lignes_Demande_Achat',sansVide({Title:_trunc(l.ref.trim().toUpperCase()),ID_Demande:d.ID,Designation:_trunc(l.des.trim()+(daMulti(F)&&MISSING.Lignes_Demande_Achat&&MISSING.Lignes_Demande_Achat.has('Client')?' · '+l.cli:'')),Quantite:parseNum(l.qte),ID_Fournisseur:fr?fr.ID:null,Fournisseur:fr?fr.Title:(l.frs.trim()||null),Client:daHasCli(F.motif)&&l.cli?_trunc(l.cli):null}));}
     // Notification : le flux Power Automate envoie Resume_Notif par mail quand Notif = « À envoyer », puis met « Envoyée »
     try{await spPatch('Demandes_Achat',d.ID,{Notif:'À envoyer',Resume_Notif:daResumeMail(d.Title,F,L,u)});}catch(e){console.warn('[DA notif]',e);}
     daFermer();await reloadAll();setTab('commandes');
@@ -3670,10 +3676,10 @@ async function daEnregistrer(){
 async function daEnregistrerModif(F,L,btn){
   const id=F.editId;const d=(DATA.da||[]).find(x=>x.ID===id);
   try{
-    await spPatch('Demandes_Achat',id,{Zone:F.zone,Transport:F.transport,Motif:F.motif,Client:F.motif==='Client'?_trunc(F.clients.join(' ; ')):null,N_Devis:F.motif==='Client'&&daNums(F.devis)?_trunc(daNums(F.devis)):null,N_Devis_Frs:daNums(F.devisFrs)?_trunc(daNums(F.devisFrs)):null,Commentaire:F.com.trim()||null},d);
+    await spPatch('Demandes_Achat',id,{Zone:F.zone,Transport:F.transport,Motif:F.motif,Client:daHasCli(F.motif)?_trunc(F.clients.join(' ; ')):null,N_Devis:daHasCli(F.motif)&&daDevisTxt(F)?_trunc(daDevisTxt(F)):null,N_Devis_Frs:daNums(F.devisFrs)?_trunc(daNums(F.devisFrs)):null,Commentaire:F.com.trim()||null},d);
     const avant=daLignes(id);const gardees=new Set();
     for(const l of L){const fr=l.frs?matchFrs(l.frs):null;
-      const body={Title:_trunc(l.ref.trim().toUpperCase()),Designation:_trunc(l.des.trim()),Quantite:parseNum(l.qte),ID_Fournisseur:fr?fr.ID:null,Fournisseur:fr?fr.Title:(l.frs.trim()||null),Client:F.motif==='Client'&&l.cli?_trunc(l.cli):null};
+      const body={Title:_trunc(l.ref.trim().toUpperCase()),Designation:_trunc(l.des.trim()),Quantite:parseNum(l.qte),ID_Fournisseur:fr?fr.ID:null,Fournisseur:fr?fr.Title:(l.frs.trim()||null),Client:daHasCli(F.motif)&&l.cli?_trunc(l.cli):null};
       if(l.id){gardees.add(l.id);if(l.lock)continue;const old=avant.find(x=>x.ID===l.id);await spPatch('Lignes_Demande_Achat',l.id,body,old);}
       else await spPostSilencieux('Lignes_Demande_Achat',sansVide({...body,ID_Demande:id}));}
     for(const o of avant){if(!gardees.has(o.ID)&&!o.N_Commande)await spDelete('Lignes_Demande_Achat',o.ID,o);}
@@ -3685,7 +3691,7 @@ function daResumeMail(num,F,L,u){
   const td='style="border:1px solid #d1d5db;padding:4px 8px"';
   const lien=location.origin+location.pathname;
   return `<p><b>${esc(u||'?')}</b> a fait la demande de commande <b>${esc(num)}</b> :</p>
-<p>Motif : <b>${F.motif==='Client'?'Client '+esc(F.clients.join(', '))+(daNums(F.devis)?' (devis client '+esc(daNums(F.devis))+')':''):'Stock'}</b>${daNums(F.devisFrs)?'<br>Devis fournisseur : <b>'+esc(daNums(F.devisFrs))+'</b>':''}<br>Destination : <b>${esc(F.zone)}</b> · Transport : <b>${esc(F.transport)}</b></p>
+<p>Pour : <b>${daHasCli(F.motif)?'Client '+esc(F.clients.join(', '))+(daHasStock(F.motif)?' + stock':'')+(daDevisTxt(F)?' (devis client '+esc(daDevisTxt(F))+')':''):'Stock'}</b>${daNums(F.devisFrs)?'<br>Devis fournisseur : <b>'+esc(daNums(F.devisFrs))+'</b>':''}<br>Destination : <b>${esc(F.zone)}</b> · Transport : <b>${esc(F.transport)}</b></p>
 <table style="border-collapse:collapse;font-family:Arial;font-size:13px"><tr style="background:#f1f5f9"><th ${td}>Réf.</th><th ${td}>Désignation</th><th ${td}>Qté</th>${daMulti(F)?`<th ${td}>Client</th>`:''}<th ${td}>Fournisseur</th></tr>
 ${L.map(l=>{const fr=l.frs?matchFrs(l.frs):null;return `<tr><td ${td}><b>${esc(l.ref.trim().toUpperCase())}</b></td><td ${td}>${esc(l.des.trim())}</td><td ${td} align="right">${esc(String(parseNum(l.qte)))}</td>${daMulti(F)?`<td ${td}>${esc(l.cli||'')}</td>`:''}<td ${td}>${esc(fr?fr.Title:(l.frs.trim()||'à choisir'))}</td></tr>`;}).join('')}</table>
 ${F.com.trim()?`<p>Commentaire : ${esc(F.com.trim())}</p>`:''}<p><a href="${esc(lien)}">Ouvrir le Portail Achats › Commandes</a></p>`;
@@ -3730,14 +3736,14 @@ function daBlocAValider(){
   const A=(DATA.da||[]).filter(d=>d.Statut==='À valider').sort((a,b)=>a.ID-b.ID);if(!A.length)return '';
   const v=daPeutValider();
   return `<div class="da-aval"><div class="da-gh"><b>⏳ Demandes des vendeurs à valider (${A.length})</b> <span class="muted">${v?'':'en attente de Fabrice'}</span></div>
-    ${A.map(d=>`<div class="da-av-i"><div><b class="mono">${esc(d.Title)}</b> · <b>${esc(d.Demandeur||'?')}</b> · ${esc(d.Motif==='Client'?'Client '+(d.Client||''):'Stock')}${daBcClient(d)?' · BC '+esc(daBcClient(d)):''} · ${esc(d.Zone||'')} ${esc(d.Transport||'')} · ${fmtD(dk(d,'Date_Demande'))}
+    ${A.map(d=>`<div class="da-av-i"><div><b class="mono">${esc(d.Title)}</b> · <b>${esc(d.Demandeur||'?')}</b> · ${esc(daPour(d))}${daBcClient(d)?' · BC '+esc(daBcClient(d)):''} · ${esc(d.Zone||'')} ${esc(d.Transport||'')} · ${fmtD(dk(d,'Date_Demande'))}
       ${d.Commentaire?`<div class="muted" style="font-size:12px">💬 ${esc(d.Commentaire)}</div>`:''}
       <div style="font-size:12.5px;margin-top:3px">${daLignes(d.ID).map(l=>`<div><b class="mono">${esc(l.Title)}</b> ${esc(daDes(l))} <span class="muted">×${fmtN(l.Quantite,0)}</span></div>`).join('')}</div></div>
       ${v?`<div class="da-av-b"><button class="btn sm primary" data-daval="${d.ID}">✓ Valider</button><button class="btn sm danger" data-darefus="${d.ID}">✕ Refuser</button></div>`:''}</div>`).join('')}</div>`;
 }
 function daResumeStocke(d,titre){
   const td='style="border:1px solid #d1d5db;padding:4px 8px"';const bc=daBcClient(d);
-  return `<p>${titre}</p><p>Demande <b>${esc(d.Title)}</b> de <b>${esc(d.Demandeur||'?')}</b>${bc?' (BC '+esc(bc)+')':''} · Pour : <b>${d.Motif==='Client'?'Client '+esc(d.Client||'')+(d.N_Devis?' (devis client '+esc(d.N_Devis)+')':''):'Stock'}</b>${d.N_Devis_Frs?'<br>Devis fournisseur : <b>'+esc(d.N_Devis_Frs)+'</b>':''}<br>Destination : <b>${esc(d.Zone||'')}</b> · Transport : <b>${esc(d.Transport||'')}</b></p>
+  return `<p>${titre}</p><p>Demande <b>${esc(d.Title)}</b> de <b>${esc(d.Demandeur||'?')}</b>${bc?' (BC '+esc(bc)+')':''} · Pour : <b>${daHasCli(d.Motif)?esc(daPour(d))+(d.N_Devis?' (devis client '+esc(d.N_Devis)+')':''):'Stock'}</b>${d.N_Devis_Frs?'<br>Devis fournisseur : <b>'+esc(d.N_Devis_Frs)+'</b>':''}<br>Destination : <b>${esc(d.Zone||'')}</b> · Transport : <b>${esc(d.Transport||'')}</b></p>
 <table style="border-collapse:collapse;font-family:Arial;font-size:13px"><tr style="background:#f1f5f9"><th ${td}>Réf.</th><th ${td}>Désignation</th><th ${td}>Qté</th>${daLignes(d.ID).some(l=>l.Client)?`<th ${td}>Client</th>`:''}<th ${td}>Fournisseur</th></tr>
 ${daLignes(d.ID).map(l=>`<tr><td ${td}><b>${esc(l.Title)}</b></td><td ${td}>${esc(daDes(l))}</td><td ${td} align="right">${esc(String(l.Quantite??''))}</td>${daLignes(d.ID).some(x=>x.Client)?`<td ${td}>${esc(l.Client||'')}</td>`:''}<td ${td}>${esc(l.Fournisseur||'à choisir')}</td></tr>`).join('')}</table>
 <p><a href="${esc(location.origin+location.pathname)}">Ouvrir le Portail Achats › Commandes</a></p>`;
@@ -3778,15 +3784,15 @@ function daBlocHtml(){
     <div style="display:flex;gap:8px"><button class="btn sm" id="daRappr" title="Relie les lignes aux BC déjà importés (même réf. Réseaux Plus)">🔗 Rapprocher avec les BC</button><button class="btn sm primary" onclick="daOuvrir()">＋ Demande de commande</button></div></div>
     <div class="card-b">${avNotif}${daBlocAValider()}${groupes.length?groupes.map(([f,L])=>`<div class="da-g"><div class="da-gh"><b>${esc(f)}</b> <span class="muted">${L.length} article${L.length>1?'s':''}</span></div>
       <table class="ltable"><tbody>${L.map(l=>{const d=dem(l.ID_Demande);return `<tr><td class="mono" style="width:130px"><b>${esc(l.Title)}</b></td><td>${esc(daDes(l))}</td><td class="r" style="width:70px">${fmtN(l.Quantite,0)}</td>
-        <td class="muted" style="font-size:12px;width:260px">${daPeutModifier(d)?`<a href="#" data-damodif="${d.ID}" title="Modifier cette demande">✎ ${esc(d.Title||'')}</a>`:esc(d.Title||'')} · ${esc(d.Motif==='Client'?'Client '+(l.Client||d.Client||''):'Stock')} ·${d.N_Devis_Frs?` devis frs ${esc(d.N_Devis_Frs)} ·`:''} ${esc([({'Îles du Nord':'IDN','Saint-Martin':'St-Martin','Saint-Barthélemy':'St-Barth'})[d.Zone]||'',d.Transport==='Aérien'?'aérien':d.Transport==='Local'?'local':''].filter(Boolean).join(' '))} ${fmtD(dk(d,'Date_Demande'))}</td>
+        <td class="muted" style="font-size:12px;width:260px">${daPeutModifier(d)?`<a href="#" data-damodif="${d.ID}" title="Modifier cette demande">✎ ${esc(d.Title||'')}</a>`:esc(d.Title||'')} · ${esc(daPour(d,l))} ·${d.N_Devis_Frs?` devis frs ${esc(d.N_Devis_Frs)} ·`:''} ${esc([({'Îles du Nord':'IDN','Saint-Martin':'St-Martin','Saint-Barthélemy':'St-Barth'})[d.Zone]||'',d.Transport==='Aérien'?'aérien':d.Transport==='Local'?'local':''].filter(Boolean).join(' '))} ${fmtD(dk(d,'Date_Demande'))}</td>
         <td style="width:150px">${ed?`<input data-dalier="${l.ID}" placeholder="n° BC si déjà passé" style="width:140px;font-size:12px">`:''}</td></tr>`;}).join('')}</tbody></table></div>`).join('')
       :'<span class="muted">✓ Rien à commander. Les demandes validées arrivent ici, groupées par fournisseur.</span>'}
     ${(DATA.da||[]).length?`<details style="margin-top:10px" ${DAV.ouvertListe?'open':''} id="daDet"><summary class="muted" style="cursor:pointer">Demandes (${(DATA.da||[]).length})</summary>
       <label style="font-size:12px;display:inline-flex;gap:4px;align-items:center;margin:6px 0"><input type="checkbox" id="daTout" ${DAV.tout?'checked':''} style="width:auto"> afficher les commandées et annulées</label>
       <table class="ltable"><thead><tr><th>N°</th><th>Date</th><th>Motif</th><th>Destination</th><th>Demandeur</th><th>Lignes</th><th>État</th><th></th></tr></thead><tbody>
-      ${liste.map(d=>{const e=daEtat(d);const L=daLignes(d.ID);return `<tr><td class="mono">${esc(d.Title)}</td><td>${fmtD(dk(d,'Date_Demande'))}</td><td>${esc(d.Motif==='Client'?'Client : '+(d.Client||'')+(d.N_Devis?' (devis '+d.N_Devis+')':''):'Stock')}${d.N_Devis_Frs?`<div class="muted" style="font-size:11.5px">Devis frs : ${esc(d.N_Devis_Frs)}</div>`:''}</td><td>${esc((d.Zone||'')+' · '+(d.Transport||''))}</td><td>${esc(d.Demandeur||'')}</td>
+      ${liste.map(d=>{const e=daEtat(d);const L=daLignes(d.ID);return `<tr><td class="mono">${esc(d.Title)}</td><td>${fmtD(dk(d,'Date_Demande'))}</td><td>${esc(daHasCli(d.Motif)?daPour(d).replace(/^Client /,'Client : ')+(d.N_Devis?' (devis '+d.N_Devis+')':''):'Stock')}${d.N_Devis_Frs?`<div class="muted" style="font-size:11.5px">Devis frs : ${esc(d.N_Devis_Frs)}</div>`:''}</td><td>${esc((d.Zone||'')+' · '+(d.Transport||''))}</td><td>${esc(d.Demandeur||'')}</td>
         <td style="font-size:12px;line-height:1.5">${L.map(l=>{const c=l.ID_Commande_Frs?cmdById(l.ID_Commande_Frs):(l.N_Commande?cmdByNum(l.N_Commande):null);const e=c?cmdEtat(c):null;
-          return `<div><b class="mono">${esc(l.Title)}</b> ${esc(daDes(l))} <span class="muted">×${fmtN(l.Quantite,0)}</span>${d.Motif==='Client'&&(l.Client||d.Client)?` <span class="tag">${esc(l.Client||d.Client)}</span>`:''}${l.Fournisseur&&!l.N_Commande?` <span class="muted" style="font-size:11px">· ${esc(l.Fournisseur)}</span>`:''}${l.N_Commande?` → ${c?`<a href="#" data-cmdgo="${c.ID}" title="Ouvrir la commande">${esc(l.N_Commande)}</a> <span class="muted">${esc(c.Fournisseur||'')} · ${esc(e.lbl)}</span>`:`<b>${esc(l.N_Commande)}</b> <span class="muted">(BC pas encore importé)</span>`}`:' <span style="color:#b45309">à commander</span>'}</div>`;}).join('')}</td><td><span class="st ${e.cls}">${esc(e.lbl)}</span></td>
+          return `<div><b class="mono">${esc(l.Title)}</b> ${esc(daDes(l))} <span class="muted">×${fmtN(l.Quantite,0)}</span>${daHasCli(d.Motif)&&(l.Client||d.Client)?` <span class="tag">${esc(l.Client||d.Client)}</span>`:''}${l.Fournisseur&&!l.N_Commande?` <span class="muted" style="font-size:11px">· ${esc(l.Fournisseur)}</span>`:''}${l.N_Commande?` → ${c?`<a href="#" data-cmdgo="${c.ID}" title="Ouvrir la commande">${esc(l.N_Commande)}</a> <span class="muted">${esc(c.Fournisseur||'')} · ${esc(e.lbl)}</span>`:`<b>${esc(l.N_Commande)}</b> <span class="muted">(BC pas encore importé)</span>`}`:' <span style="color:#b45309">à commander</span>'}</div>`;}).join('')}</td><td><span class="st ${e.cls}">${esc(e.lbl)}</span></td>
         <td style="white-space:nowrap">${daPeutModifier(d)?`<button class="btn ghost sm" data-damodif="${d.ID}" title="Modifier la demande (destination, transport, clients, articles)">✎</button>`:''}${ed&&d.Statut!=='Annulée'&&e.k!=='cmd'?`<button class="btn ghost sm" data-daannul="${d.ID}" title="Annuler la demande">✕</button>`:''}</td></tr>`;}).join('')||'<tr><td colspan="8" class="muted">Aucune demande en cours.</td></tr>'}
       </tbody></table></details>`:''}
     </div></div>`;
@@ -3812,7 +3818,7 @@ document.addEventListener('change',e=>{
   if(!e.target.closest)return;
   if(e.target.id==='daTout'){DAV.tout=e.target.checked;DAV.ouvertListe=true;renderCommandes();return;}
   if(e.target.id==='daClient'&&e.target.value.trim()){daAjouterClient();return;}
-  if(e.target.name&&/^da(Zone|Tr|Motif)$/.test(e.target.name)){daLireForm();daRender();return;}
+  if(e.target.name&&/^da(Zone|Tr|Motif|MotifC)$/.test(e.target.name)){if(e.target.name==='daMotifC'&&e.target.value==='Client'&&e.target.checked&&DAV.form&&DAV.form.motif==='Stock'){const st=document.querySelector('#daModal input[name="daMotifC"][value="Stock"]');if(st)st.checked=false;}daLireForm();daRender();return;}
   const li=e.target.dataset&&e.target.dataset.dalier;if(li){daLierManuel(+li,e.target.value);return;}
   const i=e.target.dataset&&e.target.dataset.dal;
   if(i!==undefined&&DAV.form){
@@ -3828,8 +3834,8 @@ document.addEventListener('change',e=>{
   }
 });
 function daLireFormSauf(i){const F=DAV.form;document.querySelectorAll('#daModal [data-dal]').forEach(x=>{if(x.dataset.dal!==String(i))F.lignes[+x.dataset.dal][x.dataset.k]=x.value;});
-  const r=n=>{const x=document.querySelector(`#daModal input[name="${n}"]:checked`);return x?x.value:null;};F.zone=r('daZone')||F.zone;F.transport=r('daTr')||F.transport;F.motif=r('daMotif')||F.motif;
-  if($('daClient'))F.client=$('daClient').value;if($('daDevis'))F.devis=$('daDevis').value;if($('daDevisFrs'))F.devisFrs=$('daDevisFrs').value;if($('daCom'))F.com=$('daCom').value;}
+  const r=n=>{const x=document.querySelector(`#daModal input[name="${n}"]:checked`);return x?x.value:null;};F.zone=r('daZone')||F.zone;F.transport=r('daTr')||F.transport;{const mc=[...document.querySelectorAll('#daModal input[name="daMotifC"]:checked')].map(x=>x.value);if(document.querySelector('#daModal input[name="daMotifC"]'))F.motif=mc.includes('Client')?(mc.includes('Stock')?'Client + Stock':'Client'):'Stock';}document.querySelectorAll('#daModal [data-dadevis]').forEach(i=>{(F.devisCli=F.devisCli||{})[i.dataset.dadevis]=i.value;});
+  if($('daClient'))F.client=$('daClient').value;if($('daDevisFrs'))F.devisFrs=$('daDevisFrs').value;if($('daCom'))F.com=$('daCom').value;}
 // Suggestions catalogue pendant la frappe (3 caractères mini, 30 propositions)
 document.addEventListener('input',e=>{
   if(!e.target.dataset||e.target.dataset.k!=='ref'||!DAV.cat)return;
