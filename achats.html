@@ -3513,7 +3513,7 @@ function daRender(){
   <div class="modal-b">
     <div class="da-head">
       <div><div class="da-l">Destination</div>${radio('daZone',['Guadeloupe','Saint-Martin','Saint-Barthélemy'],F.zone)}</div>
-      <div><div class="da-l">Transport</div>${radio('daTr',['Maritime','Aérien'],F.transport)}</div>
+      <div><div class="da-l">Transport</div>${radio('daTr',['Maritime','Aérien','Local'],F.transport)}</div>
       <div><div class="da-l">Motif</div>${radio('daMotif',['Stock','Client'],F.motif)}</div>
       ${F.motif==='Client'?`<div><div class="da-l">Client(s)</div><div class="da-cli">${F.clients.map((c,i)=>`<span class="da-chip">${esc(c)} <button type="button" data-dacliout="${i}" title="Retirer">✕</button></span>`).join('')}<input id="daClient" value="${esc(F.client)}" placeholder="${F.clients.length?'autre client…':'client (liste ou saisie libre)'}" list="dlDaCli" autocomplete="off" style="width:220px"><button type="button" class="btn sm" id="daCliAdd" title="Ajouter ce client (plusieurs clients possibles)">＋</button></div>${F.clients.length>1?'<div class="muted" style="font-size:11px">Choisis le client de chaque article dans la colonne Client.</div>':''}</div><div><div class="da-l">N° devis</div><input id="daDevis" value="${esc(F.devis)}" placeholder="optionnel" style="width:120px"></div>`:''}
     </div>
@@ -3659,7 +3659,7 @@ function daBlocHtml(){
     <div style="display:flex;gap:8px"><button class="btn sm" id="daRappr" title="Relie les lignes aux BC déjà importés (même réf. Réseaux Plus)">🔗 Rapprocher avec les BC</button><button class="btn sm primary" onclick="daOuvrir()">＋ Demande de commande</button></div></div>
     <div class="card-b">${avNotif}${daBlocAValider()}${groupes.length?groupes.map(([f,L])=>`<div class="da-g"><div class="da-gh"><b>${esc(f)}</b> <span class="muted">${L.length} article${L.length>1?'s':''}</span></div>
       <table class="ltable"><tbody>${L.map(l=>{const d=dem(l.ID_Demande);return `<tr><td class="mono" style="width:130px"><b>${esc(l.Title)}</b></td><td>${esc(l.Designation||'')}</td><td class="r" style="width:70px">${fmtN(l.Quantite,0)}</td>
-        <td class="muted" style="font-size:12px;width:260px">${esc(d.Title||'')} · ${esc(d.Motif==='Client'?'Client '+(l.Client||d.Client||''):'Stock')} · ${esc([({'Îles du Nord':'IDN','Saint-Martin':'St-Martin','Saint-Barthélemy':'St-Barth'})[d.Zone]||'',d.Transport==='Aérien'?'aérien':''].filter(Boolean).join(' '))} ${fmtD(dk(d,'Date_Demande'))}</td>
+        <td class="muted" style="font-size:12px;width:260px">${esc(d.Title||'')} · ${esc(d.Motif==='Client'?'Client '+(l.Client||d.Client||''):'Stock')} · ${esc([({'Îles du Nord':'IDN','Saint-Martin':'St-Martin','Saint-Barthélemy':'St-Barth'})[d.Zone]||'',d.Transport==='Aérien'?'aérien':d.Transport==='Local'?'local':''].filter(Boolean).join(' '))} ${fmtD(dk(d,'Date_Demande'))}</td>
         <td style="width:150px">${ed?`<input data-dalier="${l.ID}" placeholder="n° BC si déjà passé" style="width:140px;font-size:12px">`:''}</td></tr>`;}).join('')}</tbody></table></div>`).join('')
       :'<span class="muted">✓ Rien à commander. Les demandes validées arrivent ici, groupées par fournisseur.</span>'}
     ${(DATA.da||[]).length?`<details style="margin-top:10px" ${DAV.ouvertListe?'open':''} id="daDet"><summary class="muted" style="cursor:pointer">Demandes (${(DATA.da||[]).length})</summary>
