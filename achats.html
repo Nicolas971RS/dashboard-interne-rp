@@ -3689,7 +3689,7 @@ async function daEnregistrerModif(F,L,btn){
 }
 function daResumeMail(num,F,L,u){
   const td='style="border:1px solid #d1d5db;padding:4px 8px"';
-  const lien=location.origin+location.pathname;
+  const lien=location.origin+location.pathname+'?tab=commandes';
   return `<p><b>${esc(u||'?')}</b> a fait la demande de commande <b>${esc(num)}</b> :</p>
 <p>Pour : <b>${daHasCli(F.motif)?'Client '+esc(F.clients.join(', '))+(daHasStock(F.motif)?' + stock':'')+(daDevisTxt(F)?' (devis client '+esc(daDevisTxt(F))+')':''):'Stock'}</b>${daNums(F.devisFrs)?'<br>Devis fournisseur : <b>'+esc(daNums(F.devisFrs))+'</b>':''}<br>Destination : <b>${esc(F.zone)}</b> · Transport : <b>${esc(F.transport)}</b></p>
 <table style="border-collapse:collapse;font-family:Arial;font-size:13px"><tr style="background:#f1f5f9"><th ${td}>Réf.</th><th ${td}>Désignation</th><th ${td}>Qté</th>${daMulti(F)?`<th ${td}>Client</th>`:''}<th ${td}>Fournisseur</th></tr>
@@ -3746,7 +3746,7 @@ function daResumeStocke(d,titre){
   return `<p>${titre}</p><p>Demande <b>${esc(d.Title)}</b> de <b>${esc(d.Demandeur||'?')}</b>${bc?' (BC '+esc(bc)+')':''} · Pour : <b>${daHasCli(d.Motif)?esc(daPour(d))+(d.N_Devis?' (devis client '+esc(d.N_Devis)+')':''):'Stock'}</b>${d.N_Devis_Frs?'<br>Devis fournisseur : <b>'+esc(d.N_Devis_Frs)+'</b>':''}<br>Destination : <b>${esc(d.Zone||'')}</b> · Transport : <b>${esc(d.Transport||'')}</b></p>
 <table style="border-collapse:collapse;font-family:Arial;font-size:13px"><tr style="background:#f1f5f9"><th ${td}>Réf.</th><th ${td}>Désignation</th><th ${td}>Qté</th>${daLignes(d.ID).some(l=>l.Client)?`<th ${td}>Client</th>`:''}<th ${td}>Fournisseur</th></tr>
 ${daLignes(d.ID).map(l=>`<tr><td ${td}><b>${esc(l.Title)}</b></td><td ${td}>${esc(daDes(l))}</td><td ${td} align="right">${esc(String(l.Quantite??''))}</td>${daLignes(d.ID).some(x=>x.Client)?`<td ${td}>${esc(l.Client||'')}</td>`:''}<td ${td}>${esc(l.Fournisseur||'à choisir')}</td></tr>`).join('')}</table>
-<p><a href="${esc(location.origin+location.pathname)}">Ouvrir le Portail Achats › Commandes</a></p>`;
+<p><a href="${esc(location.origin+location.pathname+'?tab=commandes')}">Ouvrir le Portail Achats › Commandes</a></p>`;
 }
 async function daValider(id){
   const d=(DATA.da||[]).find(x=>x.ID===id);if(!d)return;
@@ -3872,7 +3872,7 @@ async function init(){
         history.replaceState({},document.title,C.redirectUri);
       }catch(e){$('loadingScreen').style.display='none';$('authScreen').style.display='flex';$('authStatus').textContent='Erreur de connexion : '+e.message;return;}
     }
-    if(!getToken()){if(QS.get('dossier'))sessionStorage.setItem('open_dossier',QS.get('dossier'));$('authScreen').style.display='flex';return;}
+    if(!getToken()){if(QS.get('dossier'))sessionStorage.setItem('open_dossier',QS.get('dossier'));if(QS.get('tab'))sessionStorage.setItem('open_tab',QS.get('tab'));$('authScreen').style.display='flex';return;}
   }
   const u=sessionStorage.getItem('user_name')||'';
   $('userName').textContent=u;$('userInitials').textContent=(u.split(' ').map(w=>(w.match(/[A-Za-zÀ-ÿ]/)||[''])[0]).join('').toUpperCase().slice(0,2))||'RP';
@@ -3881,6 +3881,7 @@ async function init(){
   catch(e){$('loadingScreen').style.display='none';$('authScreen').style.display='flex';$('authStatus').textContent='Erreur de chargement SharePoint : '+e.message;console.error(e);return;}
   $('loadingScreen').style.display='none';$('app').style.display='block';
   const open=QS.get('dossier')||sessionStorage.getItem('open_dossier');sessionStorage.removeItem('open_dossier');if(open){const a=DATA.arr.find(x=>String(x.ID)===open||x.N_Dossier===open);if(a){setTab('dossiers');openFiche(a.ID);}}
+  {const ot=QS.get('tab')||sessionStorage.getItem('open_tab');sessionStorage.removeItem('open_tab');if(ot&&!open&&document.querySelector(`.tab[data-tab="${ot}"]`))setTab(ot);}
   setInterval(()=>{if(!W&&!$('ovNew').classList.contains('open'))loadAll().catch(()=>{});},5*60*1000);
 }
 init();
