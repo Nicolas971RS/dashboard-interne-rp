@@ -3731,11 +3731,11 @@ async function daAnnuler(id){
 // ── Rendu (dans l'onglet Commandes) ──
 // ── Demandes des vendeurs (Dashboard RP) : validation par Fabrice ──
 const daPeutValider=()=>typeof estValideur==='function'&&estValideur();
-function daBcClient(d){if(!d.ID_BC_Client)return '';const b=(DATA.bcc||[]).find(x=>+x.ID===+d.ID_BC_Client);return b?b.Title:'BC #'+d.ID_BC_Client;}
+function daBcClient(d){if(!d.ID_BC_Client)return '';const b=(DATA.bcc||[]).find(x=>+x.ID===+d.ID_BC_Client);if(b)return b.Title;const m=/pour le BC <b>([^<]+)<\/b>/.exec(d.Resume_Notif||'');return m?m[1].trim():'#'+d.ID_BC_Client;}
 function daBlocAValider(){
   const A=(DATA.da||[]).filter(d=>d.Statut==='À valider').sort((a,b)=>a.ID-b.ID);if(!A.length)return '';
   const v=daPeutValider();
-  return `<div class="da-aval"><div class="da-gh"><b>⏳ Demandes des vendeurs à valider (${A.length})</b> <span class="muted">${v?'':'en attente de Fabrice'}</span></div>
+  return `<div class="da-aval"><div class="da-gh"><b>⏳ Demandes des vendeurs à valider (${A.length})</b> <span class="muted">${v?'':'en attente de Fabrice'}</span>${v?'':`<div class="muted" style="font-size:11px;margin-top:2px">Connecté : ${esc(userEmail()||'?')} — pour valider ici, cette adresse doit figurer dans Parametres_Achats › EMAIL_FABRICE (ou VALIDEURS_COEF).</div>`}</div>
     ${A.map(d=>`<div class="da-av-i"><div><b class="mono">${esc(d.Title)}</b> · <b>${esc(d.Demandeur||'?')}</b> · ${esc(daPour(d))}${daBcClient(d)?' · BC '+esc(daBcClient(d)):''} · ${esc(d.Zone||'')} ${esc(d.Transport||'')} · ${fmtD(dk(d,'Date_Demande'))}
       ${d.Commentaire?`<div class="muted" style="font-size:12px">💬 ${esc(d.Commentaire)}</div>`:''}
       <div style="font-size:12.5px;margin-top:3px">${daLignes(d.ID).map(l=>`<div><b class="mono">${esc(l.Title)}</b> ${esc(daDes(l))} <span class="muted">×${fmtN(l.Quantite,0)}</span></div>`).join('')}</div></div>
