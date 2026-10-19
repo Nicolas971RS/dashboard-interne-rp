@@ -3638,7 +3638,7 @@ async function davEnregistrer(item){
   let n=1;try{const ex=await spFetch('sites/BondeCommande','Demandes_Achat',`$select=ID,Title&$filter=startswith(Title,'${pre}')&$top=500`);n=ex.length+1;}catch(e){n=((DATA.achats.da||[]).filter(d=>String(d.Title).startsWith(pre)).length)+1;}
   const num=`${pre}-${n}`,bc=f(item,'Title')||('BC-'+item.ID);
   const td='style="border:1px solid #d1d5db;padding:4px 8px"';
-  const portail=location.origin+location.pathname.replace(/[^\/]*$/,'')+'achats.html';
+  const portail=location.origin+location.pathname.replace(/[^\/]*$/,'')+'achats.html?tab=commandes';
   const resume=`<p><b>${_escD(u)}</b> demande une commande fournisseur (<b>${_escD(num)}</b>) pour le BC <b>${_escD(bc)}</b>. <b>Elle attend ta validation.</b></p>
 <p>Pour : <b>${motif==='Client'?'Client '+_escD(client):'Stock'}</b><br>Destination : <b>${_escD(zone)}</b> · Transport : <b>${_escD(tr)}</b></p>
 <table style="border-collapse:collapse;font-family:Arial;font-size:13px"><tr style="background:#f1f5f9"><th ${td}>Réf.</th><th ${td}>Désignation</th><th ${td}>Qté</th></tr>
