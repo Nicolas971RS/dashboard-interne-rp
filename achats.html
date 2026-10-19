@@ -3627,7 +3627,7 @@ function daRender(){
     <div style="display:flex;justify-content:space-between;align-items:center;margin-top:8px"><button class="btn sm" id="daAdd">＋ Ligne</button><span class="muted" id="daCatMsg" style="font-size:12px">${DAV.cat?`Catalogue : ${DAV.cat.length} références`:'Chargement du catalogue…'}</span></div>
     <label class="cmd-com" style="margin-top:10px">Commentaire<textarea id="daCom" rows="2">${esc(F.com)}</textarea></label>
   </div>
-  <div class="modal-f"><span class="msg" id="daMsg">${F.editId?'Les lignes déjà commandées ne sont pas modifiables.':'La demande est validée à l’enregistrement (remplace la signature).'}</span><button class="btn ghost" onclick="daFermer()">Annuler</button><button class="btn primary" id="daSave">${F.editId?'Enregistrer les modifications':'Enregistrer la demande'}</button></div>`;
+  <div class="modal-f"><span class="msg" id="daMsg">${F.editId?'Les lignes déjà commandées ne sont pas modifiables.':'La demande est validée à l’enregistrement (remplace la signature).'}</span>${F.editId?`<button class="btn ghost" id="daAnnulDem" style="color:#b91c1c;margin-right:auto" title="La demande sort de « À commander » (statut Annulée)">🗑 Annuler la demande</button>`:''}<button class="btn ghost" onclick="daFermer()">Fermer</button><button class="btn primary" id="daSave">${F.editId?'Enregistrer les modifications':'Enregistrer la demande'}</button></div>`;
 }
 const daHasCli=m=>/Client/.test(m||''),daHasStock=m=>/Stock/.test(m||'')||!m;
 // N_Devis : « D1 ; D2 » (un client) ou « CLIENT A : D1 ; D2 | CLIENT B : D3 » (plusieurs)
@@ -3806,6 +3806,7 @@ document.addEventListener('click',e=>{
   if(e.target.closest('#daAdd')){daLireForm();DAV.form.lignes.push({ref:'',des:'',qte:'',frs:''});daRender();return;}
   const del=e.target.closest('[data-dadel]');if(del){daLireForm();DAV.form.lignes.splice(+del.dataset.dadel,1);if(!DAV.form.lignes.length)DAV.form.lignes.push({ref:'',des:'',qte:'',frs:''});daRender();return;}
   if(e.target.closest('#daSave')){daEnregistrer();return;}
+  if(e.target.closest('#daAnnulDem')){const id=DAV.form&&DAV.form.editId;if(id){daFermer();daAnnuler(id);}return;}
   if(e.target.closest('#daRappr')){(async()=>{const n=await daRapprocherTout();toast(n?`✓ ${n} ligne(s) rapprochée(s) avec un BC`:'Aucune ligne à rapprocher pour l’instant',n?'ok':'wa');renderCommandes();})();return;}
   const go=e.target.closest('[data-cmdgo]');if(go){e.preventDefault();CMDV.filtre='tout';CMDV.q='';CMDV.ouvert=+go.dataset.cmdgo;renderCommandes();const r=document.querySelector(`[data-cmd="${go.dataset.cmdgo}"]`);if(r)r.scrollIntoView({behavior:'smooth',block:'center'});return;}
   const va=e.target.closest('[data-daval]');if(va){daValider(+va.dataset.daval);return;}
