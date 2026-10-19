@@ -405,6 +405,11 @@ fieldset.lockfs .btn{display:none}
 .sifa-f{display:flex;justify-content:space-between;gap:10px;width:100%;text-align:left;border:1px solid var(--border,#e5e7eb);background:#fff;border-radius:8px;padding:7px 10px;margin-top:5px;cursor:pointer;font:inherit}
 .sifa-f:hover{border-color:var(--teal,#0f766e);background:#f0fdfa}
 .cmd-t tr.cmd-r{cursor:pointer}
+.mini-steps i{height:7px!important}
+.cmd-leg{border:1px solid #cbd5e1;border-radius:10px;background:#fff;margin:0 0 10px;overflow:hidden}.cmd-leg-h{display:flex;justify-content:space-between;align-items:center;padding:7px 12px;background:#f1f5f9;border-bottom:1px solid #cbd5e1;font-size:13px}.cmd-leg-b{padding:10px 12px}
+.leg-ex{display:flex;gap:4px;max-width:620px}.leg-s{flex:1;display:flex;flex-direction:column;gap:4px;font-size:11.5px;color:#334155;text-align:center}.leg-s i,.leg-k i{display:block;height:8px;border-radius:4px;background:var(--border)}.leg-s i.on,.leg-k i.on{background:var(--teal-mid)}.leg-s i.cur,.leg-k i.cur{background:var(--lime)}
+.leg-k{display:flex;gap:18px;flex-wrap:wrap;font-size:12.5px;margin-top:8px}.leg-k span{display:inline-flex;align-items:center;gap:6px}.leg-k i{width:28px;display:inline-block}
+
 .cmd-t th{background:#e2e8f0;color:#1e293b;font-size:11px;padding:9px 8px;border-bottom:2px solid #94a3b8}
 .cmd-t>tbody>tr.cmd-r>td{padding:9px 8px;border-bottom:1px solid #cbd5e1}
 .cmd-t>tbody>tr.cmd-r:nth-of-type(4n+3)>td{background:#f8fafc}
@@ -3251,6 +3256,16 @@ function cmdPastilles(c,e){
   return `<div class="mini-steps" title="${CMD_ETAPES.map(x=>x[1]).join(' → ')}">${CMD_ETAPES.filter(x=>imp||!['dispo','route'].includes(x[0])).map(x=>{const j=ordre.indexOf(x[0]);return `<i class="${j<i||e.k==='recue'?'on':(j===i?'cur':'')}" title="${x[1]}"></i>`;}).join('')}</div>`;
 }
 
+function cmdLegendeVue(){try{return localStorage.getItem('cmd_legende')!=='0';}catch(e){return true;}}
+function cmdLegendeHtml(){
+  if(!cmdLegendeVue())return `<div style="text-align:right;margin:-4px 0 6px"><button class="btn ghost sm" data-cmdleg="1">❔ Légende des étapes</button></div>`;
+  const seg=(cls,l)=>`<div class="leg-s"><i class="${cls}"></i><span>${l}</span></div>`;
+  return `<div class="cmd-leg"><div class="cmd-leg-h"><b>Comment lire la colonne « Étapes »</b><button class="btn ghost sm" data-cmdleg="0" title="Masquer la légende">Masquer ✕</button></div>
+  <div class="cmd-leg-b"><div class="leg-ex">${seg('on','1 Commandée')}${seg('on','2 ARC reçu')}${seg('cur','3 BPA envoyé')}${seg('','4 Dispo')}${seg('','5 Expédiée')}${seg('','6 Reçue')}</div>
+  <div class="leg-k"><span><i class="on"></i> étape faite</span><span><i class="cur"></i> <b>où en est la commande</b></span><span><i></i> à venir</span></div>
+  <div class="muted" style="font-size:12px;margin-top:4px">Chaque barre = une étape, de gauche à droite. Exemple ci-dessus : BPA envoyé, on attend la dispo. Les commandes <b>locales</b> n'ont que 4 barres (pas de dispo ni d'expédition). Survole une barre pour voir son nom ; la colonne « Où en est-elle » dit ce qu'il faut faire.</div></div></div>`;
+}
+
 // ── Fichiers en attente dans « Bon de commande » ──
 async function cmdFichiers(force){
   if(CMDV.fichiers&&!force)return CMDV.fichiers;
@@ -3460,6 +3475,7 @@ function renderCommandes(){
       <div class="card-b"><div id="cmdProg" class="muted" style="display:none;margin-bottom:6px"></div>${!F?'<span class="muted">Lecture du dossier…</span>':F.err?`<span class="muted">⚠️ ${esc(F.err)}</span>`:aImp.length?`<div class="cmd-files">${aImp.slice(0,30).map(f=>`<button class="sifa-f" data-cmdimp="${esc(f.path)}"><span>📄 ${esc(f.nom)} ${f.maj?'<span class="tag" style="background:#fff7ed;color:#9a3412">🔁 version modifiée</span>':''}</span><span class="muted">${f.date?esc(new Date(f.date).toLocaleDateString('fr-FR')):''}</span></button>`).join('')}</div>`:'<span class="muted">✓ Tous les BC du dossier sont suivis.</span>'}
       ${CMDV.bilan?`<details style="margin-top:8px"><summary class="muted" style="cursor:pointer">Bilan du dernier import</summary><div style="font-size:12px;white-space:pre-line">${esc(CMDV.bilan.join('\n'))}</div></details>`:''}</div></div>
     <div class="filters">${filtres.map(f=>`<button class="chip ${f[0]===fl[0]?'on':''}" data-cmdf="${f[0]}">${f[1]}<span class="n">${tous.filter(f[2]).length}</span></button>`).join('')}<input id="cmdSearch" class="search" placeholder="🔍 n°, fournisseur, article…" value="${esc(CMDV.q)}" style="margin-left:auto;max-width:260px"></div>
+    ${cmdLegendeHtml()}
     <div class="card"><div class="tblwrap"><table class="ltable cmd-t"><thead><tr><th>N°</th><th>Fournisseur</th><th>Objet</th><th>Date</th><th>Étapes</th><th>Où en est-elle</th><th class="r">Articles</th><th class="r">Montant HT</th></tr></thead><tbody>
     ${rows.length?rows.map(({c,e})=>`<tr class="cmd-r ${CMDV.ouvert===c.ID?'sel':''}" data-cmd="${c.ID}"><td class="mono"><b>${esc(c.Title)}</b></td><td>${esc(c.Fournisseur||'?')}${c.ID_Fournisseur?'':' <span class="frs-ko" title="Fournisseur non reconnu">⚠</span>'}</td><td class="muted">${esc(c.Objet||'')}</td><td>${fmtD(dk(c,'Date_Commande'))}</td><td>${cmdPastilles(c,e)}</td>
       <td><span class="st ${e.cls}">${esc(e.lbl)}</span>${e.alerte?`<div style="font-size:12px;margin-top:2px;color:${e.alerte.lvl==='r'?'var(--red)':'#b45309'}">⚠ ${esc(e.alerte.txt)}</div>`:''}</td><td class="r">${c.Nb_Lignes??cmdLignes(c.ID).length}</td><td class="r">${c.Montant_HT?fmtEur(c.Montant_HT):'—'}</td></tr>
@@ -3512,6 +3528,7 @@ document.addEventListener('click',async e=>{
   if(e.target.closest('#cmdImpTout')){cmdImporterListe(cmdAImporter());return;}
   if(e.target.closest('#cmdRelirePrix')){cmdImporterListe((DATA.cmd||[]).filter(c=>c.Lien_BC&&cmdLignes(c.ID).some(l=>l.Prix_Unitaire==null&&l.Remise!=null&&l.Montant_HT!=null)).map(c=>({path:c.Lien_BC,nom:facNom(c.Lien_BC)})));return;}
   if(e.target.closest('#cmdSolderVieux')){cmdSolderVieux();return;}
+  const lg=e.target.closest('[data-cmdleg]');if(lg){try{localStorage.setItem('cmd_legende',lg.dataset.cmdleg);}catch(_){}renderCommandes();return;}
   const f=e.target.closest('[data-cmdf]');if(f){CMDV.filtre=f.dataset.cmdf;renderCommandes();return;}
   const q=e.target.closest('[data-cmdq]');
   if(q){const id=CMDV.ouvert;const c=cmdById(id);if(!c)return;const a=q.dataset.cmdq;
