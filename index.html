@@ -1553,7 +1553,11 @@ let _contactClientDispo=true;
 // SharePoint, on la retire de la requête au lieu de faire échouer le chargement.
 const SESS_COLS_OPT={Contact_Client:true,Historique:true};
 let _historiqueDispo=true;
-async function fetchSessionsScan(){
+// Les fiches « Réception conteneur » (contrôle magasin des arrivages, créées par le Portail Achats)
+// ne sont pas des BL vendeurs : on les écarte ici, une fois pour tout le Dashboard.
+const _estReceptionScan=x=>/r[ée]ception conteneur/i.test(String(x&&x.Type_Operation&&typeof x.Type_Operation==='object'?(x.Type_Operation.Value||''):(x&&x.Type_Operation||'')));
+async function fetchSessionsScan(){return (await _fetchSessionsScanBrut()).filter(x=>!_estReceptionScan(x));}
+async function _fetchSessionsScanBrut(){
   const qs=sel=>`$select=${sel}&$orderby=ID desc&$top=2000`;
   for(let essai=0;essai<4;essai++){
     const opt=Object.keys(SESS_COLS_OPT).filter(k=>SESS_COLS_OPT[k]);
