@@ -451,6 +451,38 @@ fieldset.lockfs .btn{display:none}
 .is-busy{position:relative;pointer-events:none;opacity:.75;cursor:progress}
 .btn.is-busy::before,.sifa-f.is-busy::before,.fac-i.is-busy::before{content:'⏳';margin-right:6px;display:inline-block;animation:sablier 1s ease-in-out infinite}
 @keyframes sablier{0%,100%{transform:rotate(0)}50%{transform:rotate(180deg)}}
+
+/* ═══ STYLE NET — Dossiers & Factures (20/10) ═══ */
+#dlist.dlist{gap:0;border:1px solid #cbd5e1;border-radius:10px;overflow:hidden;background:#fff}
+#dlist .dhead{display:grid;grid-template-columns:minmax(220px,1.4fr) 1fr 1.2fr 160px 120px;gap:14px;padding:9px 16px;background:#e2e8f0;border-bottom:2px solid #94a3b8;font-size:11px;font-weight:700;color:#1e293b;text-transform:uppercase;letter-spacing:.04em}
+#dlist .dhead .r{text-align:right}
+#dlist .dcard{border:0;border-bottom:1px solid #cbd5e1;border-radius:0;box-shadow:none;transform:none}
+#dlist .dcard:nth-of-type(even){background:#f8fafc}
+#dlist .dcard:hover{background:#eef6ff;box-shadow:inset 5px 0 0 #14b8a6;transform:none}
+#dlist .dcard:last-child{border-bottom:0}
+#dlist .dcard .coef-mini{border-left:1px solid #e2e8f0}
+#dlist .empty{padding:26px}
+.fiche .card,#sec-factures .card{border-color:#cbd5e1}
+.fiche .card-h,#sec-factures .fac-form .card-h,#sec-factures .fac-lh{background:#f1f5f9;border-bottom:1px solid #cbd5e1}
+.fiche .card-h{border-radius:var(--radius-lg) var(--radius-lg) 0 0}
+.fiche .f label,.fac-f .f label{color:#334155}
+.fiche .f input,.fiche .f select,.fiche .f textarea,.fac-f .f input,.fac-f .f select,.fac-f .f textarea,.fiche .ltable input{border:1.5px solid #64748b;color:#0f172a;font-weight:500}
+.fiche .f input.plein,.fiche .f select.plein,.fiche .f textarea.plein,.fac-f .f input.plein,.fac-f .f select.plein,.fac-f .f textarea.plein,.fiche .ltable input.plein{border-color:#0d9488;background:#f0fdfa}
+.fiche .f.auto input{border-color:#93c5fd;background:var(--blue-xlight)}
+.fiche .f input:focus,.fiche .f select:focus,.fiche .f textarea:focus,.fac-f .f input:focus,.fac-f .f select:focus,.fac-f .f textarea:focus,.fiche .ltable input:focus{outline:2px solid #14b8a6;border-color:#0d9488}
+.fiche .ltable input.req-empty,.fiche .f input.req-empty,.fac-f .f input.req-empty{border:1.5px solid #e53935;background:#fff5f5}
+.fiche .ltable input.bad{border-color:#e57373;background:#fff6f6}
+.fiche .ltable th{background:#e2e8f0;color:#1e293b;border-bottom:2px solid #94a3b8;border-right:1px solid #cbd5e1}
+.fiche .ltable td{border-bottom:1px solid #e2e8f0;border-right:1px solid #eef2f7}
+.fiche .ltable tbody tr:nth-child(even):not(.new):not(.mod):not(.del) td{background:#f8fafc}
+.fac-items .fac-i{border-bottom:1px solid #cbd5e1}
+.fac-items .fac-i:nth-of-type(even){background:#f8fafc}
+.fac-items .fac-i:hover{background:#eef6ff}
+.fac-items .fac-i.on{background:#0f2a4a;box-shadow:inset 5px 0 0 #14b8a6}
+.fac-items .fac-i.on .t,.fac-items .fac-i.on .s,.fac-items .fac-i.on .d,.fac-items .fac-i.on .muted,.fac-items .fac-i.on b{color:#fff}
+.fac-items .fac-i.on .s,.fac-items .fac-i.on .d{color:#cfe3fb}
+#sec-factures .fac-form{border:2px solid #0f2a4a}
+@media (max-width:1100px){#dlist .dhead{display:none}}
 </style>
 </head>
 <body>
@@ -919,7 +951,7 @@ function renderDossiers(){
     return hay.includes(q);});}
   L.sort((x,y)=>(estHisto(x)-estHisto(y))||String(dk(y,'ETA_Port')||dk(y,'Date_Entrepot')||'').localeCompare(String(dk(x,'ETA_Port')||dk(x,'Date_Entrepot')||''))||y.ID-x.ID);
   if(!L.length){$('dlist').innerHTML=`<div class="empty">${q?'Aucun dossier ne correspond à la recherche.':'Aucun dossier dans cette catégorie.'}<br><br><button class="btn primary" onclick="openNewDossier()">＋ Créer un dossier</button></div>`;return;}
-  $('dlist').innerHTML=L.slice(0,300).map(a=>{
+  $('dlist').innerHTML='<div class="dhead"><div>Dossier · statut</div><div>Dates</div><div>Fournisseurs · étapes</div><div class="r">Valeur</div><div class="r">Coef.</div></div>'+L.slice(0,300).map(a=>{
     const ls=linesOf(a.ID);const c=calc(ls);const st=statutAuto(a);const al=alertes(a);
     const frs=[...new Set(ls.filter(l=>l.Type_Ligne!=='Frais').map(l=>l.Fournisseur).filter(Boolean))];
     const ep=entrepotPrevu(a);
@@ -2142,6 +2174,13 @@ document.addEventListener('keydown',e=>{
   if(e.key==='Enter'&&e.target.closest&&e.target.closest('#facForm')&&e.target.tagName==='INPUT'&&!$('ovConfirm').classList.contains('open')){
     e.preventDefault();const i=e.target;if(i.dataset.ff==='frs')i.dispatchEvent(new Event('change',{bubbles:true}));setTimeout(validerFacture,0);}
 });
+// ── Champs remplis : bordure turquoise (Dossiers, Factures) ──
+function rpPlein(el){if(el&&el.matches&&el.matches('input:not([type=checkbox]):not([type=radio]):not([type=file]),select,textarea'))el.classList.toggle('plein',String(el.value||'').trim()!=='');}
+function rpMarquer(root){if(root)root.querySelectorAll('input,select,textarea').forEach(rpPlein);}
+['input','change'].forEach(ev=>document.addEventListener(ev,e=>{const t=e.target;if(t&&t.closest&&t.closest('.fiche,.fac-f'))rpPlein(t);},true));
+(function(){const obs=new MutationObserver(ms=>{const vus=new Set();ms.forEach(m=>{const r=m.target.closest?m.target.closest('#fiche,#facForm'):null;if(r&&!vus.has(r)){vus.add(r);rpMarquer(r);}});});
+  const go=()=>['fiche','facForm'].forEach(id=>{const el=document.getElementById(id);if(el)obs.observe(el,{childList:true,subtree:true});});
+  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',go);else go();})();
 document.addEventListener('input',e=>{if(e.target.id==='facSearch'){FACV.rech=e.target.value;renderFacListe();}});
 ['dragover','drop'].forEach(ev=>document.addEventListener(ev,e=>{
   const sec=e.target.closest&&e.target.closest('#sec-factures');if(!sec)return;
