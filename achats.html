@@ -453,6 +453,8 @@ fieldset.lockfs .btn{display:none}
 @keyframes sablier{0%,100%{transform:rotate(0)}50%{transform:rotate(180deg)}}
 
 /* ═══ STYLE NET — Dossiers & Factures (20/10) ═══ */
+#facChips .chip.arr .n{background:var(--amber);color:#fff;padding:0 7px;border-radius:9px;margin-left:6px}
+#facListe .fac-orph{border-bottom:2px solid #f59e0b}
 #dlist.dlist{gap:0;border:1px solid #cbd5e1;border-radius:10px;overflow:hidden;background:#fff}
 #dlist .dhead{display:grid;grid-template-columns:minmax(220px,1.4fr) 1fr 1.2fr 160px 120px;gap:14px;padding:9px 16px;background:#e2e8f0;border-bottom:2px solid #94a3b8;font-size:11px;font-weight:700;color:#1e293b;text-transform:uppercase;letter-spacing:.04em}
 #dlist .dhead .r{text-align:right}
@@ -794,6 +796,7 @@ async function loadAll(){
   DATA.par={};par.forEach(p=>{if(p.Title)DATA.par[String(p.Title).trim()]=p.Valeur;});
   if(pBCC)await pBCC;
   buildDatalists();renderRibbons();renderAll();
+  facVerifArrivees();
 }
 async function reloadAll(){try{await loadAll();toast('✓ Données actualisées','ok');}catch(e){toast('🔴 '+e.message,'ko');}}
 function renderRibbons(){
@@ -1844,22 +1847,36 @@ async function facTraiterTousOrphelins(){
   const s=facAF().sort((a,b)=>a.ID-b.ID)[0];if(s)openFacture(s.ID);
 }
 function facOrphHtml(){
-  const L=FAC_ORPH||[];if(!L.length||FACV.filtre!=='af')return '';
+  const L=FAC_ORPH||[];if(!L.length||!['af','arr'].includes(FACV.filtre))return '';
   return `<div class="fac-orph"><div style="display:flex;justify-content:space-between;align-items:center;gap:6px"><b>📂 Rangées à la main, sans fiche (${L.length})</b><button class="btn sm" id="facOrphTout">Tout mettre en file</button></div>
     <div class="muted" style="font-size:11.5px;margin:2px 0 6px">PDF enregistrés directement dans « Factures Fournisseurs ». Clique pour la traiter.</div>
     ${L.slice(0,60).map(o=>`<div class="fac-i" data-facorph="${esc(o.path)}"><div class="t">${esc(o.nom.replace(/\.pdf$/i,''))}</div><div class="d">${relDay(dkey(o.date||''))}</div></div>`).join('')}</div>`;
 }
 
 // ═══ RENDU ONGLET FACTURES ═══
+function facMajCompteur(){
+  const n=facAF().length+(FAC_ORPH||[]).length;const cnt=$('cntFactures');
+  if(cnt){cnt.style.display=n?'':'none';cnt.textContent=n;cnt.title=`${(FAC_ORPH||[]).length} arrivée(s) · ${facAF().length} à compléter`;}
+}
+// Arrivées : PDF déposés dans « Factures Fournisseurs » sans fiche — vérifiés à chaque chargement (et toutes les 5 min)
+let FAC_ORPH_VUS=null;
+async function facVerifArrivees(){
+  try{await facOrphelins(true);}catch(e){return;}
+  const L=FAC_ORPH||[];const noms=new Set(L.map(o=>o.path));
+  if(FAC_ORPH_VUS){const nv=L.filter(o=>!FAC_ORPH_VUS.has(o.path));
+    if(nv.length)toast(`📥 ${nv.length} nouvelle${nv.length>1?'s':''} facture${nv.length>1?'s':''} arrivée${nv.length>1?'s':''} : ${nv.slice(0,3).map(o=>o.nom.replace(/\.pdf$/i,'')).join(', ')}${nv.length>3?'…':''}`,'ok');}
+  FAC_ORPH_VUS=noms;
+  facMajCompteur();if(CUR_TAB==='factures')renderFactures();
+}
 function renderFactures(){
-  const af=facAF();const cnt=$('cntFactures');if(cnt){cnt.style.display=af.length?'':'none';cnt.textContent=af.length;}
+  const af=facAF();facMajCompteur();
   if(CUR_TAB!=='factures')return;
   const mois=todayKey().slice(0,7);
   const ok=DATA.fac.filter(f=>f.Statut_Saisie===FAC_OK);
   const okMois=ok.filter(f=>dkey(f.Modified||f.Created||'').slice(0,7)===mois);
   const ratt=new Set(DATA.lig.filter(l=>l.ID_Facture).map(l=>l.ID_Facture));
   $('facKpis').innerHTML=[
-    {l:'À compléter',v:af.length,h:af.length?'clique sur une facture pour la traiter':'rien en attente ✓',c:af.length?'var(--amber)':'var(--green)'},
+    {l:'Arrivées · À compléter',v:`${(FAC_ORPH||[]).length} · ${af.length}`,h:(FAC_ORPH||[]).length?'📥 nouvelles factures dans le dossier : à ouvrir':af.length?'clique sur une facture pour la traiter':'rien en attente ✓',c:(FAC_ORPH||[]).length+af.length?'var(--amber)':'var(--green)'},
     {l:'Traitées ce mois',v:okMois.length,h:'rangées et envoyées à l’échéancier',c:'var(--teal-mid)'},
     {l:'Montant du mois',v:fmtN(okMois.reduce((s,f)=>s+n0(f.Montant_TTC),0),0)+' €',h:'factures et avoirs traités',c:'var(--violet)'},
     {l:'Rattachées à un dossier',v:okMois.filter(f=>ratt.has(f.ID)).length,h:'ce mois, automatiquement',c:'var(--blue)'}
@@ -1871,18 +1888,19 @@ function renderFactures(){
 function renderFacListe(){
   const af=facAF().sort((a,b)=>a.ID-b.ID);
   const q=lpNorm(FACV.rech);
-  let rows=FACV.filtre==='af'?af:DATA.fac.filter(f=>f.Statut_Saisie===FAC_OK).sort((a,b)=>b.ID-a.ID);
+  let rows=FACV.filtre==='arr'?[]:FACV.filtre==='af'?af:DATA.fac.filter(f=>f.Statut_Saisie===FAC_OK).sort((a,b)=>b.ID-a.ID);
   if(q)rows=rows.filter(f=>lpNorm([f.Title,f.Fournisseur,f.Code_Compta,facNom(lienPdf(f)),f.Montant_TTC].join(' ')).includes(q));
   const nOk=DATA.fac.length-af.length;
-  $('facChips').innerHTML=`<button class="chip ${FACV.filtre==='af'?'on':''}" data-facf="af">À compléter<span class="n">${af.length}</span></button><button class="chip ${FACV.filtre==='ok'?'on':''}" data-facf="ok">Traitées<span class="n">${nOk}</span></button>`;
+  const nArr=(FAC_ORPH||[]).length;
+  $('facChips').innerHTML=`<button class="chip ${FACV.filtre==='arr'?'on':''} ${nArr?'arr':''}" data-facf="arr" title="PDF arrivés dans « Factures Fournisseurs », pas encore ouverts">📥 Arrivées<span class="n">${nArr}</span></button><button class="chip ${FACV.filtre==='af'?'on':''}" data-facf="af">À compléter<span class="n">${af.length}</span></button><button class="chip ${FACV.filtre==='ok'?'on':''}" data-facf="ok">Traitées<span class="n">${nOk}</span></button>`;
   const src=f=>({'Mail auto':'✉️','Saisie manuelle':'⬆️','DocuWare':'⚡'}[f.Source]||'✉️');
   $('facListe').innerHTML=rows.length?rows.slice(0,200).map(f=>{
     const fr=f.ID_Fournisseur?frsById(f.ID_Fournisseur):null;
     const titre=f.Statut_Saisie===FAC_OK?`${esc(nomCourt(fr)||f.Fournisseur||'')} – ${esc(f.Title||'')}`:(fr?esc(fr.Title):'<span class="muted">Fournisseur à identifier</span>');
     const sous=f.Statut_Saisie===FAC_OK?`${fmtD(dk(f,'Date_Facture'))} · <b>${fmtEur(f.Montant_TTC)}</b>`:`${src(f)} ${esc(facNom(lienPdf(f))).slice(0,46)}`;
     return `<div class="fac-i ${FACV.sel===f.ID?'on':''}" data-fac="${f.ID}"><div class="t">${titre}</div><div class="s">${sous}</div><div class="d">${relDay(dkey(f.Created||f.Modified||''))}</div></div>`;
-  }).join(''):`<div class="todo-none" style="padding:26px 10px">${FACV.filtre==='af'?'✓ Aucune facture en attente.<br><span class="muted" style="font-size:12px">Les factures reçues par mail arrivent ici automatiquement. Tu peux aussi glisser des PDF sur cette page.</span>':'Aucune facture trouvée.'}</div>`;
-  if(FACV.filtre==='af'){if(FAC_ORPH)$('facListe').insertAdjacentHTML(af.length?'beforeend':'afterbegin',facOrphHtml());else facOrphelins().then(()=>{if(CUR_TAB==='factures'&&FAC_ORPH&&FAC_ORPH.length)renderFacListe();});}
+  }).join(''):FACV.filtre==='arr'&&(FAC_ORPH||[]).length?'':`<div class="todo-none" style="padding:26px 10px">${FACV.filtre==='arr'?'✓ Aucune nouvelle facture arrivée.<br><span class="muted" style="font-size:12px">Les PDF enregistrés directement dans « Factures Fournisseurs » apparaissent ici.</span>':FACV.filtre==='af'?'✓ Aucune facture en attente.<br><span class="muted" style="font-size:12px">Les factures reçues par mail arrivent ici automatiquement. Tu peux aussi glisser des PDF sur cette page.</span>':'Aucune facture trouvée.'}</div>`;
+  if(FACV.filtre==='af'||FACV.filtre==='arr'){if(FAC_ORPH)$('facListe').insertAdjacentHTML('afterbegin',facOrphHtml());else facOrphelins().then(()=>{if(CUR_TAB==='factures'&&FAC_ORPH&&FAC_ORPH.length)renderFacListe();});}
   if(FACV.sel&&FACV.sel!==-1&&!DATA.fac.some(f=>f.ID===FACV.sel)){FACV.sel=null;}
   if(!FACV.sel){$('facView').innerHTML=`<div class="fac-vide"><div style="font-size:42px">🧾</div><div>Choisis une facture dans la liste${facAF().length?'':' ou dépose des PDF'}.</div></div>`;$('facForm').innerHTML='';}
 }
@@ -1941,6 +1959,8 @@ function facFormInit(f,lu){
     a=lpAnalyse(lignes,{attendus:att,nomFichier:facNom(lienPdf(f))});
     if(a.source==='image')v.image=true;
   }
+  const nomF=facNom(lienPdf(f)).replace(/\.pdf$/i,'');const mNom=nomF.match(/^(.+?)\s+-\s+(\S.*)$/);
+  if(mNom&&!v.frsId){const cn=matchFrs(mNom[1].trim(),null);if(cn){v.frsId=cn.ID;v.frs=cn.Title;v.src.frs='nom';}}
   if(!v.frsId){
     let cand=null,how='';
     if(a.numero){const l=DATA.lig.find(l=>l.ID_Fournisseur&&lpNorm(l.N_Facture)===lpNorm(a.numero));if(l){cand=frsById(l.ID_Fournisseur);how='ligne';}}
@@ -1950,6 +1970,7 @@ function facFormInit(f,lu){
   }
   const put=(k,val,s='pdf')=>{if(val!==null&&val!==undefined&&val!==''&&(v[k]===''||v[k]===null)){v[k]=val;v.src[k]=s;}};
   if(a.numero){put('numero',a.numero);if(v.src.numero&&v.frsId&&lignesAttendues(v.frsId).some(l=>lpNorm(l.N_Facture)===lpNorm(a.numero)))v.src.numero='ligne';}
+  if(mNom&&v.src.frs==='nom'&&!/\s/.test(mNom[2].trim()))put('numero',mNom[2].trim(),'nom');
   put('date',a.date);
   if(a.montant!==null&&a.montant!==undefined){put('montant',Math.abs(a.montant));}
   if(a.type==='Avoir'){v.type='Avoir';v.src.type='pdf';}
@@ -1964,7 +1985,7 @@ function facEchAuto(v){const d=facDelai(v);
   else if(v.date&&v.sansPdf){const [y,m]=v.date.split('-').map(Number);const ny=m===12?y+1:y,nm=m===12?1:m+1;v.echeance=`${ny}-${String(nm).padStart(2,'0')}-10`;v.src.echeance='calc10';}}
 
 // ── Formulaire ──
-function facChip(s){return s==='pdf'?'<span class="lu" title="Lu automatiquement dans le PDF : vérifie">📄 lu</span>':s==='ligne'?'<span class="lu ok" title="Correspond à une ligne d’un dossier d’arrivage">🚢 dossier</span>':s==='calc'?'<span class="lu" title="Calculée avec le délai de paiement du fournisseur">⏱ calculée</span>':s==='calc10'?'<span class="lu" title="Par défaut : le 10 du mois suivant">⏱ le 10 du mois suivant</span>':'';}
+function facChip(s){return s==='nom'?'<span class="lu ok" title="Lu dans le nom du fichier « FOURNISSEUR - N° »">🏷 nom du fichier</span>':s==='pdf'?'<span class="lu" title="Lu automatiquement dans le PDF : vérifie">📄 lu</span>':s==='ligne'?'<span class="lu ok" title="Correspond à une ligne d’un dossier d’arrivage">🚢 dossier</span>':s==='calc'?'<span class="lu" title="Calculée avec le délai de paiement du fournisseur">⏱ calculée</span>':s==='calc10'?'<span class="lu" title="Par défaut : le 10 du mois suivant">⏱ le 10 du mois suivant</span>':'';}
 function facCtx(v){
   const fr=v.frsId?frsById(v.frsId):null;
   const lignes=fr&&v.numero?DATA.lig.filter(l=>l.ID_Fournisseur===fr.ID&&lpNorm(l.N_Facture)===lpNorm(v.numero)):[];
