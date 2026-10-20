@@ -485,6 +485,33 @@ fieldset.lockfs .btn{display:none}
 .fac-items .fac-i.on .s,.fac-items .fac-i.on .d{color:#cfe3fb}
 #sec-factures .fac-form{border:2px solid #0f2a4a}
 @media (max-width:1100px){#dlist .dhead{display:none}}
+
+/* ═══ CONTENU DU CONTENEUR (articles des BC) ═══ */
+.art-tiles{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;margin-bottom:12px}
+.art-t{border:1px solid #cbd5e1;border-radius:9px;padding:9px 12px;background:#fff;box-shadow:inset 4px 0 0 #94a3b8}
+.art-t.ok{box-shadow:inset 4px 0 0 #16a34a}.art-t.warn{box-shadow:inset 4px 0 0 #f59e0b;background:#fffbeb}.art-t.ko{box-shadow:inset 4px 0 0 #dc2626;background:#fef2f2}
+.art-t .lab{font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;color:#475569}
+.art-t .val{font-size:21px;font-weight:700;color:var(--navy);margin:2px 0}.art-t .val small{font-size:13px;color:#64748b;font-weight:600}
+.art-t .hint{font-size:11.5px;color:#64748b}
+.art-g{width:100%;border-collapse:separate;border-spacing:0;font-size:13px;border:1px solid #cbd5e1;border-radius:9px;overflow:hidden}
+.art-g>thead th{background:#e2e8f0;color:#1e293b;font-size:10.5px;text-transform:uppercase;letter-spacing:.04em;text-align:left;padding:8px;border-bottom:2px solid #94a3b8}
+.art-g th.r,.art-g td.r{text-align:right}
+.art-g>tbody>tr.art-r>td{padding:8px;border-bottom:1px solid #cbd5e1;cursor:pointer}
+.art-g>tbody>tr.art-r:nth-of-type(4n+3)>td{background:#f8fafc}
+.art-g>tbody>tr.art-r:hover>td{background:#eef6ff}
+.art-g>tbody>tr.art-r.ko>td:first-child{box-shadow:inset 4px 0 0 #dc2626}
+.art-g>tbody>tr.art-r.open>td{background:#0f2a4a;color:#fff;border-bottom:0}.art-g>tbody>tr.art-r.open .muted{color:#cfe3fb}
+.art-g>tbody>tr.art-r.open>td:first-child{box-shadow:inset 5px 0 0 #14b8a6}
+.art-g td.chev{color:#64748b;width:26px;text-align:center}.art-g tr.open td.chev{color:#5eead4}
+.art-g>tbody>tr.art-d>td{padding:0 10px 12px;background:#f4f8fd;border-bottom:2px solid #0f2a4a}
+.art-l{width:100%;border-collapse:collapse;font-size:12.5px;background:#fff;border:1px solid #cbd5e1;margin-top:0}
+.art-l th{background:#f1f5f9;font-size:10px;text-transform:uppercase;color:#334155;padding:6px;border:1px solid #cbd5e1;text-align:left}
+.art-l td{padding:5px 6px;border:1px solid #e2e8f0}.art-l tr.first td{border-top:2px solid #94a3b8}
+.art-l tbody tr:nth-child(even) td{background:#f8fafc}
+.art-b{display:inline-block;font-size:11.5px;font-weight:700;border-radius:999px;padding:2px 9px;white-space:nowrap}
+.art-b.ok{background:#dcfce7;color:#166534}.art-b.ko{background:#fee2e2;color:#991b1b}.art-b.warn{background:#fef3c7;color:#92400e}.art-b.mute{background:#f1f5f9;color:#64748b;font-weight:600}
+.art-miss{color:#b45309;font-weight:700;text-decoration:underline dotted}
+@media (max-width:1100px){.art-tiles{grid-template-columns:repeat(2,minmax(0,1fr))}}
 </style>
 </head>
 <body>
@@ -630,7 +657,7 @@ const CATEGORIES=['GROUPAGE/ASSEMBLAGE','TUBES/DEPART USINE','AERIEN','ILES DU N
 const STATUTS=['En préparation','En transit','Arrivé port','Reçu entrepôt','À valider Fabrice','Renvoyé à Patricia','Validé','Clôturé'];
 const STATUT_CLS={'En préparation':'st-prep','En transit':'st-transit','Arrivé port':'st-port','Reçu entrepôt':'st-recu','À valider Fabrice':'st-valid','Renvoyé à Patricia':'st-renv','Validé':'st-ok','Clôturé':'st-ok'};
 const STATUTS_VALIDATION=['À valider Fabrice','Renvoyé à Patricia','Validé','Clôturé'];
-const PARAM_DEFAUTS={DELAI_PORT_ENTREPOT_J:15,DELAI_APPRO_DEFAUT_J:28,DELAI_APPRO_LOCAL_J:7,SEUIL_DOSSIER_BLOQUE_J:15,SEUIL_VALIDATION_J:5,SEUIL_SAISIE_IMAGE_J:3,SEUIL_FACTURE_J:2,SEUIL_ARC_J:5,SEUIL_BPA_J:2};
+const PARAM_DEFAUTS={DELAI_PORT_ENTREPOT_J:15,DELAI_APPRO_DEFAUT_J:28,DELAI_APPRO_LOCAL_J:7,SEUIL_DOSSIER_BLOQUE_J:15,SEUIL_VALIDATION_J:5,SEUIL_SAISIE_IMAGE_J:3,SEUIL_FACTURE_J:2,SEUIL_ARC_J:5,SEUIL_BPA_J:2,TOL_ECART_PCT:1,TOL_ECART_EUR:5};
 
 // ═══ ÉTAT ═══
 const DATA={frs:[],arr:[],lig:[],par:{},fac:[],tir:[]};
@@ -1018,6 +1045,8 @@ ${VUE_F?`      <div class="card" id="cardVal"><div class="card-h"><h3>🧮 Revie
       <div class="card"><div class="card-h"><h3>📦 Marchandise <span class="tag" id="nMar"></span></h3><button class="btn sm" data-act="addMar">＋ Ligne marchandise</button></div>
         <div class="card-b tblwrap" style="padding:6px 10px 10px"><table class="ltable"><thead><tr><th style="width:22%">Fournisseur</th><th>N° cde</th><th>N° facture</th><th>Produits</th><th class="r">Valeur march.</th><th class="r">Fret frs</th><th class="r" title="Remise, avoir, correction (négatif possible)">Ajustement</th><th class="r">Total CIF</th><th>Client</th><th></th></tr></thead>
         <tbody id="tbMar"></tbody><tfoot><tr><td colspan="4">Total marchandise</td><td class="r" id="ftVM"></td><td class="r" id="ftFret"></td><td class="r" id="ftAj"></td><td class="r" id="ftCIF"></td><td colspan="2"></td></tr></tfoot></table></div></div>
+      <div class="card" id="cardArts"><div class="card-h"><h3>📋 Contenu du conteneur — articles des BC <span class="tag" id="nArts"></span></h3><div style="display:flex;gap:6px"><button class="btn sm" data-act="artsToggle" id="btnArtsTg">⊞ Tout déplier</button><button class="btn sm primary" data-act="artsPrint" title="Feuille pré-remplie pour le contrôle à l’arrivée (remplace le formulaire papier)">🖨 Feuille de contrôle</button></div></div>
+        <div class="card-b" id="artsBox" style="padding:10px 12px"></div></div>
       <div class="card"><div class="card-h"><h3>🚚 Frais d'approche <span class="tag" id="nFrais"></span></h3><button class="btn sm" data-act="addFrais">＋ Facture transitaire / transporteur</button></div>
         <div class="card-b" id="fraisBox"></div></div>
 </fieldset></div>
@@ -1036,6 +1065,8 @@ ${VUE_F?`      <div class="card" id="cardVal"><div class="card-h"><h3>🧮 Revie
 ${LOCK?`<div class="lock-ban">🔒 <b>Montants verrouillés</b> : le dossier est ${esc(a.Statut==='À valider Fabrice'?'en validation chez Fabrice':'validé')}. Pour corriger, Fabrice doit le renvoyer.</div><fieldset disabled class="lockfs">`:''}      <div class="card"><div class="card-h"><h3>📦 Marchandise <span class="tag" id="nMar"></span></h3><button class="btn sm" data-act="addMar">＋ Ligne marchandise</button></div>
         <div class="card-b tblwrap" style="padding:6px 10px 10px"><table class="ltable"><thead><tr><th style="width:22%">Fournisseur</th><th>N° cde</th><th>N° facture</th><th>Produits</th><th class="r">Valeur march.</th><th class="r">Fret frs</th><th class="r" title="Remise, avoir, correction (négatif possible)">Ajustement</th><th class="r">Total CIF</th><th>Client</th><th></th></tr></thead>
         <tbody id="tbMar"></tbody><tfoot><tr><td colspan="4">Total marchandise</td><td class="r" id="ftVM"></td><td class="r" id="ftFret"></td><td class="r" id="ftAj"></td><td class="r" id="ftCIF"></td><td colspan="2"></td></tr></tfoot></table></div></div>
+      <div class="card" id="cardArts"><div class="card-h"><h3>📋 Contenu du conteneur — articles des BC <span class="tag" id="nArts"></span></h3><div style="display:flex;gap:6px"><button class="btn sm" data-act="artsToggle" id="btnArtsTg">⊞ Tout déplier</button><button class="btn sm primary" data-act="artsPrint" title="Feuille pré-remplie pour le contrôle à l’arrivée (remplace le formulaire papier)">🖨 Feuille de contrôle</button></div></div>
+        <div class="card-b" id="artsBox" style="padding:10px 12px"></div></div>
       <div class="card"><div class="card-h"><h3>🚚 Frais d'approche <span class="tag" id="nFrais"></span></h3><button class="btn sm" data-act="addFrais">＋ Facture transitaire / transporteur</button></div>
         <div class="card-b" id="fraisBox"></div></div>
 ${LOCK?'</fieldset>':''}      <div class="card" id="cardVal"><div class="card-h"><h3>🧮 Revient à appliquer — validation Fabrice</h3></div><div class="card-b" id="valBox"></div></div>
@@ -1075,6 +1106,114 @@ function lineRowMar(l){
 function renderLines(){
   const mar=W.lines.filter(l=>l.Type_Ligne!=='Frais');
   $('tbMar').innerHTML=mar.length?mar.map(lineRowMar).join(''):`<tr><td colspan="10" class="muted" style="padding:14px">Aucune ligne. Ajoute les fournisseurs du conteneur, ou crée le dossier depuis l'extrait SIFA.</td></tr>`;
+  try{renderArts();}catch(e){console.warn('[Articles BC]',e);}
+}
+
+// ═══ CONTENU DU CONTENEUR : articles des BC (Lignes_Commande_Frs) reliés par le n° de commande ═══
+// Une ligne marchandise du dossier = une facture / valeur SIFA, pour 1 ou plusieurs BC. Contrôle : total BC HT ↔ valeur déclarée.
+const ARTS_OUV=new Set();
+const artTol=()=>({pct:param('TOL_ECART_PCT'),eur:param('TOL_ECART_EUR')});
+function artPU(l){return l.Prix_Unitaire!=null?n0(l.Prix_Unitaire)*(1-n0(l.Remise)/100):(l.Montant_HT!=null&&n0(l.Quantite)?n0(l.Montant_HT)/n0(l.Quantite):null);}
+function artMontant(l){return l.Montant_HT!=null?n0(l.Montant_HT):(artPU(l)!=null?artPU(l)*n0(l.Quantite):0);}
+function artsLignesBC(c){return (DATA.lcmd||[]).filter(l=>l.ID_Commande_Frs===c.ID||(!l.ID_Commande_Frs&&cmdNum(l.N_Commande)===cmdNum(c.Title))).sort((a,b)=>n0(a.Ordre)-n0(b.Ordre)||a.ID-b.ID);}
+function artsGroupes(){
+  if(!W)return [];
+  // Les lignes qui partagent un BC (BC facturé en plusieurs fois, facture couvrant plusieurs BC) forment un seul groupe de contrôle
+  const L=W.lines.filter(l=>l.Type_Ligne!=='Frais'&&l._st!=='del');
+  const grp=[];
+  L.forEach(l=>{const nums=bccNums(l.N_Commande);const hit=nums.length?grp.filter(g=>nums.some(n=>g.nums.has(n))):[];
+    if(!hit.length){grp.push({lines:[l],nums:new Set(nums)});return;}
+    const g0=hit[0];g0.lines.push(l);nums.forEach(n=>g0.nums.add(n));
+    hit.slice(1).forEach(g=>{g.lines.forEach(x=>g0.lines.push(x));g.nums.forEach(n=>g0.nums.add(n));grp.splice(grp.indexOf(g),1);});});
+  return grp.map(G=>{
+    const l=G.lines[0];const nums=[...G.nums].sort();
+    const bcs=nums.map(n=>{const c=cmdByNum(n);const arts=c?artsLignesBC(c):[];return {n,c,arts,total:c?(arts.length?arts.reduce((s,a)=>s+artMontant(a),0):n0(c.Montant_HT)):null};});
+    const connus=bcs.filter(b=>b.c);
+    const totBC=connus.length?connus.reduce((s,b)=>s+n0(b.total),0):null;
+    const avecV=G.lines.filter(x=>x.Valeur_Marchandise!=null&&x.Valeur_Marchandise!=='');
+    const vm=avecV.length?avecV.reduce((s,x)=>s+n0(x.Valeur_Marchandise),0):null;
+    let ec=null;
+    if(totBC!==null&&vm!==null&&connus.length===bcs.length&&avecV.length===G.lines.length){const d=vm-totBC;const t=artTol();const ok=Math.abs(d)<=t.eur||(totBC&&Math.abs(d)/Math.abs(totBC)*100<=t.pct);ec={d,pct:totBC?d/totBC*100:null,ok};}
+    const frs=[...new Set(G.lines.map(x=>x.Fournisseur).filter(Boolean))].join(' / ');
+    const fac=[...new Set(G.lines.map(x=>x.N_Facture).filter(Boolean))].join(', ');
+    const prod=[...new Set(G.lines.map(x=>x.Produits).filter(Boolean))].join(' · ');
+    return {l:{...l,Fournisseur:frs,N_Facture:fac,Produits:prod,N_Commande:nums.join(', ')},bcs,totBC,vm,ec,manq:bcs.filter(b=>!b.c).map(b=>b.n),nArts:connus.reduce((s,b)=>s+b.arts.length,0),nLig:G.lines.length};
+  });
+}
+function artEcartHtml(g){
+  if(!bccNums(g.l.N_Commande).length)return '<span class="art-b mute">n° de BC à saisir</span>';
+  if(g.manq.length)return `<span class="art-b warn" title="Dépose le PDF dans « Bon de commande » puis Commandes › importer">BC ${g.manq.join(', ')} à importer</span>`;
+  if(!g.ec)return '<span class="art-b mute">valeur à saisir</span>';
+  if(g.ec.ok)return `<span class="art-b ok">✓ conforme${Math.abs(g.ec.d)>=0.01?` (${g.ec.d>0?'+':''}${fmtN(g.ec.d,2)} €)`:''}</span>`;
+  const sens=g.ec.d>0?'facturé plus que commandé : hausse de prix, fret ou frais facturés ?':'facturé moins que commandé : reliquat, remise, échantillons ?';
+  return `<span class="art-b ko" title="${esc(sens)}">⚠ ${g.ec.d>0?'+':''}${fmtN(g.ec.d,2)} €${g.ec.pct!=null?` · ${g.ec.pct>0?'+':''}${fmtN(g.ec.pct,1)} %`:''}</span>`;
+}
+function renderArts(){
+  const box=$('artsBox');if(!box||!W)return;
+  if(!DATA.cmd){box.innerHTML='<div class="muted" style="font-size:13px">Liste des commandes inaccessible : articles indisponibles.</div>';return;}
+  const G=artsGroupes();
+  if(!G.length){box.innerHTML='<div class="muted" style="font-size:13px">Ajoute d’abord les lignes marchandise (ou importe l’extrait SIFA) : les articles des BC s’affichent ici.</div>';$('nArts').textContent='';return;}
+  const nBC=G.reduce((s,g)=>s+g.bcs.length,0),nMan=G.reduce((s,g)=>s+g.manq.length,0),nArt=G.reduce((s,g)=>s+g.nArts,0);
+  const nQ=G.reduce((s,g)=>s+g.bcs.reduce((x,b)=>x+b.arts.reduce((y,a)=>y+n0(a.Quantite),0),0),0);
+  const ctr=G.filter(g=>g.ec),nOk=ctr.filter(g=>g.ec.ok).length,nKo=ctr.length-nOk;
+  const totBC=ctr.reduce((s,g)=>s+n0(g.totBC),0),totVM=ctr.reduce((s,g)=>s+n0(g.vm),0);
+  $('nArts').textContent=`${nArt} article${nArt>1?'s':''}`;
+  const t=artTol();
+  const tile=(lab,val,hint,cls='')=>`<div class="art-t ${cls}"><div class="lab">${lab}</div><div class="val">${val}</div><div class="hint">${hint}</div></div>`;
+  let h=`<div class="art-tiles">
+    ${tile('BC du conteneur',`${nBC-nMan}<small> / ${nBC}</small>`,nMan?`<b>${nMan}</b> à importer dans Commandes`:'tous dans le portail ✓',nMan?'warn':'ok')}
+    ${tile('Articles attendus',fmtN(nArt,0),`${fmtN(nQ,0)} unités au total`)}
+    ${tile('Contrôle des montants',nKo?`${nKo}<small> écart${nKo>1?'s':''}</small>`:ctr.length?'✓':'—',`${nOk}/${G.length} conforme${nOk>1?'s':''} · tolérance ${fmtN(t.pct,0)} % ou ${fmtN(t.eur,0)} €`,nKo?'ko':ctr.length===G.length?'ok':'')}
+    ${tile('Commandé ↔ déclaré',ctr.length?`${totVM-totBC>0?'+':''}${fmtN(totVM-totBC,2)} €`:'—',ctr.length?`BC ${fmtEur(totBC)} · SIFA ${fmtEur(totVM)} (${ctr.length} contrôlé${ctr.length>1?'s':''})`:'aucun BC contrôlable',ctr.length&&Math.abs(totVM-totBC)>Math.max(artTol().eur,Math.abs(totBC)*artTol().pct/100)?'ko':ctr.length?'ok':'')}
+  </div>
+  <table class="art-g"><thead><tr><th style="width:26px"></th><th>Fournisseur</th><th>BC</th><th>Facture</th><th class="r">Articles</th><th class="r">Total BC HT</th><th class="r">Valeur SIFA</th><th>Contrôle</th></tr></thead><tbody>`;
+  G.forEach(g=>{
+    const k=String(g.l._k);const ouv=ARTS_OUV.has(k);
+    h+=`<tr class="art-r ${ouv?'open':''} ${g.ec&&!g.ec.ok?'ko':''}" data-arttg="${k}"><td class="chev">${g.nArts?(ouv?'▾':'▸'):''}</td><td><b>${esc(g.l.Fournisseur||'')}</b></td>
+      <td class="mono">${g.bcs.map(b=>b.c?`<span title="${esc(cmdEtat(b.c).lbl)}">${esc(b.n)}</span>`:`<span class="art-miss">${esc(b.n)}</span>`).join(', ')||'<span class="muted">—</span>'}</td>
+      <td class="mono">${esc(g.l.N_Facture||'')}${g.nLig>1?` <span class="muted" title="Plusieurs lignes du dossier pour ces BC : contrôle sur le total">(${g.nLig} lignes)</span>`:''}</td><td class="r">${g.nArts||'<span class="muted">—</span>'}</td>
+      <td class="r mono">${g.totBC!==null?fmtN(g.totBC,2):'—'}</td><td class="r mono">${g.vm!==null?fmtN(g.vm,2):'—'}</td><td>${artEcartHtml(g)}</td></tr>`;
+    if(ouv&&g.nArts){
+      h+=`<tr class="art-d"><td></td><td colspan="7"><table class="art-l"><thead><tr><th>BC</th><th>Réf. RP</th><th>Réf. frs</th><th>Désignation</th><th class="r">Qté attendue</th><th>Unité</th><th class="r">PU net</th><th class="r">Montant HT</th></tr></thead><tbody>`+
+      g.bcs.filter(b=>b.c).map(b=>b.arts.map((a,i)=>`<tr${i===0?' class="first"':''}><td class="mono">${i===0?esc(b.n):''}</td><td class="mono">${esc(a.Title||'')}</td><td class="mono muted">${esc(a.Ref_2||'')}</td><td>${esc(a.Designation||'')}</td><td class="r mono"><b>${fmtN(n0(a.Quantite),n0(a.Quantite)%1?2:0)}</b></td><td class="muted">${esc(a.Unite||'')}</td><td class="r mono">${artPU(a)!=null?fmtN(artPU(a),2):''}</td><td class="r mono">${fmtN(artMontant(a),2)}</td></tr>`).join('')).join('')+
+      `</tbody></table></td></tr>`;}
+  });
+  h+=`</tbody></table>`;
+  box.innerHTML=h;
+  const tg=$('btnArtsTg');if(tg)tg.textContent=G.every(g=>!g.nArts||ARTS_OUV.has(String(g.l._k)))?'⊟ Tout replier':'⊞ Tout déplier';
+}
+function artsToggle(){const G=artsGroupes().filter(g=>g.nArts);const tous=G.every(g=>ARTS_OUV.has(String(g.l._k)));G.forEach(g=>tous?ARTS_OUV.delete(String(g.l._k)):ARTS_OUV.add(String(g.l._k)));renderArts();}
+function artsPrint(){
+  if(!W)return;const a=W.a;const G=artsGroupes();
+  const mar=/a[ée]rien/i.test([a.Type_Transport,a.Categorie,a.Title].join(' '))?'aerien':'maritime';
+  const tr=String(a.Transitaire||'');const trK=/ITS/i.test(tr)?'its':/CHALLENGE/i.test(tr)?'ch':tr?'autre':'';
+  const cb=on=>on?'☒':'☐';
+  const rows=G.flatMap(g=>{const arts=g.bcs.flatMap(b=>b.arts.map(x=>({b,x})));
+    if(!arts.length)return [`<tr class="grp"><td colspan="8"><b>${esc(g.l.Fournisseur||'')}</b> · BC ${esc(g.bcs.map(b=>b.n).join(', ')||'?')} — ${g.manq.length?'BC non importé : articles à noter à la main':'pas d’articles'}${esc(g.l.Produits?' · '+g.l.Produits:'')}</td></tr>`,...Array(3).fill('<tr><td>&nbsp;</td><td></td><td></td><td></td><td></td><td></td><td></td><td></td></tr>')];
+    return [`<tr class="grp"><td colspan="8"><b>${esc(g.l.Fournisseur||'')}</b> · BC ${esc(g.bcs.map(b=>b.n).join(', '))}${g.l.N_Facture?' · facture '+esc(g.l.N_Facture):''}</td></tr>`,
+      ...arts.map(({b,x})=>`<tr><td>${esc(x.Designation||'')}</td><td class="m">${esc(x.Title||x.Ref_2||'')}</td><td class="m">${esc(b.n)}</td><td class="r"><b>${fmtN(n0(x.Quantite),n0(x.Quantite)%1?2:0)}</b> ${esc(x.Unite||'')}</td><td></td><td></td><td></td><td></td></tr>`)];});
+  const w=window.open('','_blank');if(!w){toast('🔴 Fenêtre bloquée : autorise les fenêtres pour ce site','ko');return;}
+  w.document.write(`<!doctype html><html lang="fr"><head><meta charset="utf-8"><title>Contrôle groupage ${esc(a.Title||'')}</title><style>
+  @page{size:A4 landscape;margin:10mm}body{font:11px/1.35 Arial,sans-serif;color:#000;margin:0}
+  .hd{display:flex;justify-content:space-between;align-items:flex-start;border-bottom:2px solid #000;padding-bottom:6px;margin-bottom:8px}
+  h1{font:bold 18px Georgia,serif;margin:0;text-decoration:underline}.brand{font:bold 15px Arial;letter-spacing:.06em}
+  .info{display:grid;grid-template-columns:1.2fr 1fr 1.3fr;gap:4px 18px;margin-bottom:8px;font-size:12px}.info b{font-style:italic}
+  table{width:100%;border-collapse:collapse}th,td{border:1px solid #000;padding:3px 5px;vertical-align:top}th{background:#e5e5e5;font-size:10.5px;text-transform:uppercase}
+  td.r{text-align:right;white-space:nowrap}.m{font-family:Consolas,monospace;font-size:10.5px}tr.grp td{background:#f2f2f2;font-size:11.5px}
+  col.c-rec,col.c-ab,col.c-tot{width:62px}col.c-obs{width:150px}tr{page-break-inside:avoid}thead{display:table-header-group}
+  .sig{display:flex;gap:40px;margin-top:14px;font-size:12px}.sig div{flex:1;border-top:1px solid #000;padding-top:4px}
+  </style></head><body>
+  <div class="hd"><div><div class="brand">RÉSEAUX PLUS</div><h1>CONTRÔLE GROUPAGE</h1></div><div style="text-align:right;font-size:12px"><b style="font-size:15px">${esc(a.Title||'')}</b><br>${esc([a.N_Dossier?'Dossier Image '+a.N_Dossier:'',a.Ref_Transitaire?'Réf. '+a.Ref_Transitaire:''].filter(Boolean).join(' · '))}<br>${G.reduce((s,g)=>s+g.bcs.length,0)} BC · ${G.reduce((s,g)=>s+g.nArts,0)} articles</div></div>
+  <div class="info"><div><b>Date arrivée :</b> ${a.Date_Entrepot?fmtD(a.Date_Entrepot):'…………………………'}</div>
+    <div>${cb(mar==='maritime')} Groupage Maritime &nbsp; ${cb(mar==='aerien')} Groupage Aérien</div>
+    <div><b>Transitaire :</b> ${cb(trK==='its')} ITS &nbsp; ${cb(trK==='ch')} CHALLENGE &nbsp; ${cb(trK==='autre')} Autres : ${trK==='autre'?esc(tr):'……………'}</div>
+    <div><b>Contrôle effectué par :</b> ……………………………</div><div></div><div></div></div>
+  <table><colgroup><col><col style="width:95px"><col style="width:48px"><col style="width:80px"><col class="c-rec"><col class="c-tot"><col class="c-ab"><col class="c-obs"></colgroup>
+  <thead><tr><th>Désignation</th><th>Réf.</th><th>BC</th><th>Qté attendue</th><th>Qté reçue</th><th>Total</th><th>Qté abîmés</th><th>Observations</th></tr></thead><tbody>${rows.join('')}
+  ${Array(4).fill('<tr><td>&nbsp;</td><td></td><td></td><td></td><td></td><td></td><td></td><td></td></tr>').join('')}</tbody></table>
+  <div class="sig"><div>Contrôle effectué par (nom, signature)</div><div>Date du contrôle</div><div>Litige ouvert : ☐ Non ☐ Oui — n° …………</div></div>
+  <script>window.onload=()=>setTimeout(()=>window.print(),250)<\/script></body></html>`);
+  w.document.close();
 }
 function renderFrais(){
   const fr=W.lines.filter(l=>l.Type_Ligne==='Frais');
@@ -1097,6 +1236,7 @@ function renderSteps(){
     ${cur?`<div class="next-action"><span class="ic">👉</span><span class="t"><b>Prochaine étape (${cur.n}) — ${esc(cur.lbl)} :</b> ${esc(cur.todo)}</span>${cur.field&&!cur.later?`<button class="btn sm green" data-today="${cur.field}">Fait aujourd'hui</button>`:''}</div>`:''}`;
 }
 function refreshComputed(){
+  if(W&&!W._artsT){W._artsT=setTimeout(()=>{if(W){W._artsT=null;try{renderArts();}catch(e){}}},300);}
   const a=W.a;const c=ctrlInfo(W.lines);
   // en-tête
   $('fTitle').textContent=a.Title||'Nouveau dossier';
@@ -1206,6 +1346,8 @@ document.addEventListener('click',async e=>{
   if(rm){const l=W.lines.find(x=>x._k===+rm.dataset.rm);
     if(l._st==='new')W.lines=W.lines.filter(x=>x!==l);else l._st=l._st==='del'?'mod':'del';
     markDirty();renderLines();renderFrais();refreshComputed();return;}
+  const atg=e.target.closest('[data-arttg]');if(atg){const k=atg.dataset.arttg;ARTS_OUV.has(k)?ARTS_OUV.delete(k):ARTS_OUV.add(k);renderArts();return;}
+  const aa=e.target.closest('[data-act="artsToggle"],[data-act="artsPrint"]');if(aa){aa.dataset.act==='artsPrint'?artsPrint():artsToggle();return;}
   const act=e.target.closest('[data-act]');
   if(act){const frais=act.dataset.act==='addFrais';
     const def=frais?(frsById(W.a.ID_Transitaire)||null):null;
