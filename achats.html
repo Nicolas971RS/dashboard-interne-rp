@@ -1145,6 +1145,14 @@ function artPU(l){return l.Prix_Unitaire!=null?n0(l.Prix_Unitaire)*(1-n0(l.Remis
 function artMontant(l){return l.Montant_HT!=null?n0(l.Montant_HT):(artPU(l)!=null?artPU(l)*n0(l.Quantite):0);}
 function artsLignesBC(c){return (DATA.lcmd||[]).filter(l=>l.ID_Commande_Frs===c.ID||(!l.ID_Commande_Frs&&cmdNum(l.N_Commande)===cmdNum(c.Title))).sort((a,b)=>n0(a.Ordre)-n0(b.Ordre)||a.ID-b.ID);}
 function artsGroupes(){
+  const G=artsGroupesBruts();
+  // Contrôle magasin : UNE fiche par fournisseur (tous ses BC du dossier). g.key (par BC) reste la clé des anciennes fiches et des litiges.
+  const parF=new Map();
+  G.forEach(g=>{const fk=`RXS-${W.id}-F${g.idFrs||String(g.l.Fournisseur||'?').toUpperCase().replace(/[^A-Z0-9]+/g,'')}`;g.fkey=fk;if(!parF.has(fk))parF.set(fk,[]);parF.get(fk).push(g);});
+  parF.forEach(L=>{const ids=new Set(L.flatMap(g=>g.bcs.flatMap(b=>b.arts.map(a=>a.ID))));L.forEach((g,i)=>{g.premierF=i===0;g.idsF=ids;g.nGrpF=L.length;});});
+  return G;
+}
+function artsGroupesBruts(){
   if(!W)return [];
   // Les lignes qui partagent un BC (BC facturé en plusieurs fois, facture couvrant plusieurs BC) forment un seul groupe de contrôle
   const L=W.lines.filter(l=>l.Type_Ligne!=='Frais'&&l._st!=='del');
@@ -1193,7 +1201,7 @@ function renderArts(){
   const lecture=W.lecture||(typeof lectureSeule==='function'&&lectureSeule());
   let tMag;
   if(RX.err==='colonnes')tMag=tile('Contrôle magasin','—','colonnes SharePoint à créer (voir guide)','warn');
-  else if(!RXON)tMag=`<div class="art-t"><div class="lab">Contrôle magasin</div><div class="val" style="font-size:15px;margin:5px 0">${lecture?'Pas encore envoyé':`<button class="btn sm primary" data-act="rxEnvoyer">📲 Envoyer au magasin</button>`}</div><div class="hint">${G.length} fiche${G.length>1?'s':''} (une par fournisseur) dans le portail Scan</div></div>`;
+  else if(!RXON)tMag=`<div class="art-t"><div class="lab">Contrôle magasin</div><div class="val" style="font-size:15px;margin:5px 0">${lecture?'Pas encore envoyé':`<button class="btn sm primary" data-act="rxEnvoyer">📲 Envoyer au magasin</button>`}</div><div class="hint">${new Set(G.map(g=>g.fkey)).size} fiche${new Set(G.map(g=>g.fkey)).size>1?'s':''} (une par fournisseur) dans le portail Scan</div></div>`;
   else tMag=tile('Contrôle magasin',`${rs.nOk}<small> / ${rs.n}</small>`,rs.nOk===rs.n?(rs.nEc?`terminé · <b>${rs.nEc}</b> écart${rs.nEc>1?'s':''}`:'terminé · tout conforme ✓'):`${rs.nCours} en cours · ${rs.nAtt} à prendre`,rs.nOk===rs.n?(rs.nEc?'ko':'ok'):'warn');
   let h=`<div class="art-tiles c5">
     ${tile('BC du conteneur',`${nBC-nMan}<small> / ${nBC}</small>`,nMan?`<b>${nMan}</b> à importer dans Commandes`:'tous dans le portail ✓',nMan?'warn':'ok')}
@@ -1247,11 +1255,14 @@ async function rxCharger(){
   RX.lig=L;
 }
 function rxGroupe(g){
-  const sess=RX.sess.find(x=>x.Title===g.key)||null;
+  const sess=RX.sess.find(x=>x.Title===g.fkey)||RX.sess.find(x=>x.Title===g.key)||null;
+  const parFrs=!!sess&&sess.Title===g.fkey;
   const lit=(DATA.lit||[]).filter(l=>l.ID_Arrivage===W.id&&String(l.N_Commande||'')===String(g.l.N_Commande||'')).sort((a,b)=>b.ID-a.ID)[0]||null;
   if(!sess)return {sess:null,lit,extra:[]};
-  const lines=RX.lig.filter(l=>n0(l.Session_ScanId)===sess.ID);
+  const toutes=RX.lig.filter(l=>n0(l.Session_ScanId)===sess.ID);
   const ids=new Set(g.bcs.flatMap(b=>b.arts.map(a=>a.ID)));
+  const idsF=parFrs&&g.idsF?g.idsF:ids;
+  const lines=toutes.filter(l=>ids.has(n0(l.ID_Ligne_Cmd))||(!idsF.has(n0(l.ID_Ligne_Cmd))&&(!parFrs||g.premierF)));
   const byCmd=new Map(lines.filter(l=>ids.has(n0(l.ID_Ligne_Cmd))).map(l=>[n0(l.ID_Ligne_Cmd),l]));
   const extra=lines.filter(l=>!ids.has(n0(l.ID_Ligne_Cmd)));
   const fait=sess.Statut===RX_FAIT,cours=sess.Statut==='En cours de scan';
@@ -1265,8 +1276,10 @@ function rxGroupe(g){
 }
 function rxResume(G){
   const S=G.filter(g=>g.rx.sess);
-  return {n:G.length,nEnv:S.length,nOk:S.filter(g=>g.rx.fait).length,nCours:S.filter(g=>g.rx.cours).length,nAtt:S.filter(g=>!g.rx.fait&&!g.rx.cours).length,
-    nEc:S.filter(g=>g.rx.fait).reduce((s,g)=>s+g.rx.nEc,0),nSans:G.length-S.length,
+  const U=[...new Map(S.map(g=>[g.rx.sess.ID,g.rx])).values()];
+  const nF=new Set(G.map(g=>g.fkey)).size,nSansF=new Set(G.filter(g=>!g.rx.sess).map(g=>g.fkey)).size;
+  return {n:nF,nEnv:U.length,nOk:U.filter(x=>x.fait).length,nCours:U.filter(x=>x.cours).length,nAtt:U.filter(x=>!x.fait&&!x.cours).length,
+    nEc:S.filter(g=>g.rx.fait).reduce((s,g)=>s+g.rx.nEc,0),nSans:nSansF,
     compte:S.some(g=>g.rx.lines.some(l=>n0(l.Quantite_Scannee)||n0(l.Quantite_Abimee))||g.rx.fait)};
 }
 function rxLigneArt(x,a){
@@ -1290,7 +1303,7 @@ function rxBadge(g){
 }
 function rxBandeau(G,rs,lecture){
   const S=G.filter(g=>g.rx.sess);
-  const enCours=S.filter(g=>g.rx.cours).map(g=>`${esc(nomCourtTxt(g.l.Fournisseur))} (${esc(g.rx.sess.Magasinier||'?')})`);
+  const enCours=[...new Map(S.filter(g=>g.rx.cours).map(g=>[g.rx.sess.ID,`${esc(nomCourtTxt(String(g.rx.sess.Fournisseur||g.l.Fournisseur).split(' / ')[0]))} (${esc(g.rx.sess.Magasinier||'?')})`])).values()];
   let h='';
   if(rs.nOk<rs.nEnv)h=`<div class="rx-ban info">📲 <b>Contrôle magasin : ${rs.nOk}/${rs.nEnv} fiche${rs.nEnv>1?'s':''} validée${rs.nOk>1?'s':''}</b>${enCours.length?` · en cours : ${enCours.join(', ')}`:''}${rs.nAtt?` · ${rs.nAtt} à prendre dans le portail Scan`:''}
     <span class="rx-act"><button class="btn sm" data-act="rxMaj">↻ Actualiser</button>${!lecture&&!rs.compte?'<button class="btn sm" data-act="rxAnnuler">Annuler l’envoi</button>':''}</span></div>`;
@@ -1309,20 +1322,23 @@ async function rxEnvoyer(){
   if(!W)return;
   if(W.dirty){toast('Enregistre d’abord le dossier.','ko');return;}
   if(RX.err==='colonnes'||RX.err==='acces'){toast('🔴 Portail Scan pas prêt : '+(RX.err==='colonnes'?'colonnes ID_Arrivage / Conteneur / Fournisseur à créer dans Sessions_Scan':RX.errMsg),'ko');return;}
-  const G=artsGroupes().filter(g=>!RX.sess.some(x=>x.Title===g.key));if(!G.length){toast('Toutes les fiches sont déjà envoyées.','ok');return;}
+  const tous=artsGroupes();tous.forEach(g=>g.rx=rxGroupe(g));
+  const F=new Map();tous.filter(g=>!g.rx.sess).forEach(g=>{if(!F.has(g.fkey))F.set(g.fkey,[]);F.get(g.fkey).push(g);});
+  if(!F.size){toast('Toutes les fiches sont déjà envoyées.','ok');return;}
   const cont=String(W.a.Conteneur||W.a.Title||'').trim();
-  const sansArt=G.filter(g=>!g.nArts);
-  const ok=await showConfirm('Envoyer au contrôle magasin',`Créer <b>${G.length}</b> fiche${G.length>1?'s':''} de contrôle dans le portail Scan pour <b>${esc(cont)}</b> (une par fournisseur), avec <b>${G.reduce((s,g)=>s+g.nArts,0)}</b> articles attendus.
-    ${sansArt.length?`<div class="fac-note" style="margin-top:10px">⚠ ${sansArt.length} fiche${sansArt.length>1?'s':''} sans articles (BC non importé : ${esc(sansArt.flatMap(g=>g.manq).join(', '))}). Le magasinier ajoutera ce qu’il trouve en « article non prévu ». Mieux : importe d’abord ces BC.</div>`:''}
+  const L=[...F.values()];const nArt=L.flat().reduce((s,g)=>s+g.nArts,0);
+  const sansArt=L.filter(gs=>!gs.some(g=>g.nArts));const manq=L.flat().flatMap(g=>g.manq);
+  const ok=await showConfirm('Envoyer au contrôle magasin',`Créer <b>${L.length}</b> fiche${L.length>1?'s':''} de contrôle dans le portail Scan pour <b>${esc(cont)}</b> (une par fournisseur), avec <b>${nArt}</b> articles attendus.
+    ${manq.length?`<div class="fac-note" style="margin-top:10px">⚠ BC non importé${manq.length>1?'s':''} : ${esc(manq.join(', '))}. Leurs articles ne seront pas dans les fiches${sansArt.length?` (${sansArt.length} fiche${sansArt.length>1?'s':''} sans aucun article)`:''} : le magasinier ajoutera ce qu’il trouve en « article non prévu ». Mieux : importe d’abord ces BC.</div>`:''}
     <div class="muted" style="font-size:12px;margin-top:8px">Aristide, Saïd ou Francky prennent chacun une fiche dans « BL en attente » du portail Scan.</div>`,'📲 Envoyer');
   if(!ok)return;
   let nS=0,nL=0;
   try{
-    for(const g of G){
-      const frs=g.l.Fournisseur||'';
-      const sess=await spPost('Sessions_Scan',{Title:g.key,Numero_BL:_trunc(`${cont} · ${nomCourtTxt(frs.split(' / ')[0])}`),Client:_trunc(frs),Type_Operation:RX_TYPE,Statut:'BL Émis',Date_Emission:new Date().toISOString(),ID_Arrivage:W.id,Conteneur:_trunc(cont),Fournisseur:_trunc(frs)});
+    for(const gs of L){
+      const frs=[...new Set(gs.flatMap(g=>String(g.l.Fournisseur||'').split(' / ')).filter(Boolean))].join(' / ');
+      const sess=await spPost('Sessions_Scan',{Title:gs[0].fkey,Numero_BL:_trunc(`${cont} · ${nomCourtTxt(frs.split(' / ')[0])}`),Client:_trunc(frs),Type_Operation:RX_TYPE,Statut:'BL Émis',Date_Emission:new Date().toISOString(),ID_Arrivage:W.id,Conteneur:_trunc(cont),Fournisseur:_trunc(frs)});
       nS++;let i=0;
-      for(const b of g.bcs)for(const a of b.arts){
+      for(const g of gs)for(const b of g.bcs)for(const a of b.arts){
         await spPostSilencieux('Lignes_Scan',{Title:`RX-${sess.ID}-${++i}`,Session_ScanId:sess.ID,Reference_Article:_trunc(a.Title||a.Ref_2||''),Designation:_trunc(a.Designation||''),Quantite_Attendue:n0(a.Quantite),Quantite_Scannee:0,Quantite_Abimee:0,Fournisseur:_trunc(frs),N_Commande:b.n,ID_Ligne_Cmd:a.ID});nL++;
       }
     }
@@ -1331,7 +1347,7 @@ async function rxEnvoyer(){
   await rxCharger().catch(()=>{});renderArts();renderAll();
 }
 async function rxAnnuler(){
-  const G=artsGroupes();const S=RX.sess.filter(x=>G.some(g=>g.key===x.Title));
+  const G=artsGroupes();const S=RX.sess.filter(x=>G.some(g=>g.key===x.Title||g.fkey===x.Title));
   if(S.some(x=>x.Statut!=='BL Émis')||RX.lig.some(l=>S.some(x=>x.ID===n0(l.Session_ScanId))&&(n0(l.Quantite_Scannee)||n0(l.Quantite_Abimee)))){toast('Le contrôle a commencé : impossible d’annuler.','ko');return;}
   if(!await showConfirm('Annuler l’envoi au magasin',`Supprimer les <b>${S.length}</b> fiches de contrôle (rien n’a encore été compté) ?`,'Supprimer','danger'))return;
   try{for(const x of S){for(const l of RX.lig.filter(l=>n0(l.Session_ScanId)===x.ID))await spDelete('Lignes_Scan',l.ID);await spDelete('Sessions_Scan',x.ID,x);}toast('✓ Envoi annulé','ok');}
