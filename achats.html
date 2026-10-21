@@ -534,6 +534,15 @@ fieldset.lockfs .btn{display:none}
 .lit-th img{width:100%;height:100%;object-fit:cover}.lit-th small{position:absolute;bottom:0;left:0;right:0;background:rgba(15,23,42,.6);color:#fff;font-size:10px;text-align:center;padding:1px}
 .lit-th.big{width:220px;height:220px}
 @media (max-width:1100px){.art-tiles.c5{grid-template-columns:repeat(2,minmax(0,1fr))}}
+
+/* ═══ ÉCARTS ARC PAR ARTICLE ═══ */
+.arc-c{white-space:nowrap}
+.arc-b{display:inline-block;font-size:11px;font-weight:700;border-radius:999px;padding:1px 8px;margin:1px 0}
+.arc-b.ko{background:#fee2e2;color:#991b1b}.arc-b.warn{background:#fef3c7;color:#92400e}
+.arc-ok{color:#16a34a;font-weight:800}
+.arc-d{font-size:11px;font-family:var(--font-mono)}.arc-d.up{color:#b91c1c}.arc-d.down{color:#15803d}
+.art-l tr[data-arc="ko"] td,.cmd-det .ltable tr[data-arc="ko"] td{background:#fff1f2!important}
+.art-l tr[data-arc="ko"] td:first-child,.cmd-det .ltable tr[data-arc="ko"] td:first-child{box-shadow:inset 4px 0 0 #dc2626}
 </style>
 </head>
 <body>
@@ -668,7 +677,7 @@ const SCHEMA={
   Commandes_Frs:['ID','Title','ID_Fournisseur','Fournisseur','Type_Commande','Objet','Adresse_Livraison','Date_Commande','Montant_HT','Nb_Lignes','Date_ARC','Date_BPA','Mode_BPA','Date_Dispo_Prevue','Date_Reception','Lien_BC','Statut','Commentaire','Annulee','Created','Modified'],
   Demandes_Achat:['ID','Title','Zone','Transport','Motif','Client','N_Devis','N_Devis_Frs','Demandeur','Statut','Valide_Par','Date_Demande','Date_Validation','Commentaire','Notif','Resume_Notif','ID_BC_Client','Created'],
   Lignes_Demande_Achat:['ID','Title','ID_Demande','Designation','Quantite','Qte_Commandee','ID_Fournisseur','Fournisseur','N_Commande','ID_Commande_Frs','Client'],
-  Lignes_Commande_Frs:['ID','Title','ID_Commande_Frs','N_Commande','Ref_2','Designation','Quantite','Unite','Colis','Prix_Unitaire','Remise','Montant_HT','Ordre'],
+  Lignes_Commande_Frs:['ID','Title','ID_Commande_Frs','N_Commande','Ref_2','Designation','Quantite','Unite','Colis','Prix_Unitaire','Remise','Montant_HT','Ordre','Prix_ARC','Qte_ARC','Ecart_ARC'],
   Litiges_Frs:['ID','Title','ID_Arrivage','Conteneur','ID_Fournisseur','Fournisseur','N_Commande','Type_Litige','Detail','Montant_Estime','Statut','Date_Ouverture','Date_Reclamation','Date_Relance','N_Avoir','ID_Avoir','Montant_Avoir','Date_Cloture','Ouvert_Par','Commentaire','Created','Modified'],
   Factures_Frs:['ID','Title','ID_Fournisseur','Fournisseur','Code_Compta','Type_Piece','Date_Facture','Date_Echeance','Montant_TTC','Lien_PDF','Statut_Saisie','Source','Message_ID','Exporte_Echeancier','Statut_Paiement','Date_Paiement','Commentaire','Expediteur','Created','Modified']
 };
@@ -1185,6 +1194,65 @@ function artEcartHtml(g){
   const sens=g.ec.d>0?'facturé plus que commandé : hausse de prix, fret ou frais facturés ?':'facturé moins que commandé : reliquat, remise, échantillons ?';
   return `<span class="art-b ko" title="${esc(sens)}">⚠ ${g.ec.d>0?'+':''}${fmtN(g.ec.d,2)} €${g.ec.pct!=null?` · ${g.ec.pct>0?'+':''}${fmtN(g.ec.pct,1)} %`:''}</span>`;
 }
+// ═══ ARC LIGNE PAR LIGNE : prix / quantité confirmés, gardés sur Lignes_Commande_Frs (Prix_ARC, Qte_ARC, Ecart_ARC) ═══
+// Ecart_ARC : « ok », « prix », « qte », « prix,qte », « mtt » ou « absent ». Sans ces colonnes, repli sur la ligne [ARC] du commentaire.
+let ARC_COLS_KO=false;
+async function arcEnregistrerLignes(c,r){
+  if(ARC_COLS_KO||(MISSING.Lignes_Commande_Frs&&MISSING.Lignes_Commande_Frs.has('Ecart_ARC'))){if(!ARC_COLS_KO)toast('ℹ️ Colonnes Prix_ARC / Qte_ARC / Ecart_ARC absentes de Lignes_Commande_Frs : écarts ARC lus dans le commentaire seulement','wa');ARC_COLS_KO=true;return;}
+  for(const o of r.lignes){
+    const l=(DATA.lcmd||[]).find(x=>x.ID===o.id);if(!l)continue;
+    const b={Prix_ARC:o.pa!=null?Math.round(o.pa*10000)/10000:null,Qte_ARC:o.qa!=null?o.qa:null,Ecart_ARC:!o.trouve?'absent':(o.ecarts.join(',')||'ok')};
+    if(l.Prix_ARC===b.Prix_ARC&&l.Qte_ARC===b.Qte_ARC&&l.Ecart_ARC===b.Ecart_ARC)continue;
+    try{const rr=await fetch(`${listUrl('Lignes_Commande_Frs')}(${l.ID})`,{method:'POST',headers:{...H_JSON(),'X-HTTP-Method':'MERGE','IF-MATCH':'*'},body:JSON.stringify(b)});
+      if(!rr.ok){const t=await rr.text().catch(()=>'');if(/Prix_ARC|Qte_ARC|Ecart_ARC/.test(t)){ARC_COLS_KO=true;toast('ℹ️ Colonnes Prix_ARC / Qte_ARC / Ecart_ARC à créer dans Lignes_Commande_Frs','wa');return;}throw new Error('HTTP '+rr.status);}
+      Object.assign(l,b);
+    }catch(e){console.warn('[ARC lignes]',e);return;}
+  }
+  if(W)try{renderArts();}catch(e){}
+}
+const ARC_PARSE={};
+function arcDepuisCommentaire(c){
+  const ln=String(c&&c.Commentaire||'').split('\n').find(x=>/^\[ARC\]/.test(x));if(!ln)return null;
+  const k=c.ID+'|'+ln;if(ARC_PARSE[k])return ARC_PARSE[k];
+  const res={ok:/^\[ARC\]\s*✓/.test(ln),par:{}};
+  const corps=ln.replace(/^\[ARC\][^:]*:\s*/,'').split(/ · livraison annoncée/)[0];
+  corps.split(/\s;\s/).forEach(t=>{
+    const m=t.match(/^(\S+)\s+(.*)$/);if(!m)return;const ref=arcNorm(m[1]),reste=m[2];
+    const e={};const px=reste.match(/prix\s+([\d\s.,]+?)\s+au lieu de\s+([\d\s.,]+)/i);const q=reste.match(/qt[ée]\s+([\d\s.,]+?)\s+au lieu de\s+([\d\s.,]+)/i);
+    if(px){e.pa=arcNum(px[1].trim());e.ecart='prix';}
+    if(q){e.qa=arcNum(q[1].trim());e.ecart=e.ecart?e.ecart+',qte':'qte';}
+    if(/absent de l/i.test(reste))e.ecart='absent';
+    if(/^montant/i.test(reste))e.ecart='mtt';
+    if(e.ecart)res.par[ref]=e;});
+  ARC_PARSE[k]=res;return res;
+}
+// État ARC d'une ligne de BC : null (pas d'ARC contrôlé) ou {etat:'ok'|'prix'|'qte'|'prix,qte'|'mtt'|'absent', pa, qa, pb, d, pct, impact}
+function arcLigne(l,c){
+  c=c||(DATA.cmd||[]).find(x=>x.ID===l.ID_Commande_Frs);
+  const pb=l.Prix_Unitaire!=null?n0(l.Prix_Unitaire)*(1-n0(l.Remise)/100):(l.Montant_HT!=null&&n0(l.Quantite)?n0(l.Montant_HT)/n0(l.Quantite):null);
+  let etat=l.Ecart_ARC||'',pa=l.Prix_ARC!=null&&l.Prix_ARC!==''?n0(l.Prix_ARC):null,qa=l.Qte_ARC!=null&&l.Qte_ARC!==''?n0(l.Qte_ARC):null;
+  if(!etat){const p=arcDepuisCommentaire(c);if(!p)return null;
+    const e=p.par[arcNorm(l.Title)]||p.par[arcNorm(l.Ref_2||'')];
+    if(e){etat=e.ecart;if(e.pa!=null)pa=e.pa;if(e.qa!=null)qa=e.qa;}else etat='ok';}
+  const o={etat,pa,qa,pb};
+  if(/prix/.test(etat)&&pa!=null&&pb!=null){o.d=pa-pb;o.pct=pb?o.d/pb*100:null;o.impact=o.d*n0(qa!=null?qa:l.Quantite);}
+  return o;
+}
+function arcCellHtml(a){
+  if(!a)return '<td class="arc-c"></td>';
+  if(a.etat==='ok')return '<td class="arc-c"><span class="arc-ok" title="Conforme à l’ARC">✓</span></td>';
+  if(a.etat==='absent')return '<td class="arc-c"><span class="arc-b ko">absent de l’ARC</span></td>';
+  const p=[];
+  if(/prix/.test(a.etat))p.push(`<span class="arc-b ko" title="Prix confirmé par le fournisseur sur l’ARC">ARC ${a.pa!=null?arcPx(a.pa):'?'}</span>${a.d!=null?`<div class="arc-d ${a.d>0?'up':'down'}">${a.d>0?'+':''}${fmtN(a.d,2)} €${a.pct!=null?` · ${a.pct>0?'+':''}${fmtN(a.pct,1)} %`:''}${a.impact!=null?` <b>(${a.impact>0?'+':''}${fmtN(a.impact,2)} €)</b>`:''}</div>`:''}`);
+  if(/qte/.test(a.etat))p.push(`<span class="arc-b warn">qté ARC ${a.qa!=null?fmtQ(a.qa):'?'}</span>`);
+  if(a.etat==='mtt')p.push('<span class="arc-b warn">montant ARC différent</span>');
+  return `<td class="arc-c">${p.join('')}</td>`;
+}
+function arcResumeGroupe(lignes){
+  const A=lignes.map(l=>arcLigne(l)).filter(Boolean);if(!A.length)return null;
+  const prix=A.filter(a=>/prix/.test(a.etat)),qte=A.filter(a=>/qte/.test(a.etat)),abs=A.filter(a=>a.etat==='absent');
+  return {n:A.length,prix:prix.length,qte:qte.length,abs:abs.length,impact:prix.reduce((s,a)=>s+n0(a.impact),0)};
+}
 function renderArts(){
   const box=$('artsBox');if(!box||!W)return;
   if(!DATA.cmd){box.innerHTML='<div class="muted" style="font-size:13px">Liste des commandes inaccessible : articles indisponibles.</div>';return;}
@@ -1217,12 +1285,12 @@ function renderArts(){
     h+=`<tr class="art-r ${ouv?'open':''} ${g.ec&&!g.ec.ok?'ko':''}" data-arttg="${k}"><td class="chev">${nb?(ouv?'▾':'▸'):''}</td><td><b>${esc(g.l.Fournisseur||'')}</b></td>
       <td class="mono">${g.bcs.map(b=>b.c?`<span title="${esc(cmdEtat(b.c).lbl)}">${esc(b.n)}</span>`:`<span class="art-miss">${esc(b.n)}</span>`).join(', ')||'<span class="muted">—</span>'}</td>
       <td class="mono">${esc(g.l.N_Facture||'')}${g.nLig>1?` <span class="muted" title="Plusieurs lignes du dossier pour ces BC : contrôle sur le total">(${g.nLig} lignes)</span>`:''}</td><td class="r">${g.nArts||'<span class="muted">—</span>'}</td>
-      <td class="r mono">${g.totBC!==null?fmtN(g.totBC,2):'—'}</td><td class="r mono">${g.vm!==null?fmtN(g.vm,2):'—'}</td><td>${artEcartHtml(g)}</td>${RXON?`<td>${rxBadge(g)}</td>`:''}</tr>`;
+      <td class="r mono">${g.totBC!==null?fmtN(g.totBC,2):'—'}</td><td class="r mono">${g.vm!==null?fmtN(g.vm,2):'—'}</td><td>${artEcartHtml(g)}${(()=>{const ar=arcResumeGroupe(g.bcs.flatMap(b=>b.arts));if(!ar||!(ar.prix||ar.qte||ar.abs))return '';return ` <span class="art-b ko" title="Écarts relevés au contrôle de l’ARC">ARC : ${[ar.prix?ar.prix+' prix':'',ar.qte?ar.qte+' qté':'',ar.abs?ar.abs+' absent'+(ar.abs>1?'s':''):''].filter(Boolean).join(', ')}${ar.prix?` (${ar.impact>0?'+':''}${fmtN(ar.impact,2)} €)`:''}</span>`;})()}</td>${RXON?`<td>${rxBadge(g)}</td>`:''}</tr>`;
     if(ouv&&nb){
       const rxc=!!x.sess;
-      h+=`<tr class="art-d"><td></td><td colspan="${RXON?8:7}"><table class="art-l"><thead><tr><th>BC</th><th>Réf. RP</th><th>Réf. frs</th><th>Désignation</th><th class="r">Qté attendue</th><th>Unité</th><th class="r">PU net</th><th class="r">Montant HT</th>${rxc?'<th class="r">Reçu</th><th class="r">Abîmé</th><th>Écart</th><th>📷</th>':''}</tr></thead><tbody>`+
-      g.bcs.filter(b=>b.c).map(b=>b.arts.map((a,i)=>{const r=rxc?rxLigneArt(x,a):null;return `<tr${i===0?' class="first"':''}${r&&r.cls?` data-rxc="${r.cls}"`:''}><td class="mono">${i===0?esc(b.n):''}</td><td class="mono">${esc(a.Title||'')}</td><td class="mono muted">${esc(a.Ref_2||'')}</td><td>${esc(a.Designation||'')}${r&&r.obs?`<div class="rx-obs">💬 ${esc(r.obs)}</div>`:''}</td><td class="r mono"><b>${fmtQ(n0(a.Quantite))}</b></td><td class="muted">${esc(a.Unite||'')}</td><td class="r mono">${artPU(a)!=null?fmtN(artPU(a),2):''}</td><td class="r mono">${fmtN(artMontant(a),2)}</td>${rxc?rxCells(r):''}</tr>`;}).join('')).join('')+
-      (x.extra||[]).map(l=>`<tr data-rxc="exc"><td class="mono">${esc(l.N_Commande||'')}</td><td class="mono">${esc(l.Reference_Article||'')}</td><td></td><td>${esc(l.Designation||'Article non prévu')} <span class="art-b warn">non prévu</span>${l.Observation?`<div class="rx-obs">💬 ${esc(l.Observation)}</div>`:''}</td><td class="r mono">0</td><td></td><td></td><td></td>${rxCells({recu:n0(l.Quantite_Scannee),ab:n0(l.Quantite_Abimee),ec:n0(l.Quantite_Scannee),ph:!!l.Attachments,id:l.ID,fait:x.fait})}</tr>`).join('')+
+      h+=`<tr class="art-d"><td></td><td colspan="${RXON?8:7}"><table class="art-l"><thead><tr><th>BC</th><th>Réf. RP</th><th>Réf. frs</th><th>Désignation</th><th class="r">Qté attendue</th><th>Unité</th><th class="r">PU net</th><th>ARC</th><th class="r">Montant HT</th>${rxc?'<th class="r">Reçu</th><th class="r">Abîmé</th><th>Écart</th><th>📷</th>':''}</tr></thead><tbody>`+
+      g.bcs.filter(b=>b.c).map(b=>b.arts.map((a,i)=>{const r=rxc?rxLigneArt(x,a):null;const ar=arcLigne(a,b.c);return `<tr${i===0?' class="first"':''}${r&&r.cls?` data-rxc="${r.cls}"`:''}${ar&&ar.etat!=='ok'?' data-arc="ko"':''}><td class="mono">${i===0?esc(b.n):''}</td><td class="mono">${esc(a.Title||'')}</td><td class="mono muted">${esc(a.Ref_2||'')}</td><td>${esc(a.Designation||'')}${r&&r.obs?`<div class="rx-obs">💬 ${esc(r.obs)}</div>`:''}</td><td class="r mono"><b>${fmtQ(n0(a.Quantite))}</b></td><td class="muted">${esc(a.Unite||'')}</td><td class="r mono">${artPU(a)!=null?fmtN(artPU(a),2):''}</td>${arcCellHtml(ar)}<td class="r mono">${fmtN(artMontant(a),2)}</td>${rxc?rxCells(r):''}</tr>`;}).join('')).join('')+
+      (x.extra||[]).map(l=>`<tr data-rxc="exc"><td class="mono">${esc(l.N_Commande||'')}</td><td class="mono">${esc(l.Reference_Article||'')}</td><td></td><td>${esc(l.Designation||'Article non prévu')} <span class="art-b warn">non prévu</span>${l.Observation?`<div class="rx-obs">💬 ${esc(l.Observation)}</div>`:''}</td><td class="r mono">0</td><td></td><td></td><td></td><td></td>${rxCells({recu:n0(l.Quantite_Scannee),ab:n0(l.Quantite_Abimee),ec:n0(l.Quantite_Scannee),ph:!!l.Attachments,id:l.ID,fait:x.fait})}</tr>`).join('')+
       `</tbody></table></td></tr>`;}
   });
   h+=`</tbody></table>`;
@@ -3678,7 +3746,7 @@ function arcAnalyse(pages,c){
     let idx=-1;
     for(let i=0;i<rows.length;i++){if(pris.has(i))continue;if(rows[i].items.some(it=>refs.includes(arcNorm(it.s))||refs.some(rf=>arcNorm(it.s.split(/\s+/)[0])===rf))){idx=i;break;}}
     const qb=l.Quantite,mb=l.Montant_HT,pb=l.Prix_Unitaire!=null?l.Prix_Unitaire*(1-(l.Remise||0)/100):(mb!=null&&qb?mb/qb:null);
-    const o={ref:l.Title,ref2:l.Ref_2||'',des:l.Designation||'',qb,pb,mb,trouve:idx>=0,qa:null,pa:null,ma:null,ecarts:[]};
+    const o={id:l.ID,ref:l.Title,ref2:l.Ref_2||'',des:l.Designation||'',qb,pb,mb,trouve:idx>=0,qa:null,pa:null,ma:null,ecarts:[]};
     if(idx>=0){
       pris.add(idx);const {ns}=lireLigne(rows[idx],refs);
       if(ns.length){
@@ -3901,7 +3969,7 @@ async function cmdJoindre(id,file,quoi){
     // contrôle automatique si le PDF contient du texte (l'ARC signé = BPA est contrôlé aussi)
     let r=null;
     if(/\.pdf$/i.test(ext)){try{r=await cmdControleArc(c,buf);}catch(e){console.warn('[ARC]',e);toast(`⚠ ${quoi} joint, mais lecture impossible : ${e.message}`,'wa');}}
-    if(r&&r.texte){Object.assign(body,cmdArcMaj(c,r));CMDV.arc[id]=r;}
+    if(r&&r.texte){Object.assign(body,cmdArcMaj(c,r));CMDV.arc[id]=r;arcEnregistrerLignes(c,r);}
     await cmdMaj(id,body,r&&r.texte?null:`✓ ${quoi} joint à la commande ${c.Title}${r&&!r.texte?' (scan : pas de contrôle automatique)':''}`);
     if(r&&r.texte)cmdArcAfficher(c,r,`${quoi} joint à la commande ${c.Title}`);
   }catch(e){toast('🔴 '+e.message,'ko');}
@@ -3937,7 +4005,7 @@ async function cmdRecontroler(id){
       const u=f.ServerRelativeUrl||'';
       const buf=/^(blob:|https?:)/.test(u)?await (await fetch(u)).arrayBuffer():await cmdPjGet(id,f.FileName);
       const r=await cmdControleArc(c,buf);if(!r.texte)continue;
-      CMDV.arc[id]=r;await cmdMaj(id,cmdArcMaj(c,r),null);cmdArcAfficher(c,r,f.FileName);return;
+      CMDV.arc[id]=r;await cmdMaj(id,cmdArcMaj(c,r),null);arcEnregistrerLignes(c,r);cmdArcAfficher(c,r,f.FileName);return;
     }
     choisir('Les ARC / BPA joints sont des scans (signés ou imprimés) : choisis l’ARC d’origine reçu par courriel');
   }catch(e){toast('🔴 '+e.message,'ko');}
@@ -4041,8 +4109,8 @@ function cmdDetailHtml(c,e){
       <button class="btn sm ${c.Annulee==='Oui'?'':'danger'}" data-cmdq="annul">${c.Annulee==='Oui'?'↺ Réactiver':'✕ Annuler la commande'}</button>
     </div>`:''}
     <label class="cmd-com">Commentaire<textarea data-cmdd="Commentaire" rows="2" ${dis} placeholder="Échanges avec le fournisseur, reliquats…">${esc(c.Commentaire||'')}</textarea></label>
-    <div class="tblwrap" style="max-height:340px;margin-top:8px"><table class="ltable"><thead><tr><th>Réf. fournisseur</th><th>Réf. Réseaux Plus</th><th>Désignation</th><th class="r">Qté</th><th>Unité</th><th class="r">Prix</th><th class="r">Rem.</th><th class="r">Montant HT</th></tr></thead><tbody>
-      ${L.length?L.map(l=>`<tr><td class="mono muted">${esc(l.Title)}</td><td class="mono"><b>${esc(l.Ref_2||'')}</b></td><td>${esc(l.Designation||'')}</td><td class="r">${fmtN(l.Quantite,2)}</td><td>${esc(l.Unite||'')}</td><td class="r">${l.Prix_Unitaire!=null?fmtN(l.Prix_Unitaire,2):'—'}</td><td class="r">${l.Remise?fmtN(l.Remise,1)+' %':''}</td><td class="r">${l.Montant_HT!=null?fmtEur(l.Montant_HT):'—'}</td></tr>`).join(''):'<tr><td colspan="8" class="muted">Aucun article enregistré.</td></tr>'}
+    <div class="tblwrap" style="max-height:340px;margin-top:8px"><table class="ltable"><thead><tr><th>Réf. fournisseur</th><th>Réf. Réseaux Plus</th><th>Désignation</th><th class="r">Qté</th><th>Unité</th><th class="r">Prix</th><th class="r">Rem.</th><th class="r">Montant HT</th><th>ARC</th></tr></thead><tbody>
+      ${L.length?L.map(l=>{const ar=arcLigne(l,c);return `<tr${ar&&ar.etat!=='ok'?' data-arc="ko"':''}><td class="mono muted">${esc(l.Title)}</td><td class="mono"><b>${esc(l.Ref_2||'')}</b></td><td>${esc(l.Designation||'')}</td><td class="r">${fmtN(l.Quantite,2)}</td><td>${esc(l.Unite||'')}</td><td class="r">${l.Prix_Unitaire!=null?fmtN(l.Prix_Unitaire,2):'—'}</td><td class="r">${l.Remise?fmtN(l.Remise,1)+' %':''}</td><td class="r">${l.Montant_HT!=null?fmtEur(l.Montant_HT):'—'}</td>${arcCellHtml(ar)}</tr>`;}).join(''):'<tr><td colspan="9" class="muted">Aucun article enregistré.</td></tr>'}
     </tbody></table></div></div>`;
 }
 function peutModifierCmd(){return !(typeof lectureSeule==='function'&&lectureSeule());}
