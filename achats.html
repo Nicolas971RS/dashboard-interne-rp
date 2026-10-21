@@ -547,6 +547,17 @@ fieldset.lockfs .btn{display:none}
 input.rxq{width:72px;text-align:right;font-family:var(--font-mono);border:1.5px solid #64748b;border-radius:6px;padding:4px 6px;background:#fff}
 input.rxq.mod{border-color:#d97706;background:#fffbeb;font-weight:700}
 .art-l tr[data-rxc="hors"] td{color:#94a3b8;background:#f8fafc!important}
+
+/* Envoi partiel : lignes repérables d'un coup d'œil */
+.art-l tr[data-env="sug-in"] td,.art-l tr[data-env="in"] td{background:#ecfdf5!important}
+.art-l tr[data-env="sug-in"] td:first-child,.art-l tr[data-env="in"] td:first-child{box-shadow:inset 4px 0 0 #059669}
+.art-l tr[data-env="sug-out"] td{background:#f8fafc!important;color:#64748b}
+.art-l tr[data-env="out"] td{background:#f1f5f9!important;color:#94a3b8}
+.art-l tr[data-env="out"] td:not(:last-child){text-decoration:line-through;text-decoration-color:#cbd5e1}
+.art-l tr[data-env="part"] td{background:#fffbeb!important}
+.art-l tr[data-env="part"] td:first-child{box-shadow:inset 4px 0 0 #d97706}
+.env-t{display:inline-block;margin-left:6px;font-size:10.5px;font-weight:700;border-radius:999px;padding:1px 7px;text-decoration:none;vertical-align:1px}
+.env-t.in{background:#d1fae5;color:#065f46}.env-t.out{background:#e2e8f0;color:#475569}.env-t.part{background:#fef3c7;color:#92400e}
 </style>
 </head>
 <body>
@@ -1086,7 +1097,7 @@ ${VUE_F?`      <div class="card" id="cardVal"><div class="card-h"><h3>🧮 Revie
       <div class="card"><div class="card-h"><h3>📦 Marchandise <span class="tag" id="nMar"></span></h3><button class="btn sm" data-act="addMar">＋ Ligne marchandise</button></div>
         <div class="card-b tblwrap" style="padding:6px 10px 10px"><table class="ltable"><thead><tr><th style="width:22%">Fournisseur</th><th>N° cde</th><th>N° facture</th><th>Produits</th><th class="r">Valeur march.</th><th class="r">Fret frs</th><th class="r" title="Remise, avoir, correction (négatif possible)">Ajustement</th><th class="r">Total CIF</th><th>Client</th><th></th></tr></thead>
         <tbody id="tbMar"></tbody><tfoot><tr><td colspan="4">Total marchandise</td><td class="r" id="ftVM"></td><td class="r" id="ftFret"></td><td class="r" id="ftAj"></td><td class="r" id="ftCIF"></td><td colspan="2"></td></tr></tfoot></table></div></div>
-      <div class="card" id="cardArts"><div class="card-h"><h3>📋 Contenu du conteneur — articles des BC <span class="tag" id="nArts"></span></h3><div style="display:flex;gap:6px"><button class="btn sm" data-act="artsToggle" id="btnArtsTg">⊞ Tout déplier</button><button class="btn sm primary" data-act="artsPrint" title="Feuille pré-remplie pour le contrôle à l’arrivée (remplace le formulaire papier)">🖨 Feuille de contrôle</button></div></div>
+      <div class="card" id="cardArts"><div class="card-h"><h3>📋 Contenu du conteneur — articles des BC <span class="tag" id="nArts"></span></h3><div style="display:flex;gap:6px"><button class="btn sm" data-act="arcDossier" title="Relit l’ARC joint à chaque BC du dossier et marque les articles dont le prix ou la quantité diffère">🔍 Contrôler les ARC</button><button class="btn sm" data-act="artsToggle" id="btnArtsTg">⊞ Tout déplier</button><button class="btn sm primary" data-act="artsPrint" title="Feuille pré-remplie pour le contrôle à l’arrivée (remplace le formulaire papier)">🖨 Feuille de contrôle</button></div></div>
         <div class="card-b" id="artsBox" style="padding:10px 12px"></div></div>
       <div class="card"><div class="card-h"><h3>🚚 Frais d'approche <span class="tag" id="nFrais"></span></h3><button class="btn sm" data-act="addFrais">＋ Facture transitaire / transporteur</button></div>
         <div class="card-b" id="fraisBox"></div></div>
@@ -1106,7 +1117,7 @@ ${VUE_F?`      <div class="card" id="cardVal"><div class="card-h"><h3>🧮 Revie
 ${LOCK?`<div class="lock-ban">🔒 <b>Montants verrouillés</b> : le dossier est ${esc(a.Statut==='À valider Fabrice'?'en validation chez Fabrice':'validé')}. Pour corriger, Fabrice doit le renvoyer.</div><fieldset disabled class="lockfs">`:''}      <div class="card"><div class="card-h"><h3>📦 Marchandise <span class="tag" id="nMar"></span></h3><button class="btn sm" data-act="addMar">＋ Ligne marchandise</button></div>
         <div class="card-b tblwrap" style="padding:6px 10px 10px"><table class="ltable"><thead><tr><th style="width:22%">Fournisseur</th><th>N° cde</th><th>N° facture</th><th>Produits</th><th class="r">Valeur march.</th><th class="r">Fret frs</th><th class="r" title="Remise, avoir, correction (négatif possible)">Ajustement</th><th class="r">Total CIF</th><th>Client</th><th></th></tr></thead>
         <tbody id="tbMar"></tbody><tfoot><tr><td colspan="4">Total marchandise</td><td class="r" id="ftVM"></td><td class="r" id="ftFret"></td><td class="r" id="ftAj"></td><td class="r" id="ftCIF"></td><td colspan="2"></td></tr></tfoot></table></div></div>
-      <div class="card" id="cardArts"><div class="card-h"><h3>📋 Contenu du conteneur — articles des BC <span class="tag" id="nArts"></span></h3><div style="display:flex;gap:6px"><button class="btn sm" data-act="artsToggle" id="btnArtsTg">⊞ Tout déplier</button><button class="btn sm primary" data-act="artsPrint" title="Feuille pré-remplie pour le contrôle à l’arrivée (remplace le formulaire papier)">🖨 Feuille de contrôle</button></div></div>
+      <div class="card" id="cardArts"><div class="card-h"><h3>📋 Contenu du conteneur — articles des BC <span class="tag" id="nArts"></span></h3><div style="display:flex;gap:6px"><button class="btn sm" data-act="arcDossier" title="Relit l’ARC joint à chaque BC du dossier et marque les articles dont le prix ou la quantité diffère">🔍 Contrôler les ARC</button><button class="btn sm" data-act="artsToggle" id="btnArtsTg">⊞ Tout déplier</button><button class="btn sm primary" data-act="artsPrint" title="Feuille pré-remplie pour le contrôle à l’arrivée (remplace le formulaire papier)">🖨 Feuille de contrôle</button></div></div>
         <div class="card-b" id="artsBox" style="padding:10px 12px"></div></div>
       <div class="card"><div class="card-h"><h3>🚚 Frais d'approche <span class="tag" id="nFrais"></span></h3><button class="btn sm" data-act="addFrais">＋ Facture transitaire / transporteur</button></div>
         <div class="card-b" id="fraisBox"></div></div>
@@ -1286,6 +1297,39 @@ function arcResumeGroupe(lignes){
   const prix=A.filter(a=>/prix/.test(a.etat)),qte=A.filter(a=>/qte/.test(a.etat)),abs=A.filter(a=>a.etat==='absent');
   return {n:A.length,prix:prix.length,qte:qte.length,abs:abs.length,impact:prix.reduce((s,a)=>s+n0(a.impact),0)};
 }
+// Contrôle en série des ARC joints aux BC du dossier (sans fenêtre par BC) + bilan
+async function arcControlerDossier(){
+  if(!W)return;
+  const C=[...new Map(artsGroupes().flatMap(g=>g.bcs.filter(b=>b.c).map(b=>[b.c.ID,b.c]))).values()];
+  if(!C.length){toast('Aucun BC importé dans ce dossier.','wa');return;}
+  const res=[];let i=0;
+  for(const c of C){
+    i++;toast(`🔍 ARC ${i}/${C.length} : ${c.Fournisseur||''} ${c.Title}`,'ok');
+    try{
+      const att=(await cmdAttachments(c.ID)).filter(f=>/\.pdf$/i.test(f.FileName)&&/ARC|BPA/i.test(f.FileName));
+      if(!att.length){res.push({c,etat:'sans'});continue;}
+      let r=null;
+      for(const f of att.slice().reverse()){const u=f.ServerRelativeUrl||'';const buf=/^(blob:|https?:)/.test(u)?await (await fetch(u)).arrayBuffer():await cmdPjGet(c.ID,f.FileName);
+        const x=await cmdControleArc(c,buf);if(x.texte){r=x;break;}}
+      if(!r){res.push({c,etat:'scan'});continue;}
+      CMDV.arc[c.ID]=r;await cmdMaj(c.ID,cmdArcMaj(c,r),null);await arcEnregistrerLignes(c,r);
+      res.push({c,etat:r.conforme?'ok':'ecart',r});
+    }catch(e){res.push({c,etat:'err',msg:e.message});}
+  }
+  renderArts();
+  const lab={ok:'<span class="art-b ok">✓ conforme</span>',ecart:'',sans:'<span class="art-b mute">aucun ARC joint</span>',scan:'<span class="art-b warn">ARC scanné : illisible</span>',err:''};
+  const ligne=x=>{let d=lab[x.etat];
+    if(x.etat==='ecart'){const L=x.r.lignes.filter(l=>l.ecarts.length||!l.trouve);d=`<span class="art-b ko">⚠ ${L.length} article${L.length>1?'s':''}</span> <span class="muted" style="font-size:12px">${esc(L.slice(0,4).map(l=>l.ref2||l.ref).join(', '))}${L.length>4?'…':''}${x.r.ecartTotal?` · total ${x.r.ecartTotal>0?'+':''}${fmtN(x.r.ecartTotal,2)} €`:''}</span>`;}
+    if(x.etat==='err')d=`<span class="art-b ko">erreur</span> <span class="muted" style="font-size:12px">${esc(x.msg)}</span>`;
+    return `<tr><td><b>${esc(nomCourtTxt(x.c.Fournisseur))}</b></td><td class="mono">${esc(x.c.Title)}</td><td>${d}</td></tr>`;};
+  const n=k=>res.filter(x=>x.etat===k).length;
+  const no=$('cNo');no.style.display='none';
+  await showConfirm('🔍 Contrôle des ARC du dossier',`<div style="font-size:13px;margin-bottom:8px">${n('ok')} conforme${n('ok')>1?'s':''} · <b style="color:var(--red)">${n('ecart')} avec écart</b> · ${n('sans')} sans ARC joint · ${n('scan')} scan${n('scan')>1?'s':''}</div>
+    <div class="tblwrap" style="max-height:360px"><table class="ltable" style="min-width:0;font-size:13px"><tbody>${res.map(ligne).join('')}</tbody></table></div>
+    ${n('sans')||n('scan')?'<div class="muted" style="font-size:12px;margin-top:8px">Pour ces BC : onglet Commandes › « 📎 Joindre l’ARC » avec le PDF d’origine reçu par courriel (pas un scan). Le contrôle se fait aussitôt.</div>':''}
+    <div class="muted" style="font-size:12px;margin-top:4px">Les articles en écart sont maintenant marqués dans la colonne ARC.</div>`,'OK');
+  no.style.display='';
+}
 function renderArts(){
   const box=$('artsBox');if(!box||!W)return;
   if(!DATA.cmd){box.innerHTML='<div class="muted" style="font-size:13px">Liste des commandes inaccessible : articles indisponibles.</div>';return;}
@@ -1325,7 +1369,12 @@ function renderArts(){
       const se=!rxc&&!lecture&&!g.partiel?artSousEnsemble(g):null;
       const envP=!rxc&&!lecture&&g.bcs.some(b=>b.arts.some(a=>artQteEnvoi(a)!==n0(a.Quantite)));
       h+=`<tr class="art-d"><td></td><td colspan="${RXON?8:7}">${se?`<div class="rx-ban warn" style="margin:8px 0 6px">💡 <span>La valeur SIFA (<b>${fmtEur(g.vm)}</b>) correspond exactement à <b>${se.k} article${se.k>1?'s':''} sur ${se.n}</b> : ${esc(se.arts.slice(0,3).map(a=>a.Designation||a.Ref_2||a.Title).join(', '))}${se.k>3?'…':''} (${fmtEur(se.total)}). Les autres sont probablement des reliquats.</span><span class="rx-act"><button class="btn sm primary" data-rxpart="${esc(g.key)}">Ne garder que ${se.k>1?'ces articles':'cet article'}</button></span></div>`:''}${envP?`<div class="rx-ban info" style="margin:8px 0 6px">✏️ Quantités ajustées pour ce conteneur : ${g.bcs.flatMap(b=>b.arts).filter(a=>artQteEnvoi(a)===0).length} article(s) exclu(s) (reliquat). <span class="rx-act"><button class="btn sm" data-rxreset="${esc(g.key)}">↺ Tout le BC</button></span></div>`:''}<table class="art-l"><thead><tr><th>BC</th><th>Réf. RP</th><th>Réf. frs</th><th>Désignation</th><th class="r">Qté attendue</th><th>Unité</th><th class="r">PU net</th><th>ARC</th><th class="r">Montant HT</th>${rxc?'':(!lecture?'<th class="r" title="Quantité réellement attendue dans ce conteneur (0 = reliquat, non expédié)">Dans ce conteneur</th>':'')}${rxc?'<th class="r">Reçu</th><th class="r">Abîmé</th><th>Écart</th><th>📷</th>':''}</tr></thead><tbody>`+
-      g.bcs.filter(b=>b.c).map(b=>b.arts.map((a,i)=>{const r=rxc?rxLigneArt(x,a):null;const ar=arcLigne(a,b.c);return `<tr${i===0?' class="first"':''}${r&&r.cls?` data-rxc="${r.cls}"`:''}${ar&&ar.etat!=='ok'?' data-arc="ko"':''}><td class="mono">${i===0?esc(b.n):''}</td><td class="mono"><b>${esc(a.Ref_2||'')}</b></td><td class="mono muted">${esc(a.Title||'')}</td><td>${esc(a.Designation||'')}${r&&r.obs?`<div class="rx-obs">💬 ${esc(r.obs)}</div>`:''}</td><td class="r mono"><b>${fmtQ(n0(a.Quantite))}</b></td><td class="muted">${esc(a.Unite||'')}</td><td class="r mono">${artPU(a)!=null?fmtN(artPU(a),2):''}</td>${arcCellHtml(ar)}<td class="r mono">${fmtN(artMontant(a),2)}</td>${rxc?rxCells(r):(!lecture?`<td class="r"><input class="rxq ${artQteEnvoi(a)!==n0(a.Quantite)?'mod':''}" data-rxq="${a.ID}" inputmode="decimal" value="${fmtQ(artQteEnvoi(a))}"></td>`:'')}</tr>`;}).join('')).join('')+
+      g.bcs.filter(b=>b.c).map(b=>b.arts.map((a,i)=>{const r=rxc?rxLigneArt(x,a):null;const ar=arcLigne(a,b.c);
+        // Envoi partiel visible d'un coup d'œil : proposé (avant clic) ou appliqué (quantités ajustées)
+        const qe=artQteEnvoi(a),qb=n0(a.Quantite);
+        const env=!rxc&&se?(se.ids.has(a.ID)?'sug-in':'sug-out'):(!rxc&&g.partiel?(qe<=0?'out':qe<qb?'part':'in'):'');
+        const envTag={'sug-in':'<span class="env-t in">📦 dans l’envoi SIFA</span>','sug-out':'<span class="env-t out">reliquat probable</span>','out':'<span class="env-t out">reliquat : pas dans ce conteneur</span>','part':`<span class="env-t part">partiel : ${fmtQ(qe)} / ${fmtQ(qb)}</span>`,'in':'<span class="env-t in">📦 dans ce conteneur</span>'}[env]||'';
+        return `<tr${i===0?' class="first"':''}${r&&r.cls?` data-rxc="${r.cls}"`:''}${ar&&ar.etat!=='ok'?' data-arc="ko"':''}${env?` data-env="${env}"`:''}><td class="mono">${i===0?esc(b.n):''}</td><td class="mono"><b>${esc(a.Ref_2||'')}</b></td><td class="mono muted">${esc(a.Title||'')}</td><td>${esc(a.Designation||'')}${envTag}${r&&r.obs?`<div class="rx-obs">💬 ${esc(r.obs)}</div>`:''}</td><td class="r mono"><b>${fmtQ(n0(a.Quantite))}</b></td><td class="muted">${esc(a.Unite||'')}</td><td class="r mono">${artPU(a)!=null?fmtN(artPU(a),2):''}</td>${arcCellHtml(ar)}<td class="r mono">${fmtN(artMontant(a),2)}</td>${rxc?rxCells(r):(!lecture?`<td class="r"><input class="rxq ${artQteEnvoi(a)!==n0(a.Quantite)?'mod':''}" data-rxq="${a.ID}" inputmode="decimal" value="${fmtQ(artQteEnvoi(a))}"></td>`:'')}</tr>`;}).join('')).join('')+
       (x.extra||[]).map(l=>`<tr data-rxc="exc"><td class="mono">${esc(l.N_Commande||'')}</td><td class="mono">${esc(l.Reference_Article||'')}</td><td></td><td>${esc(l.Designation||'Article non prévu')} <span class="art-b warn">non prévu</span>${l.Observation?`<div class="rx-obs">💬 ${esc(l.Observation)}</div>`:''}</td><td class="r mono">0</td><td></td><td></td><td></td><td></td>${rxCells({recu:n0(l.Quantite_Scannee),ab:n0(l.Quantite_Abimee),ec:n0(l.Quantite_Scannee),ph:!!l.Attachments,id:l.ID,fait:x.fait})}</tr>`).join('')+
       `</tbody></table></td></tr>`;}
   });
@@ -1787,6 +1836,7 @@ document.addEventListener('click',async e=>{
   const rxa=e.target.closest('[data-act="rxEnvoyer"],[data-act="rxMaj"],[data-act="rxAnnuler"],[data-act="rxReporter"]');
   if(rxa){({rxEnvoyer,rxMaj,rxAnnuler,rxReporter})[rxa.dataset.act]();return;}
   const atg=e.target.closest('[data-arttg]');if(atg){const k=atg.dataset.arttg;ARTS_OUV.has(k)?ARTS_OUV.delete(k):ARTS_OUV.add(k);renderArts();return;}
+  if(e.target.closest('[data-act="arcDossier"]')){arcControlerDossier();return;}
   const aa=e.target.closest('[data-act="artsToggle"],[data-act="artsPrint"]');if(aa){aa.dataset.act==='artsPrint'?artsPrint():artsToggle();return;}
   const act=e.target.closest('[data-act]');
   if(act){const frais=act.dataset.act==='addFrais';
