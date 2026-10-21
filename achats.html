@@ -1215,6 +1215,19 @@ function rxInitQte(){
   artsGroupes().forEach(g=>{if(!titres.has(g.fkey)&&!titres.has(g.key))return;
     g.bcs.forEach(b=>b.arts.forEach(a=>{const q=parLigne.has(a.ID)?parLigne.get(a.ID):0;if(q!==n0(a.Quantite))W.rxQte[a.ID]=q;}));});
 }
+// Envoi partiel détecté sans ambiguïté (une seule combinaison d'articles = valeur SIFA) : appliqué d'office avant l'envoi au magasin.
+// Une seule fois par groupe et par ouverture de la fiche : « ↺ Tout le BC » n'est pas réécrasé.
+function rxAutoPartiel(G){
+  if(!W||W.lecture||(typeof lectureSeule==='function'&&lectureSeule()))return false;
+  W.rxVu=W.rxVu||new Set();W.rxAuto=W.rxAuto||new Set();let fait=false;
+  G.forEach(g=>{if(W.rxVu.has(g.key))return;W.rxVu.add(g.key);
+    if(RX.sess.some(x=>x.Title===g.key||x.Title===g.fkey))return;   // déjà envoyé : les fiches font foi
+    if(g.partiel)return;                                               // déjà ajusté à la main
+    const se=artSousEnsemble(g);if(!se)return;
+    W.rxQte=W.rxQte||{};g.bcs.forEach(b=>b.arts.forEach(a=>{if(!se.ids.has(a.ID))W.rxQte[a.ID]=0;}));
+    W.rxAuto.add(g.key);fait=true;});
+  return fait;
+}
 function artQteEnvoi(a){return W&&W.rxQte&&Object.prototype.hasOwnProperty.call(W.rxQte,a.ID)?W.rxQte[a.ID]:n0(a.Quantite);}
 // Envoi partiel : la valeur SIFA correspond-elle à une partie seulement des articles du BC ? (≤ 18 articles)
 function artSousEnsemble(g){
@@ -1336,6 +1349,7 @@ function renderArts(){
   const G=artsGroupes();
   if(!G.length){box.innerHTML='<div class="muted" style="font-size:13px">Ajoute d’abord les lignes marchandise (ou importe l’extrait SIFA) : les articles des BC s’affichent ici.</div>';$('nArts').textContent='';return;}
   const sig0=W.rxQteSig;rxInitQte();if(W.rxQteSig!==sig0){renderArts();return;}
+  if(rxAutoPartiel(G)){renderArts();return;}
   G.forEach(g=>g.rx=rxGroupe(g));
   const nBC=G.reduce((s,g)=>s+g.bcs.length,0),nMan=G.reduce((s,g)=>s+g.manq.length,0),nArt=G.reduce((s,g)=>s+g.nArts,0);
   const nQ=G.reduce((s,g)=>s+g.bcs.reduce((x,b)=>x+b.arts.reduce((y,a)=>y+n0(a.Quantite),0),0),0);
@@ -1368,7 +1382,7 @@ function renderArts(){
       const rxc=!!x.sess;
       const se=!rxc&&!lecture&&!g.partiel?artSousEnsemble(g):null;
       const envP=!rxc&&!lecture&&g.bcs.some(b=>b.arts.some(a=>artQteEnvoi(a)!==n0(a.Quantite)));
-      h+=`<tr class="art-d"><td></td><td colspan="${RXON?8:7}">${se?`<div class="rx-ban warn" style="margin:8px 0 6px">💡 <span>La valeur SIFA (<b>${fmtEur(g.vm)}</b>) correspond exactement à <b>${se.k} article${se.k>1?'s':''} sur ${se.n}</b> : ${esc(se.arts.slice(0,3).map(a=>a.Designation||a.Ref_2||a.Title).join(', '))}${se.k>3?'…':''} (${fmtEur(se.total)}). Les autres sont probablement des reliquats.</span><span class="rx-act"><button class="btn sm primary" data-rxpart="${esc(g.key)}">Ne garder que ${se.k>1?'ces articles':'cet article'}</button></span></div>`:''}${envP?`<div class="rx-ban info" style="margin:8px 0 6px">✏️ Quantités ajustées pour ce conteneur : ${g.bcs.flatMap(b=>b.arts).filter(a=>artQteEnvoi(a)===0).length} article(s) exclu(s) (reliquat). <span class="rx-act"><button class="btn sm" data-rxreset="${esc(g.key)}">↺ Tout le BC</button></span></div>`:''}<table class="art-l"><thead><tr><th>BC</th><th>Réf. RP</th><th>Réf. frs</th><th>Désignation</th><th class="r">Qté attendue</th><th>Unité</th><th class="r">PU net</th><th>ARC</th><th class="r">Montant HT</th>${rxc?'':(!lecture?'<th class="r" title="Quantité réellement attendue dans ce conteneur (0 = reliquat, non expédié)">Dans ce conteneur</th>':'')}${rxc?'<th class="r">Reçu</th><th class="r">Abîmé</th><th>Écart</th><th>📷</th>':''}</tr></thead><tbody>`+
+      h+=`<tr class="art-d"><td></td><td colspan="${RXON?8:7}">${se?`<div class="rx-ban warn" style="margin:8px 0 6px">💡 <span>La valeur SIFA (<b>${fmtEur(g.vm)}</b>) correspond exactement à <b>${se.k} article${se.k>1?'s':''} sur ${se.n}</b> : ${esc(se.arts.slice(0,3).map(a=>a.Designation||a.Ref_2||a.Title).join(', '))}${se.k>3?'…':''} (${fmtEur(se.total)}). Les autres sont probablement des reliquats.</span><span class="rx-act"><button class="btn sm primary" data-rxpart="${esc(g.key)}">Ne garder que ${se.k>1?'ces articles':'cet article'}</button></span></div>`:''}${envP?`<div class="rx-ban ${W.rxAuto&&W.rxAuto.has(g.key)?'warn':'info'}" style="margin:8px 0 6px">${W.rxAuto&&W.rxAuto.has(g.key)?`🤖 <span><b>Ajusté automatiquement</b> : la valeur SIFA (${fmtEur(g.vm)}) correspond exactement aux articles en vert. ${g.bcs.flatMap(b=>b.arts).filter(a=>artQteEnvoi(a)===0).length} article(s) mis en reliquat. Vérifie avant d’envoyer au magasin.</span>`:`✏️ Quantités ajustées pour ce conteneur : ${g.bcs.flatMap(b=>b.arts).filter(a=>artQteEnvoi(a)===0).length} article(s) exclu(s) (reliquat).`} <span class="rx-act"><button class="btn sm" data-rxreset="${esc(g.key)}">↺ Tout le BC</button></span></div>`:''}<table class="art-l"><thead><tr><th>BC</th><th>Réf. RP</th><th>Réf. frs</th><th>Désignation</th><th class="r">Qté attendue</th><th>Unité</th><th class="r">PU net</th><th>ARC</th><th class="r">Montant HT</th>${rxc?'':(!lecture?'<th class="r" title="Ce que les magasiniers devront trouver dans ce conteneur (0 = reliquat, pas encore expédié). Ce n’est pas un résultat de contrôle.">Attendu dans ce conteneur</th>':'')}${rxc?'<th class="r">Reçu</th><th class="r">Abîmé</th><th>Écart</th><th>📷</th>':''}</tr></thead><tbody>`+
       g.bcs.filter(b=>b.c).map(b=>b.arts.map((a,i)=>{const r=rxc?rxLigneArt(x,a):null;const ar=arcLigne(a,b.c);
         // Envoi partiel visible d'un coup d'œil : proposé (avant clic) ou appliqué (quantités ajustées)
         const qe=artQteEnvoi(a),qb=n0(a.Quantite);
@@ -1487,7 +1501,7 @@ async function rxEnvoyer(){
   const sansArt=L.filter(gs=>!gs.some(g=>g.nArts));const manq=L.flat().flatMap(g=>g.manq);
   const ok=await showConfirm('Envoyer au contrôle magasin',`Créer <b>${L.length}</b> fiche${L.length>1?'s':''} de contrôle dans le portail Scan pour <b>${esc(cont)}</b> (une par fournisseur), avec <b>${nArt}</b> articles attendus.
     ${manq.length?`<div class="fac-note" style="margin-top:10px">⚠ BC non importé${manq.length>1?'s':''} : ${esc(manq.join(', '))}. Leurs articles ne seront pas dans les fiches${sansArt.length?` (${sansArt.length} fiche${sansArt.length>1?'s':''} sans aucun article)`:''} : le magasinier ajoutera ce qu’il trouve en « article non prévu ». Mieux : importe d’abord ces BC.</div>`:''}
-    ${nExclus?`<div class="muted" style="font-size:12.5px;margin-top:8px">✏️ ${nExclus} article${nExclus>1?'s':''} exclu${nExclus>1?'s':''} (reliquat, quantité 0 dans ce conteneur).</div>`:''}
+    ${nExclus?`<div class="muted" style="font-size:12.5px;margin-top:8px">✏️ ${nExclus} article${nExclus>1?'s':''} exclu${nExclus>1?'s':''} (reliquat, quantité 0 dans ce conteneur)${W.rxAuto&&W.rxAuto.size?`, dont ajustement automatique d’après la valeur SIFA pour : <b>${esc(L.flat().filter(g=>W.rxAuto.has(g.key)).map(g=>nomCourtTxt(g.l.Fournisseur)+' '+g.l.N_Commande).join(', '))}</b>`:''}.</div>`:''}
     ${partiels.length?`<div class="fac-note" style="margin-top:10px">💡 Envoi partiel probable sans ajustement : ${esc(partiels.map(g=>nomCourtTxt(g.l.Fournisseur)+' '+g.l.N_Commande).join(', '))}. Les magasiniers verront tous les articles du BC comme attendus. Annule, ouvre la ligne et clique « Ne garder que… ».</div>`:''}
     <div class="muted" style="font-size:12px;margin-top:8px">Aristide, Saïd ou Francky prennent chacun une fiche dans « BL en attente » du portail Scan.</div>`,'📲 Envoyer');
   if(!ok)return;
@@ -1827,8 +1841,8 @@ document.addEventListener('click',async e=>{
     markDirty();renderLines();renderFrais();refreshComputed();return;}
   const rp=e.target.closest('[data-rxpart],[data-rxreset]');
   if(rp){const g=artsGroupes().find(x=>x.key===(rp.dataset.rxpart||rp.dataset.rxreset));if(g){W.rxQte=W.rxQte||{};
-    if(rp.dataset.rxpart){const se=artSousEnsemble(g);if(se)g.bcs.forEach(b=>b.arts.forEach(a=>{W.rxQte[a.ID]=se.ids.has(a.ID)?n0(a.Quantite):0;}));}
-    else g.bcs.forEach(b=>b.arts.forEach(a=>delete W.rxQte[a.ID]));renderArts();}return;}
+    if(rp.dataset.rxpart){const se=artSousEnsemble(g);if(se){g.bcs.forEach(b=>b.arts.forEach(a=>{W.rxQte[a.ID]=se.ids.has(a.ID)?n0(a.Quantite):0;}));(W.rxAuto=W.rxAuto||new Set()).delete(g.key);}}
+    else{g.bcs.forEach(b=>b.arts.forEach(a=>delete W.rxQte[a.ID]));if(W.rxAuto)W.rxAuto.delete(g.key);}renderArts();}return;}
   if(e.target.closest('input.rxq'))return;
   const lb=e.target.closest('[data-litid]');if(lb){e.stopPropagation();litOuvrir({id:+lb.dataset.litid});return;}
   const ln=e.target.closest('[data-litnew]');if(ln){litOuvrir({key:ln.dataset.litnew});return;}
@@ -2837,7 +2851,8 @@ function rpMarquer(root){if(root)root.querySelectorAll('input,select,textarea').
 document.addEventListener('change',e=>{const t=e.target;if(!t.matches||!t.matches('input.rxq')||!W)return;
   const v=parseNum(t.value);W.rxQte=W.rxQte||{};const a=(DATA.lcmd||[]).find(x=>x.ID===+t.dataset.rxq);
   if(v===null||isNaN(v)||v<0){t.value=fmtQ(a?artQteEnvoi(a):0);return;}
-  if(a&&v===n0(a.Quantite))delete W.rxQte[a.ID];else W.rxQte[+t.dataset.rxq]=v;renderArts();});
+  if(a&&v===n0(a.Quantite))delete W.rxQte[a.ID];else W.rxQte[+t.dataset.rxq]=v;
+  if(W.rxAuto&&a){const g=artsGroupes().find(x=>x.bcs.some(b=>b.arts.some(y=>y.ID===a.ID)));if(g)W.rxAuto.delete(g.key);}renderArts();});
 document.addEventListener('input',e=>{if(e.target.id==='facSearch'){FACV.rech=e.target.value;renderFacListe();}});
 ['dragover','drop'].forEach(ev=>document.addEventListener(ev,e=>{
   const sec=e.target.closest&&e.target.closest('#sec-factures');if(!sec)return;
