@@ -709,7 +709,10 @@ function fmtCoef(c){return c&&isFinite(c)?fmtN(c,3):'—';}
 // Dates : stockées 'YYYY-MM-DDT12:00:00Z', manipulées en 'YYYY-MM-DD' (Guadeloupe UTC-4 → +4 h)
 function dkey(iso){if(!iso)return '';const t=Date.parse(iso);if(isNaN(t))return '';return new Date(t+4*3600e3).toISOString().slice(0,10);}
 const toSP=k=>k?`${k}T12:00:00Z`:null;
-const todayKey=()=>dkey(new Date().toISOString());
+// Date du jour à l'heure du poste (Guadeloupe). dkey(+4 h) reste réservé aux dates SharePoint « jour seul » ;
+// appliqué à l'heure actuelle, il donnait déjà le lendemain à partir de 20 h.
+const todayKey=()=>{const d=new Date();return new Date(d.getTime()-d.getTimezoneOffset()*60000).toISOString().slice(0,10);};
+const dkeyLocal=iso=>{if(!iso)return '';const t=Date.parse(iso);if(isNaN(t))return '';const d=new Date(t);return new Date(t-d.getTimezoneOffset()*60000).toISOString().slice(0,10);};
 function addDays(k,n){if(!k)return '';const d=new Date(k+'T12:00:00Z');d.setUTCDate(d.getUTCDate()+n);return d.toISOString().slice(0,10);}
 function fmtD(k){if(!k)return '';const [y,m,d]=k.split('-');return `${d}/${m}/${y}`;}
 function daysBetween(a,b){return Math.round((Date.parse(b+'T12:00:00Z')-Date.parse(a+'T12:00:00Z'))/864e5);}
@@ -1338,7 +1341,7 @@ async function rxAnnuler(){
 async function rxMaj(){await rxCharger().catch(e=>toast('🔴 '+e.message,'ko'));try{DATA.lit=await spGetAll('Litiges_Frs');}catch(e){}renderArts();toast('✓ Contrôle magasin actualisé','ok');}
 function rxReporter(){
   const G=artsGroupes();G.forEach(g=>g.rx=rxGroupe(g));const S=G.filter(g=>g.rx.fait);if(!S.length)return;
-  const dates=S.map(g=>dkey(g.rx.sess.Date_Scan||g.rx.sess.Modified||'')).filter(Boolean).sort();
+  const dates=S.map(g=>dkeyLocal(g.rx.sess.Date_Scan||g.rx.sess.Modified||'')).filter(Boolean).sort();
   const nEc=S.reduce((s,g)=>s+g.rx.nEc,0);
   const qui=[...new Set(S.map(g=>g.rx.sess.Repris_Par||g.rx.sess.Magasinier).filter(Boolean))].join(', ');
   const res=nEc?S.filter(g=>g.rx.nEc).map(g=>`${nomCourtTxt(g.l.Fournisseur)} : `+g.rx.ecarts.map(e=>[e.ref||e.des,e.horsBC?'non prévu +'+fmtQ(e.rec):e.rec<e.att?'manque '+fmtQ(e.att-e.rec):e.rec>e.att?'+'+fmtQ(e.rec-e.att):'',e.ab?'abîmé '+fmtQ(e.ab):''].filter(Boolean).join(' ')).join(', ')+(g.rx.lit?` (${g.rx.lit.Title})`:'')).join(' | '):'';
@@ -2269,8 +2272,8 @@ async function facOrphelins(force){
       if(!r.ok){FAC_ORPH=[];return FAC_ORPH;}
       const L=((await r.json()).value||[]).filter(x=>/\.pdf$/i.test(x.Name));
       const lies=new Set(DATA.fac.map(f=>facNom(lienPdf(f)).toLowerCase()).filter(Boolean));
-      const debut=DATA.fac.map(f=>dkey(f.Created||'')).filter(Boolean).sort()[0]||addDays(todayKey(),-15);
-      FAC_ORPH=L.filter(x=>!lies.has(String(x.Name).toLowerCase())&&dkey(x.TimeLastModified||'')>=debut)
+      const debut=DATA.fac.map(f=>dkeyLocal(f.Created||'')).filter(Boolean).sort()[0]||addDays(todayKey(),-15);
+      FAC_ORPH=L.filter(x=>!lies.has(String(x.Name).toLowerCase())&&dkeyLocal(x.TimeLastModified||'')>=debut)
         .map(x=>({nom:x.Name,path:x.ServerRelativeUrl||(D+'/'+x.Name),date:x.TimeLastModified}))
         .sort((a,b)=>String(a.date).localeCompare(String(b.date)));
     }catch(e){console.warn('[Factures sans fiche]',e);FAC_ORPH=[];}
@@ -2297,7 +2300,7 @@ function facOrphHtml(){
   const L=FAC_ORPH||[];if(!L.length||!['af','arr'].includes(FACV.filtre))return '';
   return `<div class="fac-orph"><div style="display:flex;justify-content:space-between;align-items:center;gap:6px"><b>📂 Rangées à la main, sans fiche (${L.length})</b><button class="btn sm" id="facOrphTout">Tout mettre en file</button></div>
     <div class="muted" style="font-size:11.5px;margin:2px 0 6px">PDF enregistrés directement dans « Factures Fournisseurs ». Clique pour la traiter.</div>
-    ${L.slice(0,60).map(o=>`<div class="fac-i" data-facorph="${esc(o.path)}"><div class="t">${esc(o.nom.replace(/\.pdf$/i,''))}</div><div class="d">${relDay(dkey(o.date||''))}</div></div>`).join('')}</div>`;
+    ${L.slice(0,60).map(o=>`<div class="fac-i" data-facorph="${esc(o.path)}"><div class="t">${esc(o.nom.replace(/\.pdf$/i,''))}</div><div class="d">${relDay(dkeyLocal(o.date||''))}</div></div>`).join('')}</div>`;
 }
 
 // ═══ RENDU ONGLET FACTURES ═══
@@ -2320,7 +2323,7 @@ function renderFactures(){
   if(CUR_TAB!=='factures')return;
   const mois=todayKey().slice(0,7);
   const ok=DATA.fac.filter(f=>f.Statut_Saisie===FAC_OK);
-  const okMois=ok.filter(f=>dkey(f.Modified||f.Created||'').slice(0,7)===mois);
+  const okMois=ok.filter(f=>dkeyLocal(f.Modified||f.Created||'').slice(0,7)===mois);
   const ratt=new Set(DATA.lig.filter(l=>l.ID_Facture).map(l=>l.ID_Facture));
   $('facKpis').innerHTML=[
     {l:'Arrivées · À compléter',v:`${(FAC_ORPH||[]).length} · ${af.length}`,h:(FAC_ORPH||[]).length?'📥 nouvelles factures dans le dossier : à ouvrir':af.length?'clique sur une facture pour la traiter':'rien en attente ✓',c:(FAC_ORPH||[]).length+af.length?'var(--amber)':'var(--green)'},
@@ -2345,7 +2348,7 @@ function renderFacListe(){
     const fr=f.ID_Fournisseur?frsById(f.ID_Fournisseur):null;
     const titre=f.Statut_Saisie===FAC_OK?`${esc(nomCourt(fr)||f.Fournisseur||'')} – ${esc(f.Title||'')}`:(fr?esc(fr.Title):'<span class="muted">Fournisseur à identifier</span>');
     const sous=f.Statut_Saisie===FAC_OK?`${fmtD(dk(f,'Date_Facture'))} · <b>${fmtEur(f.Montant_TTC)}</b>`:`${src(f)} ${esc(facNom(lienPdf(f))).slice(0,46)}`;
-    return `<div class="fac-i ${FACV.sel===f.ID?'on':''}" data-fac="${f.ID}"><div class="t">${titre}</div><div class="s">${sous}</div><div class="d">${relDay(dkey(f.Created||f.Modified||''))}</div></div>`;
+    return `<div class="fac-i ${FACV.sel===f.ID?'on':''}" data-fac="${f.ID}"><div class="t">${titre}</div><div class="s">${sous}</div><div class="d">${relDay(dkeyLocal(f.Created||f.Modified||''))}</div></div>`;
   }).join(''):FACV.filtre==='arr'&&(FAC_ORPH||[]).length?'':`<div class="todo-none" style="padding:26px 10px">${FACV.filtre==='arr'?'✓ Aucune nouvelle facture arrivée.<br><span class="muted" style="font-size:12px">Les PDF enregistrés directement dans « Factures Fournisseurs » apparaissent ici.</span>':FACV.filtre==='af'?'✓ Aucune facture en attente.<br><span class="muted" style="font-size:12px">Les factures reçues par mail arrivent ici automatiquement. Tu peux aussi glisser des PDF sur cette page.</span>':'Aucune facture trouvée.'}</div>`;
   if(FACV.filtre==='af'||FACV.filtre==='arr'){if(FAC_ORPH)$('facListe').insertAdjacentHTML('afterbegin',facOrphHtml());else facOrphelins().then(()=>{if(CUR_TAB==='factures'&&FAC_ORPH&&FAC_ORPH.length)renderFacListe();});}
   if(FACV.sel&&FACV.sel!==-1&&!DATA.fac.some(f=>f.ID===FACV.sel)){FACV.sel=null;}
@@ -3081,7 +3084,7 @@ function tirJournal(){
   const E=[];
   analyseDossiers().forEach(x=>{if(x.valide&&Math.abs(x.gp)>=0.005)E.push({date:dk(x.a,'Date_Validation')||x.date,cat:x.cat,montant:r2(x.gp),type:'Dossier',label:`${x.a.N_Dossier||''} ${x.a.Title||''}`.trim(),id:x.a.ID});});
   (DATA.tir||[]).forEach(m=>{const v=n0(typeof m.Montant==='number'?m.Montant:parseNum(m.Montant));if(!v)return;
-    E.push({date:dk(m,'Date_Mouvement')||dkey(m.Created)||'',cat:m.Categorie||(m.Type_Mouvement==='Report'?'Hors catégorie':CAT_VIDE),montant:r2(v),type:m.Type_Mouvement||'Mouvement',label:m.Title||'',comm:m.Motif||'',mid:m.ID,manuel:m.Type_Mouvement!=='Dossier historique',id:m.ID_Arrivage||null});});
+    E.push({date:dk(m,'Date_Mouvement')||dkeyLocal(m.Created)||'',cat:m.Categorie||(m.Type_Mouvement==='Report'?'Hors catégorie':CAT_VIDE),montant:r2(v),type:m.Type_Mouvement||'Mouvement',label:m.Title||'',comm:m.Motif||'',mid:m.ID,manuel:m.Type_Mouvement!=='Dossier historique',id:m.ID_Arrivage||null});});
   E.sort((p,q)=>(p.date||'').localeCompare(q.date||'')||(p.id||0)-(q.id||0));
   const sc={};let sg=0;E.forEach(e=>{sc[e.cat]=(sc[e.cat]||0)+e.montant;e.soldeCat=sc[e.cat];sg+=e.montant;e.solde=sg;});
   return E;
@@ -3744,7 +3747,7 @@ function cmdArrivage(c){
 }
 function cmdEtat(c){
   const t=todayKey();const imp=cmdEstImport(c);const a=cmdArrivage(c);
-  const dc=dk(c,'Date_Commande')||dkey(c.Created||'');
+  const dc=dk(c,'Date_Commande')||dkeyLocal(c.Created||'');
   if(c.Annulee==='Oui')return {k:'annulee',lbl:'Annulée',cls:'st-renv',ouverte:false};
   if(dk(c,'Date_Reception'))return {k:'recue',lbl:`Reçue le ${fmtD(dk(c,'Date_Reception'))}`,cls:'st-ok',ouverte:false};
   if(a&&dk(a,'Date_Entrepot'))return {k:'recue',lbl:`Reçue le ${fmtD(dk(a,'Date_Entrepot'))} (${a.Title})`,cls:'st-ok',ouverte:false,a};
