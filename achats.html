@@ -558,6 +558,13 @@ input.rxq.mod{border-color:#d97706;background:#fffbeb;font-weight:700}
 .art-l tr[data-env="part"] td:first-child{box-shadow:inset 4px 0 0 #d97706}
 .env-t{display:inline-block;margin-left:6px;font-size:10.5px;font-weight:700;border-radius:999px;padding:1px 7px;text-decoration:none;vertical-align:1px}
 .env-t.in{background:#d1fae5;color:#065f46}.env-t.out{background:#e2e8f0;color:#475569}.env-t.part{background:#fef3c7;color:#92400e}
+
+/* ═══ SUIVI DES RELIQUATS ═══ */
+.sv-mini{font-size:10.5px;font-weight:700;color:#b45309;font-family:var(--font-mono)}
+.sv-r{color:#b45309}.sv-0{color:#16a34a}
+.sv-ban{margin-top:8px;font-size:12.5px;color:#475569;background:#f8fafc;border:1px dashed #cbd5e1;border-radius:9px;padding:8px 12px;display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+input.sv-in{width:84px;text-align:right;font-family:var(--font-mono);border:1.5px solid #d97706;border-radius:6px;padding:4px 6px;background:#fffbeb}
+input.sv-in.mod{border-color:#16a34a;background:#f0fdf4}
 </style>
 </head>
 <body>
@@ -692,7 +699,7 @@ const SCHEMA={
   Commandes_Frs:['ID','Title','ID_Fournisseur','Fournisseur','Type_Commande','Objet','Adresse_Livraison','Date_Commande','Montant_HT','Nb_Lignes','Date_ARC','Date_BPA','Mode_BPA','Date_Dispo_Prevue','Date_Reception','Lien_BC','Statut','Commentaire','Annulee','Created','Modified'],
   Demandes_Achat:['ID','Title','Zone','Transport','Motif','Client','N_Devis','N_Devis_Frs','Demandeur','Statut','Valide_Par','Date_Demande','Date_Validation','Commentaire','Notif','Resume_Notif','ID_BC_Client','Created'],
   Lignes_Demande_Achat:['ID','Title','ID_Demande','Designation','Quantite','Qte_Commandee','ID_Fournisseur','Fournisseur','N_Commande','ID_Commande_Frs','Client'],
-  Lignes_Commande_Frs:['ID','Title','ID_Commande_Frs','N_Commande','Ref_2','Designation','Quantite','Unite','Colis','Prix_Unitaire','Remise','Montant_HT','Ordre','Prix_ARC','Qte_ARC','Ecart_ARC'],
+  Lignes_Commande_Frs:['ID','Title','ID_Commande_Frs','N_Commande','Ref_2','Designation','Quantite','Unite','Colis','Prix_Unitaire','Remise','Montant_HT','Ordre','Prix_ARC','Qte_ARC','Ecart_ARC','Qte_Livree_Avant'],
   Litiges_Frs:['ID','Title','ID_Arrivage','Conteneur','ID_Fournisseur','Fournisseur','N_Commande','Type_Litige','Detail','Montant_Estime','Statut','Date_Ouverture','Date_Reclamation','Date_Relance','N_Avoir','ID_Avoir','Montant_Avoir','Date_Cloture','Ouvert_Par','Commentaire','Created','Modified'],
   Factures_Frs:['ID','Title','ID_Fournisseur','Fournisseur','Code_Compta','Type_Piece','Date_Facture','Date_Echeance','Montant_TTC','Lien_PDF','Statut_Saisie','Source','Message_ID','Exporte_Echeancier','Statut_Paiement','Date_Paiement','Commentaire','Expediteur','Created','Modified']
 };
@@ -1199,7 +1206,8 @@ function artsGroupesBruts(){
     const prod=[...new Set(G.lines.map(x=>x.Produits).filter(Boolean))].join(' · ');
     const key=`RXS-${W.id}-${nums.length?nums.join('-'):'L'+(l.ID||l._k)}`;
     const nArtsTot=bcs.reduce((s,b)=>s+b.arts.length,0),nPart=bcs.reduce((s,b)=>s+b.arts.filter(a=>artQteEnvoi(a)<n0(a.Quantite)).length,0);
-    return {partiel:nPart?{k:bcs.reduce((s,b)=>s+b.arts.filter(a=>artQteEnvoi(a)>0).length,0),n:nArtsTot}:null,key,l:{...l,Fournisseur:frs,N_Facture:fac,Produits:prod,N_Commande:nums.join(', ')},idFrs:l.ID_Fournisseur||null,bcs,totBC,vm,ec,manq:bcs.filter(b=>!b.c).map(b=>b.n),nArts:connus.reduce((s,b)=>s+b.arts.length,0),nLig:G.lines.length};
+    const rel=bcs.some(b=>b.arts.some(a=>artSuivi(a,W.id).actif))&&bcs.every(b=>b.arts.every(a=>artQteEnvoi(a)===artDefaut(a)));
+    return {partiel:nPart?{k:bcs.reduce((s,b)=>s+b.arts.filter(a=>artQteEnvoi(a)>0).length,0),n:nArtsTot,rel}:null,key,l:{...l,Fournisseur:frs,N_Facture:fac,Produits:prod,N_Commande:nums.join(', ')},idFrs:l.ID_Fournisseur||null,bcs,totBC,vm,ec,manq:bcs.filter(b=>!b.c).map(b=>b.n),nArts:connus.reduce((s,b)=>s+b.arts.length,0),nLig:G.lines.length};
   });
 }
 // Quantité attendue DANS CE CONTENEUR (par défaut celle du BC ; 0 = reliquat, non expédié). Choisie avant l'envoi au magasin.
@@ -1213,7 +1221,7 @@ function rxInitQte(){
   const parLigne=new Map(RX.lig.filter(l=>ids.has(n0(l.Session_ScanId))&&n0(l.ID_Ligne_Cmd)).map(l=>[n0(l.ID_Ligne_Cmd),n0(l.Quantite_Attendue)]));
   W.rxQte={};
   artsGroupes().forEach(g=>{if(!titres.has(g.fkey)&&!titres.has(g.key))return;
-    g.bcs.forEach(b=>b.arts.forEach(a=>{const q=parLigne.has(a.ID)?parLigne.get(a.ID):0;if(q!==n0(a.Quantite))W.rxQte[a.ID]=q;}));});
+    g.bcs.forEach(b=>b.arts.forEach(a=>{const q=parLigne.has(a.ID)?parLigne.get(a.ID):0;if(q!==artDefaut(a))W.rxQte[a.ID]=q;}));});
 }
 // Envoi partiel détecté sans ambiguïté (une seule combinaison d'articles = valeur SIFA) : appliqué d'office avant l'envoi au magasin.
 // Une seule fois par groupe et par ouverture de la fiche : « ↺ Tout le BC » n'est pas réécrasé.
@@ -1228,13 +1236,15 @@ function rxAutoPartiel(G){
     W.rxAuto.add(g.key);fait=true;});
   return fait;
 }
-function artQteEnvoi(a){return W&&W.rxQte&&Object.prototype.hasOwnProperty.call(W.rxQte,a.ID)?W.rxQte[a.ID]:n0(a.Quantite);}
+function artDefaut(a){const s=artSuivi(a,W&&W.id);return s.actif?s.reste:n0(a.Quantite);}
+function artQteEnvoi(a){return W&&W.rxQte&&Object.prototype.hasOwnProperty.call(W.rxQte,a.ID)?W.rxQte[a.ID]:artDefaut(a);}
 // Envoi partiel : la valeur SIFA correspond-elle à une partie seulement des articles du BC ? (≤ 18 articles)
 function artSousEnsemble(g){
   if(!g.ec||g.ec.ok||g.vm==null)return null;
-  const A=g.bcs.flatMap(b=>b.arts).filter(a=>artMontant(a)>0);const n=A.length;if(n<2||n>18)return null;
+  const mD=a=>{const q=n0(a.Quantite);return q>0?artMontant(a)*artDefaut(a)/q:artMontant(a);};
+  const A=g.bcs.flatMap(b=>b.arts).filter(a=>mD(a)>0);const n=A.length;if(n<2||n>18)return null;
   const tol=Math.max(1,Math.abs(g.vm)*0.005);let best=null,nb=0;
-  for(let m=1;m<(1<<n)-1;m++){let t=0;for(let i=0;i<n;i++)if(m&(1<<i))t+=artMontant(A[i]);const d=Math.abs(t-g.vm);
+  for(let m=1;m<(1<<n)-1;m++){let t=0;for(let i=0;i<n;i++)if(m&(1<<i))t+=mD(A[i]);const d=Math.abs(t-g.vm);
     if(d<=tol){if(!best||d<best.d-0.005){best={m,d,t};nb=1;}else if(Math.abs(d-best.d)<=0.005)nb++;}}
   if(!best||nb>1)return null;   // aucune ou plusieurs combinaisons possibles : on ne devine pas
   const ids=new Set(A.filter((a,i)=>best.m&(1<<i)).map(a=>a.ID));
@@ -1244,7 +1254,7 @@ function artEcartHtml(g){
   if(!bccNums(g.l.N_Commande).length)return '<span class="art-b mute">n° de BC à saisir</span>';
   if(g.manq.length)return `<span class="art-b warn" title="Dépose le PDF dans « Bon de commande » puis Commandes › importer">BC ${g.manq.join(', ')} à importer</span>`;
   if(!g.ec)return '<span class="art-b mute">valeur à saisir</span>';
-  if(g.ec.ok)return `<span class="art-b ok">✓ conforme${Math.abs(g.ec.d)>=0.01?` (${g.ec.d>0?'+':''}${fmtN(g.ec.d,2)} €)`:''}</span>${g.partiel?` <span class="art-b mute" title="Seule une partie du BC est dans ce conteneur : le reste est en reliquat">partiel ${g.partiel.k}/${g.partiel.n}</span>`:''}`;
+  if(g.ec.ok)return `<span class="art-b ok">✓ conforme${Math.abs(g.ec.d)>=0.01?` (${g.ec.d>0?'+':''}${fmtN(g.ec.d,2)} €)`:''}</span>${g.partiel?` <span class="art-b mute" title="${g.partiel.rel?'Ce conteneur livre le reste à livrer du BC (livraisons précédentes déduites)':'Seule une partie du BC est dans ce conteneur : le reste est en reliquat'}">${g.partiel.rel?'reste du BC':`partiel ${g.partiel.k}/${g.partiel.n}`}</span>`:''}`;
   const se=g.partiel?null:artSousEnsemble(g);
   const pc=g.partiel?` <span class="art-b mute" title="Quantités ajustées pour ce conteneur">partiel ${g.partiel.k}/${g.partiel.n}</span>`:'';
   if(se)return `<span class="art-b warn" title="La valeur SIFA correspond exactement à ${se.k} article(s) du BC : les autres sont sans doute des reliquats, pas encore expédiés">📦 envoi partiel : ${se.k}/${se.n} articles</span>`;
@@ -1381,14 +1391,14 @@ function renderArts(){
     if(ouv&&nb){
       const rxc=!!x.sess;
       const se=!rxc&&!lecture&&!g.partiel?artSousEnsemble(g):null;
-      const envP=!rxc&&!lecture&&g.bcs.some(b=>b.arts.some(a=>artQteEnvoi(a)!==n0(a.Quantite)));
-      h+=`<tr class="art-d"><td></td><td colspan="${RXON?8:7}">${se?`<div class="rx-ban warn" style="margin:8px 0 6px">💡 <span>La valeur SIFA (<b>${fmtEur(g.vm)}</b>) correspond exactement à <b>${se.k} article${se.k>1?'s':''} sur ${se.n}</b> : ${esc(se.arts.slice(0,3).map(a=>a.Designation||a.Ref_2||a.Title).join(', '))}${se.k>3?'…':''} (${fmtEur(se.total)}). Les autres sont probablement des reliquats.</span><span class="rx-act"><button class="btn sm primary" data-rxpart="${esc(g.key)}">Ne garder que ${se.k>1?'ces articles':'cet article'}</button></span></div>`:''}${envP?`<div class="rx-ban ${W.rxAuto&&W.rxAuto.has(g.key)?'warn':'info'}" style="margin:8px 0 6px">${W.rxAuto&&W.rxAuto.has(g.key)?`🤖 <span><b>Ajusté automatiquement</b> : la valeur SIFA (${fmtEur(g.vm)}) correspond exactement aux articles en vert. ${g.bcs.flatMap(b=>b.arts).filter(a=>artQteEnvoi(a)===0).length} article(s) mis en reliquat. Vérifie avant d’envoyer au magasin.</span>`:`✏️ Quantités ajustées pour ce conteneur : ${g.bcs.flatMap(b=>b.arts).filter(a=>artQteEnvoi(a)===0).length} article(s) exclu(s) (reliquat).`} <span class="rx-act"><button class="btn sm" data-rxreset="${esc(g.key)}">↺ Tout le BC</button></span></div>`:''}<table class="art-l"><thead><tr><th>BC</th><th>Réf. RP</th><th>Réf. frs</th><th>Désignation</th><th class="r">Qté attendue</th><th>Unité</th><th class="r">PU net</th><th>ARC</th><th class="r">Montant HT</th>${rxc?'':(!lecture?'<th class="r" title="Ce que les magasiniers devront trouver dans ce conteneur (0 = reliquat, pas encore expédié). Ce n’est pas un résultat de contrôle.">Attendu dans ce conteneur</th>':'')}${rxc?'<th class="r">Reçu</th><th class="r">Abîmé</th><th>Écart</th><th>📷</th>':''}</tr></thead><tbody>`+
+      const envP=!rxc&&!lecture&&W.rxQte&&g.bcs.some(b=>b.arts.some(a=>Object.prototype.hasOwnProperty.call(W.rxQte,a.ID)));
+      h+=`<tr class="art-d"><td></td><td colspan="${RXON?8:7}">${se?`<div class="rx-ban warn" style="margin:8px 0 6px">💡 <span>La valeur SIFA (<b>${fmtEur(g.vm)}</b>) correspond exactement à <b>${se.k} article${se.k>1?'s':''} sur ${se.n}</b> : ${esc(se.arts.slice(0,3).map(a=>a.Designation||a.Ref_2||a.Title).join(', '))}${se.k>3?'…':''} (${fmtEur(se.total)}). Les autres sont probablement des reliquats.</span><span class="rx-act"><button class="btn sm primary" data-rxpart="${esc(g.key)}">Ne garder que ${se.k>1?'ces articles':'cet article'}</button></span></div>`:''}${envP?`<div class="rx-ban ${W.rxAuto&&W.rxAuto.has(g.key)?'warn':'info'}" style="margin:8px 0 6px">${W.rxAuto&&W.rxAuto.has(g.key)?`🤖 <span><b>Ajusté automatiquement</b> : la valeur SIFA (${fmtEur(g.vm)}) correspond exactement aux articles en vert. ${g.bcs.flatMap(b=>b.arts).filter(a=>artQteEnvoi(a)===0).length} article(s) mis en reliquat. Vérifie avant d’envoyer au magasin.</span>`:`✏️ Quantités ajustées pour ce conteneur : ${g.bcs.flatMap(b=>b.arts).filter(a=>artQteEnvoi(a)===0).length} article(s) exclu(s) (reliquat).`} <span class="rx-act"><button class="btn sm" data-rxreset="${esc(g.key)}">↺ Reste à livrer</button></span></div>`:''}<table class="art-l"><thead><tr><th>BC</th><th>Réf. RP</th><th>Réf. frs</th><th>Désignation</th><th class="r">Qté BC</th><th>Unité</th><th class="r">PU net</th><th>ARC</th><th class="r">Montant HT</th>${rxc?'':(!lecture?'<th class="r" title="Ce que les magasiniers devront trouver dans ce conteneur (0 = reliquat, pas encore expédié). Ce n’est pas un résultat de contrôle.">Attendu dans ce conteneur</th>':'')}${rxc?'<th class="r">Reçu</th><th class="r">Abîmé</th><th>Écart</th><th>📷</th>':''}</tr></thead><tbody>`+
       g.bcs.filter(b=>b.c).map(b=>b.arts.map((a,i)=>{const r=rxc?rxLigneArt(x,a):null;const ar=arcLigne(a,b.c);
         // Envoi partiel visible d'un coup d'œil : proposé (avant clic) ou appliqué (quantités ajustées)
         const qe=artQteEnvoi(a),qb=n0(a.Quantite);
         const env=!rxc&&se?(se.ids.has(a.ID)?'sug-in':'sug-out'):(!rxc&&g.partiel?(qe<=0?'out':qe<qb?'part':'in'):'');
         const envTag={'sug-in':'<span class="env-t in">📦 dans l’envoi SIFA</span>','sug-out':'<span class="env-t out">reliquat probable</span>','out':'<span class="env-t out">reliquat : pas dans ce conteneur</span>','part':`<span class="env-t part">partiel : ${fmtQ(qe)} / ${fmtQ(qb)}</span>`,'in':'<span class="env-t in">📦 dans ce conteneur</span>'}[env]||'';
-        return `<tr${i===0?' class="first"':''}${r&&r.cls?` data-rxc="${r.cls}"`:''}${ar&&ar.etat!=='ok'?' data-arc="ko"':''}${env?` data-env="${env}"`:''}><td class="mono">${i===0?esc(b.n):''}</td><td class="mono"><b>${esc(a.Ref_2||'')}</b></td><td class="mono muted">${esc(a.Title||'')}</td><td>${esc(a.Designation||'')}${envTag}${r&&r.obs?`<div class="rx-obs">💬 ${esc(r.obs)}</div>`:''}</td><td class="r mono"><b>${fmtQ(n0(a.Quantite))}</b></td><td class="muted">${esc(a.Unite||'')}</td><td class="r mono">${artPU(a)!=null?fmtN(artPU(a),2):''}</td>${arcCellHtml(ar)}<td class="r mono">${fmtN(artMontant(a),2)}</td>${rxc?rxCells(r):(!lecture?`<td class="r"><input class="rxq ${artQteEnvoi(a)!==n0(a.Quantite)?'mod':''}" data-rxq="${a.ID}" inputmode="decimal" value="${fmtQ(artQteEnvoi(a))}"></td>`:'')}</tr>`;}).join('')).join('')+
+        return `<tr${i===0?' class="first"':''}${r&&r.cls?` data-rxc="${r.cls}"`:''}${ar&&ar.etat!=='ok'?' data-arc="ko"':''}${env?` data-env="${env}"`:''}><td class="mono">${i===0?esc(b.n):''}</td><td class="mono"><b>${esc(a.Ref_2||'')}</b></td><td class="mono muted">${esc(a.Title||'')}</td><td>${esc(a.Designation||'')}${envTag}${r&&r.obs?`<div class="rx-obs">💬 ${esc(r.obs)}</div>`:''}</td><td class="r mono"><b>${fmtQ(n0(a.Quantite))}</b>${(()=>{const su=artSuivi(a,W.id);return su.actif&&(su.livre||su.route)?`<div class="sv-mini" title="Déjà livré : ${fmtQ(su.livre)}${su.route?' · en route dans un autre dossier : '+fmtQ(su.route):''}">reste ${fmtQ(su.reste)}</div>`:'';})()}</td><td class="muted">${esc(a.Unite||'')}</td><td class="r mono">${artPU(a)!=null?fmtN(artPU(a),2):''}</td>${arcCellHtml(ar)}<td class="r mono">${fmtN(artMontant(a),2)}</td>${rxc?rxCells(r):(!lecture?`<td class="r"><input class="rxq ${artQteEnvoi(a)!==n0(a.Quantite)?'mod':''}" data-rxq="${a.ID}" inputmode="decimal" value="${fmtQ(artQteEnvoi(a))}"></td>`:'')}</tr>`;}).join('')).join('')+
       (x.extra||[]).map(l=>`<tr data-rxc="exc"><td class="mono">${esc(l.N_Commande||'')}</td><td class="mono">${esc(l.Reference_Article||'')}</td><td></td><td>${esc(l.Designation||'Article non prévu')} <span class="art-b warn">non prévu</span>${l.Observation?`<div class="rx-obs">💬 ${esc(l.Observation)}</div>`:''}</td><td class="r mono">0</td><td></td><td></td><td></td><td></td>${rxCells({recu:n0(l.Quantite_Scannee),ab:n0(l.Quantite_Abimee),ec:n0(l.Quantite_Scannee),ph:!!l.Attachments,id:l.ID,fait:x.fait})}</tr>`).join('')+
       `</tbody></table></td></tr>`;}
   });
@@ -1419,7 +1429,23 @@ async function rxCharger(){
     catch(e){b=await spFetch('Lignes_Scan',`$select=${base},Attachments&$filter=${f}&$top=5000`);RX.err=RX.err||'colonnes';}
     L.push(...b.filter(l=>set.has(n0(l.Session_ScanId))));
   }
-  RX.lig=L;
+  RX.lig=L;rxIndexer();
+}
+function rxIndexer(){RX.parCmd=new Map();RX.sessById=new Map(RX.sess.map(x=>[x.ID,x]));RX.lig.forEach(l=>{const k=n0(l.ID_Ligne_Cmd);if(!k)return;if(!RX.parCmd.has(k))RX.parCmd.set(k,[]);RX.parCmd.get(k).push(l);});}
+// ═══ SUIVI DES RELIQUATS (par ligne de BC) ═══
+// Reste = Qté BC − déjà livré avant le portail (reprise, Qte_Livree_Avant) − reçu bon via le portail (contrôles magasin validés) − en route (fiches magasin non validées)
+function artSuivi(l,exclArr){
+  const q=n0(l.Quantite),av=l.Qte_Livree_Avant!=null&&l.Qte_Livree_Avant!==''?n0(l.Qte_Livree_Avant):null;
+  let recu=0,route=0,vu=false;
+  ((RX.parCmd&&RX.parCmd.get(l.ID))||[]).forEach(x=>{const ss=RX.sessById&&RX.sessById.get(n0(x.Session_ScanId));if(!ss||(exclArr&&ss.ID_Arrivage===exclArr))return;vu=true;
+    if(ss.Statut===RX_FAIT)recu+=Math.max(0,n0(x.Quantite_Scannee)-n0(x.Quantite_Abimee));else route+=n0(x.Quantite_Attendue);});
+  const r3=v=>Math.round(v*1000)/1000;
+  return {q,avant:av||0,recu:r3(recu),route:r3(route),livre:r3((av||0)+recu),reste:Math.max(0,r3(q-(av||0)-recu-route)),actif:vu||av!=null};
+}
+function cmdSuivi(c){
+  const L=cmdLignes(c.ID).map(l=>({l,s:artSuivi(l)}));const pu=l=>artPU(l)||0;
+  const actif=L.some(x=>x.s.actif);
+  return {actif,L,nReste:L.filter(x=>x.s.reste>0).length,montantReste:L.reduce((t,x)=>t+x.s.reste*pu(x.l),0),livre:L.reduce((t,x)=>t+x.s.livre,0),route:L.reduce((t,x)=>t+x.s.route,0)};
 }
 function rxGroupe(g){
   const sess=RX.sess.find(x=>x.Title===g.fkey)||RX.sess.find(x=>x.Title===g.key)||null;
@@ -1841,7 +1867,7 @@ document.addEventListener('click',async e=>{
     markDirty();renderLines();renderFrais();refreshComputed();return;}
   const rp=e.target.closest('[data-rxpart],[data-rxreset]');
   if(rp){const g=artsGroupes().find(x=>x.key===(rp.dataset.rxpart||rp.dataset.rxreset));if(g){W.rxQte=W.rxQte||{};
-    if(rp.dataset.rxpart){const se=artSousEnsemble(g);if(se){g.bcs.forEach(b=>b.arts.forEach(a=>{W.rxQte[a.ID]=se.ids.has(a.ID)?n0(a.Quantite):0;}));(W.rxAuto=W.rxAuto||new Set()).delete(g.key);}}
+    if(rp.dataset.rxpart){const se=artSousEnsemble(g);if(se){g.bcs.forEach(b=>b.arts.forEach(a=>{W.rxQte[a.ID]=se.ids.has(a.ID)?artDefaut(a):0;}));(W.rxAuto=W.rxAuto||new Set()).delete(g.key);}}
     else{g.bcs.forEach(b=>b.arts.forEach(a=>delete W.rxQte[a.ID]));if(W.rxAuto)W.rxAuto.delete(g.key);}renderArts();}return;}
   if(e.target.closest('input.rxq'))return;
   const lb=e.target.closest('[data-litid]');if(lb){e.stopPropagation();litOuvrir({id:+lb.dataset.litid});return;}
@@ -2848,10 +2874,20 @@ function rpMarquer(root){if(root)root.querySelectorAll('input,select,textarea').
 (function(){const obs=new MutationObserver(ms=>{const vus=new Set();ms.forEach(m=>{const r=m.target.closest?m.target.closest('#fiche,#facForm'):null;if(r&&!vus.has(r)){vus.add(r);rpMarquer(r);}});});
   const go=()=>['fiche','facForm'].forEach(id=>{const el=document.getElementById(id);if(el)obs.observe(el,{childList:true,subtree:true});});
   if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',go);else go();})();
+document.addEventListener('change',async e=>{const t=e.target;if(!t.matches||!t.matches('input[data-cmdreste]'))return;
+  const l=(DATA.lcmd||[]).find(x=>x.ID===+t.dataset.cmdreste);if(!l)return;
+  if(MISSING.Lignes_Commande_Frs&&MISSING.Lignes_Commande_Frs.has('Qte_Livree_Avant')){toast('🔴 Colonne Qte_Livree_Avant (Nombre) à créer dans Lignes_Commande_Frs','ko');return;}
+  const v=parseNum(t.value);if(v===null||isNaN(v)||v<0){t.value=fmtQ(artSuivi(l).reste);return;}
+  const su=artSuivi(l);const av=Math.max(0,Math.round((n0(l.Quantite)-v-su.recu-su.route)*1000)/1000);
+  try{await spPatch('Lignes_Commande_Frs',l.ID,{Qte_Livree_Avant:av},l);l.Qte_Livree_Avant=av;t.classList.add('mod');
+    toast(`✓ ${l.Ref_2||l.Title} : déjà livré ${fmtQ(av)} / ${fmtQ(n0(l.Quantite))} · reste ${fmtQ(v)}`,'ok');
+    const c=cmdById(l.ID_Commande_Frs);if(c){const e2=cmdEtat(c);const st=e2.lbl.split(' ·')[0];if(c.Statut!==st&&!/^Sold/i.test(c.Statut||'')){try{await spPatch('Commandes_Frs',c.ID,{Statut:_trunc(st)},c);c.Statut=st;}catch(_){}}}
+  }catch(er){toast('🔴 '+er.message,'ko');}
+});
 document.addEventListener('change',e=>{const t=e.target;if(!t.matches||!t.matches('input.rxq')||!W)return;
   const v=parseNum(t.value);W.rxQte=W.rxQte||{};const a=(DATA.lcmd||[]).find(x=>x.ID===+t.dataset.rxq);
   if(v===null||isNaN(v)||v<0){t.value=fmtQ(a?artQteEnvoi(a):0);return;}
-  if(a&&v===n0(a.Quantite))delete W.rxQte[a.ID];else W.rxQte[+t.dataset.rxq]=v;
+  if(a&&v===artDefaut(a))delete W.rxQte[a.ID];else W.rxQte[+t.dataset.rxq]=v;
   if(W.rxAuto&&a){const g=artsGroupes().find(x=>x.bcs.some(b=>b.arts.some(y=>y.ID===a.ID)));if(g)W.rxAuto.delete(g.key);}renderArts();});
 document.addEventListener('input',e=>{if(e.target.id==='facSearch'){FACV.rech=e.target.value;renderFacListe();}});
 ['dragover','drop'].forEach(ev=>document.addEventListener(ev,e=>{
@@ -3951,8 +3987,13 @@ function cmdEtat(c){
   const dc=dk(c,'Date_Commande')||dkeyLocal(c.Created||'');
   if(c.Annulee==='Oui')return {k:'annulee',lbl:'Annulée',cls:'st-renv',ouverte:false};
   if(dk(c,'Date_Reception'))return {k:'recue',lbl:`Reçue le ${fmtD(dk(c,'Date_Reception'))}`,cls:'st-ok',ouverte:false};
-  if(a&&dk(a,'Date_Entrepot'))return {k:'recue',lbl:`Reçue le ${fmtD(dk(a,'Date_Entrepot'))} (${a.Title})`,cls:'st-ok',ouverte:false,a};
-  if(a){const eta=dk(a,'ETA_Port');return {k:'route',lbl:`Expédiée · ${a.Title}${eta?' · ETA '+fmtD(eta):''}`,cls:'st-transit',ouverte:true,a};}
+  const SV=cmdSuivi(c);
+  if(a&&dk(a,'Date_Entrepot')){
+    if(SV.actif&&SV.nReste>0&&!/^Sold/i.test(c.Statut||''))return {k:'reliquat',lbl:`Reliquat : ${SV.nReste} article${SV.nReste>1?'s':''} à recevoir`,cls:'st-prep',ouverte:true,a};
+    if(SV.actif&&SV.nReste===0&&!/^Sold/i.test(c.Statut||''))return {k:'asolder',lbl:'Tout livré · à solder',cls:'st-valid',ouverte:true,a};
+    return {k:'recue',lbl:`Reçue le ${fmtD(dk(a,'Date_Entrepot'))} (${a.Title})`,cls:'st-ok',ouverte:false,a};}
+  if(a){const eta=dk(a,'ETA_Port');return {k:'route',lbl:`Expédiée · ${a.Title}${eta?' · ETA '+fmtD(eta):''}${SV.actif&&SV.nReste>0?' · reliquat à suivre':''}`,cls:'st-transit',ouverte:true,a};}
+  if(SV.actif&&SV.livre>0&&!/^Sold/i.test(c.Statut||''))return SV.nReste>0?{k:'reliquat',lbl:`Reliquat : ${SV.nReste} article${SV.nReste>1?'s':''} à recevoir`,cls:'st-prep',ouverte:true}:{k:'asolder',lbl:'Tout livré · à solder',cls:'st-valid',ouverte:true};
   if(/^Sold/i.test(c.Statut||''))return {k:'recue',lbl:'Soldée',cls:'st-ok',ouverte:false};
   if(dk(c,'Date_Dispo_Prevue')){const dd=dk(c,'Date_Dispo_Prevue');const ret=dd<t;return {k:'dispo',lbl:`Dispo annoncée le ${fmtD(dd)}`,cls:'st-prep',ouverte:true,alerte:ret?{lvl:'a',txt:`Dispo annoncée dépassée de ${daysBetween(dd,t)} j, pas encore dans un extrait`}:null};}
   if(dk(c,'Date_BPA'))return {k:'bpa',lbl:imp?'BPA envoyé · dispo à confirmer':'BPA envoyé · livraison attendue',cls:'st-prep',ouverte:true};
@@ -4226,8 +4267,15 @@ function cmdDetailHtml(c,e){
       <button class="btn sm ${c.Annulee==='Oui'?'':'danger'}" data-cmdq="annul">${c.Annulee==='Oui'?'↺ Réactiver':'✕ Annuler la commande'}</button>
     </div>`:''}
     <label class="cmd-com">Commentaire<textarea data-cmdd="Commentaire" rows="2" ${dis} placeholder="Échanges avec le fournisseur, reliquats…">${esc(c.Commentaire||'')}</textarea></label>
-    <div class="tblwrap" style="max-height:340px;margin-top:8px"><table class="ltable"><thead><tr><th>Réf. fournisseur</th><th>Réf. Réseaux Plus</th><th>Désignation</th><th class="r">Qté</th><th>Unité</th><th class="r">Prix</th><th class="r">Rem.</th><th class="r">Montant HT</th><th>ARC</th></tr></thead><tbody>
-      ${L.length?L.map(l=>{const ar=arcLigne(l,c);return `<tr${ar&&ar.etat!=='ok'?' data-arc="ko"':''}><td class="mono muted">${esc(l.Title)}</td><td class="mono"><b>${esc(l.Ref_2||'')}</b></td><td>${esc(l.Designation||'')}</td><td class="r">${fmtN(l.Quantite,2)}</td><td>${esc(l.Unite||'')}</td><td class="r">${l.Prix_Unitaire!=null?fmtN(l.Prix_Unitaire,2):'—'}</td><td class="r">${l.Remise?fmtN(l.Remise,1)+' %':''}</td><td class="r">${l.Montant_HT!=null?fmtEur(l.Montant_HT):'—'}</td>${arcCellHtml(ar)}</tr>`;}).join(''):'<tr><td colspan="9" class="muted">Aucun article enregistré.</td></tr>'}
+    ${(()=>{const SV=cmdSuivi(c);const so=/^Sold/i.test(c.Statut||'');const rep=CMDV.reprise&&CMDV.reprise[c.ID];
+      const bt=ed&&!so?`<button class="btn sm" data-cmdrep="${c.ID}">${rep?'✓ Terminer la reprise':'✏️ Reprise depuis Image'}</button>`:'';
+      if(rep)return `<div class="rx-ban warn" style="margin-top:8px">✏️ <span><b>Reprise des livraisons passées</b> : dans Image, ouvre la commande ${esc(c.Title)} et recopie la colonne <b>« Qte cde »</b> (reste à livrer) dans la colonne Reste ci-dessous. Le portail en déduit ce qui a déjà été livré.</span><span class="rx-act">${bt}</span></div>`;
+      if(!SV.actif)return `<div class="sv-ban">Suivi des livraisons : aucun historique pour ce BC.${ed&&!so?' Si des livraisons ont déjà eu lieu avant le portail, fais la reprise depuis Image.':''} <span class="rx-act">${bt}</span></div>`;
+      if(SV.nReste>0)return `<div class="rx-ban warn" style="margin-top:8px">📦 <b>Reliquat : ${SV.nReste} article${SV.nReste>1?'s':''} à recevoir</b> · ${fmtEur(SV.montantReste)}${SV.route?` · ${fmtQ(SV.route)} unité(s) en route`:''} <span class="rx-act">${bt}</span></div>`;
+      return so?`<div class="rx-ban ok" style="margin-top:8px">✓ Commande soldée.</div>`:`<div class="rx-ban ok" style="margin-top:8px">✓ <b>Tout est livré</b> : plus rien à recevoir sur cette commande. <span class="rx-act">${ed?'<button class="btn sm green" data-cmdq="solde">✔ Solder la commande</button>':''}${bt}</span></div>`;})()}
+    <div class="tblwrap" style="max-height:340px;margin-top:8px"><table class="ltable"><thead><tr><th>Réf. fournisseur</th><th>Réf. Réseaux Plus</th><th>Désignation</th><th class="r">Qté BC</th><th class="r" title="Déjà livré : reprise avant le portail + reçu bon aux contrôles magasin">Livré</th><th class="r" title="Attendu dans un conteneur pas encore contrôlé">En route</th><th class="r">${CMDV.reprise&&CMDV.reprise[c.ID]?'Reste (Image « Qte cde »)':'Reste'}</th><th>Unité</th><th class="r">Prix</th><th class="r">Rem.</th><th class="r">Montant HT</th><th>ARC</th></tr></thead><tbody>
+      ${L.length?L.map(l=>{const ar=arcLigne(l,c);return `<tr${ar&&ar.etat!=='ok'?' data-arc="ko"':''}><td class="mono muted">${esc(l.Title)}</td><td class="mono"><b>${esc(l.Ref_2||'')}</b></td><td>${esc(l.Designation||'')}</td><td class="r">${fmtN(l.Quantite,2)}</td>${(()=>{const su=artSuivi(l);const rep=CMDV.reprise&&CMDV.reprise[c.ID];
+        return `<td class="r ${su.livre?'':'muted'}">${su.actif?fmtQ(su.livre):'—'}</td><td class="r ${su.route?'':'muted'}">${su.route?fmtQ(su.route):''}</td>`+(rep?`<td class="r"><input class="sv-in" data-cmdreste="${l.ID}" inputmode="decimal" value="${fmtQ(su.actif?su.reste:n0(l.Quantite))}" title="Recopie la colonne « Qte cde » d’Image (reste à livrer)"></td>`:`<td class="r"><b class="${su.actif?(su.reste>0?'sv-r':'sv-0'):''}">${su.actif?fmtQ(su.reste):'—'}</b></td>`);})()}<td>${esc(l.Unite||'')}</td><td class="r">${l.Prix_Unitaire!=null?fmtN(l.Prix_Unitaire,2):'—'}</td><td class="r">${l.Remise?fmtN(l.Remise,1)+' %':''}</td><td class="r">${l.Montant_HT!=null?fmtEur(l.Montant_HT):'—'}</td>${arcCellHtml(ar)}</tr>`;}).join(''):'<tr><td colspan="12" class="muted">Aucun article enregistré.</td></tr>'}
     </tbody></table></div></div>`;
 }
 function peutModifierCmd(){return !(typeof lectureSeule==='function'&&lectureSeule());}
@@ -4241,6 +4289,7 @@ document.addEventListener('click',async e=>{
   if(e.target.closest('#cmdSolderVieux')){cmdSolderVieux();return;}
   const lg=e.target.closest('[data-cmdleg]');if(lg){try{localStorage.setItem('cmd_legende',lg.dataset.cmdleg);}catch(_){}renderCommandes();return;}
   const f=e.target.closest('[data-cmdf]');if(f){CMDV.filtre=f.dataset.cmdf;renderCommandes();return;}
+  const rpb=e.target.closest('[data-cmdrep]');if(rpb){CMDV.reprise=CMDV.reprise||{};const id=+rpb.dataset.cmdrep;CMDV.reprise[id]=!CMDV.reprise[id];renderCommandes();return;}
   const q=e.target.closest('[data-cmdq]');
   if(q){const id=CMDV.ouvert;const c=cmdById(id);if(!c)return;const a=q.dataset.cmdq;
     if(a==='arc')cmdMaj(id,{Date_ARC:toSP(todayKey())},`✓ ARC reçu pour ${c.Title}`);
