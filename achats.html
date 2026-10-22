@@ -1242,13 +1242,25 @@ function artQteEnvoi(a){return W&&W.rxQte&&Object.prototype.hasOwnProperty.call(
 function artSousEnsemble(g){
   if(!g.ec||g.ec.ok||g.vm==null)return null;
   const mD=a=>{const q=n0(a.Quantite);return q>0?artMontant(a)*artDefaut(a)/q:artMontant(a);};
-  const A=g.bcs.flatMap(b=>b.arts).filter(a=>mD(a)>0);const n=A.length;if(n<2||n>18)return null;
-  const tol=Math.max(1,Math.abs(g.vm)*0.005);let best=null,nb=0;
-  for(let m=1;m<(1<<n)-1;m++){let t=0;for(let i=0;i<n;i++)if(m&(1<<i))t+=mD(A[i]);const d=Math.abs(t-g.vm);
-    if(d<=tol){if(!best||d<best.d-0.005){best={m,d,t};nb=1;}else if(Math.abs(d-best.d)<=0.005)nb++;}}
-  if(!best||nb>1)return null;   // aucune ou plusieurs combinaisons possibles : on ne devine pas
-  const ids=new Set(A.filter((a,i)=>best.m&(1<<i)).map(a=>a.ID));
-  return {ids,total:best.t,k:ids.size,n:A.length,arts:A.filter(a=>ids.has(a.ID))};
+  const A=g.bcs.flatMap(b=>b.arts).filter(a=>mD(a)>0);const n=A.length;if(n<2)return null;
+  const fin=ids=>({ids,total:A.filter(a=>ids.has(a.ID)).reduce((t,a)=>t+mD(a),0),k:ids.size,n,arts:A.filter(a=>ids.has(a.ID))});
+  // a) petits BC : combinaison d'articles égale à la valeur SIFA
+  if(n<=18){
+    const tol=Math.max(1,Math.abs(g.vm)*0.005);let best=null,nb=0;
+    for(let m=1;m<(1<<n)-1;m++){let t=0;for(let i=0;i<n;i++)if(m&(1<<i))t+=mD(A[i]);const d=Math.abs(t-g.vm);
+      if(d<=tol){if(!best||d<best.d-0.005){best={m,d};nb=1;}else if(Math.abs(d-best.d)<=0.005)nb++;}}
+    if(best&&nb===1)return fin(new Set(A.filter((a,i)=>best.m&(1<<i)).map(a=>a.ID)));
+  }
+  // b) tous BC : 1 à 3 articles absents dont la somme = total BC − valeur SIFA (au centime près)
+  const tot=A.reduce((t,a)=>t+mD(a),0),manque=tot-g.vm;if(manque<=0.05)return null;
+  const tol=Math.max(0.1,manque*0.001);const sols=[];
+  const M=A.map(mD);
+  for(let i=0;i<n&&sols.length<2;i++){if(Math.abs(M[i]-manque)<=tol)sols.push([i]);}
+  if(!sols.length)for(let i=0;i<n&&sols.length<2;i++)for(let j=i+1;j<n&&sols.length<2;j++){if(Math.abs(M[i]+M[j]-manque)<=tol)sols.push([i,j]);}
+  if(!sols.length&&n<=80)for(let i=0;i<n&&sols.length<2;i++)for(let j=i+1;j<n&&sols.length<2;j++){const r=manque-M[i]-M[j];if(r<-tol)continue;for(let k=j+1;k<n;k++){if(Math.abs(M[k]-r)<=tol){sols.push([i,j,k]);if(sols.length>1)break;}}}
+  if(sols.length!==1)return null;   // aucune ou plusieurs explications : on ne devine pas
+  const ex=new Set(sols[0].map(i=>A[i].ID));
+  const r=fin(new Set(A.filter(a=>!ex.has(a.ID)).map(a=>a.ID)));r.exclus=A.filter(a=>ex.has(a.ID));return r;
 }
 function artEcartHtml(g){
   if(!bccNums(g.l.N_Commande).length)return '<span class="art-b mute">n° de BC à saisir</span>';
@@ -1392,7 +1404,7 @@ function renderArts(){
       const rxc=!!x.sess;
       const se=!rxc&&!lecture&&!g.partiel?artSousEnsemble(g):null;
       const envP=!rxc&&!lecture&&W.rxQte&&g.bcs.some(b=>b.arts.some(a=>Object.prototype.hasOwnProperty.call(W.rxQte,a.ID)));
-      h+=`<tr class="art-d"><td></td><td colspan="${RXON?8:7}">${se?`<div class="rx-ban warn" style="margin:8px 0 6px">💡 <span>La valeur SIFA (<b>${fmtEur(g.vm)}</b>) correspond exactement à <b>${se.k} article${se.k>1?'s':''} sur ${se.n}</b> : ${esc(se.arts.slice(0,3).map(a=>a.Designation||a.Ref_2||a.Title).join(', '))}${se.k>3?'…':''} (${fmtEur(se.total)}). Les autres sont probablement des reliquats.</span><span class="rx-act"><button class="btn sm primary" data-rxpart="${esc(g.key)}">Ne garder que ${se.k>1?'ces articles':'cet article'}</button></span></div>`:''}${envP?`<div class="rx-ban ${W.rxAuto&&W.rxAuto.has(g.key)?'warn':'info'}" style="margin:8px 0 6px">${W.rxAuto&&W.rxAuto.has(g.key)?`🤖 <span><b>Ajusté automatiquement</b> : la valeur SIFA (${fmtEur(g.vm)}) correspond exactement aux articles en vert. ${g.bcs.flatMap(b=>b.arts).filter(a=>artQteEnvoi(a)===0).length} article(s) mis en reliquat. Vérifie avant d’envoyer au magasin.</span>`:`✏️ Quantités ajustées pour ce conteneur : ${g.bcs.flatMap(b=>b.arts).filter(a=>artQteEnvoi(a)===0).length} article(s) exclu(s) (reliquat).`} <span class="rx-act"><button class="btn sm" data-rxreset="${esc(g.key)}">↺ Reste à livrer</button></span></div>`:''}<table class="art-l"><thead><tr><th>BC</th><th>Réf. RP</th><th>Réf. frs</th><th>Désignation</th><th class="r">Qté BC</th><th>Unité</th><th class="r">PU net</th><th>ARC</th><th class="r">Montant HT</th>${rxc?'':(!lecture?'<th class="r" title="Ce que les magasiniers devront trouver dans ce conteneur (0 = reliquat, pas encore expédié). Ce n’est pas un résultat de contrôle.">Attendu dans ce conteneur</th>':'')}${rxc?'<th class="r">Reçu</th><th class="r">Abîmé</th><th>Écart</th><th>📷</th>':''}</tr></thead><tbody>`+
+      h+=`<tr class="art-d"><td></td><td colspan="${RXON?8:7}">${se?`<div class="rx-ban warn" style="margin:8px 0 6px">💡 <span>La valeur SIFA (<b>${fmtEur(g.vm)}</b>) ${se.exclus?`correspond au BC <b>sans ${se.exclus.length} article${se.exclus.length>1?'s':''}</b> : ${esc(se.exclus.map(a=>(a.Ref_2||a.Title)+' '+(a.Designation||'')).join(', '))} (${fmtEur(se.exclus.reduce((t,a)=>t+artMontant(a)*artDefaut(a)/(n0(a.Quantite)||1),0))}). ${se.exclus.length>1?'Ils sont':'Il est'} probablement en reliquat.`:`correspond exactement à <b>${se.k} article${se.k>1?'s':''} sur ${se.n}</b> : ${esc(se.arts.slice(0,3).map(a=>a.Designation||a.Ref_2||a.Title).join(', '))}${se.k>3?'…':''} (${fmtEur(se.total)}). Les autres sont probablement des reliquats.`}</span><span class="rx-act"><button class="btn sm primary" data-rxpart="${esc(g.key)}">Ne garder que ${se.k>1?'ces articles':'cet article'}</button></span></div>`:''}${envP?`<div class="rx-ban ${W.rxAuto&&W.rxAuto.has(g.key)?'warn':'info'}" style="margin:8px 0 6px">${W.rxAuto&&W.rxAuto.has(g.key)?`🤖 <span><b>Ajusté automatiquement</b> : la valeur SIFA (${fmtEur(g.vm)}) correspond exactement aux articles en vert. ${g.bcs.flatMap(b=>b.arts).filter(a=>artQteEnvoi(a)===0).length} article(s) mis en reliquat. Vérifie avant d’envoyer au magasin.</span>`:`✏️ Quantités ajustées pour ce conteneur : ${g.bcs.flatMap(b=>b.arts).filter(a=>artQteEnvoi(a)===0).length} article(s) exclu(s) (reliquat).`} <span class="rx-act"><button class="btn sm" data-rxreset="${esc(g.key)}">↺ Reste à livrer</button></span></div>`:''}<table class="art-l"><thead><tr><th>BC</th><th>Réf. RP</th><th>Réf. frs</th><th>Désignation</th><th class="r">Qté BC</th><th>Unité</th><th class="r">PU net</th><th>ARC</th><th class="r">Montant HT</th>${rxc?'':(!lecture?'<th class="r" title="Ce que les magasiniers devront trouver dans ce conteneur (0 = reliquat, pas encore expédié). Ce n’est pas un résultat de contrôle.">Attendu dans ce conteneur</th>':'')}${rxc?'<th class="r">Reçu</th><th class="r">Abîmé</th><th>Écart</th><th>📷</th>':''}</tr></thead><tbody>`+
       g.bcs.filter(b=>b.c).map(b=>b.arts.map((a,i)=>{const r=rxc?rxLigneArt(x,a):null;const ar=arcLigne(a,b.c);
         // Envoi partiel visible d'un coup d'œil : proposé (avant clic) ou appliqué (quantités ajustées)
         const qe=artQteEnvoi(a),qb=n0(a.Quantite);
@@ -2878,12 +2890,17 @@ document.addEventListener('change',async e=>{const t=e.target;if(!t.matches||!t.
   const l=(DATA.lcmd||[]).find(x=>x.ID===+t.dataset.cmdreste);if(!l)return;
   if(MISSING.Lignes_Commande_Frs&&MISSING.Lignes_Commande_Frs.has('Qte_Livree_Avant')){toast('🔴 Colonne Qte_Livree_Avant (Nombre) à créer dans Lignes_Commande_Frs','ko');return;}
   const v=parseNum(t.value);if(v===null||isNaN(v)||v<0){t.value=fmtQ(artSuivi(l).reste);return;}
+  if(await cmdRepriseEnregistrer(l,v))t.classList.add('mod');
+});
+async function cmdRepriseEnregistrer(l,v){
+  if(v===null||isNaN(v)||v<0)return false;
   const su=artSuivi(l);const av=Math.max(0,Math.round((n0(l.Quantite)-v-su.recu-su.route)*1000)/1000);
-  try{await spPatch('Lignes_Commande_Frs',l.ID,{Qte_Livree_Avant:av},l);l.Qte_Livree_Avant=av;t.classList.add('mod');
+  try{await spPatch('Lignes_Commande_Frs',l.ID,{Qte_Livree_Avant:av},l);l.Qte_Livree_Avant=av;
     toast(`✓ ${l.Ref_2||l.Title} : déjà livré ${fmtQ(av)} / ${fmtQ(n0(l.Quantite))} · reste ${fmtQ(v)}`,'ok');
     const c=cmdById(l.ID_Commande_Frs);if(c){const e2=cmdEtat(c);const st=e2.lbl.split(' ·')[0];if(c.Statut!==st&&!/^Sold/i.test(c.Statut||'')){try{await spPatch('Commandes_Frs',c.ID,{Statut:_trunc(st)},c);c.Statut=st;}catch(_){}}}
-  }catch(er){toast('🔴 '+er.message,'ko');}
-});
+    return true;
+  }catch(er){toast('🔴 '+er.message,'ko');return false;}
+}
 document.addEventListener('change',e=>{const t=e.target;if(!t.matches||!t.matches('input.rxq')||!W)return;
   const v=parseNum(t.value);W.rxQte=W.rxQte||{};const a=(DATA.lcmd||[]).find(x=>x.ID===+t.dataset.rxq);
   if(v===null||isNaN(v)||v<0){t.value=fmtQ(a?artQteEnvoi(a):0);return;}
@@ -4290,7 +4307,12 @@ document.addEventListener('click',async e=>{
   if(e.target.closest('#cmdSolderVieux')){cmdSolderVieux();return;}
   const lg=e.target.closest('[data-cmdleg]');if(lg){try{localStorage.setItem('cmd_legende',lg.dataset.cmdleg);}catch(_){}renderCommandes();return;}
   const f=e.target.closest('[data-cmdf]');if(f){CMDV.filtre=f.dataset.cmdf;renderCommandes();return;}
-  const rpb=e.target.closest('[data-cmdrep]');if(rpb){CMDV.reprise=CMDV.reprise||{};const id=+rpb.dataset.cmdrep;CMDV.reprise[id]=!CMDV.reprise[id];renderCommandes();return;}
+  const rpb=e.target.closest('[data-cmdrep]');if(rpb){CMDV.reprise=CMDV.reprise||{};const id=+rpb.dataset.cmdrep;
+    if(CMDV.reprise[id]){   // fin de reprise : les lignes non modifiées (reste = valeur affichée) sont enregistrées aussi
+      for(const inp of document.querySelectorAll('input[data-cmdreste]')){const l=(DATA.lcmd||[]).find(x=>x.ID===+inp.dataset.cmdreste);if(!l||artSuivi(l).actif)continue;
+        await cmdRepriseEnregistrer(l,parseNum(inp.value));}
+    }
+    CMDV.reprise[id]=!CMDV.reprise[id];renderCommandes();return;}
   const q=e.target.closest('[data-cmdq]');
   if(q){const id=CMDV.ouvert;const c=cmdById(id);if(!c)return;const a=q.dataset.cmdq;
     if(a==='arc')cmdMaj(id,{Date_ARC:toSP(todayKey())},`✓ ARC reçu pour ${c.Title}`);
