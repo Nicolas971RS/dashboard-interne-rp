@@ -3979,7 +3979,8 @@ function cmdEstImport(c){if(/import/i.test(c.Type_Commande||''))return true;if(/
 function cmdArrivage(c){
   const n=cmdNum(c.Title);if(!n)return null;
   const ids=[...new Set(DATA.lig.filter(l=>l.Type_Ligne!=='Frais'&&bccNums(l.N_Commande).includes(n)).map(l=>l.ID_Arrivage))];
-  const arrs=ids.map(id=>DATA.arr.find(a=>a.ID===id)).filter(Boolean).sort((a,b)=>b.ID-a.ID);
+  // BC livré en plusieurs fois : le dossier en cours passe avant les dossiers clôturés / historiques
+const arrs=ids.map(id=>DATA.arr.find(a=>a.ID===id)).filter(Boolean).sort((a,b)=>(estHisto(a)-estHisto(b))||b.ID-a.ID);
   return arrs[0]||null;
 }
 function cmdEtat(c){
@@ -3988,10 +3989,10 @@ function cmdEtat(c){
   if(c.Annulee==='Oui')return {k:'annulee',lbl:'Annulée',cls:'st-renv',ouverte:false};
   if(dk(c,'Date_Reception'))return {k:'recue',lbl:`Reçue le ${fmtD(dk(c,'Date_Reception'))}`,cls:'st-ok',ouverte:false};
   const SV=cmdSuivi(c);
-  if(a&&dk(a,'Date_Entrepot')){
+  if(a&&(dk(a,'Date_Entrepot')||estHisto(a))){
     if(SV.actif&&SV.nReste>0&&!/^Sold/i.test(c.Statut||''))return {k:'reliquat',lbl:`Reliquat : ${SV.nReste} article${SV.nReste>1?'s':''} à recevoir`,cls:'st-prep',ouverte:true,a};
     if(SV.actif&&SV.nReste===0&&!/^Sold/i.test(c.Statut||''))return {k:'asolder',lbl:'Tout livré · à solder',cls:'st-valid',ouverte:true,a};
-    return {k:'recue',lbl:`Reçue le ${fmtD(dk(a,'Date_Entrepot'))} (${a.Title})`,cls:'st-ok',ouverte:false,a};}
+    return {k:'recue',lbl:dk(a,'Date_Entrepot')?`Reçue le ${fmtD(dk(a,'Date_Entrepot'))} (${a.Title})`:`Reçue (${a.Title})`,cls:'st-ok',ouverte:false,a};}
   if(a){const eta=dk(a,'ETA_Port');return {k:'route',lbl:`Expédiée · ${a.Title}${eta?' · ETA '+fmtD(eta):''}${SV.actif&&SV.nReste>0?' · reliquat à suivre':''}`,cls:'st-transit',ouverte:true,a};}
   if(SV.actif&&SV.livre>0&&!/^Sold/i.test(c.Statut||''))return SV.nReste>0?{k:'reliquat',lbl:`Reliquat : ${SV.nReste} article${SV.nReste>1?'s':''} à recevoir`,cls:'st-prep',ouverte:true}:{k:'asolder',lbl:'Tout livré · à solder',cls:'st-valid',ouverte:true};
   if(/^Sold/i.test(c.Statut||''))return {k:'recue',lbl:'Soldée',cls:'st-ok',ouverte:false};
