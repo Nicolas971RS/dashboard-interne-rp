@@ -3801,6 +3801,8 @@ function cmdAnalyse(pages){
   const all=pages.flat();const txt=all.map(cmdTxt);
   const find=re=>{for(const t of txt){const m=t.match(re);if(m)return m[1].trim();}return '';};
   r.num=cmdNum(find(/N°\s*:?\s*(\d{3,})/));
+  // Réimpression de reliquat dans Image : « N° : 8655(2) / » → quantités imprimées = reste à livrer
+  r.reliquat=+(find(/N°\s*:?\s*\d{3,}\s*\((\d+)\)/)||0);
   r.type=find(/Type de commande\s*:\s*(.+?)(?:\s+Destination|$)/i);
   r.destination=find(/Destination\s*:\s*(.+)$/i);
   const iDest=txt.findIndex(t=>/Destination\s*:/i.test(t));
@@ -4062,29 +4064,81 @@ function cmdAImporter(){
 }
 
 // ── Import ──
-async function cmdEnregistrer(r,path,existante){
+// Enregistre un BC lu dans un PDF. BC déjà connu : les lignes sont MISES À JOUR (mêmes ID), pour garder le suivi
+// (déjà livré, fiches magasin, écarts ARC). Réimpression de reliquat : les quantités imprimées sont le reste à livrer.
+async function cmdEnregistrer(r,path,existante,opt){
+  opt=opt||{};
   const fr=cmdFrsDe(r);
   const body={Title:r.num,ID_Fournisseur:fr?fr.ID:null,Fournisseur:fr?fr.Title:(r.fournisseur||'?'),Type_Commande:r.type||null,Objet:r.objet||null,
     Adresse_Livraison:r.adresse||null,Date_Commande:toSP(r.date||todayKey()),Montant_HT:r.totalHT,Nb_Lignes:r.lignes.length,Lien_BC:path||null};
+  const pu=l=>l.prix!=null?l.prix*(1-(l.rem||0)/100):(l.mtt!=null&&l.qte?l.mtt/l.qte:null);
   let id;
-  if(existante){
-    await spPatch('Commandes_Frs',existante.ID,body,existante);id=existante.ID;
-    for(const l of cmdLignes(id)){await spDelete('Lignes_Commande_Frs',l.ID,l);}
-  }else{body.Statut='Commandée';const c=await spPost('Commandes_Frs',body);id=c.ID;}
+  if(!existante){
+    body.Statut='Commandée';
+    if(r.reliquat)body.Commentaire=`[Import] BC importé depuis le reliquat n°${r.reliquat} d’Image : quantités = reste à livrer au ${fmtD(todayKey())}.`;
+    const c=await spPost('Commandes_Frs',body);id=c.ID;let k=0;
+    for(const l of r.lignes)await spPostSilencieux('Lignes_Commande_Frs',sansVide({Title:_trunc(l.ref||'(sans réf.)'),ID_Commande_Frs:id,N_Commande:r.num,Ref_2:l.ref2,Designation:_trunc(l.des),
+      Quantite:l.qte,Unite:l.uni,Colis:l.colis,Prix_Unitaire:l.prix,Remise:l.rem,Montant_HT:l.mtt,Ordre:++k}));
+    return {id,fr};
+  }
+  id=existante.ID;
+  const anciennes=cmdLignes(id);const norm=x=>arcNorm(x||'');
+  const reliq=!!(r.reliquat||opt.reliquat);
+  const prises=new Set();
+  const trouver=l=>{const k1=norm(l.ref),k2=norm(l.ref2);
+    return anciennes.find(o=>!prises.has(o.ID)&&k1&&k2&&norm(o.Title)===k1&&norm(o.Ref_2)===k2)
+      ||anciennes.find(o=>!prises.has(o.ID)&&k2&&norm(o.Ref_2)===k2)
+      ||anciennes.find(o=>!prises.has(o.ID)&&k1&&norm(o.Title)===k1&&k1!=='(SANSRÉF)');};
   let k=0;
   for(const l of r.lignes){
-    await spPostSilencieux('Lignes_Commande_Frs',sansVide({Title:_trunc(l.ref||'(sans réf.)'),ID_Commande_Frs:id,N_Commande:r.num,Ref_2:l.ref2,Designation:_trunc(l.des),
-      Quantite:l.qte,Unite:l.uni,Colis:l.colis,Prix_Unitaire:l.prix,Remise:l.rem,Montant_HT:l.mtt,Ordre:++k}));
+    k++;const o=trouver(l);
+    if(o){prises.add(o.ID);
+      const b={Designation:_trunc(l.des||o.Designation||''),Unite:l.uni||o.Unite||null,Colis:l.colis??o.Colis??null,Ordre:k};
+      if(l.prix!=null){b.Prix_Unitaire=l.prix;b.Remise=l.rem??null;}
+      if(reliq){   // quantité imprimée = reste : on garde la quantité d'origine et on déduit le déjà livré
+        const q=Math.max(n0(o.Quantite),n0(l.qte));const su=artSuivi(o);
+        b.Quantite=q;b.Qte_Livree_Avant=Math.max(0,Math.round((q-n0(l.qte)-su.recu-su.route)*1000)/1000);
+        const p=pu(l);b.Montant_HT=p!=null?Math.round(q*p*100)/100:o.Montant_HT;
+      }else{b.Quantite=l.qte;b.Montant_HT=l.mtt??(pu(l)!=null?Math.round(l.qte*pu(l)*100)/100:o.Montant_HT);}
+      await spPatch('Lignes_Commande_Frs',o.ID,clean('Lignes_Commande_Frs',b),o);Object.assign(o,b);
+    }else{
+      await spPostSilencieux('Lignes_Commande_Frs',sansVide({Title:_trunc(l.ref||'(sans réf.)'),ID_Commande_Frs:id,N_Commande:r.num,Ref_2:l.ref2,Designation:_trunc(l.des),
+        Quantite:l.qte,Unite:l.uni,Colis:l.colis,Prix_Unitaire:l.prix,Remise:l.rem,Montant_HT:l.mtt,Ordre:k}));
+    }
   }
+  // lignes absentes du nouveau PDF
+  for(const o of anciennes){if(prises.has(o.ID))continue;const su=artSuivi(o);
+    if(reliq){const av=Math.max(0,Math.round((n0(o.Quantite)-su.recu-su.route)*1000)/1000);   // plus rien à livrer : entièrement livrée
+      if(n0(o.Qte_Livree_Avant)!==av){const b={Qte_Livree_Avant:av};await spPatch('Lignes_Commande_Frs',o.ID,clean('Lignes_Commande_Frs',b),o);Object.assign(o,b);}}
+    else if(!su.actif&&!(RX.parCmd&&RX.parCmd.has(o.ID))&&!o.Ecart_ARC)await spDelete('Lignes_Commande_Frs',o.ID,o);   // ligne retirée du BC, sans historique
+  }
+  // en-tête : la date de commande et le total d'origine ne sont pas écrasés par une réimpression
+  if(dk(existante,'Date_Commande'))delete body.Date_Commande;
+  if(reliq){delete body.Montant_HT;body.Commentaire=[`[Reliquat] Relu depuis le reliquat${r.reliquat?' n°'+r.reliquat:''} d’Image le ${fmtD(todayKey())} : déjà livré mis à jour.`,...String(existante.Commentaire||'').split('\n').filter(x=>!/^\[Reliquat\]/.test(x))].join('\n').trim();}
+  body.Nb_Lignes=cmdLignes(id).length||r.lignes.length;
+  await spPatch('Commandes_Frs',id,body,existante);Object.assign(existante,body);
   return {id,fr};
 }
-async function cmdImporter(path,silencieux){
+async function cmdImporter(path,silencieux,demander){
   const buf=await spFileGet(path);
   const r=await cmdLirePdf(buf);
   if(!r.num)r.num=cmdNum(facNom(path));
   if(!r.num)throw new Error(`${facNom(path)} : n° de commande introuvable`);
   const ex=cmdByNum(r.num);
-  const res=await cmdEnregistrer(r,path,ex);
+  let opt={};
+  if(ex&&!r.reliquat&&demander){   // pas de marque « (n) » : si les quantités baissent ou des lignes disparaissent, c'est peut-être une réimpression du reliquat
+    const anc=cmdLignes(ex.ID),nm=x=>arcNorm(x||'');
+    const bas=r.lignes.filter(l=>{const o=anc.find(o=>nm(o.Ref_2)===nm(l.ref2)||nm(o.Title)===nm(l.ref));return o&&n0(l.qte)<n0(o.Quantite);}).length;
+    const absentes=anc.filter(o=>!r.lignes.some(l=>nm(o.Ref_2)===nm(l.ref2)||nm(o.Title)===nm(l.ref))).length;
+    if(bas||absentes){
+      const no=$('cNo');const t0=no.textContent;no.textContent='Non : le BC a été modifié';
+      opt.reliquat=await showConfirm('Réimpression du reliquat ?',`Le PDF relu a ${bas?`<b>${bas}</b> quantité${bas>1?'s':''} plus basse${bas>1?'s':''}`:''}${bas&&absentes?' et ':''}${absentes?`<b>${absentes}</b> ligne${absentes>1?'s':''} en moins`:''} que le BC du portail.<br><br>
+        <b>Oui</b> si c’est la réimpression du <b>reliquat</b> dans Image (quantités = reste à livrer) : le portail garde les quantités d’origine et met à jour le « déjà livré ».<br>
+        <b>Non</b> si la commande a vraiment été modifiée : les quantités du portail sont remplacées.`,'Oui, c’est le reliquat');
+      no.textContent=t0;
+    }
+  }
+  const res=await cmdEnregistrer(r,path,ex,opt);
   if(!silencieux)toast(`✓ Commande ${r.num} ${ex?'mise à jour':'importée'} : ${r.lignes.length} article(s)${res.fr?'':' · ⚠ fournisseur à choisir'}`,res.fr&&!r.alertes.length?'ok':'wa');
   return {num:r.num,fr:res.fr,alertes:r.alertes,n:r.lignes.length,id:res.id};
 }
@@ -4320,7 +4374,7 @@ document.addEventListener('click',async e=>{
     else if(a==='solde'){const s=/^Sold/i.test(c.Statut||'');try{await spPatch('Commandes_Frs',id,{Statut:s?'Commandée':'Soldée'},c);c.Statut=s?'Commandée':'Soldée';if(!s)CMDV.ouvert=null;toast(s?'Commande remise en suivi':`✓ Commande ${c.Title} soldée`,'ok');renderCommandes();}catch(er){toast('🔴 '+er.message,'ko');}}
     else if(a==='ctrl')cmdRecontroler(id);
     else if(a==='annul')cmdMaj(id,{Annulee:c.Annulee==='Oui'?'Non':'Oui'},c.Annulee==='Oui'?'Commande réactivée':'Commande annulée');
-    else if(a==='relire'){try{await cmdImporter(c.Lien_BC);await reloadAll();setTab('commandes');if(typeof daRapprocherTout==='function')await daRapprocherTout();}catch(er){toast('🔴 '+er.message,'ko');}}
+    else if(a==='relire'){try{await cmdImporter(c.Lien_BC,false,true);await reloadAll();setTab('commandes');if(typeof daRapprocherTout==='function')await daRapprocherTout();}catch(er){toast('🔴 '+er.message,'ko');}}
     return;}
   const pd=e.target.closest('[data-cmdpjdel]');
   if(pd){e.preventDefault();const id=CMDV.ouvert;const c=cmdById(id);const n=pd.dataset.cmdpjdel;if(!c)return;
