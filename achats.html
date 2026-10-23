@@ -565,6 +565,9 @@ input.rxq.mod{border-color:#d97706;background:#fffbeb;font-weight:700}
 .sv-ban{margin-top:8px;font-size:12.5px;color:#475569;background:#f8fafc;border:1px dashed #cbd5e1;border-radius:9px;padding:8px 12px;display:flex;align-items:center;gap:8px;flex-wrap:wrap}
 input.sv-in{width:84px;text-align:right;font-family:var(--font-mono);border:1.5px solid #d97706;border-radius:6px;padding:4px 6px;background:#fffbeb}
 input.sv-in.mod{border-color:#16a34a;background:#f0fdf4}
+
+.art-b.gr{background:#e8f2fd;color:#0e2d57}
+.art-l tr[data-rxc="gr"] td{background:#f0f7ff!important}
 </style>
 </head>
 <body>
@@ -1411,7 +1414,10 @@ function renderArts(){
         const env=!rxc&&se?(se.ids.has(a.ID)?'sug-in':'sug-out'):(!rxc&&g.partiel?(qe<=0?'out':qe<qb?'part':'in'):'');
         const envTag={'sug-in':'<span class="env-t in">📦 dans l’envoi SIFA</span>','sug-out':'<span class="env-t out">reliquat probable</span>','out':'<span class="env-t out">reliquat : pas dans ce conteneur</span>','part':`<span class="env-t part">partiel : ${fmtQ(qe)} / ${fmtQ(qb)}</span>`,'in':'<span class="env-t in">📦 dans ce conteneur</span>'}[env]||'';
         return `<tr${i===0?' class="first"':''}${r&&r.cls?` data-rxc="${r.cls}"`:''}${ar&&ar.etat!=='ok'?' data-arc="ko"':''}${env?` data-env="${env}"`:''}><td class="mono">${i===0?esc(b.n):''}</td><td class="mono"><b>${esc(a.Ref_2||'')}</b></td><td class="mono muted">${esc(a.Title||'')}</td><td>${esc(a.Designation||'')}${envTag}${r&&r.obs?`<div class="rx-obs">💬 ${esc(r.obs)}</div>`:''}</td><td class="r mono"><b>${fmtQ(n0(a.Quantite))}</b>${(()=>{const su=artSuivi(a,W.id);return su.actif&&(su.livre||su.route)?`<div class="sv-mini" title="Déjà livré : ${fmtQ(su.livre)}${su.route?' · en route dans un autre dossier : '+fmtQ(su.route):''}">reste ${fmtQ(su.reste)}</div>`:'';})()}</td><td class="muted">${esc(a.Unite||'')}</td><td class="r mono">${artPU(a)!=null?fmtN(artPU(a),2):''}</td>${arcCellHtml(ar)}<td class="r mono">${fmtN(artMontant(a),2)}</td>${rxc?rxCells(r):(!lecture?`<td class="r"><input class="rxq ${artQteEnvoi(a)!==n0(a.Quantite)?'mod':''}" data-rxq="${a.ID}" inputmode="decimal" value="${fmtQ(artQteEnvoi(a))}"></td>`:'')}</tr>`;}).join('')).join('')+
-      (x.extra||[]).map(l=>`<tr data-rxc="exc"><td class="mono">${esc(l.N_Commande||'')}</td><td class="mono">${esc(l.Reference_Article||'')}</td><td></td><td>${esc(l.Designation||'Article non prévu')} <span class="art-b warn">non prévu</span>${l.Observation?`<div class="rx-obs">💬 ${esc(l.Observation)}</div>`:''}</td><td class="r mono">0</td><td></td><td></td><td></td><td></td>${rxCells({recu:n0(l.Quantite_Scannee),ab:n0(l.Quantite_Abimee),ec:n0(l.Quantite_Scannee),ph:!!l.Attachments,id:l.ID,fait:x.fait})}</tr>`).join('')+
+      (x.extra||[]).map(l=>{const gr=estGratuit(l),att=gr?n0(l.Quantite_Attendue):0,rec=n0(l.Quantite_Scannee),ab=n0(l.Quantite_Abimee);
+        const cls=gr?(x.fait?(ab?'ab':rec<att?'man':rec>att?'exc':'ok'):(rec?'cours':'gr')):'exc';
+        const del=gr&&!x.fait&&!rec&&!ab&&!lecture?` <button class="btn sm" data-grdel="${l.ID}" title="Retirer cet article gratuit">✕</button>`:'';
+        return `<tr data-rxc="${cls}"><td class="mono">${gr?'🎁':esc(l.N_Commande||'')}</td><td class="mono">${esc(l.Reference_Article||'')}</td><td></td><td>${esc(l.Designation||(gr?'Article gratuit':'Article non prévu'))} ${gr?'<span class="art-b gr">🎁 gratuit · non facturé</span>':'<span class="art-b warn">non prévu</span>'}${del}${l.Observation&&!/^Article non facturé/.test(l.Observation)?`<div class="rx-obs">💬 ${esc(l.Observation)}</div>`:''}</td><td class="r mono">${fmtQ(att)}</td><td></td><td class="r mono muted">${gr?'0,00':''}</td><td></td><td class="r mono muted">${gr?'0,00':''}</td>${rxCells({recu:rec,ab,ec:rec-att,ph:!!l.Attachments,id:l.ID,fait:x.fait})}</tr>`;}).join('')+
       `</tbody></table></td></tr>`;}
   });
   h+=`</tbody></table>`;
@@ -1459,6 +1465,34 @@ function cmdSuivi(c){
   const actif=L.some(x=>x.s.actif);
   return {actif,L,nReste:L.filter(x=>x.s.reste>0).length,montantReste:L.reduce((t,x)=>t+x.s.reste*pu(x.l),0),livre:L.reduce((t,x)=>t+x.s.livre,0),route:L.reduce((t,x)=>t+x.s.route,0)};
 }
+const estGratuit=l=>String(l&&l.N_Commande||'')==='GRATUIT';
+// ── Articles gratuits / non facturés (cadeaux, échantillons) saisis par Patricia avant le contrôle ──
+async function rxGratuitAjouter(key){
+  const g=artsGroupes().find(x=>x.key===key);if(!g)return;g.rx=rxGroupe(g);const sess=g.rx.sess;
+  if(!sess){toast('Envoie d’abord le conteneur au magasin : l’article gratuit s’ajoute à la fiche du fournisseur.','wa');return;}
+  if(sess.Statut===RX_FAIT){toast('Cette fiche est déjà validée par le magasin.','wa');return;}
+  const ok=await showConfirm('🎁 Article gratuit · '+esc(nomCourtTxt(String(sess.Fournisseur||g.l.Fournisseur).split(' / ')[0])),
+    `<div class="muted" style="font-size:12.5px;margin-bottom:10px">Cadeau, échantillon, article non facturé annoncé par le fournisseur : il apparaîtra sur la fiche du magasinier comme article attendu, valeur 0 €.</div>
+    <div class="fgrid2"><div class="f"><label>Référence</label><input id="grRef" placeholder="si connue"></div><div class="f req"><label>Quantité attendue</label><input id="grQ" inputmode="decimal" value="1"></div></div>
+    <div class="f req" style="margin-top:8px"><label>Désignation</label><input id="grDes" placeholder="ex. Coffret échantillons raccords"></div>
+    <div class="f" style="margin-top:8px"><label>Commentaire</label><input id="grCom" placeholder="ex. offert avec la commande 8656"></div>
+    ${sess.Statut==='En cours de scan'?`<div class="fac-note" style="margin-top:10px">🔄 ${esc(sess.Magasinier||'Un magasinier')} est en train de compter : il verra l’article en rouvrant la fiche.</div>`:''}`,'🎁 Ajouter');
+  if(!ok)return;
+  const ref=($('grRef')||{}).value||'',des=(($('grDes')||{}).value||'').trim(),q=parseNum(($('grQ')||{}).value),com=(($('grCom')||{}).value||'').trim();
+  if(!des||!(q>0)){toast('Désignation et quantité obligatoires','ko');return;}
+  try{
+    await spPostSilencieux('Lignes_Scan',{Title:`RX-${sess.ID}-G${Date.now().toString(36)}`,Session_ScanId:sess.ID,Reference_Article:_trunc(ref.trim()),Designation:_trunc(des),
+      Quantite_Attendue:q,Quantite_Scannee:0,Quantite_Abimee:0,Fournisseur:_trunc(sess.Fournisseur||''),N_Commande:'GRATUIT',Observation:_trunc('Article non facturé (gratuit)'+(com?' — '+com:'')+' · saisi par '+(sessionStorage.getItem('user_name')||'le bureau'),500)});
+    toast(`✓ ${des} ajouté à la fiche du magasin`,'ok');ARTS_OUV.add(String(g.l._k));
+  }catch(e){toast('🔴 '+e.message,'ko');}
+  await rxCharger().catch(()=>{});renderArts();
+}
+async function rxGratuitRetirer(id){
+  const l=RX.lig.find(x=>x.ID===id);if(!l)return;
+  if(!await showConfirm('Retirer l’article gratuit',`Retirer « ${esc(l.Designation||'')} » de la fiche du magasin ?`,'Retirer','danger'))return;
+  try{await spDelete('Lignes_Scan',id,l);toast('✓ Article retiré','ok');}catch(e){toast('🔴 '+e.message,'ko');}
+  await rxCharger().catch(()=>{});renderArts();
+}
 function rxGroupe(g){
   const sess=RX.sess.find(x=>x.Title===g.fkey)||RX.sess.find(x=>x.Title===g.key)||null;
   const parFrs=!!sess&&sess.Title===g.fkey;
@@ -1477,7 +1511,11 @@ function rxGroupe(g){
     r.uRecu+=rec;r.uAtt+=att;const m=Math.max(0,att-rec),e=Math.max(0,rec-att);
     if(m||e||ab){r.nEc++;r.ecarts.push({ref:a.Title||a.Ref_2||'',des:a.Designation||'',bc:b.n,att,rec,ab,pu:artPU(a),ligne:l});}
     if(m)r.nManq++;if(e)r.nExc++;if(ab)r.nAb++;}));
-  extra.forEach(l=>{const rec=n0(l.Quantite_Scannee),ab=n0(l.Quantite_Abimee);r.uRecu+=rec;if(rec||ab){r.nEc++;r.nExc++;if(ab)r.nAb++;r.ecarts.push({ref:l.Reference_Article||'',des:l.Designation||'Article non prévu',bc:l.N_Commande||'',att:0,rec,ab,pu:null,ligne:l,horsBC:true});}});
+  extra.forEach(l=>{const rec=n0(l.Quantite_Scannee),ab=n0(l.Quantite_Abimee);r.uRecu+=rec;
+    if(estGratuit(l)){const att=n0(l.Quantite_Attendue);r.uAtt+=att;const m=Math.max(0,att-rec),e=Math.max(0,rec-att);
+      if(m||e||ab){r.nEc++;r.ecarts.push({ref:l.Reference_Article||'',des:l.Designation||'Article gratuit',bc:'',att,rec,ab,pu:null,ligne:l,gratuit:true});}
+      if(m)r.nManq++;if(e)r.nExc++;if(ab)r.nAb++;return;}
+    if(rec||ab){r.nEc++;r.nExc++;if(ab)r.nAb++;r.ecarts.push({ref:l.Reference_Article||'',des:l.Designation||'Article non prévu',bc:l.N_Commande||'',att:0,rec,ab,pu:null,ligne:l,horsBC:true});}});
   return r;
 }
 function rxResume(G){
@@ -1504,6 +1542,7 @@ function rxBadge(g){
   const qui=x.sess.Repris_Par||x.sess.Magasinier||'';
   let b=x.fait?(x.nEc?`<span class="art-b ko">⚠ ${x.nEc} écart${x.nEc>1?'s':''}</span>`:'<span class="art-b ok">✓ conforme</span>'):x.cours?`<span class="art-b warn">🔄 ${esc(qui||'en cours')}</span>`:'<span class="art-b mute">à prendre</span>';
   if(x.fait&&qui)b+=` <span class="muted" style="font-size:11px">${esc(qui)}</span>`;
+  if(!x.fait&&!(W.lecture)&&(g.premierF||x.sess.Title===g.key))b+=` <button class="btn sm" data-grnew="${esc(g.key)}" title="Ajouter un article gratuit (non facturé) attendu dans ce conteneur">🎁 ＋</button>`;
   if(x.lit)b+=` <button class="art-b ${litOuvert(x.lit)?'warn':'mute'} lit-b" data-litid="${x.lit.ID}" title="Voir le litige">${esc(x.lit.Title)} · ${esc(x.lit.Statut||'')}</button>`;
   else if(x.fait&&x.nEc&&!(W.lecture))b+=` <button class="btn sm danger" data-litnew="${esc(g.key)}">Ouvrir un litige</button>`;
   return b;
@@ -1612,7 +1651,7 @@ function litDepuisGroupe(key){
   const G=artsGroupes();const g=G.find(x=>x.key===key);if(!g)return null;g.rx=rxGroupe(g);const x=g.rx;
   const kinds=[x.nAb?'Casse':'',x.nManq?'Manquant':'',x.nExc?'Excédent':''].filter(Boolean);
   const mt=x.ecarts.reduce((s,e)=>s+(e.pu!=null?(Math.max(0,e.att-e.rec)+e.ab)*e.pu:0),0);
-  const det=x.ecarts.map(e=>`• ${[e.ref,e.des].filter(Boolean).join(' — ')}${e.bc?` (BC ${e.bc})`:''} : ${e.horsBC?`non prévu, reçu ${fmtQ(e.rec)}`:`attendu ${fmtQ(e.att)}, reçu ${fmtQ(e.rec)}`}${e.ab?`, abîmé ${fmtQ(e.ab)}`:''}${e.ligne&&e.ligne.Observation?` — ${e.ligne.Observation}`:''}`).join('\n');
+  const det=x.ecarts.map(e=>`• ${[e.ref,e.des].filter(Boolean).join(' — ')}${e.bc?` (BC ${e.bc})`:''} : ${e.horsBC?`non prévu, reçu ${fmtQ(e.rec)}`:`${e.gratuit?'gratuit (non facturé), ':''}attendu ${fmtQ(e.att)}, reçu ${fmtQ(e.rec)}`}${e.ab?`, abîmé ${fmtQ(e.ab)}`:''}${e.ligne&&e.ligne.Observation&&!/^Article non factur/.test(e.ligne.Observation)?` — ${e.ligne.Observation}`:''}`).join('\n');
   return {g,l:{Title:litNouveauTitre(),ID_Arrivage:W.id,Conteneur:String(W.a.Conteneur||W.a.Title||''),ID_Fournisseur:g.idFrs,Fournisseur:g.l.Fournisseur,N_Commande:g.l.N_Commande,
     Type_Litige:kinds.join(' + ')||'Autre',Detail:det,Montant_Estime:Math.round(mt*100)/100,Statut:'Ouvert',Date_Ouverture:todayKey(),Ouvert_Par:(sessionStorage.getItem('user_name')||'')}};
 }
@@ -1882,6 +1921,8 @@ document.addEventListener('click',async e=>{
     if(rp.dataset.rxpart){const se=artSousEnsemble(g);if(se){g.bcs.forEach(b=>b.arts.forEach(a=>{W.rxQte[a.ID]=se.ids.has(a.ID)?artDefaut(a):0;}));(W.rxAuto=W.rxAuto||new Set()).delete(g.key);}}
     else{g.bcs.forEach(b=>b.arts.forEach(a=>delete W.rxQte[a.ID]));if(W.rxAuto)W.rxAuto.delete(g.key);}renderArts();}return;}
   if(e.target.closest('input.rxq'))return;
+  const gn=e.target.closest('[data-grnew]');if(gn){e.stopPropagation();rxGratuitAjouter(gn.dataset.grnew);return;}
+  const gd=e.target.closest('[data-grdel]');if(gd){e.stopPropagation();rxGratuitRetirer(+gd.dataset.grdel);return;}
   const lb=e.target.closest('[data-litid]');if(lb){e.stopPropagation();litOuvrir({id:+lb.dataset.litid});return;}
   const ln=e.target.closest('[data-litnew]');if(ln){litOuvrir({key:ln.dataset.litnew});return;}
   const ph=e.target.closest('[data-rxph]');if(ph){rxVoirPhotos(+ph.dataset.rxph);return;}
