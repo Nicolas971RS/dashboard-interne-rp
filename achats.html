@@ -1552,12 +1552,12 @@ function rxBandeau(G,rs,lecture){
   const enCours=[...new Map(S.filter(g=>g.rx.cours).map(g=>[g.rx.sess.ID,`${esc(nomCourtTxt(String(g.rx.sess.Fournisseur||g.l.Fournisseur).split(' / ')[0]))} (${esc(g.rx.sess.Magasinier||'?')})`])).values()];
   let h='';
   if(rs.nOk<rs.nEnv)h=`<div class="rx-ban info">📲 <b>Contrôle magasin : ${rs.nOk}/${rs.nEnv} fiche${rs.nEnv>1?'s':''} validée${rs.nOk>1?'s':''}</b>${enCours.length?` · en cours : ${enCours.join(', ')}`:''}${rs.nAtt?` · ${rs.nAtt} à prendre dans le portail Scan`:''}
-    <span class="rx-act"><button class="btn sm" data-act="rxMaj">↻ Actualiser</button>${!lecture&&!rs.compte?'<button class="btn sm" data-act="rxAnnuler">Annuler l’envoi</button>':''}</span></div>`;
+    <span class="rx-act"><button class="btn sm" data-act="rxPrint" title="Imprimer l’état du contrôle (provisoire tant que toutes les fiches ne sont pas validées)">🖨 Imprimer</button><button class="btn sm" data-act="rxMaj">↻ Actualiser</button>${!lecture&&!rs.compte?'<button class="btn sm" data-act="rxAnnuler">Annuler l’envoi</button>':''}</span></div>`;
   else{
     const sansLit=S.filter(g=>g.rx.nEc&&!g.rx.lit);
     h=rs.nEc?`<div class="rx-ban ko">⚠ <b>Contrôle magasin terminé : ${rs.nEc} écart${rs.nEc>1?'s':''}</b> sur ${S.filter(g=>g.rx.nEc).length} fournisseur${S.filter(g=>g.rx.nEc).length>1?'s':''}. Les lignes en écart sont colorées ci-dessous.${sansLit.length?` <b>${sansLit.length}</b> litige${sansLit.length>1?'s':''} à ouvrir.`:''}
-      <span class="rx-act">${!lecture?'<button class="btn sm" data-act="rxReporter">📋 Reporter dans le dossier</button>':''}<button class="btn sm" data-act="rxMaj">↻</button></span></div>`
-      :`<div class="rx-ban ok">✓ <b>Contrôle magasin terminé : tout est conforme.</b> <span class="rx-act">${!lecture?'<button class="btn sm green" data-act="rxReporter">📋 Reporter dans le dossier</button>':''}</span></div>`;
+      <span class="rx-act"><button class="btn sm primary" data-act="rxPrint" title="Tableau du contrôle à imprimer">🖨 Imprimer le contrôle</button>${!lecture?'<button class="btn sm" data-act="rxReporter">📋 Reporter dans le dossier</button>':''}<button class="btn sm" data-act="rxMaj">↻</button></span></div>`
+      :`<div class="rx-ban ok">✓ <b>Contrôle magasin terminé : tout est conforme.</b> <span class="rx-act"><button class="btn sm" data-act="rxPrint" title="Tableau du contrôle à imprimer">🖨 Imprimer le contrôle</button>${!lecture?'<button class="btn sm green" data-act="rxReporter">📋 Reporter dans le dossier</button>':''}</span></div>`;
   }
   if(rs.nSans&&!lecture)h+=`<div class="rx-ban warn">${rs.nSans} groupe${rs.nSans>1?'s':''} sans fiche de contrôle (lignes ajoutées après l’envoi). <span class="rx-act"><button class="btn sm" data-act="rxEnvoyer">📲 Envoyer ${rs.nSans>1?'les fiches manquantes':'la fiche manquante'}</button></span></div>`;
   if(RX.err==='colonnes')h+=`<div class="rx-ban warn">Colonnes de réception absentes dans Lignes_Scan : quantités abîmées / observations non lues.</div>`;
@@ -1753,6 +1753,58 @@ async function rxVoirPhotos(id){
   await p;no.style.display='';
 }
 function artsToggle(){const G=artsGroupes().filter(g=>g.nArts);const tous=G.every(g=>ARTS_OUV.has(String(g.l._k)));G.forEach(g=>tous?ARTS_OUV.delete(String(g.l._k)):ARTS_OUV.add(String(g.l._k)));renderArts();}
+// Impression du RÉSULTAT du contrôle magasin (transition papier pour Patricia) : un tableau par fournisseur,
+// écarts en tête et surlignés, valeur des manquants au PU du BC, gratuits et non prévus inclus.
+function rxPrint(){
+  if(!W)return;const a=W.a;const G=artsGroupes();G.forEach(g=>g.rx=rxGroupe(g));
+  const S=G.filter(g=>g.rx.sess);if(!S.length){toast('Aucune fiche de contrôle envoyée au magasin pour ce dossier.','ko');return;}
+  const rs=rxResume(G);const prov=rs.nOk<rs.nEnv;
+  const eur=v=>v==null?'':fmtN(v,2)+' €';
+  let totManq=0,nEcTot=0;
+  const blocs=S.map(g=>{const x=g.rx,se=x.sess;
+    const qui=se.Repris_Par||se.Magasinier||'';const dt=dkeyLocal(se.Date_Scan||(x.fait?se.Modified:'')||'');
+    const st=x.fait?(x.nEc?`⚠ ${x.nEc} écart${x.nEc>1?'s':''}`:'✓ Conforme'):x.cours?'En cours de comptage':'Pas encore pris';
+    const rows=[];let vManq=0;
+    g.bcs.filter(b=>b.c).forEach(b=>b.arts.forEach(art=>{const l=x.byCmd.get(art.ID);if(!l)return;
+      const att=n0(l.Quantite_Attendue),rec=n0(l.Quantite_Scannee),ab=n0(l.Quantite_Abimee),ec=rec-att,pu=artPU(art);
+      const vm=(Math.max(0,-ec)+ab)*(pu||0);if(x.fait)vManq+=vm;
+      rows.push({ec:x.fait&&(ec||ab),bc:b.n,ref:art.Title||'',rp:art.Ref_2||'',des:art.Designation||'',u:art.Unite||'',att,rec,ab,ecart:ec,pu,vm,obs:l.Observation||'',ph:!!l.Attachments,tag:''});}));
+    (x.extra||[]).forEach(l=>{const gr=estGratuit(l),att=gr?n0(l.Quantite_Attendue):0,rec=n0(l.Quantite_Scannee),ab=n0(l.Quantite_Abimee);if(!gr&&!rec&&!ab)return;
+      rows.push({ec:x.fait&&(rec-att||ab),bc:gr?'':(l.N_Commande||''),ref:l.Reference_Article||'',rp:'',des:l.Designation||(gr?'Article gratuit':'Article non prévu'),u:'',att,rec,ab,ecart:rec-att,pu:null,vm:0,obs:/^Article non facturé/.test(l.Observation||'')?'':(l.Observation||''),ph:!!l.Attachments,tag:gr?'GRATUIT':'NON PRÉVU'});});
+    rows.sort((p,q)=>(q.ec?1:0)-(p.ec?1:0));
+    totManq+=vManq;if(x.fait)nEcTot+=x.nEc;
+    const ecTxt=r=>{if(!x.fait)return r.rec?'en cours':'';const t=[r.ecart<0?`MANQUE ${fmtQ(-r.ecart)}`:r.ecart>0?`+${fmtQ(r.ecart)} en trop`:'',r.ab?`ABÎMÉ ${fmtQ(r.ab)}`:''].filter(Boolean);return t.length?t.join('<br>'):'✓';};
+    return `<div class="bloc"><div class="bh"><div><b>${esc(se.Fournisseur||g.l.Fournisseur||'')}</b> · BC ${esc(g.bcs.map(b=>b.n).join(', '))}${g.l.N_Facture?' · facture '+esc(g.l.N_Facture):''}</div>
+      <div class="st ${x.fait?(x.nEc?'ko':'ok'):'enc'}">${st}</div></div>
+      <div class="bm">Contrôlé par : <b>${esc(qui||'—')}</b>${dt?' · le '+fmtD(dt):''}${x.lit?` · Litige <b>${esc(x.lit.Title)}</b> (${esc(x.lit.Statut||'')})`:x.fait&&x.nEc?' · Litige : ☐ à ouvrir':''}</div>
+      <table><colgroup><col style="width:44px"><col style="width:90px"><col><col style="width:52px"><col style="width:52px"><col style="width:52px"><col style="width:82px"><col style="width:62px"><col style="width:70px"><col style="width:150px"><col style="width:24px"></colgroup>
+      <thead><tr><th>BC</th><th>Réf. frs / RP</th><th>Désignation</th><th>Attendu</th><th>Reçu</th><th>Abîmé</th><th>Écart</th><th>PU BC</th><th>Valeur écart</th><th>Observation</th><th>✓</th></tr></thead><tbody>
+      ${rows.map(r=>`<tr class="${r.ec?'ec':''}"><td class="m">${esc(r.bc)}</td><td class="m">${esc(r.ref)}${r.rp?`<br><span class="g">RP ${esc(r.rp)}</span>`:''}</td><td>${esc(r.des)}${r.tag?` <span class="tg">${r.tag}</span>`:''}</td><td class="r">${fmtQ(r.att)} ${esc(r.u)}</td><td class="r"><b>${x.fait||r.rec?fmtQ(r.rec):''}</b></td><td class="r">${r.ab?'<b>'+fmtQ(r.ab)+'</b>':''}</td><td class="c">${ecTxt(r)}</td><td class="r">${r.pu!=null?fmtN(r.pu,2):''}</td><td class="r">${r.vm?'<b>'+eur(r.vm)+'</b>':''}</td><td class="o">${esc(r.obs)}${r.ph?' 📷':''}</td><td></td></tr>`).join('')||'<tr><td colspan="11" class="g">Aucune ligne</td></tr>'}
+      </tbody>${vManq?`<tfoot><tr><td colspan="8" class="r">Valeur manquante / abîmée (au prix du BC)</td><td class="r"><b>${eur(vManq)}</b></td><td colspan="2"></td></tr></tfoot>`:''}</table></div>`;});
+  const w=window.open('','_blank');if(!w){toast('🔴 Fenêtre bloquée : autorise les fenêtres pour ce site','ko');return;}
+  w.document.write(`<!doctype html><html lang="fr"><head><meta charset="utf-8"><title>Résultat contrôle ${esc(a.Title||'')}</title><style>
+  @page{size:A4 landscape;margin:9mm}body{font:10.5px/1.35 Arial,sans-serif;color:#000;margin:0}
+  .hd{display:flex;justify-content:space-between;align-items:flex-start;border-bottom:2px solid #000;padding-bottom:6px;margin-bottom:8px}
+  h1{font:bold 17px Georgia,serif;margin:0}.brand{font:bold 14px Arial;letter-spacing:.06em}
+  .prov{border:2px dashed #000;padding:5px 8px;margin-bottom:8px;font-weight:bold}
+  .sum{display:flex;gap:10px;margin-bottom:10px}.sum div{flex:1;border:1px solid #000;padding:5px 8px}.sum b{font-size:15px;display:block}
+  .bloc{margin-bottom:12px;page-break-inside:auto}.bh{display:flex;justify-content:space-between;background:#e5e5e5;border:1px solid #000;border-bottom:0;padding:4px 6px;font-size:12px}
+  .bm{border:1px solid #000;border-bottom:0;padding:3px 6px;font-size:10.5px}.st{font-weight:bold}.st.ko{text-decoration:underline}
+  table{width:100%;border-collapse:collapse}th,td{border:1px solid #000;padding:2px 4px;vertical-align:top}th{background:#f2f2f2;font-size:9.5px;text-transform:uppercase}
+  td.r{text-align:right;white-space:nowrap}td.c{text-align:center;white-space:nowrap}.m{font-family:Consolas,monospace;font-size:9.5px}.g{color:#555}.o{font-size:9.5px}
+  tr.ec td{background:#ddd;font-weight:bold}tr.ec td.c{text-decoration:underline}.tg{border:1px solid #000;font-size:8.5px;padding:0 3px}
+  tr{page-break-inside:avoid}thead{display:table-header-group}tfoot td{background:#f2f2f2}
+  .sig{display:flex;gap:40px;margin-top:14px;font-size:11.5px}.sig div{flex:1;border-top:1px solid #000;padding-top:4px}
+  *{-webkit-print-color-adjust:exact;print-color-adjust:exact}
+  </style></head><body>
+  <div class="hd"><div><div class="brand">RÉSEAUX PLUS</div><h1>RÉSULTAT DU CONTRÔLE CONTENEUR</h1></div><div style="text-align:right;font-size:11.5px"><b style="font-size:14px">${esc(a.Title||'')}</b><br>${esc([a.N_Dossier?'Dossier Image '+a.N_Dossier:'',a.Transitaire||'',a.Date_Entrepot?'arrivé le '+fmtD(a.Date_Entrepot):''].filter(Boolean).join(' · '))}<br>Imprimé le ${fmtD(todayKey())}</div></div>
+  ${prov?`<div class="prov">⚠ PROVISOIRE : ${rs.nOk}/${rs.nEnv} fiche${rs.nEnv>1?'s':''} validée${rs.nOk>1?'s':''} par le magasin. Les fiches en cours peuvent encore changer.</div>`:''}
+  <div class="sum"><div>Fiches validées<b>${rs.nOk} / ${rs.nEnv}</b></div><div>Écarts relevés<b>${nEcTot}</b></div><div>Valeur manquante / abîmée<b>${eur(totManq)||'0,00 €'}</b></div><div>Référence<b style="font-size:11px">Le contrôle se fait par rapport au BC (quantités et prix du BC)</b></div></div>
+  ${blocs.join('')}
+  <div class="sig"><div>Vérifié par (nom, signature)</div><div>Date</div><div>Litige(s) envoyé(s) au fournisseur : ☐ Non ☐ Oui</div></div>
+  <script>window.onload=()=>setTimeout(()=>window.print(),250)<\/script></body></html>`);
+  w.document.close();
+}
 function artsPrint(){
   if(!W)return;const a=W.a;const G=artsGroupes();
   const mar=/a[ée]rien/i.test([a.Type_Transport,a.Categorie,a.Title].join(' '))?'aerien':'maritime';
@@ -1926,8 +1978,8 @@ document.addEventListener('click',async e=>{
   const lb=e.target.closest('[data-litid]');if(lb){e.stopPropagation();litOuvrir({id:+lb.dataset.litid});return;}
   const ln=e.target.closest('[data-litnew]');if(ln){litOuvrir({key:ln.dataset.litnew});return;}
   const ph=e.target.closest('[data-rxph]');if(ph){rxVoirPhotos(+ph.dataset.rxph);return;}
-  const rxa=e.target.closest('[data-act="rxEnvoyer"],[data-act="rxMaj"],[data-act="rxAnnuler"],[data-act="rxReporter"]');
-  if(rxa){({rxEnvoyer,rxMaj,rxAnnuler,rxReporter})[rxa.dataset.act]();return;}
+  const rxa=e.target.closest('[data-act="rxEnvoyer"],[data-act="rxMaj"],[data-act="rxAnnuler"],[data-act="rxReporter"],[data-act="rxPrint"]');
+  if(rxa){({rxEnvoyer,rxMaj,rxAnnuler,rxReporter,rxPrint})[rxa.dataset.act]();return;}
   const atg=e.target.closest('[data-arttg]');if(atg){const k=atg.dataset.arttg;ARTS_OUV.has(k)?ARTS_OUV.delete(k):ARTS_OUV.add(k);renderArts();return;}
   if(e.target.closest('[data-act="arcDossier"]')){arcControlerDossier();return;}
   const aa=e.target.closest('[data-act="artsToggle"],[data-act="artsPrint"]');if(aa){aa.dataset.act==='artsPrint'?artsPrint():artsToggle();return;}
