@@ -1756,8 +1756,17 @@ async function syncLivraisonDepuisScan(){
        (!ref&&design&&(f(l,'Designation')||'').trim().toLowerCase()===design))
     );
     if(!ligneScan)return;
-    const scanne=Number(f(ligneScan,'Quantite_Scannee')||0);
+    // Le livré d'une ligne = scan de SON BL + les livraisons des autres BL déjà
+    // inscrites dans l'historique BLSigné (remontées des BC suffixés, mises à jour
+    // manuelles). Avant : on alignait sur le seul scan → chaque rechargement
+    // effaçait ce que syncLivraisonVersRacine venait d'ajouter.
+    const autres=parseBLHistorique(f(ligne,'BLSign_x00e9_')||'')
+      .filter(e=>e.qte!=null&&String(e.bl)!==String(numBL).trim())
+      .reduce((t,e)=>t+e.qte,0);
+    const scanne=Number(f(ligneScan,'Quantite_Scannee')||0)+autres;
     const livreActuel=Number(f(ligne,'Quantit_x00e9_livr_x00e9_e')||0);
+    const cmd=Number(f(ligne,'Quantit_x00e9_command_x00e9_e')||0);
+    if(cmd>0&&scanne>cmd)return; // dépasserait le commandé : double comptage probable, on n'écrit pas
     if(scanne!==livreActuel)updates.push({ligne,scanne});
   });
   if(!updates.length)return;
@@ -1982,6 +1991,8 @@ async function loadAll(){
     // Puis on remonte vers le BC d'origine toute livraison passée par un split
     // (suffixe -A, -A-A...) — pour garder un suivi complet en un seul endroit.
     await syncLivraisonVersRacine();
+    // BC suffixés lancés depuis « Livrer le reste » et pas encore complétés (flux lent, page fermée)
+    try{await emReprendreSplits();}catch(e){console.warn('[emReprendreSplits]',e.message);}
 
     // Debug: log first suivi item to help identify field names
 
@@ -5870,8 +5881,23 @@ function renderDevisTable(){
 }
 
 // ═══ LIVRAISONS PARTIELLES — RAL ═══
+// Ligne d'un BC suffixé (-A, -A-A…) dont l'article existe sur le BC d'origine :
+// le suivi du reste à livrer se fait sur l'origine (syncLivraisonVersRacine),
+// la compter aussi ici ferait apparaître deux fois le même reste.
+function ligneSplitMiroir(l){
+  const bcId=l.BCId??parseInt(l.BCId);
+  const bc=(DATA.suivi||[]).find(x=>x.ID===bcId);
+  if(!bc)return false;
+  const t=(f(bc,'Title')||'').trim(),r=bcRacine(t);
+  if(!r||r===t)return false;
+  const root=(DATA.suivi||[]).find(x=>(f(x,'Title')||'').trim()===r);
+  if(!root)return false;
+  const ref=(f(l,'R_x00e9_f_x00e9_rence')||'').trim().toLowerCase();
+  const des=(f(l,'Produit_x002f_D_x00e9_signation')||'').trim().toLowerCase();
+  return (DATA.lignes||[]).some(x=>x.BCId===root.ID&&((ref&&(f(x,'R_x00e9_f_x00e9_rence')||'').trim().toLowerCase()===ref)||(!ref&&des&&(f(x,'Produit_x002f_D_x00e9_signation')||'').trim().toLowerCase()===des)));
+}
 function getRALLignes(){
-  return (DATA.lignes||[]).map(l=>{
+  return (DATA.lignes||[]).filter(l=>!ligneSplitMiroir(l)).map(l=>{
     const qc=parseFloat(f(l,'Quantit_x00e9_command_x00e9_e'))||0;
     const ql=parseFloat(f(l,'Quantit_x00e9_livr_x00e9_e'))||0;
     return{ligne:l,qc,ql,ral:qc-ql};
@@ -6215,6 +6241,7 @@ function renderRALTable(){
         <td>
           <div style="display:flex;flex-direction:column;gap:5px;align-items:stretch;width:104px">
             <button class="btn orange" style="min-height:26px;height:auto;padding:4px 6px;font-size:11px;white-space:normal;line-height:1.15" onclick="openReceptionnerLigne(${l.ID},${x.info.bcId})">🔄 Mettre à jour</button>
+            <button class="btn" style="min-height:26px;height:auto;padding:4px 6px;font-size:11px;white-space:normal;line-height:1.15;color:var(--blue);border-color:#93c5fd" title="Le client revient : émettre le BL du reste, avec les articles déjà remplis" onclick="openLivrerReste(${x.info.bcId})">🚚 Livrer le reste</button>
             <button class="btn" style="min-height:26px;height:auto;padding:4px 6px;font-size:11px;white-space:normal;line-height:1.15" title="Corriger une erreur de saisie" onclick="openCorrigerLigneBC(${l.ID},${x.info.bcId})">✏️ Corriger</button>
             <button class="btn" style="min-height:26px;height:auto;padding:4px 6px;font-size:11px;white-space:normal;line-height:1.15;color:#047857;border-color:#6ee7b7" title="Noter un suivi client (appel, passage prévu…)" onclick="openSuiviClient(${x.info.bcId})">📞 Suivi client</button>
             ${jours>=15?`<button class="btn" style="min-height:26px;height:auto;padding:4px 6px;font-size:11px;white-space:normal;line-height:1.15;color:var(--red);border-color:var(--red)" onclick="cloturerBC(${x.info.bcId},'${String(x.info.numBC).replace(/'/g,"\\'")}')">⛔ Clôturer</button>`:''}
@@ -8914,7 +8941,9 @@ async function alerteSoldeOui(id,numBC){
 
 function alerteSoldeNon(id,numBC){
   document.getElementById('alerte-solde-ov')?.remove();
-  openLivraisonPartielle(id);
+  // Rien à créer maintenant : le reste est déjà suivi dans « Livraisons Partielles »
+  // (Cmdé − Livré). Le BC suffixé se crée quand le client revient, avec le BL du reste.
+  toast(`📦 ${numBC||'BC'} : le reste à livrer est suivi dans « Livraisons Partielles ». Quand le client revient : « 🚚 Livrer le reste ».`);
 }
 
 async function openFacturerModal(id,numBC,client){
@@ -12392,6 +12421,161 @@ async function syncLigneToScan(session,ref,design,qc,ql){
 
 let _emissionType='Livraison client';
 
+// ── Livrer le reste d'un BC depuis l'émission du BL ──
+// Client choisi → BC d'origine encore ouverts → tableau du reste à livrer.
+// À la validation : session BL avec les articles cochés + BC suffixé (‑A, ‑A‑A…)
+// créé par le flux habituel, auquel on ajoute le N° BL et les mêmes articles.
+// Le scan magasin met ensuite à jour le livré, puis la remontée vers l'origine
+// se fait comme avant — aucune ressaisie dans « Livraisons Partielles ».
+let _emBC=null; // {rootId}
+function emBCOuverts(clientNom){
+  const n=_normTxt(clientNom);
+  if(!n)return[];
+  const ral=getRALLignes();
+  return (DATA.suivi||[]).filter(bc=>{
+    const t=(f(bc,'Title')||'').trim();
+    if(!t||bcRacine(t)!==t||estSolde(bc))return false;
+    if(_normTxt(getClient(bc))!==n)return false;
+    return ral.some(x=>x.ligne.BCId===bc.ID);
+  }).map(bc=>({bc,lignes:ral.filter(x=>x.ligne.BCId===bc.ID)}))
+    .sort((a,b)=>new Date(f(a.bc,'Dateder_x00e9_ception')||0)-new Date(f(b.bc,'Dateder_x00e9_ception')||0));
+}
+function emAfficherBC(rootIdForce){
+  const host=document.getElementById('em-field-bc');
+  if(!host)return;
+  const client=(document.getElementById('em-client-search')?.value||'').trim();
+  const liste=emBCOuverts(client);
+  if(rootIdForce&&!liste.some(x=>x.bc.ID===rootIdForce)){
+    const bc=(DATA.suivi||[]).find(x=>x.ID===rootIdForce);
+    if(bc)liste.unshift({bc,lignes:getRALLignes().filter(x=>x.ligne.BCId===bc.ID)});
+  }
+  if(!liste.length){host.style.display='none';host.innerHTML='';_emBC=null;return;}
+  const choisi=rootIdForce||(_emBC&&liste.some(x=>x.bc.ID===_emBC.rootId)?_emBC.rootId:null);
+  const e=v=>_escD(String(v==null?'':v));
+  host.style.display='block';
+  host.innerHTML=`<div style="border:1px solid #93c5fd;background:#eff6ff;border-radius:var(--radius-sm);padding:10px 12px">
+    <div style="font-size:12px;font-weight:700;color:#1e3a8a;margin-bottom:6px">📋 BC avec un reste à livrer pour ce client</div>
+    ${liste.map(x=>`<label style="display:flex;gap:8px;align-items:center;font-size:12.5px;padding:3px 0;cursor:pointer">
+      <input type="radio" name="em-bc" value="${x.bc.ID}" ${choisi===x.bc.ID?'checked':''} onchange="emChoisirBC(${x.bc.ID})">
+      <span class="mono" style="font-weight:700">${e(f(x.bc,'Title'))}</span>
+      <span style="color:var(--text-muted)">${fmtDate(f(x.bc,'Dateder_x00e9_ception'))}${x.bc._ProjetTitle?' · '+e(x.bc._ProjetTitle):''} — ${x.lignes.length} article${x.lignes.length>1?'s':''} à livrer</span></label>`).join('')}
+    <label style="display:flex;gap:8px;align-items:center;font-size:12.5px;padding:3px 0;cursor:pointer;color:var(--text-muted)">
+      <input type="radio" name="em-bc" value="" ${choisi?'':'checked'} onchange="emChoisirBC(null)"> Aucun — BL sans lien avec un BC</label>
+    <div id="em-bc-table"></div></div>`;
+  emChoisirBC(choisi);
+}
+function emChoisirBC(rootId){
+  const zone=document.getElementById('em-bc-table');
+  if(!zone)return;
+  if(!rootId){_emBC=null;zone.innerHTML='';return;}
+  _emBC={rootId};
+  const lignes=getRALLignes().filter(x=>x.ligne.BCId===rootId);
+  const e=v=>_escD(String(v==null?'':v));
+  const g='display:grid;grid-template-columns:22px 78px 1fr 40px 40px 44px 52px 62px;gap:5px;align-items:center';
+  zone.innerHTML=`<div style="margin-top:8px;background:#fff;border:1px solid var(--border);border-radius:6px;font-size:12px;overflow:hidden">
+    <div style="${g};padding:6px 8px;background:#f8fafd;font-size:10.5px;font-weight:700;color:var(--text-muted);text-transform:uppercase">
+      <span></span><span>Réf.</span><span>Désignation</span><span style="text-align:right">Cmdé</span><span style="text-align:right">Livré</span><span style="text-align:right">Reste</span><span style="text-align:right">Stock</span><span style="text-align:center">À livrer</span></div>
+    ${lignes.map(x=>{const l=x.ligne,ref=f(l,'R_x00e9_f_x00e9_rence')||'';return`<div class="em-bc-l" data-lid="${l.ID}" data-ral="${x.ral}" style="${g};padding:6px 8px;border-top:1px solid #eef1f6">
+      <input type="checkbox" class="em-bc-chk" checked onchange="this.closest('.em-bc-l').style.opacity=this.checked?1:.45">
+      <span class="mono" style="font-weight:700;overflow:hidden;text-overflow:ellipsis">${e(ref)||'—'}</span>
+      <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${e(f(l,'Produit_x002f_D_x00e9_signation'))}">${e(f(l,'Produit_x002f_D_x00e9_signation'))}</span>
+      <span style="text-align:right">${x.qc}</span><span style="text-align:right;color:var(--green)">${x.ql}</span>
+      <span style="text-align:right;font-weight:700;color:var(--red)">${x.ral}</span>
+      <span style="text-align:right">${dvStockHtml(stockImageRef(ref),x.ral)}</span>
+      <input type="number" class="em-bc-q" min="0" max="${x.ral}" step="1" value="${x.ral}" style="width:100%;padding:4px;border:1px solid var(--border);border-radius:5px;font-size:12px;text-align:center;box-sizing:border-box">
+    </div>`;}).join('')}
+  </div>
+  <div style="font-size:11.5px;color:#1e3a8a;margin-top:6px">À la validation : le BC suffixé est créé avec ce BL et ces articles. Le scan magasin fera foi pour les quantités réellement livrées.</div>`;
+}
+function emCollectBC(){
+  if(!_emBC)return null;
+  const out=[];let err='';
+  document.querySelectorAll('#em-bc-table .em-bc-l').forEach(row=>{
+    if(!row.querySelector('.em-bc-chk').checked)return;
+    const l=(DATA.lignes||[]).find(x=>x.ID===parseInt(row.dataset.lid));
+    const q=parseFloat(row.querySelector('.em-bc-q').value)||0,ral=parseFloat(row.dataset.ral)||0;
+    if(!l||q<=0)return;
+    if(q>ral){err=`${f(l,'R_x00e9_f_x00e9_rence')||f(l,'Produit_x002f_D_x00e9_signation')} : ${q} demandé pour un reste de ${ral}.`;row.querySelector('.em-bc-q').style.border='2px solid var(--red)';return;}
+    out.push({ref:f(l,'R_x00e9_f_x00e9_rence')||'',design:f(l,'Produit_x002f_D_x00e9_signation')||'',qte:q,unite:f(l,'Unit_x00e9_')||'',chantier:f(l,'Chantier')||''});
+  });
+  if(err)throw new Error('Quantité supérieure au reste à livrer — '+err);
+  if(!out.length)throw new Error('Aucun article coché pour le BC choisi — coche au moins un article, ou choisis « Aucun ».');
+  return {rootId:_emBC.rootId,lignes:out};
+}
+// Chaîne de suffixes du flux : ORIGINE → ORIGINE-A → ORIGINE-A-A …
+// Le flux suffixe le BC qu'on lui donne : on lui passe le dernier de la chaîne.
+function emDernierDeChaine(rootId){
+  const root=(DATA.suivi||[]).find(x=>x.ID===rootId);
+  if(!root)return null;
+  const titres=new Map((DATA.suivi||[]).map(x=>[(f(x,'Title')||'').trim(),x]));
+  let cur=root,t=(f(root,'Title')||'').trim();
+  while(titres.has(t+'-A')){t=t+'-A';cur=titres.get(t);}
+  return {dernier:cur,attendu:t+'-A'};
+}
+const EM_SPLIT_KEY='rp_split_en_attente';
+function _emSplitsLire(){try{return JSON.parse(localStorage.getItem(EM_SPLIT_KEY)||'[]');}catch(e){return[];}}
+function _emSplitsEcrire(a){try{localStorage.setItem(EM_SPLIT_KEY,JSON.stringify(a));}catch(e){}}
+// Termine un BC suffixé en attente : N° BL + articles. Rejouée à chaque chargement
+// tant que le flux n'a pas créé l'élément (fermeture de page, flux lent…).
+async function emFinaliserSplit(job){
+  const items=await spFetch('sites/RseauxPlus','Suivi_BC',`$select=ID,Title,N_x00b0_BL&$filter=Title eq '${job.attendu.replace(/'/g,"''")}'&$top=5`);
+  const it=items&&items[0];
+  if(!it)return false;
+  if(!f(it,'N_x00b0_BL'))await spPatch('sites/RseauxPlus','Suivi_BC',it.ID,{N_x00b0_BL:job.numero});
+  const deja=await spFetch('sites/RseauxPlus','Lignes_BC',`$select=ID&$filter=BCId eq ${it.ID}&$top=200`);
+  if(!(deja||[]).length){
+    let n=0;
+    for(const l of job.lignes){
+      n++;
+      await spPost('sites/RseauxPlus','Lignes_BC',{Title:String(n),BCId:it.ID,R_x00e9_f_x00e9_rence:l.ref,Produit_x002f_D_x00e9_signation:l.design,
+        Quantit_x00e9_command_x00e9_e:l.qte,Quantit_x00e9_livr_x00e9_e:0,Unit_x00e9_:l.unite||'',Chantier:l.chantier||''});
+    }
+  }
+  return true;
+}
+async function emReprendreSplits(){
+  const a=_emSplitsLire();if(!a.length)return;
+  const reste=[];
+  for(const job of a){
+    try{
+      if(await emFinaliserSplit(job))toast(`🔀 ${job.attendu} créé avec le BL ${job.numero} et ${job.lignes.length} article(s)`);
+      else if(Date.now()-job.t<3*86400000)reste.push(job);
+      else toast(`⚠️ ${job.attendu} jamais créé par le flux — vérifie le BC ${job.attendu.replace(/-A$/,'')}`,'ko');
+    }catch(e){reste.push(job);console.warn('[emReprendreSplits]',e.message);}
+  }
+  _emSplitsEcrire(reste);
+}
+async function emLancerSplit(sel,numero){
+  const ch=emDernierDeChaine(sel.rootId);
+  if(!ch)throw new Error('BC d\'origine introuvable.');
+  const job={attendu:ch.attendu,numero,lignes:sel.lignes,t:Date.now()};
+  _emSplitsEcrire([..._emSplitsLire().filter(j=>j.attendu!==job.attendu),job]);
+  await triggerPAFlow('livraisonPartielle',ch.dernier.ID);
+  (async()=>{
+    for(const w of[3000,5000,8000,12000,20000]){
+      await new Promise(r=>setTimeout(r,w));
+      try{if(await emFinaliserSplit(job)){_emSplitsEcrire(_emSplitsLire().filter(j=>j.attendu!==job.attendu));toast(`🔀 ${job.attendu} créé avec le BL ${numero}`);setTimeout(()=>loadAll(),1500);return;}}catch(e){}
+    }
+    toast(`⏳ ${job.attendu} pas encore créé par le flux — il sera complété automatiquement au prochain chargement`,'ko');
+  })();
+  return ch.attendu;
+}
+// Ancien bouton « Livraison partielle » : ouvre le même formulaire, déjà rempli.
+// (L'ancien flux seul créait un BC suffixé vide → doublon avec le nouveau process.)
+function openLivrerReste(bcId){
+  const it=(DATA.suivi||[]).find(x=>x.ID===bcId||x.ID===parseInt(bcId));
+  if(!it)return;
+  const root=(DATA.suivi||[]).find(x=>(f(x,'Title')||'').trim()===bcRacine(f(it,'Title')))||it;
+  openEmissionBL();
+  setTimeout(()=>{
+    const ci=document.getElementById('em-client-search');if(ci){ci.value=getClient(root);ci.dispatchEvent(new Event('input'));document.getElementById('em-client-drop').style.display='none';}
+    const v=document.getElementById('em-vendeur'),ve=f(root,'Vendeurencharge')||'';
+    if(v&&[...v.options].some(o=>o.value===ve)){v.value=ve;v.dispatchEvent(new Event('change'));}
+    document.getElementById('modal-title').textContent='🚚 Livrer le reste — '+(f(root,'Title')||'');
+    emAfficherBC(root.ID);
+    document.getElementById('em-numero')?.focus();
+  },120);
+}
 function openEmissionBL(){
   const vendeurs=['Nicolas','Fred','Fritz','Fabrice'];
   const html=`
@@ -12425,6 +12609,7 @@ function openEmissionBL(){
           ${vendeurs.map(v=>`<option value="${v}">${v}</option>`).join('')}
         </select>
       </div>
+      <div id="em-field-bc" style="display:none"></div>
       <div id="em-field-prep">
         <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer">
           <input type="checkbox" id="em-prep" style="width:16px;height:16px">
@@ -12445,7 +12630,7 @@ function openEmissionBL(){
       </div>
     </div>`;
 
-  _emissionType='Livraison client';
+  _emissionType='Livraison client';_emBC=null;
   openModal('➕ Nouveau BL ou FC à livrer',html,emettreBL);
 
   // Pré-remplir la date de livraison avec aujourd'hui
@@ -12456,7 +12641,9 @@ function openEmissionBL(){
   // Autocomplete client avec saisie libre (setupAC laisse le texte tapé si rien n'est choisi)
   setTimeout(()=>{
     const clientData=Object.entries(DATA.clients||{}).map(([cid,cname])=>({id:cid,name:cname}));
-    setupAC('em-client-search','em-client-id','em-client-drop',clientData);
+    setupAC('em-client-search','em-client-id','em-client-drop',clientData,()=>emAfficherBC());
+    const _ci=document.getElementById('em-client-search');
+    if(_ci)_ci.addEventListener('change',()=>emAfficherBC());
     // Champs obligatoires rouge/vert
     setupRequiredField(document.getElementById('em-numero'));
     setupRequiredField(document.getElementById('em-client-search'));
@@ -12474,6 +12661,7 @@ function setEmissionType(type){
   document.getElementById('em-field-prep').style.display=isInv?'none':'block';
   const lg=document.getElementById('em-field-lignes');
   if(lg)lg.style.display=isInv?'none':'block';
+  if(isInv){_emBC=null;const b=document.getElementById('em-field-bc');if(b){b.style.display='none';b.innerHTML='';}}else emAfficherBC();
 }
 
 // ── Lignes d'articles optionnelles sur le formulaire d'émission BL ──
@@ -12582,7 +12770,9 @@ async function emettreBL(){
     throw new Error('Le N° de BL « '+numero+' » existe déjà (session « '+(f(existe,'Statut')||'?')+' »). Choisissez un autre numéro.');
   }
 
-  const lignes=isInv?[]:emCollectLignes();
+  const lignesManu=isInv?[]:emCollectLignes();
+  const selBC=isInv?null:emCollectBC();
+  const lignes=[...(selBC?selBC.lignes.map(l=>({ref:l.ref,design:l.design,qte:l.qte})):[]),...lignesManu];
 
   // Validation : si une référence ou désignation est saisie, la quantité est obligatoire
   if(!isInv){
@@ -12629,6 +12819,12 @@ async function emettreBL(){
   // Le flow Scan_EmissionBL crée la session de façon fiable (confirmé le 31/08/2026)
   // mais de façon asynchrone — on attend qu'elle apparaisse pour y accrocher les articles.
   if(lignes.length)syncLignesApresEmission(numero,lignes);
+  let _split='';
+  if(selBC){
+    try{_split=await emLancerSplit(selBC,numero);}
+    catch(e){toast('🔴 BC suffixé non créé : '+e.message+' — utilise « Livrer le reste » dans Livraisons Partielles','ko');}
+  }
+  if(_split)return `${numero} — ${client} — BL créé · ${_split} en cours de création (${selBC.lignes.length} article${selBC.lignes.length>1?'s':''})`;
 
   return isInv
     ? `${numero} — session inventaire créée`
@@ -13873,10 +14069,9 @@ async function supprimerLigneBC(ligneId,bcId){
 }
 
 function openLivraisonPartielle(id){
-  const item=(DATA.suivi||[]).find(x=>x.ID===id||x.ID===parseInt(id));
-  const numBC=item?f(item,'Title')||('BC-'+id):('BC-'+id);
-  const client=item?getClient(item):'';
-  livraisonPartielleFlow(id,numBC,client);
+  // Nouveau process : le BC suffixé est créé en même temps que le BL du reste,
+  // avec ses articles. L'ancien flux seul (BC suffixé vide) n'est plus proposé.
+  openLivrerReste(id);
 }
 
 // ── Livraison partielle — Flow PA ──
