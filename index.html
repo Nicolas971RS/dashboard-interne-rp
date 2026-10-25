@@ -913,13 +913,13 @@
         <div class="kc t"><div class="kl">🔧 En cours de préparation</div><div class="kv" id="kpi-prep-encours">—</div><div class="ks">Pris en charge, scan en cours</div></div>
         <div class="kc g" style="cursor:pointer" onclick="document.getElementById('pretes-block-dash')?.scrollIntoView({behavior:'smooth'})"><div class="kl">✅ Prêtes à livrer</div><div class="kv" id="kpi-prep-prete">—</div><div class="ks">En attente du client</div></div>
         <div class="kc r" id="kc-prep-retard" style="cursor:pointer" onclick="togglePrepRetard()"><div class="kl">⚠️ En retard +2 jours</div><div class="kv" id="kpi-prep-retard">—</div><div class="ks" id="ks-prep-retard">Cliquer pour filtrer la liste</div></div>
-        <div class="kc" id="kc-prep-libre" style="cursor:pointer;background:#f3f0ff;border-color:#7c3aed" onclick="document.getElementById('preplibre-block-dash')?.scrollIntoView({behavior:'smooth'})"><div class="kl" style="color:#7c3aed">📦 À affecter</div><div class="kv" id="kpi-prep-libre" style="color:#7c3aed">—</div><div class="ks" id="ks-prep-libre">Préparations sans client</div></div>
+        <div class="kc" id="kc-prep-libre" style="cursor:pointer;background:#fff4e0;border-color:#d97706" onclick="document.getElementById('preplibre-block-dash')?.scrollIntoView({behavior:'smooth'})"><div class="kl" style="color:#b45309">📦 À affecter</div><div class="kv" id="kpi-prep-libre" style="color:#7c3aed">—</div><div class="ks" id="ks-prep-libre">Préparations sans client</div></div>
       </div>
 
       <!-- Bloc préparations matériel en attente d'affectation à un client -->
-      <div id="preplibre-block-dash" style="display:none;background:#f3f0ff;border:2px solid #7c3aed;border-radius:var(--radius);padding:14px 16px;margin-bottom:14px">
-        <div style="font-weight:800;font-size:14px;color:#7c3aed;margin-bottom:4px">📦 Préparations en attente d'affectation</div>
-        <div style="font-size:11.5px;color:#6b5b95;margin-bottom:10px">Matériel déjà préparé par un magasinier, sans client ni BL/FC associé pour l'instant.</div>
+      <div id="preplibre-block-dash" style="display:none;background:#fff4e0;border:2px solid #d97706;border-radius:var(--radius);padding:14px 16px;margin-bottom:14px">
+        <div style="font-weight:800;font-size:14px;color:#b45309;margin-bottom:4px">📦 Préparations en attente d'affectation</div>
+        <div style="font-size:11.5px;color:#92400e;margin-bottom:10px">Matériel déjà préparé par un magasinier, sans client ni BL/FC associé pour l'instant.</div>
         <div id="preplibre-list-dash"></div>
       </div>
 
@@ -6648,13 +6648,13 @@ function renderPreparations(){
   if(preplibres.length){
     const joursMax=Math.max(...preplibres.map(s=>daysSince(f(s,'Date_Emission'))));
     if(kcPrepLibre){
-      kcPrepLibre.style.background=joursMax>=2?'#fee2e2':'#f3f0ff';
-      kcPrepLibre.style.borderColor=joursMax>=2?'var(--red)':'#7c3aed';
+      kcPrepLibre.style.background=joursMax>=2?'#fee2e2':'#fff4e0';
+      kcPrepLibre.style.borderColor=joursMax>=2?'var(--red)':'#d97706';
     }
     if(ksPrepLibre)ksPrepLibre.textContent=joursMax>=2?'⚠️ En attente depuis '+joursMax+'j':'Préparations sans client';
     if(preplibreDash){
       preplibreDash.style.display='block';
-      preplibreDash.style.borderColor=joursMax>=2?'var(--red)':'#7c3aed';
+      preplibreDash.style.borderColor=joursMax>=2?'var(--red)':'#d97706';
     }
     if(preplibreList){
       preplibreList.innerHTML=preplibres.map(s=>{
@@ -6667,14 +6667,14 @@ function renderPreparations(){
         return`<div style="background:white;border:1px solid ${urgent?'#fecaca':'#e3d9ff'};border-radius:8px;padding:10px 14px;margin-bottom:8px;display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap">
           <div style="min-width:0">
             <div style="font-weight:700;font-size:13.5px">📦 ${ref} <span style="font-weight:400;color:var(--text-muted);font-size:12px">· ${nbArt} référence${nbArt>1?'s':''} scannée${nbArt>1?'s':''}</span></div>
-            ${hintTxt?`<div style="font-size:12px;color:#7c3aed;font-weight:600;margin-top:2px">Pour : ${hintTxt}${f(s,'Contact_Client')?` <span style="font-weight:500">· demandé par ${String(f(s,'Contact_Client')).replace(/</g,'&lt;')}</span>`:''}</div>`
-              :(f(s,'Contact_Client')?`<div style="font-size:12px;color:#7c3aed;font-weight:600;margin-top:2px">Demandé par ${String(f(s,'Contact_Client')).replace(/</g,'&lt;')}</div>`:'')}
+            ${hintTxt?`<div style="font-size:12px;color:#b45309;font-weight:600;margin-top:2px">Pour : ${hintTxt}${f(s,'Contact_Client')?` <span style="font-weight:500">· demandé par ${String(f(s,'Contact_Client')).replace(/</g,'&lt;')}</span>`:''}</div>`
+              :(f(s,'Contact_Client')?`<div style="font-size:12px;color:#b45309;font-weight:600;margin-top:2px">Demandé par ${String(f(s,'Contact_Client')).replace(/</g,'&lt;')}</div>`:'')}
             <div style="font-size:11.5px;color:var(--text-muted);margin-top:2px">Vendeur : <strong>${f(s,'Vendeur_Emetteur')||'client en direct / non indiqué'}</strong></div>
             <div style="font-size:11.5px;color:var(--text-muted);margin-top:2px">Préparé par : <strong>${mag}</strong> · commencé le ${dateHeureGP(dateCreation(s))} · <span style="${urgent?'color:var(--red);font-weight:700':'font-weight:600;color:var(--text-secondary)'}">il y a ${depuisTexte(dateCreation(s))}${urgent?' ⚠️':''}</span></div>
           </div>
           <div style="display:flex;gap:6px;flex-wrap:wrap">
             <button class="btn" onclick="openSessionPanel(${s.ID})" style="height:32px;font-size:12px;white-space:nowrap" title="Consulter les articles sans encore l'affecter">👁 Voir</button>
-            <button class="btn" onclick="openPrendreEnChargePrepLibre(${s.ID})" style="background:#7c3aed;color:white;border-color:#7c3aed;height:32px;font-size:12px;white-space:nowrap">✅ Prendre en charge</button>
+            <button class="btn" onclick="openPrendreEnChargePrepLibre(${s.ID})" style="background:#d97706;color:white;border-color:#d97706;height:32px;font-size:12px;white-space:nowrap">✅ Prendre en charge</button>
             <button class="btn" onclick="archiverPrepLibre(${s.ID},'${ref.replace(/'/g,"\\'")}')" style="height:32px;font-size:12px;color:var(--text-muted)" title="Aucun client trouvé, aucune suite prévue">🗄 Sans suite</button>
           </div>
         </div>`;
@@ -6682,7 +6682,7 @@ function renderPreparations(){
     }
   }else{
     if(preplibreDash)preplibreDash.style.display='none';
-    if(kcPrepLibre){kcPrepLibre.style.background='#f3f0ff';kcPrepLibre.style.borderColor='#7c3aed';}
+    if(kcPrepLibre){kcPrepLibre.style.background='#fff4e0';kcPrepLibre.style.borderColor='#d97706';}
     if(ksPrepLibre)ksPrepLibre.textContent='Préparations sans client';
   }
 
@@ -8623,6 +8623,7 @@ function _retourRemoveLine(i){
 }
 
 function openModal(title,html,onSubmit){
+  {const _b=document.querySelector('#modal-ov .modal-box');if(_b)_b.style.width='';} // largeur par défaut (un modal précédent a pu l'élargir)
   if(!/^🔧 Traiter/.test(title))_traiterOuvertId=null; // un autre modal remplace Traiter
   document.getElementById('modal-title').textContent=title;
   document.getElementById('modal-body').innerHTML=html+'<div class="modal-msg" id="modal-msg"></div>';
@@ -9573,7 +9574,7 @@ function renderPlanning7j(){
       <div>
         <span style="font-weight:700;font-size:12.5px;color:var(--blue)">${iconBLFC(bl)} ${bl}</span>
         <span style="font-size:11.5px;color:var(--text-muted);margin-left:6px">${cl}</span>
-        ${prep?'<span style="font-size:12px;background:#ede9fe;color:#6c63ff;border-radius:8px;padding:1px 6px;margin-left:4px">Prép. avance</span>':''}
+        ${prep?'<span style="font-size:12px;background:#fff4e0;color:#b45309;border-radius:8px;padding:1px 6px;margin-left:4px">Prép. avance</span>':''}
       </div>
       <span style="font-size:11px;font-weight:600;color:${vColor};white-space:nowrap">${vendeur}</span>
     </div>`;
@@ -12467,18 +12468,20 @@ function emAfficherBC(rootIdForce){
 function emChoisirBC(rootId){
   const zone=document.getElementById('em-bc-table');
   if(!zone)return;
-  if(!rootId){_emBC=null;zone.innerHTML='';return;}
+  if(!rootId){_emBC=null;zone.innerHTML='';const _b=document.querySelector('#modal-ov .modal-box');if(_b)_b.style.width='';return;}
   _emBC={rootId};
   const lignes=getRALLignes().filter(x=>x.ligne.BCId===rootId);
   const e=v=>_escD(String(v==null?'':v));
-  const g='display:grid;grid-template-columns:22px 78px 1fr 40px 40px 44px 52px 62px;gap:5px;align-items:center';
+  const g='display:grid;grid-template-columns:22px 74px minmax(0,1fr) 42px 42px 46px 56px 62px;gap:6px;align-items:center';
+  // Le tableau a besoin de place : la fenêtre s'élargit tant qu'il est affiché
+  const _box=document.querySelector('#modal-ov .modal-box');if(_box)_box.style.width='860px';
   zone.innerHTML=`<div style="margin-top:8px;background:#fff;border:1px solid var(--border);border-radius:6px;font-size:12px;overflow:hidden">
     <div style="${g};padding:6px 8px;background:#f8fafd;font-size:10.5px;font-weight:700;color:var(--text-muted);text-transform:uppercase">
       <span></span><span>Réf.</span><span>Désignation</span><span style="text-align:right">Cmdé</span><span style="text-align:right">Livré</span><span style="text-align:right">Reste</span><span style="text-align:right">Stock</span><span style="text-align:center">À livrer</span></div>
     ${lignes.map(x=>{const l=x.ligne,ref=f(l,'R_x00e9_f_x00e9_rence')||'';return`<div class="em-bc-l" data-lid="${l.ID}" data-ral="${x.ral}" style="${g};padding:6px 8px;border-top:1px solid #eef1f6">
       <input type="checkbox" class="em-bc-chk" checked onchange="this.closest('.em-bc-l').style.opacity=this.checked?1:.45">
       <span class="mono" style="font-weight:700;overflow:hidden;text-overflow:ellipsis">${e(ref)||'—'}</span>
-      <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${e(f(l,'Produit_x002f_D_x00e9_signation'))}">${e(f(l,'Produit_x002f_D_x00e9_signation'))}</span>
+      <span style="line-height:1.25;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden" title="${e(f(l,'Produit_x002f_D_x00e9_signation'))}">${e(f(l,'Produit_x002f_D_x00e9_signation'))}</span>
       <span style="text-align:right">${x.qc}</span><span style="text-align:right;color:var(--green)">${x.ql}</span>
       <span style="text-align:right;font-weight:700;color:var(--red)">${x.ral}</span>
       <span style="text-align:right">${dvStockHtml(stockImageRef(ref),x.ral)}</span>
@@ -13168,7 +13171,7 @@ function blocPrepBC(bc){
     const manques=lignes.filter(l=>Number(f(l,'Quantite_Scannee')||0)<Number(f(l,'Quantite_Attendue')||0));
     const st=_normTxt(f(sess,'Statut'));
     const prete=st.includes('prete')||st.includes('termin')||st.includes('ecart');
-    return `<div style="background:#f5f3ff;border:1px solid #c4b5fd;border-left:4px solid #7c3aed;border-radius:var(--radius-sm);padding:10px 12px;margin:10px 0;font-size:12.5px;color:#4c1d95">
+    return `<div style="background:#fff4e0;border:1px solid #fcd34d;border-left:4px solid #d97706;border-radius:var(--radius-sm);padding:10px 12px;margin:10px 0;font-size:12.5px;color:#92400e">
       📦 <strong>Préparation magasin ${_escD(f(sess,'Numero_BL'))}</strong> — ${statutVisuel(sess).tag}
       ${prete?(manques.length?`<div style="margin-top:6px;color:#b91c1c">⚠️ Manque : ${manques.map(l=>`${_escD(f(l,'Reference_Article')||f(l,'Designation'))} (${f(l,'Quantite_Scannee')||0}/${f(l,'Quantite_Attendue')||0})`).join(', ')}</div>`:'<div style="margin-top:6px;color:#047857">✅ Tout est préparé — tu peux émettre le BL dans Image puis le saisir dans Traiter.</div>'):'<div style="margin-top:6px">En attente du magasinier.</div>'}
       <div style="margin-top:8px"><button class="btn" style="height:26px;font-size:11.5px" onclick="closePanel();openSessionPanel(${sess.ID})">Voir la préparation</button></div>
@@ -13177,9 +13180,9 @@ function blocPrepBC(bc){
   if(String(f(bc,'N_x00b0_BL')||'').trim())return'';
   const ral=lignesRALduBC(bc);
   if(!ral.length)return'';
-  return `<div style="background:#f5f3ff;border:1px dashed #c4b5fd;border-radius:var(--radius-sm);padding:10px 12px;margin:10px 0;font-size:12.5px;color:#4c1d95;display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap">
+  return `<div style="background:#fff4e0;border:1px dashed #fcd34d;border-radius:var(--radius-sm);padding:10px 12px;margin:10px 0;font-size:12.5px;color:#92400e;display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap">
     <span>📦 Pas encore de BL. Faire préparer les ${ral.length} article${ral.length>1?'s':''} par le magasin pour vérifier le stock avant d'émettre le BL ?</span>
-    <button class="btn" style="height:28px;font-size:12px;background:#7c3aed;color:#fff;border-color:#7c3aed" onclick="faireBCPreparer(${bc.ID})">📦 Faire préparer (sans BL)</button>
+    <button class="btn" style="height:28px;font-size:12px;background:#d97706;color:#fff;border-color:#d97706" onclick="faireBCPreparer(${bc.ID})">📦 Faire préparer (sans BL)</button>
   </div>`;
 }
 async function faireBCPreparer(bcId){
