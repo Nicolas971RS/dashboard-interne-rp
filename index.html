@@ -12489,7 +12489,7 @@ function emAfficherBC(rootIdForce){
 function emChoisirBC(rootId){
   const zone=document.getElementById('em-bc-table');
   if(!zone)return;
-  if(!rootId){_emBC=null;zone.innerHTML='';const _b=document.querySelector('#modal-ov .modal-box');if(_b)_b.style.width='';return;}
+  if(!rootId){_emBC=null;zone.innerHTML='';const _b=document.querySelector('#modal-ov .modal-box');if(_b)_b.style.width='';emAppliquerPdf();return;}
   _emBC={rootId};
   const lignes=getRALLignes().filter(x=>x.ligne.BCId===rootId);
   const e=v=>_escD(String(v==null?'':v));
@@ -12511,6 +12511,7 @@ function emChoisirBC(rootId){
   </div>
   <div style="font-size:11.5px;color:#1e3a8a;margin-top:6px">À la validation : le BC suffixé est créé avec ce BL et ces articles. Le scan magasin fera foi pour les quantités réellement livrées.</div>`;
   emPrefillDepuisSession();
+  emAppliquerPdf();
 }
 // BL déjà émis (le vendeur a oublié « Livrer le reste ») : session de livraison
 // existante, rattachée à aucun BC → on peut la relier au BC sans réémettre de BL.
@@ -12541,6 +12542,115 @@ function emPrefillDepuisSession(){
     q.value=Math.min(sc||att,parseFloat(row.dataset.ral)||0);chk.checked=true;row.style.opacity=1;n++;
   });
   zone.insertAdjacentHTML('afterbegin',`<div id="em-bc-rattache" style="margin-top:8px;background:#fff7ed;border:1px solid #fdba74;border-radius:6px;padding:7px 10px;font-size:12px;color:#9a3412">🔗 <strong>BL ${_escD(f(sess,'Numero_BL'))} déjà émis</strong> (${_escD(f(sess,'Statut')||'')}) : il sera <strong>rattaché</strong> à ce BC, sans créer de nouveau BL. ${n} article(s) repris du scan magasin — vérifie les quantités.</div>`);
+}
+// ── Lecture du PDF du BL / de la FC (édition Image) ──
+// Lignes « Réf  Désignation  Qté [prix…] » ; en-tête « N°  code client » puis le nom du client.
+async function lireBLPdf(buf){
+  const pdfjsLib=await chargerPdfjs();
+  const pdf=await pdfjsLib.getDocument({data:new Uint8Array(buf)}).promise;
+  const rows=[];
+  for(let p=1;p<=pdf.numPages;p++){
+    const page=await pdf.getPage(p),vw=page.getViewport({scale:1}).width||600;
+    const tc=await page.getTextContent(),m=new Map();
+    tc.items.forEach(it=>{if(!it.str||!it.str.trim())return;const y=Math.round(it.transform[5]/2)*2;(m.get(y)||m.set(y,[]).get(y)).push(it);});
+    [...m.entries()].sort((a,b)=>b[0]-a[0]).forEach(([,its])=>{
+      const r=[];its.sort((a,b)=>a.transform[4]-b.transform[4]).forEach(i=>{
+        const x=i.transform[4]/vw*100,t=i.str.trim(),d=r[r.length-1];
+        if(d&&d.s===t&&Math.abs(d.x-x)<3)return; // texte « gras » imprimé deux fois
+        r.push({x,s:t});});
+      rows.push(r);
+    });
+  }
+  return parseBLPdf(rows);
+}
+function parseBLPdf(rows){
+  const out={numero:'',codeClient:'',client:'',lignes:[]};
+  let iNum=-1;
+  rows.forEach((r,i)=>{
+    if(iNum>=0)return;
+    const n=r.find(c=>/^\d{6}$/.test(c.s)),c=r.find(c=>/^C[A-Z]\d{5,7}$/.test(c.s));
+    if(n&&c){out.numero=n.s;out.codeClient=c.s;iNum=i;}
+  });
+  if(iNum>=0){
+    for(let i=iNum+1;i<Math.min(rows.length,iNum+5)&&!out.client;i++){
+      const c=rows[i].find(c=>c.x>=45&&/[A-Za-zÀ-ÿ]{2}/.test(c.s)&&!/^\d{5}\b/.test(c.s));
+      if(c)out.client=c.s;
+    }
+  }
+  const cumul=new Map();
+  rows.forEach(r=>{
+    if(r.length<3)return;
+    const [a,b]=r;
+    if(a.x>12||!/^[0-9A-Z][0-9A-Z.\-\/]{3,11}$/.test(a.s)||!/\d/.test(a.s)||!/[A-Za-z]/.test(b.s))return;
+    const q=r.slice(2).find(c=>/^\d+(?:[.,]\d+)?$/.test(c.s));
+    const qte=q?parseFloat(q.s.replace(',','.')):0;
+    if(!qte)return;
+    const k=a.s;
+    if(cumul.has(k))cumul.get(k).qte+=qte; // même article sur deux lignes (remises différentes)
+    else cumul.set(k,{ref:a.s,design:b.s,qte});
+  });
+  out.lignes=[...cumul.values()];
+  return out;
+}
+let _emPdf=null; // dernier PDF lu : {numero, client, lignes}
+async function emImporterPdf(file){
+  const etat=document.getElementById('em-pdf-etat');
+  if(!file)return;
+  const dire=(t,c)=>{if(etat){etat.innerHTML=t;etat.style.color=c||'var(--text-muted)';}};
+  dire('⏳ Lecture du PDF…');
+  try{
+    const r=await lireBLPdf(await file.arrayBuffer());
+    if(!r.lignes.length&&!r.numero){dire('🔴 Aucun article lu : ce PDF n\'est pas un BL/FC Image (ou c\'est un scan). Saisis les articles à la main.','var(--red)');_emPdf=null;return;}
+    _emPdf={...r,fichier:file};
+    if(_emissionType!=='Livraison client')setEmissionType('Livraison client');
+    const num=document.getElementById('em-numero');
+    if(num&&r.numero){num.value=r.numero;num.dispatchEvent(new Event('input'));}
+    // Client : nom du carnet d'adresses si on le reconnaît, sinon le nom tel qu'imprimé
+    const ci=document.getElementById('em-client-search');
+    if(ci&&r.client){
+      const n=_normTxt(r.client),noms=Object.values(DATA.clients||{});
+      const trouve=noms.find(x=>_normTxt(x)===n)||noms.find(x=>_normTxt(x).startsWith(n)||n.startsWith(_normTxt(x)));
+      ci.value=trouve||r.client;ci.dispatchEvent(new Event('input'));
+      const d=document.getElementById('em-client-drop');if(d)d.style.display='none';
+    }
+    // BC du client dont le reste contient des articles du PDF : présélectionné s'il n'y en a qu'un
+    const _refs=new Set(r.lignes.map(l=>l.ref.toUpperCase()));
+    const _cand=emBCOuverts(ci?ci.value:'').filter(x=>x.lignes.some(y=>_refs.has(String(f(y.ligne,'R_x00e9_f_x00e9_rence')||'').trim().toUpperCase())));
+    emAfficherBC(_cand.length===1?_cand[0].bc.ID:undefined);
+    emAppliquerPdf();
+    const inconnus=r.lignes.filter(l=>stockImageRef(l.ref)===null&&!(DATA.catalogue||[]).some(p=>String(f(p,'Title')||'').trim().toUpperCase()===l.ref.toUpperCase()));
+    dire(`✅ ${estNumeroFC(r.numero)?'FC':'BL'} <strong>${_escD(r.numero||'?')}</strong> · ${_escD(r.client||'client non lu')} · <strong>${r.lignes.length} article${r.lignes.length>1?'s':''}</strong> repris${inconnus.length?` — ❔ hors catalogue : ${inconnus.map(l=>_escD(l.ref)).join(', ')}`:''}. Vérifie avant de valider.`,'#166534');
+  }catch(e){dire('🔴 Lecture impossible : '+_escD(e.message),'var(--red)');}
+}
+// Répartit les articles du PDF : ceux du BC choisi vont dans son tableau (reste à livrer),
+// les autres en lignes d'articles libres. Rejoué quand on change de BC.
+function emAppliquerPdf(){
+  if(!_emPdf)return;
+  document.querySelectorAll('#em-lignes-list > div[data-pdf="1"]').forEach(r=>r.remove());
+  const norm=v=>String(v||'').trim().toUpperCase();
+  const pris=new Set();
+  const rows=[...document.querySelectorAll('#em-bc-table .em-bc-l')];
+  if(rows.length&&!emSessionRattachable(document.getElementById('em-numero')?.value)){
+    rows.forEach(row=>{
+      const l=(DATA.lignes||[]).find(x=>x.ID===parseInt(row.dataset.lid));
+      const m=_emPdf.lignes.find(p=>norm(p.ref)===norm(f(l,'R_x00e9_f_x00e9_rence')));
+      const chk=row.querySelector('.em-bc-chk'),q=row.querySelector('.em-bc-q');
+      if(m){chk.checked=true;row.style.opacity=1;q.value=Math.min(m.qte,parseFloat(row.dataset.ral)||m.qte);pris.add(m.ref);}
+      else{chk.checked=false;row.style.opacity=.45;}
+    });
+  }
+  _emPdf.lignes.filter(p=>!pris.has(p.ref)).forEach(p=>{
+    emAddLigneRow();
+    const list=document.getElementById('em-lignes-list'),row=list.lastElementChild;
+    row.dataset.pdf='1';
+    const idx=row.id.replace('em-ligne-','');
+    document.getElementById('em-l-search-'+idx).value=p.ref;
+    document.getElementById('em-l-ref-'+idx).value=p.ref;
+    const cat=(DATA.catalogue||[]).find(c=>norm(f(c,'Title'))===norm(p.ref));
+    document.getElementById('em-l-design-'+idx).value=(cat&&f(cat,'field_1'))||p.design;
+    document.getElementById('em-l-qte-'+idx).value=p.qte;
+    row.style.background='var(--green-light)';row.style.borderRadius='5px';
+  });
 }
 function emCollectBC(){
   if(!_emBC)return null;
@@ -12652,6 +12762,13 @@ function openEmissionBL(){
   const vendeurs=['Nicolas','Fred','Fritz','Fabrice'];
   const html=`
     <div style="display:flex;flex-direction:column;gap:14px">
+      <div id="em-pdf-zone" style="border:2px dashed #93c5fd;background:#f8fbff;border-radius:var(--radius-sm);padding:10px 12px">
+        <label style="display:flex;align-items:center;gap:10px;cursor:pointer;font-size:13px;font-weight:700;color:#1e3a8a">
+          📄 Importer le BL ou la FC (PDF d'Image)
+          <input type="file" id="em-pdf" accept=".pdf,application/pdf" style="font-size:12px;font-weight:400" onchange="emImporterPdf(this.files[0])">
+        </label>
+        <div id="em-pdf-etat" style="font-size:12px;color:var(--text-muted);margin-top:4px">Remplit le N°, le client et les articles — plus besoin de les saisir.</div>
+      </div>
       <div>
         <label style="font-size:12px;font-weight:700;color:var(--text-muted);display:block;margin-bottom:6px">Type d'opération</label>
         <div style="display:flex;gap:8px">
@@ -12702,7 +12819,7 @@ function openEmissionBL(){
       </div>
     </div>`;
 
-  _emissionType='Livraison client';_emBC=null;
+  _emissionType='Livraison client';_emBC=null;_emPdf=null;
   openModal('➕ Nouveau BL ou FC à livrer',html,emettreBL);
 
   // Pré-remplir la date de livraison avec aujourd'hui
