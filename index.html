@@ -5142,7 +5142,7 @@ function sclDeplier(bcId,btn){
 // une consigne que le vendeur doit voir.
 function emailTexte(raw){
   if(!raw)return '';
-  return String(raw).replace(/<style[^>]*>[\s\S]*?<\/style>/gi,'').replace(/<script[^>]*>[\s\S]*?<\/script>/gi,'')
+  return String(raw).replace(/&amp;(#\d+|nbsp|lt|gt|quot|apos|#39);/gi,'&$1;').replace(/<style[^>]*>[\s\S]*?<\/style>/gi,'').replace(/<script[^>]*>[\s\S]*?<\/script>/gi,'')
     .replace(/<head[^>]*>[\s\S]*?<\/head>/gi,'')
     .replace(/<br\s*\/?>/gi,'\n').replace(/<\/(p|div|tr|li|h\d|table)>/gi,'\n')
     .replace(/<[^>]*>/g,' ').replace(/&nbsp;|&#160;/g,' ').replace(/&lt;/g,'<').replace(/&gt;/g,'>')
@@ -7297,6 +7297,13 @@ function openSessionPanel(id){
       <span>📨 <strong>Aucun BC</strong> ne porte ce BL. Le client doit-il envoyer un BC ?</span>
       <button class="btn" data-label="1" style="height:28px;font-size:11.5px;background:var(--green);color:#fff;border-color:var(--green)" onclick="dbcDepuisSession(${id})">🆕 Demande BC depuis ce BL</button>
     </div>`;
+  }
+  if(!_bcDuBL&&_numS&&!_numS.startsWith('PREP-')&&_normTxt(f(s,'Type_Operation'))==='livraison client'){
+    const _ouv=emBCOuverts(f(s,'Client')||'');
+    if(_ouv.length)_blocDBC=`<div style="background:#eff6ff;border:1px solid #93c5fd;border-left:4px solid #2563eb;border-radius:var(--radius-sm);padding:9px 12px;margin-bottom:12px;font-size:12.5px;color:#1e3a8a;display:flex;gap:10px;align-items:center;justify-content:space-between;flex-wrap:wrap">
+      <span>🔗 Ce client a un reste à livrer sur <strong>${_ouv.map(x=>_escD(f(x.bc,'Title'))).join(', ')}</strong>. Ce BL en fait partie ?</span>
+      <button class="btn" data-label="1" style="height:28px;font-size:11.5px;background:#2563eb;color:#fff;border-color:#2563eb" onclick="openRattacherBL(${id})">🔗 Rattacher au BC</button>
+    </div>`+_blocDBC;
   }
   const _inc=statutIncoherent(s);
   const _bandeauInc=_inc?`<div style="background:#fff7ed;border:1px solid #fdba74;border-left:4px solid #c2410c;border-radius:var(--radius-sm);padding:10px 12px;margin-bottom:12px;font-size:12.5px;color:#7c2d12;display:flex;gap:10px;align-items:center;justify-content:space-between;flex-wrap:wrap">
@@ -10738,7 +10745,8 @@ async function openTraiterModal(id,numBC,client){
   const portailMatch=rawEmail.match(/href=["']([^"']*portail[^"']*)["']/i)||rawEmail.match(/href=["']([^"']{20,})["']/i);
   const portailUrl=portailMatch?portailMatch[1]:'';
   const msgEmail=emailMessageUtile(rawEmail);
-  const cleanEmail=rawEmail.replace(/<style[^>]*>[\s\S]*?<\/style>/gi,'').replace(/<[^>]*>/g,' ').replace(/&nbsp;/g,' ').replace(/&lt;/g,'<').replace(/&gt;/g,'>').replace(/&amp;/g,'&').replace(/\s{3,}/g,' ').trim();
+  // emailTexte décode aussi les entités numériques (&#160; &#58;…) qui restaient affichées telles quelles
+  const cleanEmail=emailTexte(rawEmail).replace(/\s{3,}/g,' ').trim();
 
   const acInput=`width:100%;border:1px solid var(--border);border-radius:var(--radius-sm);padding:8px 10px;font-size:13px;font-family:var(--font-body);outline:none;box-sizing:border-box;`;
   const acDrop=`position:absolute;top:100%;left:0;right:0;z-index:9999;background:white;border:1px solid var(--teal-mid);border-radius:0 0 var(--radius-sm) var(--radius-sm);max-height:200px;overflow-y:auto;box-shadow:var(--shadow-md);display:none;`;
@@ -12489,6 +12497,37 @@ function emChoisirBC(rootId){
     </div>`;}).join('')}
   </div>
   <div style="font-size:11.5px;color:#1e3a8a;margin-top:6px">À la validation : le BC suffixé est créé avec ce BL et ces articles. Le scan magasin fera foi pour les quantités réellement livrées.</div>`;
+  emPrefillDepuisSession();
+}
+// BL déjà émis (le vendeur a oublié « Livrer le reste ») : session de livraison
+// existante, rattachée à aucun BC → on peut la relier au BC sans réémettre de BL.
+function emSessionRattachable(numero){
+  const n=String(numero||'').trim().toLowerCase();
+  if(!n)return null;
+  const s=(DATA.sessionsScan||[]).find(x=>String(f(x,'Numero_BL')||'').trim().toLowerCase()===n);
+  if(!s||_normTxt(f(s,'Type_Operation'))!=='livraison client'||bcLiePourBL(numero))return null;
+  return s;
+}
+// Quantités reprises de la session existante : scanné s'il y en a, sinon attendu, plafonné au reste
+function emPrefillDepuisSession(){
+  const sess=emSessionRattachable(document.getElementById('em-numero')?.value);
+  const zone=document.getElementById('em-bc-table');
+  const note=document.getElementById('em-bc-rattache');
+  if(note)note.remove();
+  if(!sess||!zone||!zone.querySelector('.em-bc-l'))return;
+  const ls=lignesDeSession(sess.ID);
+  const norm=v=>String(v||'').trim().toLowerCase();
+  let n=0;
+  zone.querySelectorAll('.em-bc-l').forEach(row=>{
+    const l=(DATA.lignes||[]).find(x=>x.ID===parseInt(row.dataset.lid));
+    const ref=norm(f(l,'R_x00e9_f_x00e9_rence')),des=norm(f(l,'Produit_x002f_D_x00e9_signation'));
+    const m=ls.find(x=>(ref&&norm(f(x,'Reference_Article'))===ref)||(!ref&&des&&norm(f(x,'Designation'))===des));
+    const chk=row.querySelector('.em-bc-chk'),q=row.querySelector('.em-bc-q');
+    if(!m){chk.checked=false;row.style.opacity=.45;return;}
+    const sc=Number(f(m,'Quantite_Scannee')||0),att=Number(f(m,'Quantite_Attendue')||0);
+    q.value=Math.min(sc||att,parseFloat(row.dataset.ral)||0);chk.checked=true;row.style.opacity=1;n++;
+  });
+  zone.insertAdjacentHTML('afterbegin',`<div id="em-bc-rattache" style="margin-top:8px;background:#fff7ed;border:1px solid #fdba74;border-radius:6px;padding:7px 10px;font-size:12px;color:#9a3412">🔗 <strong>BL ${_escD(f(sess,'Numero_BL'))} déjà émis</strong> (${_escD(f(sess,'Statut')||'')}) : il sera <strong>rattaché</strong> à ce BC, sans créer de nouveau BL. ${n} article(s) repris du scan magasin — vérifie les quantités.</div>`);
 }
 function emCollectBC(){
   if(!_emBC)return null;
@@ -12565,6 +12604,23 @@ async function emLancerSplit(sel,numero){
 }
 // Ancien bouton « Livraison partielle » : ouvre le même formulaire, déjà rempli.
 // (L'ancien flux seul créait un BC suffixé vide → doublon avec le nouveau process.)
+// Depuis le panneau d'un BL magasin sans BC : le rattacher au reste d'un BC du client
+function openRattacherBL(sessionId){
+  const sess=(DATA.sessionsScan||[]).find(x=>x.ID===sessionId);
+  if(!sess)return;
+  try{closePanel();}catch(e){}
+  openEmissionBL();
+  setTimeout(()=>{
+    const num=document.getElementById('em-numero');if(num)num.value=f(sess,'Numero_BL')||'';
+    const ci=document.getElementById('em-client-search');if(ci){ci.value=f(sess,'Client')||'';ci.dispatchEvent(new Event('input'));document.getElementById('em-client-drop').style.display='none';}
+    const v=document.getElementById('em-vendeur'),_vv=f(sess,'Vendeur_Emetteur'),ve=String((_vv&&_vv.Value)||_vv||'');
+    if(v&&[...v.options].some(o=>o.value===ve)){v.value=ve;v.dispatchEvent(new Event('change'));}
+    document.getElementById('modal-title').textContent='🔗 Rattacher le BL '+(f(sess,'Numero_BL')||'')+' à un BC';
+    const ouverts=emBCOuverts(f(sess,'Client')||'');
+    emAfficherBC(ouverts.length===1?ouverts[0].bc.ID:undefined);
+    checkEmissionDoublon();
+  },120);
+}
 function openLivrerReste(bcId){
   const it=(DATA.suivi||[]).find(x=>x.ID===bcId||x.ID===parseInt(bcId));
   if(!it)return;
@@ -12745,10 +12801,13 @@ function checkEmissionDoublon(){
   const warn=document.getElementById('em-doublon-warn');
   if(!num){warn.style.display='none';return;}
   const existe=(DATA.sessionsScan||[]).find(s=>String(f(s,'Numero_BL')||'').trim().toLowerCase()===num.toLowerCase());
-  if(existe){
-    warn.textContent='⚠️ Ce N° de BL existe déjà (session « '+(f(existe,'Statut')||'?')+' »). Vérifiez avant d\'émettre.';
+  if(existe&&emSessionRattachable(num)&&document.getElementById('em-bc-table')?.querySelector('.em-bc-l')){
+    warn.style.display='none';emPrefillDepuisSession();
+  }else if(existe){
+    warn.textContent='⚠️ Ce N° de BL existe déjà (session « '+(f(existe,'Statut')||'?')+' »).'+(emSessionRattachable(num)?' Choisis le BC du client ci-dessous pour le rattacher.':' Vérifiez avant d\'émettre.');
     warn.style.display='block';
   }else{
+    document.getElementById('em-bc-rattache')?.remove();
     warn.style.display='none';
   }
 }
@@ -12767,8 +12826,15 @@ async function emettreBL(){
   if(!vendeur){throw new Error('Le vendeur émetteur est obligatoire.');}
   if(!isInv&&!client){throw new Error('Le client est obligatoire pour une livraison.');}
 
-  // Garde-fou anti-doublon — bloquant
+  // Garde-fou anti-doublon — bloquant, sauf rattachement d'un BL déjà émis à un BC
   const existe=(DATA.sessionsScan||[]).find(s=>String(f(s,'Numero_BL')||'').trim().toLowerCase()===numero.toLowerCase());
+  if(existe&&!isInv&&emSessionRattachable(numero)){
+    const selR=emCollectBC();
+    if(selR){
+      const sp=await emLancerSplit(selR,numero);
+      return `🔗 BL ${numero} rattaché — ${sp} en cours de création (${selR.lignes.length} article${selR.lignes.length>1?'s':''}). Le livré se mettra à jour depuis le scan.`;
+    }
+  }
   if(existe){
     throw new Error('Le N° de BL « '+numero+' » existe déjà (session « '+(f(existe,'Statut')||'?')+' »). Choisissez un autre numéro.');
   }
