@@ -3612,17 +3612,18 @@ async function fetchAchatsArrivages(){
     }
     return [];
   };
-  const [arr,lig,par,cmd,da,lda]=await Promise.all([
+  const [arr,lig,par,cmd,da,lda,lcmd]=await Promise.all([
     lire('Arrivages','ID,Title,N_Dossier,Conteneur,Type_Transport,Transitaire,Date_Depart,ETA_Port,Date_Arrivee_Port,Date_Entrepot_Prevue,Date_Entrepot,Statut,Date_Saisie_Image'),
     lire('Lignes_Arrivage','ID,ID_Arrivage,Type_Ligne,N_Commande,Fournisseur,Produits,Client_Concerne'),
     lire('Parametres_Achats','ID,Title,Valeur').catch(()=>[]),
     lire('Commandes_Frs','ID,Title,Fournisseur,Date_Commande,Date_ARC,Date_BPA,Date_Dispo_Prevue,Date_Reception,Annulee').catch(()=>[]),
     lire('Demandes_Achat','ID,Title,Zone,Transport,Motif,Client,Demandeur,Statut,Date_Demande,Commentaire,ID_BC_Client').catch(()=>null),
-    lire('Lignes_Demande_Achat','ID,Title,ID_Demande,Designation,Quantite,N_Commande').catch(()=>null)
+    lire('Lignes_Demande_Achat','ID,Title,ID_Demande,Designation,Quantite,N_Commande').catch(()=>null),
+    lire('Lignes_Commande_Frs','ID,Title,ID_Commande_Frs,N_Commande,Ref_2,Designation,Quantite,Unite').catch(()=>[])
   ]);
   const p=par.find(x=>x.Title==='DELAI_PORT_ENTREPOT_J');
   const delai=p&&!isNaN(parseInt(p.Valeur))?parseInt(p.Valeur):ACH_DELAI_DEFAUT;
-  return {arr,lig:lig.filter(l=>l.Type_Ligne!=='Frais'&&l.N_Commande),cmd:(cmd||[]).filter(c=>c.Annulee!=='Oui'),da:da&&da.filter(d=>d.ID_BC_Client),lda:lda||[],delai,ts:Date.now()};
+  return {arr,lig:lig.filter(l=>l.Type_Ligne!=='Frais'&&l.N_Commande),cmd:(cmd||[]).filter(c=>c.Annulee!=='Oui'),da:da&&da.filter(d=>d.ID_BC_Client),lda:lda||[],lcmd:lcmd||[],delai,ts:Date.now()};
 }
 // ═══ DEMANDES DE COMMANDE FOURNISSEUR (vendeur → Fabrice → achats) ═══
 // Le vendeur demande depuis le panneau d'un BC : la demande part « À valider » dans la liste
@@ -3853,6 +3854,82 @@ function achMajModal(id,valeur){
   const el=document.getElementById('m-bcfrs-arr');if(!el)return;
   const it=(DATA.suivi||[]).find(x=>x.ID===id)||{};
   el.innerHTML=achBlocHtml(it,valeur);
+  achSugMaj(id);
+}
+// ═══ PONT BC client ↔ BC fournisseur : où sont les articles ? ═══
+// Les références Image des lignes du BC client (Lignes_BC) sont cherchées dans les lignes des BC
+// fournisseurs (Lignes_Commande_Frs.Ref_2 = réf. Réseaux Plus). Les 6 derniers mois, annulés exclus.
+// Rien n'est rattaché sans clic : « ＋ Rattacher » ajoute le n° au champ N° BC fournisseur.
+const ACH_REF_MOIS=6;
+const achRefN=s=>String(s||'').toUpperCase().replace(/\s+/g,'').replace(/^0+(?=\d)/,'');
+let _achRefSrc=null,_achRefIdx=null;
+function achRefIndex(){
+  const src=DATA.achats;if(!src||!src.lcmd||!src.lcmd.length)return null;
+  if(_achRefSrc===src)return _achRefIdx;
+  const byId=new Map(),byNum=new Map();(src.cmd||[]).forEach(c=>{byId.set(c.ID,c);const n=achNums(c.Title)[0];if(n&&!byNum.has(n))byNum.set(n,c);});
+  const lim=Date.now()-ACH_REF_MOIS*30.5*864e5;
+  const L=[],idx=new Map();
+  src.lcmd.forEach(l=>{const c=byId.get(+l.ID_Commande_Frs)||byNum.get(achNums(l.N_Commande)[0]);if(!c)return;
+    if(c.Date_Commande&&new Date(c.Date_Commande).getTime()<lim)return;
+    const x={l,c,k:achRefN(l.Ref_2),kf:achRefN(l.Title),d:String(l.Designation||'').toLowerCase()};L.push(x);
+    if(x.k){if(!idx.has(x.k))idx.set(x.k,[]);idx.get(x.k).push(x);}});
+  _achRefSrc=src;_achRefIdx={L,idx};return _achRefIdx;
+}
+function achRefEtat(c){
+  const num=achNums(c.Title)[0]||'';const L=num?achLiens({ID:'ref'+c.ID},num):null;
+  const ph=L&&L.liens.length?L.liens.reduce((m,x)=>x.ph.rang<m.rang?x.ph:m,L.liens[0].ph):achPhaseCmd(c);
+  return {num,ph,recu:ph.rang>=3||!!c.Date_Reception};
+}
+// Regroupe des correspondances par BC frs (les plus récents d'abord, reçus en dernier)
+function achRefGrouper(X){
+  const m=new Map();X.forEach(x=>{if(!m.has(x.c.ID))m.set(x.c.ID,{c:x.c,lignes:[]});m.get(x.c.ID).lignes.push(x);});
+  return [...m.values()].map(g=>({...g,...achRefEtat(g.c)})).sort((a,b)=>(a.recu-b.recu)||String(b.c.Date_Commande||'').localeCompare(String(a.c.Date_Commande||''))||b.c.ID-a.c.ID);
+}
+function achRefCherche(q){
+  const I=achRefIndex();if(!I)return [];q=String(q||'').trim();if(q.length<3)return [];
+  const k=achRefN(q),t=q.toLowerCase();
+  return I.L.filter(x=>(k&&(x.k.startsWith(k)||x.kf.startsWith(k)))||x.d.includes(t)).slice(0,60);
+}
+function achRefLigneHtml(g,item,actuels,refsClient){
+  const e=_escD,ph=g.ph,deja=actuels.includes(g.num);
+  const arts=g.lignes.map(x=>`<span class="mono">${e(x.l.Ref_2||x.l.Title||'')}</span> ${e(String(x.l.Designation||'').slice(0,38))}${x.l.Quantite!=null&&x.l.Quantite!==''?' ×'+e(x.l.Quantite)+(x.l.Unite?' '+e(x.l.Unite):''):''}`).join(' · ');
+  const nb=refsClient?` <span style="color:var(--text-muted)">(${new Set(g.lignes.map(x=>x.k)).size} réf. sur ${refsClient})</span>`:'';
+  return `<div style="display:flex;gap:8px;align-items:center;padding:6px 10px;border-bottom:1px solid var(--border-light);font-size:12px;${g.recu?'opacity:.55':''}">
+    <div style="flex:1;min-width:0"><div><strong class="mono">BC frs ${e(g.num)}</strong> · ${e(g.c.Fournisseur||'')}${g.c.Date_Commande?' · '+fmtDate(g.c.Date_Commande):''}${nb} ${achBadgeHtml(ph)}</div>
+    <div style="margin-top:2px;font-size:11.5px;color:var(--text-muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="${e(g.lignes.map(x=>(x.l.Ref_2||x.l.Title)+' '+(x.l.Designation||'')).join(' · '))}">${arts}</div></div>
+    ${deja?'<span style="font-size:11.5px;color:var(--green);font-weight:600;white-space:nowrap">✓ rattaché</span>':`<button type="button" class="btn navy" style="height:26px;font-size:11px;white-space:nowrap" onclick="achRattacher(${item.ID||0},'${e(g.num)}')">＋ Rattacher</button>`}</div>`;
+}
+function achSugHtml(item,qManu){
+  const I=achRefIndex();if(!I||!item||!item.ID)return '';
+  const e=_escD;const champ=document.getElementById('m-bcfrs');const actuels=achNums(champ?champ.value:getBCFrs(item));
+  const lignes=(typeof _lignesDuBC==='function'?_lignesDuBC(item.ID):[]).map(l=>({ref:achRefN(f(l,'R_x00e9_f_x00e9_rence')),brut:String(f(l,'R_x00e9_f_x00e9_rence')||'').trim(),ral:(parseFloat(f(l,'Quantit_x00e9_command_x00e9_e'))||0)-(parseFloat(f(l,'Quantit_x00e9_livr_x00e9_e'))||0)})).filter(x=>x.ref);
+  const aLivrer=lignes.filter(x=>x.ral>0);const refs=[...new Set((aLivrer.length?aLivrer:lignes).map(x=>x.ref))];
+  const X=refs.flatMap(r=>I.idx.get(r)||[]);const G=achRefGrouper(X);
+  const sans=refs.filter(r=>!I.idx.has(r)).map(r=>(lignes.find(x=>x.ref===r)||{}).brut||r);
+  const q=qManu!==undefined?qManu:(window._achRefQ&&window._achRefQ.id===item.ID?window._achRefQ.q:'');
+  const R=q?achRefGrouper(achRefCherche(q)):[];
+  let h=`<div style="margin:2px 0 10px;border:1px solid var(--border);border-radius:var(--radius-sm);overflow:hidden">
+    <div style="font-size:11px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:.04em;padding:6px 10px;background:var(--bg,#f8fafc);border-bottom:1px solid var(--border-light)">🔎 Où sont les articles de ce BC ? <span style="font-weight:400;text-transform:none">BC fournisseurs des ${ACH_REF_MOIS} derniers mois</span></div>`;
+  if(!refs.length)h+=`<div style="padding:6px 10px;font-size:11.5px;color:var(--text-muted)">Pas de référence Image dans les articles de ce BC : utilise la recherche ci-dessous.</div>`;
+  else if(!G.length)h+=`<div style="padding:6px 10px;font-size:11.5px;color:var(--text-muted)">Aucune de ces références (${e(refs.length)}) n’est sur un BC fournisseur récent : article en stock, commande non importée au Portail Achats ou plus ancienne.</div>`;
+  else h+=G.map(g=>achRefLigneHtml(g,item,actuels,refs.length)).join('')+(sans.length?`<div style="padding:5px 10px;font-size:11px;color:var(--text-muted)">Sans BC fournisseur récent : ${sans.slice(0,12).map(e).join(', ')}${sans.length>12?'…':''}</div>`:'');
+  h+=`<div style="padding:6px 10px;border-top:1px solid var(--border-light);display:flex;gap:6px;align-items:center"><input id="m-bcfrs-q" placeholder="🔍 autre référence ou désignation…" value="${e(q)}" oninput="achRefTaper(${item.ID},this.value)" style="flex:1;height:28px;font-size:12px;font-family:var(--font-mono)"></div>
+    <div id="m-bcfrs-res">${q?(R.length?R.map(g=>achRefLigneHtml(g,item,actuels,0)).join(''):`<div style="padding:6px 10px;font-size:11.5px;color:var(--text-muted)">${q.trim().length<3?'3 caractères minimum.':'Aucun BC fournisseur récent pour « '+e(q)+' ».'}</div>`):''}</div></div>`;
+  return h;
+}
+function achSugMaj(id){
+  const el=document.getElementById('m-bcfrs-sug');if(!el)return;
+  const it=(DATA.suivi||[]).find(x=>x.ID===id);if(!it)return;
+  const q=document.getElementById('m-bcfrs-q');const foc=q&&document.activeElement===q;const pos=q?q.selectionStart:0;
+  el.innerHTML=achSugHtml(it);
+  if(foc){const n=document.getElementById('m-bcfrs-q');if(n){n.focus();n.setSelectionRange(pos,pos);}}
+}
+function achRefTaper(id,v){window._achRefQ={id,q:v};clearTimeout(window._achRefT);window._achRefT=setTimeout(()=>achSugMaj(id),250);}
+function achRattacher(id,num){
+  const c=document.getElementById('m-bcfrs');if(!c)return;
+  const nums=achNums(c.value);if(!nums.includes(String(num))){c.value=c.value.trim()?c.value.trim()+' - '+num:String(num);}
+  achMajModal(id,c.value);
+  toast('BC frs '+num+' rattaché : enregistre pour valider');
 }
 // Texte court (aperçu au survol)
 function achResume(i){
@@ -11008,6 +11085,7 @@ async function openTraiterModal(id,numBC,client){
         </div>
         <div class="mf"><label>N° BC fournisseur <span style="font-weight:400;color:var(--text-muted)">(n° Image, plusieurs séparés par « - » — optionnel)</span></label><input id="m-bcfrs" value="${_escD(getBCFrs(currentItem))}" placeholder="ex : 8412 - 8415" oninput="achMajModal(${currentItem.ID||0},this.value)" style="font-family:var(--font-mono)"></div>
         <div id="m-bcfrs-arr">${achBlocHtml(currentItem)}</div>
+        <div id="m-bcfrs-sug">${achSugHtml(currentItem)}</div>
         <div id="m-field-prep" style="border:1px solid var(--border);border-radius:var(--radius-sm);padding:10px 14px">
           <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer">
             <input type="checkbox" id="m-prep" ${curSessPrep?'checked':''} style="width:16px;height:16px">
