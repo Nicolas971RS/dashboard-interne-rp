@@ -4391,7 +4391,8 @@ function renderCommandes(){
       ${aImp.length>1?`<button class="btn sm primary" id="cmdImpTout">⬇ Importer tout (${aImp.length})</button>`:''}</div></div>
       <div class="card-b"><div id="cmdProg" class="muted" style="display:none;margin-bottom:6px"></div>${!F?'<span class="muted">Lecture du dossier…</span>':F.err?`<span class="muted">⚠️ ${esc(F.err)}</span>`:aImp.length?`<div class="cmd-files">${aImp.slice(0,30).map(f=>`<button class="sifa-f" data-cmdimp="${esc(f.path)}"><span>📄 ${esc(f.nom)} ${f.maj?'<span class="tag" style="background:#fff7ed;color:#9a3412">🔁 version modifiée</span>':''}</span><span class="muted">${f.date?esc(new Date(f.date).toLocaleDateString('fr-FR')):''}</span></button>`).join('')}</div>`:'<span class="muted">✓ Tous les BC du dossier sont suivis.</span>'}
       ${CMDV.bilan?`<details style="margin-top:8px"><summary class="muted" style="cursor:pointer">Bilan du dernier import</summary><div style="font-size:12px;white-space:pre-line">${esc(CMDV.bilan.join('\n'))}</div></details>`:''}</div></div>
-    <div class="filters">${filtres.map(f=>`<button class="chip ${f[0]===fl[0]?'on':''}" data-cmdf="${f[0]}">${f[1]}<span class="n">${tous.filter(f[2]).length}</span></button>`).join('')}<input id="cmdSearch" class="search" placeholder="🔍 n°, fournisseur, article…" value="${esc(CMDV.q)}" style="margin-left:auto;max-width:260px"></div>
+    <div class="filters">${filtres.map(f=>`<button class="chip ${f[0]===fl[0]?'on':''}" data-cmdf="${f[0]}">${f[1]}<span class="n">${tous.filter(f[2]).length}</span></button>`).join('')}<input id="cmdSearch" class="search" placeholder="🔍 n°, fournisseur, réf. article…" value="${esc(CMDV.q)}" style="margin-left:auto;max-width:260px"></div>
+    ${cmdOuEstHtml(q)}
     ${cmdLegendeHtml()}
     <div class="card"><div class="tblwrap"><table class="ltable cmd-t"><thead><tr><th>N°</th><th>Fournisseur</th><th>Objet</th><th>Date</th><th>Étapes</th><th>Où en est-elle</th><th class="r">Articles</th><th class="r">Montant HT</th></tr></thead><tbody>
     ${rows.length?rows.map(({c,e})=>`<tr class="cmd-r ${CMDV.ouvert===c.ID?'sel':''}" data-cmd="${c.ID}"><td class="mono"><b>${esc(c.Title)}</b></td><td>${esc(c.Fournisseur||'?')}${c.ID_Fournisseur?'':' <span class="frs-ko" title="Fournisseur non reconnu">⚠</span>'}</td><td class="muted">${esc(c.Objet||'')}</td><td>${fmtD(dk(c,'Date_Commande'))}</td><td>${cmdPastilles(c,e)}</td>
@@ -4401,6 +4402,24 @@ function renderCommandes(){
   if(CUR_TAB==='commandes'&&typeof daCompleterDesignations==='function')daCompleterDesignations();
   if(!F&&CUR_TAB==='commandes')cmdFichiers().then(()=>{if(CUR_TAB==='commandes')renderCommandes();});
   if(CMDV.ouvert)cmdAttachments(CMDV.ouvert).then(a=>{const el=$('cmdAtt');if(el)el.innerHTML=a.length?a.map(f=>`<span class="cmd-pj"><a href="${esc(f.ServerRelativeUrl&&f.ServerRelativeUrl.startsWith('/')?C.spRoot+f.ServerRelativeUrl:f.ServerRelativeUrl)}" target="_blank" rel="noopener">📎 ${esc(f.FileName)}</a>${peutModifierCmd()?`<button class="cmd-pjdel" data-cmdpjdel="${esc(f.FileName)}" title="Supprimer cette pièce jointe">✕</button>`:''}</span>`).join(' '):'<span class="muted">Aucune pièce jointe</span>';});
+}
+// « Où est cet article ? » : la recherche trouve les lignes de BC (réf. RP, réf. frs ou désignation)
+// dans TOUTES les commandes, quel que soit le filtre, avec livré / en route / reste et le dossier d'arrivage.
+const refN=s=>String(s||'').toUpperCase().replace(/\s+/g,'').replace(/^0+(?=\d)/,'');
+function cmdOuEstHtml(q){
+  q=String(q||'').trim();if(q.length<3||!DATA.lcmd)return '';
+  const k=refN(q),t=q.toLowerCase(),byId=new Map((DATA.cmd||[]).map(c=>[c.ID,c]));
+  const X=DATA.lcmd.filter(l=>!estGratuit(l)&&((k&&(refN(l.Ref_2).startsWith(k)||refN(l.Title).startsWith(k)))||String(l.Designation||'').toLowerCase().includes(t)))
+    .map(l=>({l,c:byId.get(l.ID_Commande_Frs)})).filter(x=>x.c&&x.c.Annulee!=='Oui').map(x=>({...x,e:cmdEtat(x.c),s:artSuivi(x.l)}));
+  if(!X.length)return '';
+  X.sort((a,b)=>((a.e.k==='recue')-(b.e.k==='recue'))||String(dk(b.c,'Date_Commande')).localeCompare(String(dk(a.c,'Date_Commande')))||b.c.ID-a.c.ID);
+  const V=X.slice(0,40);
+  return `<div class="card" style="margin-bottom:12px"><div class="card-h"><h3>📍 Où est cet article ? <span class="tag">${X.length} ligne${X.length>1?'s':''} de BC</span></h3><span class="muted" style="font-size:12px">toutes commandes, quel que soit le filtre · clic = ouvrir la commande</span></div>
+    <div class="tblwrap"><table class="ltable"><thead><tr><th>Réf. RP</th><th>Réf. frs</th><th>Désignation</th><th>BC</th><th>Fournisseur</th><th>Date</th><th class="r">Qté BC</th><th class="r">Livré</th><th class="r">En route</th><th class="r">Reste</th><th>Où en est-elle</th></tr></thead><tbody>
+    ${V.map(({l,c,e,s})=>{const a=e.a||cmdArrivage(c);const fini=e.k==='recue';return `<tr data-cmdgo="${c.ID}" style="cursor:pointer;${fini?'opacity:.55':''}"><td class="mono"><b>${esc(l.Ref_2||'')}</b></td><td class="mono muted">${esc(l.Title||'')}</td><td>${esc(l.Designation||'')}</td><td class="mono"><b>${esc(c.Title)}</b></td><td>${esc(c.Fournisseur||'')}</td><td>${fmtD(dk(c,'Date_Commande'))}</td>
+      <td class="r mono">${fmtQ(n0(l.Quantite))} ${esc(l.Unite||'')}</td><td class="r mono">${s.actif?fmtQ(s.livre):'<span class="muted">—</span>'}</td><td class="r mono">${s.route?fmtQ(s.route):''}</td><td class="r mono">${s.actif?`<b>${fmtQ(s.reste)}</b>`:'<span class="muted">—</span>'}</td>
+      <td><span class="st ${e.cls}">${esc(e.lbl)}</span>${a?`<div class="muted" style="font-size:11.5px">🚢 ${esc(a.Conteneur||a.Title||'')}</div>`:''}</td></tr>`;}).join('')}
+    </tbody></table></div>${X.length>40?`<div class="muted" style="font-size:12px;padding:6px 10px">${X.length-40} autres lignes : précise la recherche.</div>`:''}</div>`;
 }
 function cmdDetailHtml(c,e){
   const L=cmdLignes(c.ID);const ed=peutModifierCmd();const dis=ed?'':'disabled';
