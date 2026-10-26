@@ -12563,8 +12563,10 @@ async function lireBLPdf(buf){
   }
   return parseBLPdf(rows);
 }
+// Codes vendeur imprimés sur les BL / FC Image
+const BL_VENDEURS={'01':'Fabrice','04':'Fred','05':'Fritz','06':'Nicolas'};
 function parseBLPdf(rows){
-  const out={numero:'',codeClient:'',client:'',lignes:[]};
+  const out={numero:'',codeClient:'',client:'',vendeur:'',lignes:[]};
   let iNum=-1;
   rows.forEach((r,i)=>{
     if(iNum>=0)return;
@@ -12575,6 +12577,11 @@ function parseBLPdf(rows){
     for(let i=iNum+1;i<Math.min(rows.length,iNum+5)&&!out.client;i++){
       const c=rows[i].find(c=>c.x>=45&&/[A-Za-zÀ-ÿ]{2}/.test(c.s)&&!/^\d{5}\b/.test(c.s));
       if(c)out.client=c.s;
+    }
+    // Code vendeur Image : 2 chiffres dans la colonne de gauche, sous la date
+    for(let i=iNum+1;i<Math.min(rows.length,iNum+5)&&!out.vendeur;i++){
+      const v=rows[i].find(c=>c.x<45&&/^\d{2}$/.test(c.s));
+      if(v&&BL_VENDEURS[v.s])out.vendeur=BL_VENDEURS[v.s];
     }
   }
   const cumul=new Map();
@@ -12617,9 +12624,11 @@ async function emImporterPdf(file){
     const _refs=new Set(r.lignes.map(l=>l.ref.toUpperCase()));
     const _cand=emBCOuverts(ci?ci.value:'').filter(x=>x.lignes.some(y=>_refs.has(String(f(y.ligne,'R_x00e9_f_x00e9_rence')||'').trim().toUpperCase())));
     emAfficherBC(_cand.length===1?_cand[0].bc.ID:undefined);
+    const _v=document.getElementById('em-vendeur');
+    if(_v&&r.vendeur&&[..._v.options].some(o=>o.value===r.vendeur)){_v.value=r.vendeur;_v.dispatchEvent(new Event('change'));}
     emAppliquerPdf();
     const inconnus=r.lignes.filter(l=>stockImageRef(l.ref)===null&&!(DATA.catalogue||[]).some(p=>String(f(p,'Title')||'').trim().toUpperCase()===l.ref.toUpperCase()));
-    dire(`✅ ${estNumeroFC(r.numero)?'FC':'BL'} <strong>${_escD(r.numero||'?')}</strong> · ${_escD(r.client||'client non lu')} · <strong>${r.lignes.length} article${r.lignes.length>1?'s':''}</strong> repris${inconnus.length?` — ❔ hors catalogue : ${inconnus.map(l=>_escD(l.ref)).join(', ')}`:''}. Vérifie avant de valider.`,'#166534');
+    dire(`✅ ${estNumeroFC(r.numero)?'FC':'BL'} <strong>${_escD(r.numero||'?')}</strong> · ${_escD(r.client||'client non lu')} · ${r.vendeur?_escD(r.vendeur):'vendeur non lu'} · <strong>${r.lignes.length} article${r.lignes.length>1?'s':''}</strong> repris${inconnus.length?` — ❔ hors catalogue : ${inconnus.map(l=>_escD(l.ref)).join(', ')}`:''}. Vérifie avant de valider.`,'#166534');
   }catch(e){dire('🔴 Lecture impossible : '+_escD(e.message),'var(--red)');}
 }
 // Répartit les articles du PDF : ceux du BC choisi vont dans son tableau (reste à livrer),
