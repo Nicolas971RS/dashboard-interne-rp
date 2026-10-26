@@ -8910,7 +8910,18 @@ function openRetourModalSession(sessionId){
 // à l'aise avec l'outil, dans l'ordre : soit on clôt (Oui), soit on enchaîne
 // immédiatement sur la création d'une Livraison Partielle (Non) — jamais les deux
 // actions oubliées entre elles.
+// Depuis le nouveau process (« Livrer le reste ») : « Non » ne crée plus rien.
+// Le reste est suivi tout seul dans Livraisons Partielles (Cmdé − Livré) et le BC
+// suffixé se crée quand le client revient, avec le BL du reste → pas de doublon.
 function alerteBCSolde(id,numBC){
+  const _ral=(DATA.lignes||[]).filter(l=>l.BCId===id||parseInt(l.BCId)===id)
+    .map(l=>({ref:f(l,'R_x00e9_f_x00e9_rence')||f(l,'Produit_x002f_D_x00e9_signation')||'?',r:(parseFloat(f(l,'Quantit_x00e9_command_x00e9_e'))||0)-(parseFloat(f(l,'Quantit_x00e9_livr_x00e9_e'))||0)}))
+    .filter(x=>x.r>0);
+  const _nbLignes=(DATA.lignes||[]).filter(l=>l.BCId===id||parseInt(l.BCId)===id).length;
+  const _resteHtml=_ral.length
+    ?`<div style="background:#fff7ed;border:1px solid #fdba74;border-radius:9px;padding:10px 12px;margin:-10px 0 18px;font-size:13px;color:#9a3412;text-align:left">📦 Reste à livrer d'après les articles : <strong>${_ral.map(x=>_escD(x.ref)+' ×'+x.r).join(', ')}</strong></div>`
+    :(_nbLignes?`<div style="background:#f0fdf4;border:1px solid #86efac;border-radius:9px;padding:10px 12px;margin:-10px 0 18px;font-size:13px;color:#14532d;text-align:left">✅ D'après les articles saisis, tout est livré.</div>`
+      :`<div style="background:#fef2f2;border:1px solid #fca5a5;border-radius:9px;padding:10px 12px;margin:-10px 0 18px;font-size:13px;color:#991b1b;text-align:left">⚠️ Aucun article saisi sur ce BC : s'il reste quelque chose à livrer, saisis les articles (Cmdé / Livré) dans Traiter, sinon le reste ne sera pas suivi.</div>`);
   document.getElementById('alerte-solde-ov')?.remove();
   const ov=document.createElement('div');
   ov.id='alerte-solde-ov';
@@ -8922,6 +8933,7 @@ function alerteBCSolde(id,numBC){
       <div style="font-size:17px;font-weight:700;color:var(--text-primary);margin-bottom:24px;line-height:1.4">
         Ce BC est-il <u>entièrement livré</u> ?
       </div>
+      ${_resteHtml}
       <div style="display:flex;flex-direction:column;gap:11px">
         <button onclick="alerteSoldeOui(${id},'${String(numBC).replace(/'/g,"\\'")}')"
           style="background:var(--green);color:white;border:none;border-radius:9px;padding:16px;font-size:16px;font-weight:800;cursor:pointer">
@@ -8929,7 +8941,8 @@ function alerteBCSolde(id,numBC){
         </button>
         <button onclick="alerteSoldeNon(${id},'${String(numBC).replace(/'/g,"\\'")}')"
           style="background:white;color:#c2410c;border:2px solid #c2410c;border-radius:9px;padding:16px;font-size:16px;font-weight:800;cursor:pointer">
-          ◻ NON — Créer une Livraison Partielle
+          ◻ NON — Il reste à livrer
+          <div style="font-size:12px;font-weight:600;margin-top:4px">Rien à créer : suivi dans « Livraisons Partielles », puis « 🚚 Livrer le reste » quand le client revient</div>
         </button>
       </div>
     </div>`;
