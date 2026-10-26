@@ -1115,6 +1115,7 @@
         </div>
       </div>
       <div id="devis-auto-alerte" style="display:none"></div>
+      <div id="devis-dbc-alerte" style="display:none"></div>
       <div id="bpa-alerte" style="display:none"></div>
       <div class="kpi-row c4">
         <div class="kc b"><div class="kl">📄 En cours de traitement</div><div class="kv" id="kpi-devis-cours">—</div><div class="ks">Action requise</div></div>
@@ -5810,8 +5811,94 @@ function openCreerBCDepuisBPA(id,accord){
   });
 }
 
+// ── Devis des Demandes BC (enlèvement sans BC) ──
+// Le vendeur joint le devis à la demande BC, mais ce devis n'arrivait jamais dans
+// l'onglet Devis. On liste les demandes dont le N° de devis est absent de
+// Demandes_Devis, et on les crée (avec le PDF joint) en un clic.
+const DBC_DEVIS_IGN='rp_dbc_devis_ignores';
+const _dbcDevisIgn=()=>{try{return JSON.parse(localStorage.getItem(DBC_DEVIS_IGN)||'[]');}catch(e){return[];}};
+function numDevisDBC(d){const m=String(f(d,'ID_Devis')||'').match(/(?:^|\D)(\d{6})(?:\D|$)/);return m?m[1]:'';}
+function dbcDevisManquants(){
+  const ign=new Set(_dbcDevisIgn()),vus=new Set();
+  return (DATA.dbc||[]).filter(d=>{
+    const n=numDevisDBC(d);
+    if(!n||vus.has(n)||ign.has(d.ID)||devisDuNumero(n))return false;
+    vus.add(n);return true;
+  });
+}
+function renderDevisDBCAlerte(){
+  const host=document.getElementById('devis-dbc-alerte');
+  if(!host)return;
+  const l=dbcDevisManquants();
+  if(!l.length){host.style.display='none';host.innerHTML='';return;}
+  const e=v=>_escD(String(v==null?'':v));
+  host.style.display='block';
+  host.innerHTML=`<div style="background:#eff6ff;border:1px solid #93c5fd;border-left:4px solid #2563eb;border-radius:var(--radius-sm);padding:12px 14px;margin-bottom:14px">
+    <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap">
+      <div style="font-weight:800;color:#1e3a8a;font-size:13.5px">📥 ${l.length} devis de Demandes BC absent${l.length>1?'s':''} de l'onglet Devis</div>
+      <button class="btn" style="height:30px;font-size:12px;background:#2563eb;color:#fff;border-color:#2563eb" onclick="importerDevisDBCTous(this)">📥 Tout importer (${l.length})</button>
+    </div>
+    <div style="font-size:11.5px;color:#1e40af;margin:3px 0 8px">Le client a enlevé la marchandise sur ce devis : il est créé en « Accepté » (ou « Converti en BC » si le BC est reçu), avec le PDF joint à la demande.</div>
+    ${l.map(d=>`<div style="display:flex;gap:10px;align-items:center;justify-content:space-between;padding:6px 0;border-top:1px solid #dbeafe;font-size:12.5px;flex-wrap:wrap">
+      <span><strong class="mono">${e(numDevisDBC(d))}</strong> · ${e(f(d,'NomClient')||f(d,'Title'))} · ${e(f(d,'Vendeur')||'—')} · <span style="color:var(--text-muted)">${e(f(d,'Title'))} du ${fmtDate(f(d,'Date_Enl_x00e8_vement'))} · ${e(f(d,'Statut')||'')}</span></span>
+      <span style="display:flex;gap:6px"><button class="btn" style="height:26px;font-size:11.5px" onclick="importerDevisDBC(${d.ID},null,this)">📥 Importer</button>
+      <button class="btn" style="height:26px;font-size:11.5px;color:var(--text-muted)" title="N° de devis erroné ou déjà suivi ailleurs" onclick="ignorerDevisDBC(${d.ID})">Ignorer</button></span>
+    </div>`).join('')}
+  </div>`;
+}
+function ignorerDevisDBC(id){
+  try{localStorage.setItem(DBC_DEVIS_IGN,JSON.stringify([..._dbcDevisIgn(),id]));}catch(e){}
+  renderDevisDBCAlerte();
+}
+// Crée le devis à partir d'une demande BC. fichier : le devis d'origine (création
+// depuis le dashboard) ; sinon on recopie la pièce jointe de la demande.
+async function importerDevisDBC(dbcId,fichier,btn){
+  const d=(DATA.dbc||[]).find(x=>x.ID===dbcId);
+  if(!d)return null;
+  const num=numDevisDBC(d);
+  if(!num||devisDuNumero(num))return null;
+  if(btn){btn.disabled=true;btn.textContent='⏳';}
+  try{
+    const client=f(d,'NomClient')||'';
+    const recu=_normTxt(f(d,'Statut')).includes('recu');
+    const created=await spPost('sites/BondeCommande','Demandes_Devis',{
+      Title:`DEVIS-${num}-${client}`.substring(0,255),Devis_RS:num,Client:client,
+      Client_Email:f(d,'Email_Client')||null,Vendeur_Assign_x00e9_:f(d,'Vendeur')||'Fabrice',
+      Statut:recu?'Converti en BC':'Accepté',
+      Notes_Internes:`Créé depuis la demande BC ${f(d,'Title')||''} — enlèvement du ${fmtDate(f(d,'Date_Enl_x00e8_vement'))}${f(d,'N_x00b0_BL')?' · BL '+f(d,'N_x00b0_BL'):''}`,
+      Envoyer_Devis:'MANUEL' // pas de notification : le devis n'est pas à envoyer
+    });
+    const newId=created?.ID??created?.Id;
+    if(!newId)throw new Error('devis non créé');
+    try{await spPatch('sites/BondeCommande','Demandes_Devis',newId,{Num_x00e9_ro_Devis:`DEV-${newId}`});}catch(e){}
+    let pj='';
+    try{
+      if(fichier){await spAddAttachment('sites/BondeCommande','Demandes_Devis',newId,fichier.name,await fichier.arrayBuffer());pj=fichier.name;}
+      else{
+        const pjs=(await getAttachments('sites/BondeCommande','Demandes_BC',d.ID)).filter(a=>/\.(pdf|jpe?g|png)$/i.test(a.FileName||''));
+        const a=pjs.find(x=>/devis/i.test(x.FileName))||pjs[0];
+        if(a){await spAddAttachment('sites/BondeCommande','Demandes_Devis',newId,a.FileName,await lirePieceJointe('sites/BondeCommande','Demandes_BC',d.ID,a));pj=a.FileName;}
+      }
+    }catch(e){console.warn('[importerDevisDBC] pièce jointe',e.message);}
+    DATA.devis=[{ID:newId,Devis_RS:num,Num_x00e9_ro_Devis:`DEV-${newId}`,Client:client,Vendeur_Assign_x00e9_:f(d,'Vendeur')||'Fabrice',Statut:recu?'Converti en BC':'Accepté'},...(DATA.devis||[])];
+    try{renderDevisTable();}catch(e){}
+    if(btn)toast(`📥 Devis ${num} ajouté${pj?' avec '+pj:' (sans PDF)'}`);
+    return newId;
+  }catch(e){
+    if(btn){btn.disabled=false;btn.textContent='📥 Importer';}
+    toast('🔴 Devis '+num+' non créé : '+e.message,'ko');return null;
+  }
+}
+async function importerDevisDBCTous(btn){
+  const l=dbcDevisManquants();
+  if(btn){btn.disabled=true;btn.textContent='⏳ Import…';}
+  let ok=0;for(const d of l){if(await importerDevisDBC(d.ID))ok++;}
+  toast(`📥 ${ok} devis importé${ok>1?'s':''} depuis les demandes BC`);
+  renderDevisDBCAlerte();
+}
 function renderDevisTable(){
   try{renderDevisAutoAlerte();}catch(e){console.warn('[devisAuto]',e);}
+  try{renderDevisDBCAlerte();}catch(e){console.warn('[devisDBC]',e);}
   try{renderBPAAlerte();}catch(e){console.warn('[BPA]',e);}
   let items=[...DATA.devis];
   const fV=document.getElementById('filter-vendeur-devis')?.value||'all';
@@ -13764,10 +13851,15 @@ async function openDevisPanel(id){
     <div id="devis-pdf-msg" style="font-size:11px;margin-top:4px"></div>
     </div><div class="pactions">`;
     const _dejaEnvoye=devisRecuParEmail(item);
-    if(st!=='En cours de traitement'&&st!=='Devis envoyé'&&!_dejaEnvoye){
+    // Devis repris d'une demande BC : le BC arrive par la demande, pas d'action ici
+    const _viaDBC=/Créé depuis la demande BC/.test(String(f(item,'Notes_Internes')||''));
+    if(_viaDBC){
+      html+=`<div style="font-size:12px;color:#1e3a8a;background:#eff6ff;border:1px solid #93c5fd;border-radius:6px;padding:6px 10px;margin-bottom:6px;width:100%">📥 Devis repris d'une demande BC (enlèvement sans BC) : le BC est suivi dans l'onglet Demandes BC.</div>`;
+    }else if(st!=='En cours de traitement'&&st!=='Devis envoyé'&&!_dejaEnvoye){
       html+=`<button class="pbtn blue" onclick="passerEnCours(${id},true)">📋 Prendre en charge</button>`;
     }
-    if(st==='Accepté'&&bpaATraiter().some(x=>x.ID===item.ID)){
+    if(_viaDBC){/* rien : voir message ci-dessus */}
+    else if(st==='Accepté'&&bpaATraiter().some(x=>x.ID===item.ID)){
       html+=`<button class="pbtn green" onclick="closePanel();openCreerBCDepuisBPA(${id})">➕ Créer le BC (BPA)</button>`;
     }else if((st==='Devis envoyé'||st==='En cours de traitement'||st==='Accepté')&&!(()=>{const idx=pdIndexBC();return [f(item,'Devis_RS'),f(item,'Num_x00e9_ro_Devis','Numero_Devis')].map(x=>String(x||'').trim().toUpperCase()).filter(Boolean).some(k=>(idx[k]||[]).length);})()){
       html+=`<button class="pbtn green" title="Le client a donné son accord sans renvoyer le devis signé (BL déjà fait pour bloquer le matériel, BC à venir…)" onclick="closePanel();openCreerBCDepuisBPA(${id},true)">🤝 Accord client — créer le BC</button>`;
@@ -13776,7 +13868,7 @@ async function openDevisPanel(id){
       const devisRS=f(item,'Devis_RS')||'';
       html+=`<button class="pbtn grey" style="background:var(--teal-light);color:var(--teal);border:1px solid var(--teal)" onclick="closePanel();trouverBCDepuisDevis('${nd}','${devisRS}')">🔗 Trouver BC associé</button>`;
     }
-    html+=(_dejaEnvoye
+    html+=(_viaDBC?'':_dejaEnvoye
         ?`<span style="font-size:12px;color:#047857;background:#ecfdf5;border:1px solid #6ee7b7;border-radius:6px;padding:6px 10px">✉️ Déjà envoyé au client par l'émetteur (reçu par email)</span>`
         :`<button class="pbtn green" onclick="envoyerDevisFlow(${id})">📨 Envoyer devis</button>`)+`
       <button class="pbtn grey" onclick="closePanel()">Fermer</button>
@@ -14586,6 +14678,12 @@ function openNouveauDBCModal(){
 
     const created=await spPost('sites/BondeCommande','Demandes_BC',body);
     const newId=created.ID||created.id;
+    // Le devis de la demande rejoint l'onglet Devis (s'il n'y est pas déjà)
+    if(newId){
+      DATA.dbc=[{...body,ID:newId},...(DATA.dbc||[])];
+      const _df=document.getElementById('d-devisfile')?.files?.[0]||null;
+      importerDevisDBC(newId,_df).then(r=>{if(r)toast(`📥 Devis ${numDevis} ajouté à l'onglet Devis`);}).catch(()=>{});
+    }
 
     const blInput=document.getElementById('d-blfile');
     const devisInput=document.getElementById('d-devisfile');
