@@ -2789,10 +2789,66 @@ function dbcDepuisSession(sessionId){
     }
     const drop=document.getElementById('d-client-drop');if(drop)drop.style.display='none';
     if(typeof dbcLivePreview==='function')dbcLivePreview();
+    dbcChargerBLSigne(f(s,'Numero_BL'));
     toast(`📝 Pré-rempli depuis le BL ${f(s,'Numero_BL')} : ${rempli.join(', ')}${precedente?' (email/chef repris de DBC-'+precedente.ID+' — à vérifier)':''}`);
   },180);
 }
 function regulHPCreerDBC(sessionId){dbcDepuisSession(sessionId);}
+
+// ── BL signé déposé sur la livraison (pièce jointe « BL_signe_… » de la session) ──
+// Le vendeur dépose le BL signé dès la livraison : la demande BC le reprend toute
+// seule, et un BL livré sans signature saute aux yeux dans le panneau.
+const _estBLSigne=a=>/^BL_sign/i.test(a.FileName||'');
+async function blSigneDeSession(sessionId){
+  const pjs=await getAttachments('sites/BondeCommande','Sessions_Scan',sessionId);
+  return (pjs||[]).filter(_estBLSigne).sort((a,b)=>String(b.FileName).localeCompare(String(a.FileName)))[0]||null;
+}
+async function majBlocBLSigne(sessionId){
+  const box=document.getElementById('sp-blsigne-'+sessionId);
+  if(!box)return;
+  let a=null;
+  try{a=await blSigneDeSession(sessionId);}catch(e){box.innerHTML='✍️ BL signé : pièces jointes inaccessibles ('+_escD(e.message)+')';return;}
+  const inp=`<label class="btn" style="height:28px;font-size:11.5px;cursor:pointer;display:inline-flex;align-items:center;gap:4px">${a?'🔁 Remplacer':'📤 Déposer le BL signé'}<input type="file" accept=".pdf,.jpg,.jpeg,.png,image/*" capture="environment" style="display:none" onchange="deposerBLSigne(${sessionId},this.files[0])"></label>`;
+  if(a){
+    box.style.cssText+=';background:#f0fdf4;border-color:#86efac;color:#14532d';
+    box.innerHTML=`<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap"><span>✅ <strong>BL signé déposé</strong> — ${_escD(a.FileName)}</span><span style="display:flex;gap:6px"><button class="btn" style="height:28px;font-size:11.5px" onclick="window.open(C.spRoot+encodeURI('${String(a.ServerRelativeUrl||'').replace(/'/g,"\\'")}'),'_blank')">👁 Voir</button>${inp}</span></div>`;
+  }else{
+    box.style.cssText+=';background:#fff7ed;border-color:#fdba74;color:#9a3412';
+    box.innerHTML=`<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap"><span>⚠️ <strong>BL signé pas encore déposé.</strong> Photo ou scan du BL signé par le client : il sera repris automatiquement dans la demande BC.</span>${inp}</div>`;
+  }
+}
+async function deposerBLSigne(sessionId,file){
+  if(!file)return;
+  const s=(DATA.sessionsScan||[]).find(x=>x.ID===sessionId);
+  const ext=(file.name.split('.').pop()||'pdf').toLowerCase();
+  const nom=`BL_signe_${String(f(s,'Numero_BL')||sessionId).replace(/[^\w-]/g,'')}_${new Date().toISOString().slice(0,10).replace(/-/g,'')}.${ext}`;
+  const box=document.getElementById('sp-blsigne-'+sessionId);
+  if(box)box.innerHTML='⏳ Envoi du BL signé…';
+  try{
+    await spAddAttachment('sites/BondeCommande','Sessions_Scan',sessionId,nom,await file.arrayBuffer());
+    try{if(typeof histoAjouter==='function'&&_historiqueDispo)await histoAjouter(sessionId,[histoEntree(s,'bl_signe','BL signé déposé : '+nom)]);}catch(e){}
+    toast('✍️ BL signé déposé');
+  }catch(e){toast('🔴 BL signé non déposé : '+e.message,'ko');}
+  majBlocBLSigne(sessionId);
+}
+// Place le BL signé de la livraison dans le champ « BL signé — fichier » de la demande BC
+async function dbcChargerBLSigne(numBL){
+  const inp=document.getElementById('d-blfile');
+  const hint=inp?.parentElement?.querySelector('.hint');
+  if(!inp||!numBL||(inp.files&&inp.files.length&&!inp.dataset.auto))return;
+  const s=findSessionByBL(numBL);
+  if(!s){if(inp.dataset.auto){inp.value='';delete inp.dataset.auto;if(hint)hint.textContent='PDF, JPG, PNG — obligatoire (preuve d\'enlèvement)';}return;}
+  try{
+    const a=await blSigneDeSession(s.ID);
+    if(!a){if(hint){hint.innerHTML='⚠️ Pas de BL signé déposé sur la livraison '+_escD(numBL)+' — joins-le ici';hint.style.color='#c2410c';}return;}
+    const buf=await lirePieceJointe('sites/BondeCommande','Sessions_Scan',s.ID,a);
+    const ext=(a.FileName.split('.').pop()||'').toLowerCase();
+    const type=ext==='pdf'?'application/pdf':ext==='png'?'image/png':'image/jpeg';
+    const dt=new DataTransfer();dt.items.add(new File([buf],a.FileName,{type}));
+    inp.files=dt.files;inp.dataset.auto='1';inp.classList.remove('err');
+    if(hint){hint.innerHTML='✅ BL signé repris de la livraison '+_escD(numBL);hint.style.color='#166534';}
+  }catch(e){console.warn('[dbcChargerBLSigne]',e.message);}
+}
 
 // Photo du BL papier prise par le magasinier = pièce jointe de la session
 async function voirPhotoBL(sessionId){
@@ -7398,7 +7454,10 @@ function openSessionPanel(id){
       <button class="btn" data-label="1" style="height:28px;font-size:11.5px;background:#c2410c;color:#fff;border-color:#c2410c" onclick="this.disabled=true;corrigerStatutSession(${id})">Corriger → ${_inc.cible}</button>
     </div>`:'';
 
-  openPanel(iconBLFC(f(s,'Numero_BL'))+' '+(f(s,'Numero_BL')||'BL'),_bandeauInc+_blocDBC+html);
+  const _avecBLS=_livreFinal&&_numS&&!estNumeroFC(_numS)&&!_numS.startsWith('PREP-');
+  const _blocBLS=_avecBLS?`<div id="sp-blsigne-${id}" style="border:1px solid var(--border);border-radius:var(--radius-sm);padding:9px 12px;margin-bottom:12px;font-size:12.5px;color:var(--text-muted)">✍️ BL signé : vérification…</div>`:'';
+  openPanel(iconBLFC(f(s,'Numero_BL'))+' '+(f(s,'Numero_BL')||'BL'),_bandeauInc+_blocBLS+_blocDBC+html);
+  if(_avecBLS)majBlocBLSigne(id);
 }
 
 // ── Suppression d'une session créée par erreur ──
@@ -14555,7 +14614,7 @@ function openNouveauDBCModal(){
     </div>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
       <div class="mf"><label>Date enlèvement *</label><input id="d-dateenlev" type="date" value="${today}" oninput="dbcLivePreview()"></div>
-      <div class="mf"><label>N° BL signé *</label><input id="d-numbl" placeholder="ex: 820454"></div>
+      <div class="mf"><label>N° BL signé *</label><input id="d-numbl" placeholder="ex: 820454" onchange="dbcChargerBLSigne(this.value.trim())"></div>
     </div>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
       <div class="mf"><label>Chef de chantier *</label><input id="d-chef" placeholder="Nom du chef de chantier" oninput="dbcLivePreview()"></div>
@@ -14571,7 +14630,7 @@ function openNouveauDBCModal(){
 
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:2px">
       <div class="mf"><label>📄 BL signé — fichier *</label>
-        <input id="d-blfile" type="file" accept=".pdf,.jpg,.jpeg,.png" style="font-size:11.5px;padding:4px 0;width:100%" onchange="this.classList.remove('err')">
+        <input id="d-blfile" type="file" accept=".pdf,.jpg,.jpeg,.png" style="font-size:11.5px;padding:4px 0;width:100%" onchange="this.classList.remove('err');delete this.dataset.auto">
         <span class="hint">PDF, JPG, PNG — obligatoire (preuve d'enlèvement)</span>
       </div>
       <div class="mf"><label>📋 Devis joint — fichier *</label>
