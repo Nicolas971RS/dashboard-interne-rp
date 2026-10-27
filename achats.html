@@ -522,7 +522,7 @@ fieldset.lockfs .btn{display:none}
 .art-l tr[data-rxc="man"] td{background:#fef2f2!important}.art-l tr[data-rxc="ab"] td{background:#fff1f2!important}
 .art-l tr[data-rxc="exc"] td{background:#fffbeb!important}.art-l tr[data-rxc="ok"] td:nth-last-child(-n+4){background:#f0fdf4!important}
 .rx-obs{font-size:11.5px;color:#92400e;margin-top:2px}
-.rx-reg{font-size:11.5px;color:#1e3a8a;margin-top:2px}.px-ed{border:0;background:none;cursor:pointer;font-size:11px;padding:0 0 0 3px;opacity:.45}.px-ed:hover{opacity:1}.px-t{font-size:10px;color:#1565c0;font-family:inherit}.env-pts{flex-basis:100%;margin-top:8px;background:#fffbeb;border:1px solid #fcd34d;border-radius:8px;padding:8px 12px;font-size:12.5px;color:#78350f}.env-pts ul{margin:4px 0 0 18px;padding:0}.env-pts li{margin:2px 0}.env-pts li.bl{color:#b91c1c;font-weight:600}.env-pts a{font-weight:600}
+.rx-reg{font-size:11.5px;color:#1e3a8a;margin-top:2px}.bc-act{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:8px 0 4px}.px-ed{border:0;background:none;cursor:pointer;font-size:11px;padding:0 0 0 3px;opacity:.45}.px-ed:hover{opacity:1}.px-t{font-size:10px;color:#1565c0;font-family:inherit}.env-pts{flex-basis:100%;margin-top:8px;background:#fffbeb;border:1px solid #fcd34d;border-radius:8px;padding:8px 12px;font-size:12.5px;color:#78350f}.env-pts ul{margin:4px 0 0 18px;padding:0}.env-pts li{margin:2px 0}.env-pts li.bl{color:#b91c1c;font-weight:600}.env-pts a{font-weight:600}
 .flash-go{animation:flashGo 1.6s ease-out}@keyframes flashGo{0%{box-shadow:0 0 0 4px #f59e0b}100%{box-shadow:0 0 0 0 transparent}}.rx-sug{font-size:11.5px;color:#0d47a1;margin-top:3px;background:#e3f2fd;border-radius:6px;padding:2px 6px;display:inline-block}.art-l td.c,.art-l th.c{text-align:center}.rx-ver{width:18px;height:18px;cursor:pointer;accent-color:#2e7d32}.art-l tr[data-ver] td:first-child{box-shadow:inset 4px 0 0 #2e7d32}.reg-o{display:flex;gap:8px;align-items:flex-start;padding:6px 8px;border:1px solid var(--border,#e2e8f0);border-radius:8px;cursor:pointer}.reg-o input{width:auto;margin-top:3px}.reg-f{margin:-2px 0 4px 30px;font-size:12.5px}
 .lit-b.art-b{border:0;cursor:pointer}
 #ovLit .lit-box{position:absolute;left:50%;top:4vh;transform:translateX(-50%);width:min(880px,94vw);max-height:92vh;background:#fff;border-radius:14px;box-shadow:var(--shadow-lg);display:flex;flex-direction:column;overflow:hidden}
@@ -1420,13 +1420,13 @@ function renderArts(){
         const qe=artQteEnvoi(a),qb=n0(a.Quantite);
         const env=!rxc&&se?(se.ids.has(a.ID)?'sug-in':'sug-out'):(!rxc&&g.partiel?(qe<=0?'out':qe<qb?'part':'in'):'');
         const envTag={'sug-in':'<span class="env-t in">📦 dans l’envoi SIFA</span>','sug-out':'<span class="env-t out">reliquat probable</span>','out':'<span class="env-t out">reliquat : pas dans ce conteneur</span>','part':`<span class="env-t part">partiel : ${fmtQ(qe)} / ${fmtQ(qb)}</span>`,'in':'<span class="env-t in">📦 dans ce conteneur</span>'}[env]||'';
-        return `<tr${i===0?' class="first"':''}${r&&r.cls?` data-rxc="${r.cls}"`:''}${r&&r.ver?' data-ver="1"':''}${ar&&ar.etat!=='ok'?' data-arc="ko"':''}${env?` data-env="${env}"`:''}><td class="mono">${i===0?esc(b.n):''}</td><td class="mono"><b>${esc(a.Ref_2||'')}</b></td><td class="mono muted">${esc(a.Title||'')}</td><td>${esc(a.Designation||'')}${envTag}${r&&r.obs?`<div class="rx-obs">💬 ${esc(r.obs)}</div>`:''}${r&&r.regs?rxRegHtml(r.regs):''}</td><td class="r mono"><b>${fmtQ(n0(a.Quantite))}</b>${(()=>{const su=artSuivi(a,W.id);return su.actif&&(su.livre||su.route)?`<div class="sv-mini" title="Déjà livré : ${fmtQ(su.livre)}${su.route?' · en route dans un autre dossier : '+fmtQ(su.route):''}">reste ${fmtQ(su.reste)}</div>`:'';})()}</td><td class="muted">${esc(a.Unite||'')}</td>${pxCellHtml(a,ar,lecture)}${arcCellHtml(ar)}<td class="r mono">${fmtN(artMontant(a),2)}</td>${rxc?rxCells(r):(!lecture?`<td class="r"><input class="rxq ${artQteEnvoi(a)!==n0(a.Quantite)?'mod':''}" data-rxq="${a.ID}" inputmode="decimal" value="${fmtQ(artQteEnvoi(a))}"></td>`:'')}</tr>`;}).join('')).join('')+
+        return `<tr${i===0?' class="first"':''}${r&&r.cls?` data-rxc="${r.cls}"`:''}${r&&r.ver?' data-ver="1"':''}${ar&&ar.etat!=='ok'?' data-arc="ko"':''}${env?` data-env="${env}"`:''}><td class="mono">${i===0?esc(b.n):''}</td><td class="mono"><b>${esc(a.Ref_2||'')}</b></td><td class="mono muted">${esc(a.Title||'')}</td><td>${esc(a.Designation||'')}${(pxNote(a)||{}).ajout?` <span class="art-b warn" title="Ajouté à la main par ${esc((pxNote(a)||{}).par||'')}">ajouté à la main</span>${!lecture&&!(RX.parCmd&&RX.parCmd.has(a.ID))?` <button class="btn sm" data-artdel="${a.ID}" title="Retirer cet article ajouté à la main">✕</button>`:''}`:''}${envTag}${r&&r.obs?`<div class="rx-obs">💬 ${esc(r.obs)}</div>`:''}${r&&r.regs?rxRegHtml(r.regs):''}</td><td class="r mono"><b>${fmtQ(n0(a.Quantite))}</b>${(()=>{const su=artSuivi(a,W.id);return su.actif&&(su.livre||su.route)?`<div class="sv-mini" title="Déjà livré : ${fmtQ(su.livre)}${su.route?' · en route dans un autre dossier : '+fmtQ(su.route):''}">reste ${fmtQ(su.reste)}</div>`:'';})()}</td><td class="muted">${esc(a.Unite||'')}</td>${pxCellHtml(a,ar,lecture)}${arcCellHtml(ar)}<td class="r mono">${fmtN(artMontant(a),2)}</td>${rxc?rxCells(r):(!lecture?`<td class="r"><input class="rxq ${artQteEnvoi(a)!==n0(a.Quantite)?'mod':''}" data-rxq="${a.ID}" inputmode="decimal" value="${fmtQ(artQteEnvoi(a))}"></td>`:'')}</tr>`;}).join('')).join('')+
       (x.extra||[]).map(l=>{const gr=estGratuit(l),att=gr?n0(l.Quantite_Attendue):0,rec=n0(l.Quantite_Scannee),ab=n0(l.Quantite_Abimee);
         const cls=gr?(x.fait?(ab?'ab':rec<att?'man':rec>att?'exc':'ok'):(rec?'cours':'gr')):'exc';
         const del=gr&&!x.fait&&!rec&&!ab&&!lecture?` <button class="btn sm" data-grdel="${l.ID}" title="Retirer cet article gratuit">✕</button>`:'';
         const accX=rxRegAccepte(l);const clsX=x.fait&&accX?'ok':cls;
         return `<tr data-rxc="${clsX}"${rxVer(l)?' data-ver="1"':''}><td class="mono">${gr?'🎁':esc(l.N_Commande||'')}</td><td class="mono">${esc(l.Reference_Article||'')}</td><td></td><td>${esc(l.Designation||(gr?'Article gratuit':'Article non prévu'))} ${gr?'<span class="art-b gr">🎁 gratuit · non facturé</span>':'<span class="art-b warn">non prévu</span>'}${del}${l.Observation&&!/^Article non facturé/.test(l.Observation)?`<div class="rx-obs">💬 ${esc(l.Observation)}</div>`:''}${rxRegHtml(rxRegs(l))}${x.fait&&!gr&&rxPeutReg()?(()=>{const sg=(x._sug||(x._sug=rxSuggestions(x.sess))).find(z=>z.l.ID===l.ID);return sg?`<div class="rx-sug">↪ Probablement <b class="mono">${esc(sg.c.a.Ref_2||sg.c.a.Title||'')}</b> ${esc(sg.c.a.Designation||'')} (BC ${esc(sg.c.bc)}, mis en reliquat)</div>`:'';})():''}</td><td class="r mono">${fmtQ(att)}</td><td></td><td class="r mono muted">${gr?'0,00':''}</td><td></td><td class="r mono muted">${gr?'0,00':''}</td>${rxCells({recu:rec,ab,ec:rec-att,ph:!!l.Attachments,id:l.ID,fait:x.fait,acc:accX,regs:rxRegs(l),ver:rxVer(l),vid:l.ID})}</tr>`;}).join('')+
-      `</tbody></table></td></tr>`;}
+      `</tbody></table>${!lecture?`<div class="bc-act"><button class="btn sm" data-bcadd="${esc(g.key)}" title="La facture couvre aussi un autre BC de ce fournisseur (le fournisseur n’en a écrit qu’un)">＋ Ajouter un BC à cette facture</button><button class="btn sm" data-artadd="${esc(g.key)}" title="Article facturé qui n’est pas dans le BC du portail (BC d’origine non enregistré, réimpression de reliquat…)">＋ Ajouter un article au BC</button><span class="muted" style="font-size:11.5px">Facture ${esc(g.l.N_Facture||'?')} : BC ${esc(g.bcs.map(b=>b.n).join(' + ')||'?')} · total BC ${g.totBC!==null?fmtEur(g.totBC):'—'} · valeur SIFA ${g.vm!==null?fmtEur(g.vm):'—'}</span></div>`:''}</td></tr>`;}
   });
   h+=`</tbody></table>`;
   box.innerHTML=h;
@@ -1821,6 +1821,46 @@ function rxVerifNouveaux(){
   RX_VUS=new Set(faits.map(x=>x.ID));
 }
 // À faire : contrôles magasin reçus et litiges
+// ═══ COMPOSITION DE LA FACTURE : BC supplémentaire, article ajouté à la main ═══
+async function bcAjouter(key){
+  const g=artsGroupes().find(x=>x.key===key);if(!g)return;
+  const dans=new Set(g.bcs.map(b=>String(b.n)));
+  const C=(DATA.cmd||[]).filter(c=>(g.l.ID_Fournisseur?c.ID_Fournisseur===g.l.ID_Fournisseur:nCore(c.Fournisseur||'')===nCore(g.l.Fournisseur||''))&&!dans.has(cmdNum(c.Title))&&c.Annulee!=='Oui')
+    .sort((a,b)=>(cmdEtat(a).k==='recue')-(cmdEtat(b).k==='recue')||String(dk(b,'Date_Commande')).localeCompare(String(dk(a,'Date_Commande'))));
+  const ok=await showConfirm('＋ Ajouter un BC à la facture '+esc(g.l.N_Facture||''),`<div class="muted" style="font-size:12.5px;margin-bottom:8px">Le fournisseur n’a écrit qu’un n° de BC, mais la facture en couvre plusieurs. Les articles du BC ajouté apparaîtront dans le contenu du conteneur : rattache ensuite les « non prévus » ou répartis les quantités.</div>
+    ${C.length?`<div style="max-height:46vh;overflow:auto;display:grid;gap:4px">${C.slice(0,30).map((c,i)=>{const e=cmdEtat(c);return `<label class="reg-o"><input type="radio" name="bcAdd" value="${esc(cmdNum(c.Title))}" ${i===0?'checked':''}><span><b class="mono">BC ${esc(c.Title)}</b> · ${fmtD(dk(c,'Date_Commande'))} · ${c.Montant_HT?fmtEur(c.Montant_HT):''}<br><span class="muted" style="font-size:12px">${esc(e.lbl)} · ${cmdLignes(c.ID).length} article(s)${c.Objet?' · '+esc(c.Objet):''}</span></span></label>`;}).join('')}</div>`:`<div class="muted">Aucun autre BC de ${esc(g.l.Fournisseur||'')} dans Commandes.</div>`}
+    <div class="f" style="margin-top:8px"><label>…ou n° de BC (s’il n’est pas encore importé)</label><input id="bcAddN" inputmode="numeric" placeholder="ex. 8501"></div>`,'Ajouter');
+  if(!ok)return;
+  const n=cmdNum(($('bcAddN').value||'').trim())||((document.querySelector('input[name="bcAdd"]:checked')||{}).value||'');
+  if(!n){toast('Choisis un BC.','ko');return;}if(dans.has(n)){toast('Ce BC est déjà sur cette facture.','wa');return;}
+  const l=W.lines.find(x=>x._k===g.l._k)||g.l;l.N_Commande=[String(l.N_Commande||'').trim(),n].filter(Boolean).join(' - ');if(!l._st)l._st='mod';
+  markDirty();renderLines();renderArts();refreshComputed();
+  toast(`✓ BC ${n} ajouté à la facture ${l.N_Facture||''}${cmdByNum(n)?'':' (à importer dans Commandes)'} : enregistre le dossier`,'ok');
+}
+async function artAjouter(key){
+  const g=artsGroupes().find(x=>x.key===key);if(!g)return;
+  if(MISSING.Lignes_Commande_Frs&&MISSING.Lignes_Commande_Frs.has('Prix_Note')){toast('Crée d’abord la colonne « Prix_Note » dans Lignes_Commande_Frs.','ko');return;}
+  const B=g.bcs.filter(b=>b.c);if(!B.length){toast('Importe d’abord le BC dans Commandes.','ko');return;}
+  const ok=await showConfirm('＋ Ajouter un article au BC',`<div class="muted" style="font-size:12.5px;margin-bottom:8px">Article facturé qui manque dans le BC du portail. Il est ajouté au BC, marqué « ajouté à la main », et compte dans le contrôle des montants.</div>
+    <div class="f"><label>BC</label><select id="aaBC">${B.map(b=>`<option value="${b.c.ID}">BC ${esc(b.n)}</option>`).join('')}</select></div>
+    <div class="fgrid2" style="margin-top:8px"><div class="f"><label>Réf. RP</label><input id="aaRP"></div><div class="f"><label>Réf. fournisseur</label><input id="aaRF"></div></div>
+    <div class="f req" style="margin-top:8px"><label>Désignation</label><input id="aaDes"></div>
+    <div class="fgrid2" style="margin-top:8px"><div class="f req"><label>Quantité</label><input id="aaQ" inputmode="decimal"></div><div class="f req"><label>PU net remisé (facture)</label><input id="aaPU" inputmode="decimal"></div></div>`,'Ajouter');
+  if(!ok)return;
+  const q=parseNum($('aaQ').value),pu=parseNum($('aaPU').value),des=($('aaDes').value||'').trim();
+  if(!des||!(q>0)||pu===null||isNaN(pu)){toast('Désignation, quantité et prix obligatoires.','ko');return;}
+  const c=(DATA.cmd||[]).find(x=>x.ID===+$('aaBC').value);const ordre=Math.max(0,...cmdLignes(c.ID).map(x=>n0(x.Ordre)))+1;
+  const body={Title:_trunc(($('aaRF').value||'').trim()),Ref_2:_trunc(($('aaRP').value||'').trim()),Designation:_trunc(des),Quantite:q,Prix_Unitaire:pu,Remise:0,Montant_HT:Math.round(q*pu*100)/100,
+    ID_Commande_Frs:c.ID,N_Commande:c.Title,Ordre:ordre,Prix_Note:JSON.stringify({ajout:true,par:(sessionStorage.getItem('user_name')||'Bureau').split(' ')[0],d:new Date().toISOString(),dos:W.id,f:_trunc(String(g.l.N_Facture||''),40),img:new Date().toISOString()})};
+  try{const r=await spPost('Lignes_Commande_Frs',body);DATA.lcmd.push({...body,ID:r.ID});toast('✓ Article ajouté au BC '+c.Title,'ok');}catch(e){toast('🔴 '+e.message,'ko');}
+  rxIndexer();renderArts();
+}
+async function artRetirer(id){
+  const a=(DATA.lcmd||[]).find(x=>x.ID===id);if(!a||!(pxNote(a)||{}).ajout)return;
+  if(!await showConfirm('Retirer l’article ?',`<b>${esc(a.Designation||'')}</b> (ajouté à la main) sera retiré du BC.`,'Retirer','danger'))return;
+  try{await spDelete('Lignes_Commande_Frs',a.ID,a);DATA.lcmd=DATA.lcmd.filter(x=>x!==a);toast('✓ Article retiré','ok');}catch(e){toast('🔴 '+e.message,'ko');}
+  renderArts();
+}
 // ═══ PRIX CONFIRMÉ (tarif Image pas à jour) : ligne par ligne, le prix du BC d'origine reste visible ═══
 // Lignes_Commande_Frs.Prix_Confirme = PU net remisé lu sur la facture ; Prix_Note = {a:ancien,f:facture,par,d,dos,img:date de mise à jour Image}
 const pxPeut=()=>!!W&&!(W.lecture||(typeof lectureSeule==='function'&&lectureSeule()));
@@ -2092,7 +2132,7 @@ function ficheAller(go){
 const FRAIS_MAP=[
   [/^(ASSIGNE|FRET)/,'Fret'],[/^DEBARQ/,'Debarquement'],[/^OCTROI DE MER REG|^O\.?M\.?R\b/,'OM_Additionnel'],[/^OCTROI DE MER|^O\.?M\.?\b/,'OM'],
   [/^DROITS? DE PORT|LTA/,'Droit_Port_LTA'],[/^CREDIT D.?ENLEVEMENT/,'Credit_Enlevement'],[/^T\.?I\.?D\b/,'TID'],[/^SPI|MANUTENTION/,'Manutention_SPI'],
-  [/^TRANSPORT|^LIVRAISON|^ENLEVEMENT/,'Transport'],[/^GESTION DOUANE|^TRANSIT|^DEDOUAN|^HONORAIRE/,'Transit']];
+  [/^TRANSPORT|^LIVRAISON|^ENLEVEMENT/,'Transport'],[/^GESTION DOUANE/,'Divers'],[/^HAD\b|^AVANCE DE FONDS|^TRANSIT|^DEDOUAN|^HONORAIRE/,'Transit']];
 const FRAIS_EXCLU=/^(TVA|TOTAL|H\.?T\.?|TTC|DOUANE|VALEUR|ECHEANCE|AUTRES ADMIN|FRAIS DIVERS|DESCRIPTION|NON-TAXABLE|\*|4 :)/;
 function fraisParse(lignes){
   const norm=x=>String(x).normalize('NFD').replace(/[̀-ͯ]/g,'').toUpperCase().replace(/[’']/g,"'").trim();
@@ -2105,8 +2145,8 @@ function fraisParse(lignes){
   for(let i=i0+1;i<i1;i++){const x=L[i];const m=x.match(R);if(!m)continue;
     const lab=x.slice(0,x.search(/\d/)).replace(/\s+/g,' ').trim();
     if(!lab||FRAIS_EXCLU.test(lab)||/\*/.test(x)){ignores.push(lignes[i]);continue;}
-    const v=num(m[m.length-1]);const k=(FRAIS_MAP.find(([re])=>re.test(lab))||[])[1]||'Divers';
-    postes[k]=Math.round(((postes[k]||0)+v)*100)/100;lus.push({lab,v,k});}
+    const v=num(m[m.length-1]);const hit=FRAIS_MAP.find(([re])=>re.test(lab));const k=hit?hit[1]:'Divers';
+    postes[k]=Math.round(((postes[k]||0)+v)*100)/100;lus.push({lab,v,k,inconnu:!hit});}
   const all=L.join('\n');
   const ht=(all.match(/H\.T\.?\s*:?\s*(\d{1,3}(?:[^\d,.A-Za-z]{1,3}\d{3})*,\d{2})/)||[])[1];
   const nf=(all.match(/FACTURE\s*:?\s*([A-Z]{2,5}\d{5,})/)||[])[1]||'';
@@ -2129,7 +2169,7 @@ async function fraisAppliquer(l,r){
   const okHT=r.ht!=null&&Math.abs(r.ht-tot)<0.02;
   const lab=k=>k==='Fret'?'Fret maritime':(POSTES.find(x=>x[0]===k)||[,k])[1];
   const ok=await showConfirm('🔍 Facture lue',`<div class="${okHT?'rx-ban ok':'rx-ban warn'}" style="margin-bottom:8px">${okHT?`✓ Total des postes = H.T. de la facture (${fmtEur(r.ht)})`:`⚠ Total des postes ${fmtEur(tot)}${r.ht!=null?' ≠ H.T. facture '+fmtEur(r.ht):''} : vérifie avant d’appliquer`}</div>
-    <div style="display:grid;grid-template-columns:1fr auto auto;gap:3px 12px;font-size:12.5px;align-items:baseline"><b class="muted" style="font-size:11px">LIGNE DE LA FACTURE</b><b class="muted" style="font-size:11px">POSTE</b><b class="muted" style="font-size:11px;text-align:right">MONTANT</b>${r.lus.map(x=>`<span>${esc(x.lab)}</span><span>${x.k==='Divers'?'<b style="color:#b45309">Divers</b>':esc(lab(x.k))}</span><span class="mono" style="text-align:right">${fmtN(x.v)}</span>`).join('')}<span style="border-top:1px solid #e2e8f0;padding-top:3px"><b>Total</b></span><span style="border-top:1px solid #e2e8f0"></span><b class="mono" style="text-align:right;border-top:1px solid #e2e8f0;padding-top:3px">${fmtN(tot)}</b></div>
+    <div style="display:grid;grid-template-columns:1fr auto auto;gap:3px 12px;font-size:12.5px;align-items:baseline"><b class="muted" style="font-size:11px">LIGNE DE LA FACTURE</b><b class="muted" style="font-size:11px">POSTE</b><b class="muted" style="font-size:11px;text-align:right">MONTANT</b>${r.lus.map(x=>`<span>${esc(x.lab)}</span><span>${x.inconnu?'<b style="color:#b45309" title="Ligne non reconnue : vérifie le poste">Divers ?</b>':esc(lab(x.k))}</span><span class="mono" style="text-align:right">${fmtN(x.v)}</span>`).join('')}<span style="border-top:1px solid #e2e8f0;padding-top:3px"><b>Total</b></span><span style="border-top:1px solid #e2e8f0"></span><b class="mono" style="text-align:right;border-top:1px solid #e2e8f0;padding-top:3px">${fmtN(tot)}</b></div>
     ${r.ignores.length?`<div class="muted" style="font-size:11.5px;margin-top:6px">Non repris (TVA, montants pour information) : ${esc(r.ignores.map(x=>x.replace(/\s+/g,' ')).join(' · '))}</div>`:''}
     <div class="muted" style="font-size:12px;margin-top:6px">Les montants remplacent ceux déjà saisis sur cette facture. Tu peux les corriger ensuite.</div>`,'Appliquer');
   if(!ok)return;
@@ -2313,6 +2353,9 @@ document.addEventListener('click',async e=>{
     W.lines.push({_k:++_k,_st:'new',ID_Arrivage:W.id,Type_Ligne:frais?'Frais':'Marchandise',Fournisseur:def?def.Title:'',ID_Fournisseur:def?def.ID:null});
     markDirty();renderLines();renderFrais();refreshComputed();
     const ins=document.querySelectorAll(`[data-l="${_k}"]`);if(ins[0])ins[0].focus();return;}
+  const bca=e.target.closest('[data-bcadd]');if(bca){e.stopPropagation();bcAjouter(bca.dataset.bcadd);return;}
+  const ara=e.target.closest('[data-artadd]');if(ara){e.stopPropagation();artAjouter(ara.dataset.artadd);return;}
+  const ard=e.target.closest('[data-artdel]');if(ard){e.stopPropagation();artRetirer(+ard.dataset.artdel);return;}
   const pxe=e.target.closest('[data-pxed]');if(pxe){e.stopPropagation();pxOuvrir(+pxe.dataset.pxed);return;}
   const gt=e.target.closest('[data-goto]');if(gt){e.preventDefault();ficheAller(gt.dataset.goto);return;}
   const flb=e.target.closest('[data-fraislire]');if(flb){fraisLireFacture(+flb.dataset.fraislire);return;}
@@ -4562,7 +4605,7 @@ async function cmdEnregistrer(r,path,existante,opt){
   for(const o of anciennes){if(prises.has(o.ID))continue;const su=artSuivi(o);
     if(reliq){const av=Math.max(0,Math.round((n0(o.Quantite)-su.recu-su.route)*1000)/1000);   // plus rien à livrer : entièrement livrée
       if(n0(o.Qte_Livree_Avant)!==av){const b={Qte_Livree_Avant:av};await spPatch('Lignes_Commande_Frs',o.ID,clean('Lignes_Commande_Frs',b),o);Object.assign(o,b);}}
-    else if(!su.actif&&!(RX.parCmd&&RX.parCmd.has(o.ID))&&!o.Ecart_ARC)await spDelete('Lignes_Commande_Frs',o.ID,o);   // ligne retirée du BC, sans historique
+    else if(!su.actif&&!(RX.parCmd&&RX.parCmd.has(o.ID))&&!o.Ecart_ARC&&!(pxNote(o)||{}).ajout)await spDelete('Lignes_Commande_Frs',o.ID,o);   // ligne retirée du BC, sans historique
   }
   // en-tête : la date de commande et le total d'origine ne sont pas écrasés par une réimpression
   if(dk(existante,'Date_Commande'))delete body.Date_Commande;
