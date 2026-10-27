@@ -12824,14 +12824,37 @@ function parseBLPdf(rows){
   return out;
 }
 let _emPdf=null; // dernier PDF lu : {numero, client, lignes}
+// Joint le fichier importé à la session de livraison comme BL signé.
+// Session neuve : on attend que le flux d'émission l'ait créée (asynchrone).
+async function joindreBLSigneSession(numero,file,sessionExistante){
+  const ext=(file.name.split('.').pop()||'pdf').toLowerCase();
+  const nom=`BL_signe_${String(numero).replace(/[^\w-]/g,'')}_${new Date().toISOString().slice(0,10).replace(/-/g,'')}.${ext}`;
+  let sess=sessionExistante||null;
+  for(const w of(sess?[0]:[2500,4500,7000,12000,20000])){
+    if(sess)break;
+    await new Promise(r=>setTimeout(r,w));
+    sess=await refetchSessionByBL(numero);
+  }
+  if(!sess){toast(`⚠️ BL signé non joint : livraison ${numero} introuvable — dépose-le depuis le panneau du BL`,'ko');return false;}
+  try{
+    if(sessionExistante&&(await blSigneDeSession(sess.ID)))return true; // déjà déposé
+    await spAddAttachment('sites/BondeCommande','Sessions_Scan',sess.ID,nom,await file.arrayBuffer());
+    toast(`✍️ BL signé joint à la livraison ${numero}`);return true;
+  }catch(e){toast('🔴 BL signé non joint : '+e.message+' — dépose-le depuis le panneau du BL','ko');return false;}
+}
 async function emImporterPdf(file){
   const etat=document.getElementById('em-pdf-etat');
   if(!file)return;
   const dire=(t,c)=>{if(etat){etat.innerHTML=t;etat.style.color=c||'var(--text-muted)';}};
+  const sl=document.getElementById('em-pdf-signe-l');if(sl)sl.style.display='flex';
+  _emPdf={numero:'',client:'',vendeur:'',lignes:[],fichier:file};
+  if(!/pdf$/i.test(file.type)&&!/\.pdf$/i.test(file.name)){
+    dire('📷 Photo gardée : elle sera jointe à la livraison si la case ci-dessous est cochée. Les articles d\'une photo ne sont pas lus — saisis le N°, le client et les articles.','#9a3412');return;
+  }
   dire('⏳ Lecture du PDF…');
   try{
     const r=await lireBLPdf(await file.arrayBuffer());
-    if(!r.lignes.length&&!r.numero){dire('🔴 Aucun article lu : ce PDF n\'est pas un BL/FC Image (ou c\'est un scan). Saisis les articles à la main.','var(--red)');_emPdf=null;return;}
+    if(!r.lignes.length&&!r.numero){dire('⚠️ Aucun article lu (scan ou PDF non issu d\'Image) : saisis le N°, le client et les articles. Le fichier sera quand même joint si la case est cochée.','#9a3412');return;}
     _emPdf={...r,fichier:file};
     if(_emissionType!=='Livraison client')setEmissionType('Livraison client');
     const num=document.getElementById('em-numero');
@@ -12997,10 +13020,12 @@ function openEmissionBL(){
     <div style="display:flex;flex-direction:column;gap:14px">
       <div id="em-pdf-zone" style="border:2px dashed #93c5fd;background:#f8fbff;border-radius:var(--radius-sm);padding:10px 12px">
         <label style="display:flex;align-items:center;gap:10px;cursor:pointer;font-size:13px;font-weight:700;color:#1e3a8a">
-          📄 Importer le BL ou la FC (PDF d'Image)
-          <input type="file" id="em-pdf" accept=".pdf,application/pdf" style="font-size:12px;font-weight:400" onchange="emImporterPdf(this.files[0])">
+          📄 Importer le BL ou la FC (PDF, scan ou photo)
+          <input type="file" id="em-pdf" accept=".pdf,application/pdf,.jpg,.jpeg,.png,image/*" style="font-size:12px;font-weight:400" onchange="emImporterPdf(this.files[0])">
         </label>
         <div id="em-pdf-etat" style="font-size:12px;color:var(--text-muted);margin-top:4px">Remplit le N°, le client et les articles — plus besoin de les saisir.</div>
+        <label id="em-pdf-signe-l" style="display:none;align-items:center;gap:8px;margin-top:6px;font-size:12.5px;font-weight:700;color:#14532d;cursor:pointer">
+          <input type="checkbox" id="em-pdf-signe" checked style="width:16px;height:16px"> ✍️ C'est le BL signé par le client : le joindre à la livraison (repris ensuite par la demande BC)</label>
       </div>
       <div>
         <label style="font-size:12px;font-weight:700;color:var(--text-muted);display:block;margin-bottom:6px">Type d'opération</label>
@@ -13195,6 +13220,7 @@ async function emettreBL(){
     const selR=emCollectBC();
     if(selR){
       const sp=await emLancerSplit(selR,numero);
+      if(_emPdf&&_emPdf.fichier&&document.getElementById('em-pdf-signe')?.checked)joindreBLSigneSession(numero,_emPdf.fichier,existe);
       return `🔗 BL ${numero} rattaché — ${sp} en cours de création (${selR.lignes.length} article${selR.lignes.length>1?'s':''}). Le livré se mettra à jour depuis le scan.`;
     }
   }
@@ -13251,6 +13277,8 @@ async function emettreBL(){
   // Le flow Scan_EmissionBL crée la session de façon fiable (confirmé le 31/08/2026)
   // mais de façon asynchrone — on attend qu'elle apparaisse pour y accrocher les articles.
   if(lignes.length)syncLignesApresEmission(numero,lignes);
+  const _blsFichier=(!isInv&&_emPdf&&_emPdf.fichier&&document.getElementById('em-pdf-signe')?.checked)?_emPdf.fichier:null;
+  if(_blsFichier)joindreBLSigneSession(numero,_blsFichier);
   let _split='';
   if(selBC){
     try{_split=await emLancerSplit(selBC,numero);}
