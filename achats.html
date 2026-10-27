@@ -522,7 +522,7 @@ fieldset.lockfs .btn{display:none}
 .art-l tr[data-rxc="man"] td{background:#fef2f2!important}.art-l tr[data-rxc="ab"] td{background:#fff1f2!important}
 .art-l tr[data-rxc="exc"] td{background:#fffbeb!important}.art-l tr[data-rxc="ok"] td:nth-last-child(-n+4){background:#f0fdf4!important}
 .rx-obs{font-size:11.5px;color:#92400e;margin-top:2px}
-.rx-reg{font-size:11.5px;color:#1e3a8a;margin-top:2px}.env-pts{flex-basis:100%;margin-top:8px;background:#fffbeb;border:1px solid #fcd34d;border-radius:8px;padding:8px 12px;font-size:12.5px;color:#78350f}.env-pts ul{margin:4px 0 0 18px;padding:0}.env-pts li{margin:2px 0}.env-pts li.bl{color:#b91c1c;font-weight:600}.env-pts a{font-weight:600}
+.rx-reg{font-size:11.5px;color:#1e3a8a;margin-top:2px}.px-ed{border:0;background:none;cursor:pointer;font-size:11px;padding:0 0 0 3px;opacity:.45}.px-ed:hover{opacity:1}.px-t{font-size:10px;color:#1565c0;font-family:inherit}.env-pts{flex-basis:100%;margin-top:8px;background:#fffbeb;border:1px solid #fcd34d;border-radius:8px;padding:8px 12px;font-size:12.5px;color:#78350f}.env-pts ul{margin:4px 0 0 18px;padding:0}.env-pts li{margin:2px 0}.env-pts li.bl{color:#b91c1c;font-weight:600}.env-pts a{font-weight:600}
 .flash-go{animation:flashGo 1.6s ease-out}@keyframes flashGo{0%{box-shadow:0 0 0 4px #f59e0b}100%{box-shadow:0 0 0 0 transparent}}.rx-sug{font-size:11.5px;color:#0d47a1;margin-top:3px;background:#e3f2fd;border-radius:6px;padding:2px 6px;display:inline-block}.art-l td.c,.art-l th.c{text-align:center}.rx-ver{width:18px;height:18px;cursor:pointer;accent-color:#2e7d32}.art-l tr[data-ver] td:first-child{box-shadow:inset 4px 0 0 #2e7d32}.reg-o{display:flex;gap:8px;align-items:flex-start;padding:6px 8px;border:1px solid var(--border,#e2e8f0);border-radius:8px;cursor:pointer}.reg-o input{width:auto;margin-top:3px}.reg-f{margin:-2px 0 4px 30px;font-size:12.5px}
 .lit-b.art-b{border:0;cursor:pointer}
 #ovLit .lit-box{position:absolute;left:50%;top:4vh;transform:translateX(-50%);width:min(880px,94vw);max-height:92vh;background:#fff;border-radius:14px;box-shadow:var(--shadow-lg);display:flex;flex-direction:column;overflow:hidden}
@@ -704,7 +704,7 @@ const SCHEMA={
   Commandes_Frs:['ID','Title','ID_Fournisseur','Fournisseur','Type_Commande','Objet','Adresse_Livraison','Date_Commande','Montant_HT','Nb_Lignes','Date_ARC','Date_BPA','Mode_BPA','Date_Dispo_Prevue','Date_Reception','Lien_BC','Statut','Commentaire','Annulee','Created','Modified'],
   Demandes_Achat:['ID','Title','Zone','Transport','Motif','Client','N_Devis','N_Devis_Frs','Demandeur','Statut','Valide_Par','Date_Demande','Date_Validation','Commentaire','Notif','Resume_Notif','ID_BC_Client','Created'],
   Lignes_Demande_Achat:['ID','Title','ID_Demande','Designation','Quantite','Qte_Commandee','ID_Fournisseur','Fournisseur','N_Commande','ID_Commande_Frs','Client'],
-  Lignes_Commande_Frs:['ID','Title','ID_Commande_Frs','N_Commande','Ref_2','Designation','Quantite','Unite','Colis','Prix_Unitaire','Remise','Montant_HT','Ordre','Prix_ARC','Qte_ARC','Ecart_ARC','Qte_Livree_Avant'],
+  Lignes_Commande_Frs:['ID','Title','ID_Commande_Frs','N_Commande','Ref_2','Designation','Quantite','Unite','Colis','Prix_Unitaire','Remise','Montant_HT','Ordre','Prix_ARC','Qte_ARC','Ecart_ARC','Qte_Livree_Avant','Prix_Confirme','Prix_Note'],
   Litiges_Frs:['ID','Title','ID_Arrivage','Conteneur','ID_Fournisseur','Fournisseur','N_Commande','Type_Litige','Detail','Montant_Estime','Statut','Date_Ouverture','Date_Reclamation','Date_Relance','N_Avoir','ID_Avoir','Montant_Avoir','Date_Cloture','Ouvert_Par','Commentaire','Created','Modified'],
   Factures_Frs:['ID','Title','ID_Fournisseur','Fournisseur','Code_Compta','Type_Piece','Date_Facture','Date_Echeance','Montant_TTC','Lien_PDF','Statut_Saisie','Source','Message_ID','Exporte_Echeancier','Statut_Paiement','Date_Paiement','Commentaire','Expediteur','Created','Modified']
 };
@@ -1177,8 +1177,11 @@ function renderLines(){
 // Une ligne marchandise du dossier = une facture / valeur SIFA, pour 1 ou plusieurs BC. Contrôle : total BC HT ↔ valeur déclarée.
 const ARTS_OUV=new Set();
 const artTol=()=>({pct:param('TOL_ECART_PCT'),eur:param('TOL_ECART_EUR')});
-function artPU(l){return l.Prix_Unitaire!=null?n0(l.Prix_Unitaire)*(1-n0(l.Remise)/100):(l.Montant_HT!=null&&n0(l.Quantite)?n0(l.Montant_HT)/n0(l.Quantite):null);}
-function artMontant(l){return l.Montant_HT!=null?n0(l.Montant_HT):(artPU(l)!=null?artPU(l)*n0(l.Quantite):0);}
+const pxConf=l=>l&&l.Prix_Confirme!=null&&l.Prix_Confirme!==''?n0(l.Prix_Confirme):null;
+const pxNote=l=>{try{return l&&l.Prix_Note?JSON.parse(l.Prix_Note):null;}catch(_){return null;}};
+function artPUBC(l){return l.Prix_Unitaire!=null?n0(l.Prix_Unitaire)*(1-n0(l.Remise)/100):(l.Montant_HT!=null&&n0(l.Quantite)?n0(l.Montant_HT)/n0(l.Quantite):null);}
+function artPU(l){if(pxConf(l)!=null)return pxConf(l);return l.Prix_Unitaire!=null?n0(l.Prix_Unitaire)*(1-n0(l.Remise)/100):(l.Montant_HT!=null&&n0(l.Quantite)?n0(l.Montant_HT)/n0(l.Quantite):null);}
+function artMontant(l){if(pxConf(l)!=null)return Math.round(pxConf(l)*n0(l.Quantite)*100)/100;return l.Montant_HT!=null?n0(l.Montant_HT):(artPU(l)!=null?artPU(l)*n0(l.Quantite):0);}
 function artsLignesBC(c){return (DATA.lcmd||[]).filter(l=>l.ID_Commande_Frs===c.ID||(!l.ID_Commande_Frs&&cmdNum(l.N_Commande)===cmdNum(c.Title))).sort((a,b)=>n0(a.Ordre)-n0(b.Ordre)||a.ID-b.ID);}
 function artsGroupes(){
   const G=artsGroupesBruts();
@@ -1318,7 +1321,9 @@ function arcLigne(l,c){
   if(!etat){const p=arcDepuisCommentaire(c);if(!p)return null;
     const e=p.par[arcNorm(l.Title)]||p.par[arcNorm(l.Ref_2||'')];
     if(e){etat=e.ecart;if(e.pa!=null)pa=e.pa;if(e.qa!=null)qa=e.qa;}else etat='ok';}
-  const o={etat,pa,qa,pb};
+  const pc=pxConf(l);
+  if(pc!=null&&/prix/.test(etat)&&pa!=null&&Math.abs(pa-pc)<0.005){etat=etat.replace(/prix\+?|\+?prix/,'')||'ok';}
+  const o={etat,pa,qa,pb:pc!=null?pc:pb};
   if(/prix/.test(etat)&&pa!=null&&pb!=null){o.d=pa-pb;o.pct=pb?o.d/pb*100:null;o.impact=o.d*n0(qa!=null?qa:l.Quantite);}
   return o;
 }
@@ -1415,7 +1420,7 @@ function renderArts(){
         const qe=artQteEnvoi(a),qb=n0(a.Quantite);
         const env=!rxc&&se?(se.ids.has(a.ID)?'sug-in':'sug-out'):(!rxc&&g.partiel?(qe<=0?'out':qe<qb?'part':'in'):'');
         const envTag={'sug-in':'<span class="env-t in">📦 dans l’envoi SIFA</span>','sug-out':'<span class="env-t out">reliquat probable</span>','out':'<span class="env-t out">reliquat : pas dans ce conteneur</span>','part':`<span class="env-t part">partiel : ${fmtQ(qe)} / ${fmtQ(qb)}</span>`,'in':'<span class="env-t in">📦 dans ce conteneur</span>'}[env]||'';
-        return `<tr${i===0?' class="first"':''}${r&&r.cls?` data-rxc="${r.cls}"`:''}${r&&r.ver?' data-ver="1"':''}${ar&&ar.etat!=='ok'?' data-arc="ko"':''}${env?` data-env="${env}"`:''}><td class="mono">${i===0?esc(b.n):''}</td><td class="mono"><b>${esc(a.Ref_2||'')}</b></td><td class="mono muted">${esc(a.Title||'')}</td><td>${esc(a.Designation||'')}${envTag}${r&&r.obs?`<div class="rx-obs">💬 ${esc(r.obs)}</div>`:''}${r&&r.regs?rxRegHtml(r.regs):''}</td><td class="r mono"><b>${fmtQ(n0(a.Quantite))}</b>${(()=>{const su=artSuivi(a,W.id);return su.actif&&(su.livre||su.route)?`<div class="sv-mini" title="Déjà livré : ${fmtQ(su.livre)}${su.route?' · en route dans un autre dossier : '+fmtQ(su.route):''}">reste ${fmtQ(su.reste)}</div>`:'';})()}</td><td class="muted">${esc(a.Unite||'')}</td><td class="r mono">${artPU(a)!=null?fmtN(artPU(a),2):''}</td>${arcCellHtml(ar)}<td class="r mono">${fmtN(artMontant(a),2)}</td>${rxc?rxCells(r):(!lecture?`<td class="r"><input class="rxq ${artQteEnvoi(a)!==n0(a.Quantite)?'mod':''}" data-rxq="${a.ID}" inputmode="decimal" value="${fmtQ(artQteEnvoi(a))}"></td>`:'')}</tr>`;}).join('')).join('')+
+        return `<tr${i===0?' class="first"':''}${r&&r.cls?` data-rxc="${r.cls}"`:''}${r&&r.ver?' data-ver="1"':''}${ar&&ar.etat!=='ok'?' data-arc="ko"':''}${env?` data-env="${env}"`:''}><td class="mono">${i===0?esc(b.n):''}</td><td class="mono"><b>${esc(a.Ref_2||'')}</b></td><td class="mono muted">${esc(a.Title||'')}</td><td>${esc(a.Designation||'')}${envTag}${r&&r.obs?`<div class="rx-obs">💬 ${esc(r.obs)}</div>`:''}${r&&r.regs?rxRegHtml(r.regs):''}</td><td class="r mono"><b>${fmtQ(n0(a.Quantite))}</b>${(()=>{const su=artSuivi(a,W.id);return su.actif&&(su.livre||su.route)?`<div class="sv-mini" title="Déjà livré : ${fmtQ(su.livre)}${su.route?' · en route dans un autre dossier : '+fmtQ(su.route):''}">reste ${fmtQ(su.reste)}</div>`:'';})()}</td><td class="muted">${esc(a.Unite||'')}</td>${pxCellHtml(a,ar,lecture)}${arcCellHtml(ar)}<td class="r mono">${fmtN(artMontant(a),2)}</td>${rxc?rxCells(r):(!lecture?`<td class="r"><input class="rxq ${artQteEnvoi(a)!==n0(a.Quantite)?'mod':''}" data-rxq="${a.ID}" inputmode="decimal" value="${fmtQ(artQteEnvoi(a))}"></td>`:'')}</tr>`;}).join('')).join('')+
       (x.extra||[]).map(l=>{const gr=estGratuit(l),att=gr?n0(l.Quantite_Attendue):0,rec=n0(l.Quantite_Scannee),ab=n0(l.Quantite_Abimee);
         const cls=gr?(x.fait?(ab?'ab':rec<att?'man':rec>att?'exc':'ok'):(rec?'cours':'gr')):'exc';
         const del=gr&&!x.fait&&!rec&&!ab&&!lecture?` <button class="btn sm" data-grdel="${l.ID}" title="Retirer cet article gratuit">✕</button>`:'';
@@ -1816,6 +1821,51 @@ function rxVerifNouveaux(){
   RX_VUS=new Set(faits.map(x=>x.ID));
 }
 // À faire : contrôles magasin reçus et litiges
+// ═══ PRIX CONFIRMÉ (tarif Image pas à jour) : ligne par ligne, le prix du BC d'origine reste visible ═══
+// Lignes_Commande_Frs.Prix_Confirme = PU net remisé lu sur la facture ; Prix_Note = {a:ancien,f:facture,par,d,dos,img:date de mise à jour Image}
+const pxPeut=()=>!!W&&!(W.lecture||(typeof lectureSeule==='function'&&lectureSeule()));
+function pxCellHtml(a,ar,lecture){
+  const pc=pxConf(a),pb=artPUBC(a),nt=pxNote(a);
+  const bt=!lecture&&pxPeut()?` <button class="px-ed" data-pxed="${a.ID}" title="${pc!=null?'Modifier ou annuler le prix confirmé':'Le tarif du BC n’est pas à jour : saisir le prix de la facture'}">✏️</button>`:'';
+  if(pc==null)return `<td class="r mono">${pb!=null?fmtN(pb,2):''}${bt}</td>`;
+  const tip=`Prix du BC ${pb!=null?fmtN(pb,2):'?'} → ${fmtN(pc,2)}${nt&&nt.f?' · facture '+nt.f:''}${nt?' · '+(nt.par||'')+(nt.d?' '+fmtD(dkeyLocal(nt.d)):''):''}${nt&&nt.img?' · Image à jour':' · à mettre à jour dans Image'}`;
+  return `<td class="r mono" title="${esc(tip)}">${pb!=null?`<s class="muted" style="font-size:11px">${fmtN(pb,2)}</s><br>`:''}<b style="color:#1565c0">${fmtN(pc,2)}</b>${bt}<div class="px-t">${nt&&nt.img?'✓ Image':'confirmé'}</div></td>`;
+}
+async function pxOuvrir(id){
+  if(!pxPeut())return;
+  if(MISSING.Lignes_Commande_Frs&&MISSING.Lignes_Commande_Frs.has('Prix_Confirme')){toast('Crée d’abord les colonnes « Prix_Confirme » (Nombre) et « Prix_Note » (texte) dans Lignes_Commande_Frs, puis recharge.','ko');return;}
+  const a=(DATA.lcmd||[]).find(x=>x.ID===id);if(!a)return;
+  const c=(DATA.cmd||[]).find(x=>x.ID===a.ID_Commande_Frs);const pb=artPUBC(a),pc=pxConf(a),ar=arcLigne(a,c);
+  const g=artsGroupes().find(x=>x.bcs.some(b=>b.arts.some(y=>y.ID===id)));const fac=g?String(g.l.N_Facture||''):'';
+  const html=`<div style="font-size:13px;margin-bottom:8px"><b class="mono">${esc(a.Ref_2||a.Title||'')}</b> ${esc(a.Designation||'')}<br><span class="muted">${esc(c?c.Fournisseur||'':'')} · BC ${esc(c?c.Title:'')} · qté ${fmtQ(n0(a.Quantite))}</span></div>
+    <div class="art-tiles" style="grid-template-columns:repeat(${ar&&ar.pa!=null?3:2},1fr);margin-bottom:10px"><div class="art-t"><div class="lab">PU net du BC</div><div class="val">${pb!=null?fmtN(pb,2):'—'}</div></div>${ar&&ar.pa!=null?`<div class="art-t"><div class="lab">Prix ARC</div><div class="val">${fmtN(ar.pa,2)}</div></div>`:''}<div class="art-t"><div class="lab">Prix confirmé</div><div class="val">${pc!=null?fmtN(pc,2):'—'}</div></div></div>
+    <div class="fgrid2"><div class="f req"><label>PU net remisé de la facture</label><input id="pxV" inputmode="decimal" value="${pc!=null?fmtN(pc,2):''}" placeholder="ex. 6,13"></div><div class="f"><label>N° de facture</label><input id="pxF" value="${esc(pxNote(a)&&pxNote(a).f||fac)}"></div></div>
+    ${ar&&ar.pa!=null&&ar.pa!==pc?`<button class="btn sm" type="button" style="margin-top:8px" onclick="document.getElementById('pxV').value='${fmtN(ar.pa,2)}'">Prendre le prix de l’ARC (${fmtN(ar.pa,2)})</button>`:''}
+    <div class="muted" style="font-size:12px;margin-top:8px">Le prix du BC reste affiché barré. Le contrôle des montants et le total du BC utilisent le prix confirmé. Pense à mettre le tarif à jour dans Image (rappel dans « À faire »).</div>
+    ${pc!=null?`<label style="display:flex;gap:6px;align-items:center;margin-top:8px;font-size:12.5px"><input type="checkbox" id="pxDel" style="width:auto"> Revenir au prix du BC (annuler la correction)</label>`:''}`;
+  if(!await showConfirm('✏️ Prix confirmé',html,'Enregistrer'))return;
+  let body;
+  if($('pxDel')&&$('pxDel').checked)body={Prix_Confirme:null,Prix_Note:''};
+  else{const v=parseNum($('pxV').value);if(v===null||isNaN(v)||v<0){toast('Prix invalide.','ko');return;}
+    const old=pxNote(a);body={Prix_Confirme:Math.round(v*10000)/10000,Prix_Note:JSON.stringify({a:pb!=null?Math.round(pb*10000)/10000:null,f:_trunc(($('pxF').value||'').trim(),40),par:(sessionStorage.getItem('user_name')||'Bureau').split(' ')[0],d:new Date().toISOString(),dos:W.id,img:old&&old.img&&n0(old.v)===v?old.img:null,v})};}
+  try{await spPatch('Lignes_Commande_Frs',a.ID,body,a);Object.assign(a,body);toast('✓ Prix enregistré','ok');}catch(e){toast('🔴 '+e.message,'ko');}
+  renderArts();
+}
+// Tarifs à mettre à jour dans Image
+const pxAImage=()=>(DATA.lcmd||[]).filter(l=>pxConf(l)!=null&&!(pxNote(l)||{}).img);
+async function pxImageFait(id){
+  const a=(DATA.lcmd||[]).find(x=>x.ID===id);if(!a)return;const n=pxNote(a)||{};n.img=new Date().toISOString();
+  const body={Prix_Note:JSON.stringify(n)};try{await spPatch('Lignes_Commande_Frs',a.ID,body,a);Object.assign(a,body);}catch(e){toast('🔴 '+e.message,'ko');}
+  if(CUR_TAB==='commandes')renderCommandes();if(W)renderArts();
+}
+function pxImageHtml(){
+  const L=pxAImage();if(!L.length)return '';const byId=new Map((DATA.cmd||[]).map(c=>[c.ID,c]));
+  return `<div class="card" style="margin-bottom:14px;border-left:4px solid #1565c0"><div class="card-h"><h3>🏷 Tarifs à mettre à jour dans Image <span class="tag">${L.length}</span></h3><span class="muted" style="font-size:12px">prix confirmés sur facture, différents du tarif du BC</span></div>
+    <div class="tblwrap"><table class="ltable"><thead><tr><th>Réf. RP</th><th>Désignation</th><th>Fournisseur</th><th>BC</th><th class="r">Tarif BC</th><th class="r">Prix facture</th><th class="r">Écart</th><th>Facture</th><th></th></tr></thead><tbody>
+    ${L.map(l=>{const c=byId.get(l.ID_Commande_Frs)||{};const n=pxNote(l)||{};const v=pxConf(l),o=n.a;const pct=o?((v-o)/o*100):null;
+      return `<tr><td class="mono"><b>${esc(l.Ref_2||'')}</b></td><td>${esc(l.Designation||'')}</td><td>${esc(c.Fournisseur||'')}</td><td class="mono">${esc(c.Title||'')}</td><td class="r mono">${o!=null?fmtN(o,2):''}</td><td class="r mono"><b>${fmtN(v,2)}</b></td><td class="r mono" style="color:${pct>0?'var(--red)':'var(--green)'}">${pct!=null?(pct>0?'+':'')+fmtN(pct,1)+' %':''}</td><td class="mono muted">${esc(n.f||'')}</td><td><button class="btn sm green" data-pximg="${l.ID}">✓ Fait dans Image</button></td></tr>`;}).join('')}
+    </tbody></table></div></div>`;
+}
 function rxTodoBlocks(actifs){
   const parA=new Map();RX.sess.forEach(x=>{if(!parA.has(x.ID_Arrivage))parA.set(x.ID_Arrivage,[]);parA.get(x.ID_Arrivage).push(x);});
   const ctl=[];parA.forEach((L,aid)=>{const a=DATA.arr.find(x=>x.ID===aid);if(!a||estHisto(a))return;
@@ -1828,7 +1878,9 @@ function rxTodoBlocks(actifs){
     const ref=dk(l,'Date_Relance')||dk(l,'Date_Reclamation');const j=ref?daysBetween(ref,t):null;
     const txt=`${l.Title} · ${nomCourtTxt(l.Fournisseur)} · ${l.Statut||'Ouvert'}`+(l.Statut==='Ouvert'?' : réclamation à envoyer':j!==null&&j>=7?` : relancer (${j} j)`:'');
     return {a,txt,urg:l.Statut==='Ouvert'||(j!==null&&j>=7)};}).filter(Boolean).sort((x,y)=>y.urg-x.urg);
-  return [{ic:'📲',t:'Contrôles magasin',c:'var(--teal-mid)',items:ctl},{ic:'⚠️',t:'Litiges fournisseurs',c:'var(--red)',items:lit}];
+  const pxD=new Map();pxAImage().forEach(l=>{const n=pxNote(l)||{};const a=DATA.arr.find(x=>x.ID===n.dos);if(!a)return;pxD.set(a.ID,(pxD.get(a.ID)||0)+1);});
+  const px=[...pxD].map(([id,n])=>({a:DATA.arr.find(x=>x.ID===id),txt:`${n} tarif${n>1?'s':''} à mettre à jour dans Image (liste dans Commandes)`}));
+  return [{ic:'📲',t:'Contrôles magasin',c:'var(--teal-mid)',items:ctl},{ic:'⚠️',t:'Litiges fournisseurs',c:'var(--red)',items:lit},{ic:'🏷',t:'Tarifs Image',c:'#1565c0',items:px}];
 }
 
 // ── Fenêtre litige ──
@@ -2261,6 +2313,7 @@ document.addEventListener('click',async e=>{
     W.lines.push({_k:++_k,_st:'new',ID_Arrivage:W.id,Type_Ligne:frais?'Frais':'Marchandise',Fournisseur:def?def.Title:'',ID_Fournisseur:def?def.ID:null});
     markDirty();renderLines();renderFrais();refreshComputed();
     const ins=document.querySelectorAll(`[data-l="${_k}"]`);if(ins[0])ins[0].focus();return;}
+  const pxe=e.target.closest('[data-pxed]');if(pxe){e.stopPropagation();pxOuvrir(+pxe.dataset.pxed);return;}
   const gt=e.target.closest('[data-goto]');if(gt){e.preventDefault();ficheAller(gt.dataset.goto);return;}
   const flb=e.target.closest('[data-fraislire]');if(flb){fraisLireFacture(+flb.dataset.fraislire);return;}
   const ffb=e.target.closest('[data-fraisfac]');if(ffb){fraisChoisirFacture(+ffb.dataset.fraisfac);return;}
@@ -4691,6 +4744,7 @@ function renderCommandes(){
       return (vieux.length&&peutModifierCmd()?`<div class="warn-ribbon" style="border-radius:8px;margin-bottom:10px;display:flex;gap:10px;align-items:center;flex-wrap:wrap">🧹 <b>${vieux.length}</b> commande(s) encore « en cours » passée(s) il y a plus de <input type="number" id="cmdJSolde" value="${CMDV.joursSolde}" min="1" style="width:56px"> jours, sans dossier d’arrivage : probablement déjà reçues. <button class="btn sm" id="cmdSolderVieux">✔ Les solder (${vieux.length})</button><span class="muted" style="font-size:12px">Vérifie d’abord la liste avec le filtre « ARC attendu ».</span></div>`:'')
        +(prixKo.length&&peutModifierCmd()?`<div class="warn-ribbon" style="border-radius:8px;margin-bottom:10px">🔁 <b>${prixKo.length}</b> BC importé(s) avec une version précédente du lecteur : prix rangés dans la colonne remise. <button class="btn sm" id="cmdRelirePrix">Relire ces BC</button></div>`:'');})()}
     ${typeof daBlocHtml==='function'?daBlocHtml():''}
+    ${pxImageHtml()}
     <div class="card" style="margin-bottom:14px"><div class="card-h"><h3>📂 Nouveaux BC dans « Bon de commande » ${aImp.length?`<span class="tag">${aImp.length}</span>`:''}</h3>
       <div style="display:flex;gap:8px;align-items:center">${F&&F.D?`<a href="${pdfAbs(F.D)}" target="_blank" rel="noopener" style="font-size:12px">Ouvrir le dossier ↗</a>`:''}
       <label style="font-size:12px;display:flex;gap:4px;align-items:center"><input type="checkbox" id="cmdTout" ${CMDV.tout?'checked':''} style="width:auto"> plus de ${CMD_JOURS_LISTE} j</label>
@@ -4775,6 +4829,7 @@ document.addEventListener('click',async e=>{
   if(!e.target.closest)return;
   const imp=e.target.closest('[data-cmdimp]');if(imp){e.preventDefault();if(CMDV.busy)return;CMDV.busy=true;try{progressionCmd('Lecture de '+facNom(imp.dataset.cmdimp)+'…');const r=await cmdImporter(imp.dataset.cmdimp);await reloadAll();setTab('commandes');if(typeof daRapprocherTout==='function')await daRapprocherTout();CMDV.ouvert=r.id;renderCommandes();}catch(er){toast('🔴 '+er.message,'ko');}finally{CMDV.busy=false;progressionCmd(null);}return;}
   if(e.target.closest('#cmdImpTout')){cmdImporterListe(cmdAImporter());return;}
+  const pxi=e.target.closest('[data-pximg]');if(pxi){pxImageFait(+pxi.dataset.pximg);return;}
   if(e.target.matches&&e.target.matches('input[data-cmdsel]')){CMDV.sel=CMDV.sel||new Set();const p=e.target.dataset.cmdsel;e.target.checked?CMDV.sel.add(p):CMDV.sel.delete(p);renderCommandes();return;}
   if(e.target.closest('#cmdSelNone')){CMDV.sel=new Set();renderCommandes();return;}
   if(e.target.closest('#cmdImpSel')){const L=cmdAImporter().filter(f=>CMDV.sel&&CMDV.sel.has(f.path));CMDV.sel=new Set();cmdImporterListe(L);return;}
