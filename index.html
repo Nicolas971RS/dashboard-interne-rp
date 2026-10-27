@@ -1994,6 +1994,7 @@ async function loadAll(){
     await syncLivraisonVersRacine();
     // BC suffixés lancés depuis « Livrer le reste » et pas encore complétés (flux lent, page fermée)
     try{await emReprendreSplits();}catch(e){console.warn('[emReprendreSplits]',e.message);}
+    blsReprendre().catch(e=>console.warn('[blsReprendre]',e.message));
 
     // Debug: log first suivi item to help identify field names
 
@@ -2806,6 +2807,9 @@ async function blSigneDeSession(sessionId){
 async function majBlocBLSigne(sessionId){
   const box=document.getElementById('sp-blsigne-'+sessionId);
   if(!box)return;
+  const _sN=(DATA.sessionsScan||[]).find(x=>x.ID===sessionId);
+  const _pend=_sN&&_blsEnCours.get(String(f(_sN,'Numero_BL')||''));
+  if(_pend){box.innerHTML='⏳ <strong>BL signé en cours d\'envoi</strong> (il part avec la création du BL)…';await _pend.catch(()=>{});}
   let a=null;
   try{a=await blSigneDeSession(sessionId);}catch(e){box.innerHTML='✍️ BL signé : pièces jointes inaccessibles ('+_escD(e.message)+')';return;}
   const inp=`<label class="btn" style="height:28px;font-size:11.5px;cursor:pointer;display:inline-flex;align-items:center;gap:4px">${a?'🔁 Remplacer':'📤 Déposer le BL signé'}<input type="file" accept=".pdf,.jpg,.jpeg,.png,image/*" capture="environment" style="display:none" onchange="deposerBLSigne(${sessionId},this.files[0])"></label>`;
@@ -12825,22 +12829,48 @@ function parseBLPdf(rows){
 }
 let _emPdf=null; // dernier PDF lu : {numero, client, lignes}
 // Joint le fichier importé à la session de livraison comme BL signé.
-// Session neuve : on attend que le flux d'émission l'ait créée (asynchrone).
-async function joindreBLSigneSession(numero,file,sessionExistante){
+// Session neuve : on attend que le flux d'émission l'ait créée (asynchrone, jusqu'à ~1 min).
+// Le fichier est aussi gardé dans le navigateur (IndexedDB) : si la page se recharge
+// (reconnexion, fermeture), l'envoi reprend au chargement suivant.
+const _blsEnCours=new Map(); // n° BL → promesse d'envoi (le panneau du BL l'attend)
+const _blsDB=()=>new Promise((ok,ko)=>{try{const r=indexedDB.open('rp_bl_signe',1);r.onupgradeneeded=()=>r.result.createObjectStore('att',{keyPath:'numero'});r.onsuccess=()=>ok(r.result);r.onerror=()=>ko(r.error);}catch(e){ko(e);}});
+async function _blsIDB(mode,fn){try{const db=await _blsDB();return await new Promise((ok,ko)=>{const tx=db.transaction('att',mode),st=tx.objectStore('att');const r=fn(st);tx.oncomplete=()=>ok(r&&r.result);tx.onerror=()=>ko(tx.error);});}catch(e){console.warn('[BL signé IDB]',e.message);return null;}}
+function joindreBLSigneSession(numero,file,sessionExistante){
+  const pr=(async()=>{
+    await _blsIDB('readwrite',st=>st.put({numero:String(numero),nom:file.name,type:file.type||'',blob:file,t:Date.now()}));
+    return _blsEnvoyer(String(numero),file,sessionExistante,true);
+  })();
+  _blsEnCours.set(String(numero),pr);
+  pr.finally(()=>{_blsEnCours.delete(String(numero));const s=findSessionByBL(numero);if(s&&document.getElementById('sp-blsigne-'+s.ID))majBlocBLSigne(s.ID);});
+  return pr;
+}
+async function _blsEnvoyer(numero,file,sessionExistante,avecToast){
   const ext=(file.name.split('.').pop()||'pdf').toLowerCase();
-  const nom=`BL_signe_${String(numero).replace(/[^\w-]/g,'')}_${new Date().toISOString().slice(0,10).replace(/-/g,'')}.${ext}`;
+  const nom=`BL_signe_${numero.replace(/[^\w-]/g,'')}_${new Date().toISOString().slice(0,10).replace(/-/g,'')}.${ext}`;
   let sess=sessionExistante||null;
-  for(const w of(sess?[0]:[2500,4500,7000,12000,20000])){
-    if(sess)break;
+  for(const w of(sess?[]:[1500,2500,4000,6000,10000,15000,20000])){
     await new Promise(r=>setTimeout(r,w));
     sess=await refetchSessionByBL(numero);
+    if(sess)break;
   }
-  if(!sess){toast(`⚠️ BL signé non joint : livraison ${numero} introuvable — dépose-le depuis le panneau du BL`,'ko');return false;}
+  if(!sess){if(avecToast)toast(`⏳ Livraison ${numero} pas encore créée : le BL signé sera joint au prochain chargement du dashboard`,'ko');return false;}
   try{
-    if(sessionExistante&&(await blSigneDeSession(sess.ID)))return true; // déjà déposé
-    await spAddAttachment('sites/BondeCommande','Sessions_Scan',sess.ID,nom,await file.arrayBuffer());
-    toast(`✍️ BL signé joint à la livraison ${numero}`);return true;
-  }catch(e){toast('🔴 BL signé non joint : '+e.message+' — dépose-le depuis le panneau du BL','ko');return false;}
+    if(!(await blSigneDeSession(sess.ID)))await spAddAttachment('sites/BondeCommande','Sessions_Scan',sess.ID,nom,await file.arrayBuffer());
+    await _blsIDB('readwrite',st=>st.delete(numero));
+    if(avecToast)toast(`✍️ BL signé joint à la livraison ${numero}`);
+    return true;
+  }catch(e){if(avecToast)toast('🔴 BL signé non joint : '+e.message+' — nouvel essai au prochain chargement','ko');return false;}
+}
+// Au chargement : termine les BL signés restés en attente (page fermée, reconnexion…)
+async function blsReprendre(){
+  const tous=await _blsIDB('readonly',st=>st.getAll());
+  for(const j of(tous||[])){
+    if(Date.now()-j.t>7*86400000){await _blsIDB('readwrite',st=>st.delete(j.numero));continue;}
+    const sess=findSessionByBL(j.numero);
+    if(!sess)continue;
+    const f=new File([j.blob],j.nom,{type:j.type||j.blob.type||''});
+    if(await _blsEnvoyer(j.numero,f,sess,false))toast(`✍️ BL signé joint à la livraison ${j.numero} (envoi repris)`);
+  }
 }
 async function emImporterPdf(file){
   const etat=document.getElementById('em-pdf-etat');
