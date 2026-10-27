@@ -3242,7 +3242,7 @@ function renderValidation(){
   if(LS&&!enAttente){actions=st==='Validé'||st==='Clôturé'?`<button class="btn sm" id="btnFichePdf">🖨 Imprimer le dossier (PDF)</button>`:`<span class="muted" style="font-size:12px">${st==='Renvoyé à Patricia'?'Renvoyé à Patricia : en attente de ses corrections.':'Dossier en préparation chez Patricia.'}</span>`;}
   else if(!enAttente&&!valide){
     const manque=[];if(!a.N_Dossier)manque.push('n° dossier Image');if(!c.factOk)manque.push('n° de facture sur chaque ligne');if(!c.nFrais)manque.push('facture du transitaire');
-    actions=`<button class="btn primary" id="btnEnvoiFab" ${pret?'':'disabled'}>📤 Envoyer à Fabrice</button><button class="btn sm" id="btnFichePdf">🖨 Imprimer le dossier (PDF)</button>${manque.length?`<span class="muted" style="font-size:12px">Manque : ${esc(manque.join(', '))}</span>`:''}`;
+    actions=`<button class="btn primary" id="btnEnvoiFab" ${pret?'':'disabled'}>📤 Envoyer à Fabrice</button><button class="btn sm" id="btnFichePdf">🖨 Imprimer le dossier (PDF)</button>${manque.length?`<span class="muted" style="font-size:12px">Manque : ${esc(manque.join(', '))}</span>`:''}${(()=>{const al=envoiAlertes();return al.length?`<span style="font-size:12px;color:#b45309;font-weight:600" title="${esc(al.join(' · '))}">⚠ ${al.length} point${al.length>1?'s':''} à vérifier avant l’envoi</span>`:'';})()}`;
   }else if(enAttente&&val){
     actions=`<button class="btn green" id="btnValFab">✅ Valider les coefficients</button><button class="btn danger sm" id="btnRenvoi">↩ Renvoyer à Patricia</button><button class="btn sm" id="btnFichePdf">🖨 Imprimer le dossier (PDF)</button>`;
   }else if(st==='Validé'){
@@ -3266,10 +3266,39 @@ function majGains(){
 }
 
 // ── Actions ──
+// Garde-fou avant l'envoi à Fabrice : ce qui reste à faire sur le contrôle et les montants (n'empêche pas l'envoi)
+function envoiAlertes(){
+  const out=[];if(!W||!DATA.cmd)return out;
+  try{
+    const G=artsGroupes();if(!G.length)return out;G.forEach(g=>g.rx=rxGroupe(g));
+    if(RX.err==='colonnes'||RX.err==='acces')return out;
+    const rs=rxResume(G);const S=G.filter(g=>g.rx.sess);
+    const U=[...new Map(S.map(g=>[g.rx.sess.ID,g])).values()];
+    if(!S.length)out.push('Contrôle magasin pas encore envoyé au portail Scan');
+    else{
+      if(rs.nOk<rs.nEnv)out.push(`Contrôle magasin pas terminé : ${rs.nOk}/${rs.nEnv} fiche${rs.nEnv>1?'s':''} validée${rs.nOk>1?'s':''}`);
+      if(rs.nSans)out.push(`${rs.nSans} fournisseur${rs.nSans>1?'s':''} sans fiche de contrôle`);
+      const sansSuite=U.filter(g=>g.rx.fait&&g.rx.nEc&&!g.rx.lit);
+      if(sansSuite.length)out.push(`Écarts sans litige ni régularisation : ${sansSuite.map(g=>`${nomCourtTxt(String(g.rx.sess.Fournisseur||g.l.Fournisseur).split(' / ')[0])} (${g.rx.nEc})`).join(', ')}`);
+      if(!RX.verKo){const F=U.filter(g=>g.rx.fait),t=F.reduce((a,g)=>a+g.rx.nVerTot,0),v=F.reduce((a,g)=>a+g.rx.nVer,0);if(t&&v<t)out.push(`Vérification au bureau incomplète : ${v}/${t} lignes cochées`);}
+      if(rs.nOk&&rs.nOk===rs.nEnv){
+        const nEc=G.filter(g=>g.rx.fait).reduce((a,g)=>a+g.rx.nEc,0);
+        const rep=/\[Contrôle magasin/.test(String(W.a.Anomalies_Depotage||''));
+        if(!rep)out.push('Résultat du contrôle pas reporté dans le dossier (bouton « 📋 Reporter dans le dossier »)');
+        else if((nEc===0)!==(W.a.Controle_OK==='Oui'))out.push('Résultat reporté avant les dernières régularisations : reporte-le à nouveau');
+      }
+    }
+    const mt=G.filter(g=>g.ec&&!g.ec.ok);
+    if(mt.length)out.push(`Écart de montant BC ↔ SIFA : ${mt.map(g=>nomCourtTxt(g.l.Fournisseur)).join(', ')}`);
+  }catch(e){console.warn('envoiAlertes',e);}
+  return out;
+}
 async function envoyerFabrice(){
   if(W.dirty){toast('⚠️ Enregistre d’abord le dossier (Ctrl+S).','wa');return;}
   const a=W.a;const c=ctrlInfo(W.lines);
-  const ok=await showConfirm('Envoyer à Fabrice ?',`Dossier <b>${esc(a.N_Dossier||a.Title)}</b> — revient réel <b>${fmtCoef(c.coef)}</b>, ${groupesFrs(W.lines).length} fournisseur(s).<br><br>Fabrice reçoit un message Teams et un mail avec le lien vers ce dossier.`,'Envoyer');
+  const al=envoiAlertes();
+  const alHtml=al.length?`<div class="rx-ban warn" style="display:block;margin-bottom:10px"><b>⚠ ${al.length} point${al.length>1?'s':''} à vérifier avant d’envoyer :</b><ul style="margin:6px 0 0 18px;padding:0">${al.map(x=>`<li>${esc(x)}</li>`).join('')}</ul><div style="margin-top:6px;font-size:12px">Tu peux envoyer quand même : Fabrice verra le dossier tel qu’il est.</div></div>`:`<div class="rx-ban ok" style="margin-bottom:10px">✓ Contrôle terminé, vérifié et reporté ; montants conformes.</div>`;
+  const ok=await showConfirm('Envoyer à Fabrice ?',`${alHtml}Dossier <b>${esc(a.N_Dossier||a.Title)}</b> — revient réel <b>${fmtCoef(c.coef)}</b>, ${groupesFrs(W.lines).length} fournisseur(s).<br><br>Fabrice reçoit un message Teams et un mail avec le lien vers ce dossier.`,al.length?'Envoyer quand même':'Envoyer');
   if(!ok)return;
   await changerStatut({Statut:'À valider Fabrice',Date_Envoi_Validation:new Date().toISOString(),Total_VM:r2(c.vm),Total_CIF:r2(c.cif),Total_Frais:r2(c.frais),Coef_Reel:c.coef},'📤 Dossier envoyé à Fabrice');
 }
