@@ -522,7 +522,8 @@ fieldset.lockfs .btn{display:none}
 .art-l tr[data-rxc="man"] td{background:#fef2f2!important}.art-l tr[data-rxc="ab"] td{background:#fff1f2!important}
 .art-l tr[data-rxc="exc"] td{background:#fffbeb!important}.art-l tr[data-rxc="ok"] td:nth-last-child(-n+4){background:#f0fdf4!important}
 .rx-obs{font-size:11.5px;color:#92400e;margin-top:2px}
-.rx-reg{font-size:11.5px;color:#1e3a8a;margin-top:2px}.rx-sug{font-size:11.5px;color:#0d47a1;margin-top:3px;background:#e3f2fd;border-radius:6px;padding:2px 6px;display:inline-block}.art-l td.c,.art-l th.c{text-align:center}.rx-ver{width:18px;height:18px;cursor:pointer;accent-color:#2e7d32}.art-l tr[data-ver] td:first-child{box-shadow:inset 4px 0 0 #2e7d32}.reg-o{display:flex;gap:8px;align-items:flex-start;padding:6px 8px;border:1px solid var(--border,#e2e8f0);border-radius:8px;cursor:pointer}.reg-o input{width:auto;margin-top:3px}.reg-f{margin:-2px 0 4px 30px;font-size:12.5px}
+.rx-reg{font-size:11.5px;color:#1e3a8a;margin-top:2px}.env-pts{flex-basis:100%;margin-top:8px;background:#fffbeb;border:1px solid #fcd34d;border-radius:8px;padding:8px 12px;font-size:12.5px;color:#78350f}.env-pts ul{margin:4px 0 0 18px;padding:0}.env-pts li{margin:2px 0}.env-pts li.bl{color:#b91c1c;font-weight:600}.env-pts a{font-weight:600}
+.flash-go{animation:flashGo 1.6s ease-out}@keyframes flashGo{0%{box-shadow:0 0 0 4px #f59e0b}100%{box-shadow:0 0 0 0 transparent}}.rx-sug{font-size:11.5px;color:#0d47a1;margin-top:3px;background:#e3f2fd;border-radius:6px;padding:2px 6px;display:inline-block}.art-l td.c,.art-l th.c{text-align:center}.rx-ver{width:18px;height:18px;cursor:pointer;accent-color:#2e7d32}.art-l tr[data-ver] td:first-child{box-shadow:inset 4px 0 0 #2e7d32}.reg-o{display:flex;gap:8px;align-items:flex-start;padding:6px 8px;border:1px solid var(--border,#e2e8f0);border-radius:8px;cursor:pointer}.reg-o input{width:auto;margin-top:3px}.reg-f{margin:-2px 0 4px 30px;font-size:12.5px}
 .lit-b.art-b{border:0;cursor:pointer}
 #ovLit .lit-box{position:absolute;left:50%;top:4vh;transform:translateX(-50%);width:min(880px,94vw);max-height:92vh;background:#fff;border-radius:14px;box-shadow:var(--shadow-lg);display:flex;flex-direction:column;overflow:hidden}
 .lit-h{display:flex;justify-content:space-between;align-items:flex-start;padding:14px 18px;background:linear-gradient(120deg,var(--navy),var(--navy-mid));color:#fff}
@@ -2025,6 +2026,64 @@ function artsPrint(){
   <script>window.onload=()=>setTimeout(()=>window.print(),250)<\/script></body></html>`);
   w.document.close();
 }
+// Aller à l'endroit à corriger (liste des points en bas du dossier)
+function ficheAller(go){
+  const el=go==='ndos'?document.querySelector('#fiche [data-h="N_Dossier"]'):go==='mar'?$('tbMar'):go==='frais'?$('fraisBox'):go==='mont'||go==='arts'?$('cardArts'):null;
+  if(!el)return;
+  if(go==='ndos'){const acc=$('accIdent');if(acc)acc.classList.remove('closed');}
+  const card=el.closest('.card')||el;card.scrollIntoView({behavior:'smooth',block:'start'});
+  card.classList.remove('flash-go');void card.offsetWidth;card.classList.add('flash-go');
+  if(go==='ndos')setTimeout(()=>el.focus(),400);
+  if(go==='mar'){const v=[...el.querySelectorAll('input[data-f="N_Facture"]')].find(i=>!i.value.trim());if(v)setTimeout(()=>v.focus(),400);}
+}
+// ── Lecture d'une facture de transitaire (SIFA…) : fret maritime + postes de frais ──
+const FRAIS_MAP=[
+  [/^(ASSIGNE|FRET)/,'Fret'],[/^DEBARQ/,'Debarquement'],[/^OCTROI DE MER REG|^O\.?M\.?R\b/,'OM_Additionnel'],[/^OCTROI DE MER|^O\.?M\.?\b/,'OM'],
+  [/^DROITS? DE PORT|LTA/,'Droit_Port_LTA'],[/^CREDIT D.?ENLEVEMENT/,'Credit_Enlevement'],[/^T\.?I\.?D\b/,'TID'],[/^SPI|MANUTENTION/,'Manutention_SPI'],
+  [/^TRANSPORT|^LIVRAISON|^ENLEVEMENT/,'Transport'],[/^GESTION DOUANE|^TRANSIT|^DEDOUAN|^HONORAIRE/,'Transit']];
+const FRAIS_EXCLU=/^(TVA|TOTAL|H\.?T\.?|TTC|DOUANE|VALEUR|ECHEANCE|AUTRES ADMIN|FRAIS DIVERS|DESCRIPTION|NON-TAXABLE|\*|4 :)/;
+function fraisParse(lignes){
+  const norm=x=>String(x).normalize('NFD').replace(/[̀-ͯ]/g,'').toUpperCase().replace(/[’']/g,"'").trim();
+  const L=lignes.map(norm);
+  let i0=L.findIndex(x=>/^DESCRIPTION\b/.test(x)),i1=L.findIndex((x,i)=>i>i0&&/^\* ?MONTANT POUR INFO|^TVA SUR DEBIT|^TOTAL/.test(x));
+  if(i0<0)i0=-1;if(i1<0)i1=L.length;
+  const num=v=>parseFloat(v.replace(/[^\d,]/g,'').replace(',','.'));  // séparateur de milliers : espace, insécable ou caractère de police (« † » chez SIFA)
+  const R=/(\d{1,3}(?:[^\d,.A-Za-z]{1,3}\d{3})*,\d{2})(?!\d)/g;
+  const postes={},lus=[],ignores=[];
+  for(let i=i0+1;i<i1;i++){const x=L[i];const m=x.match(R);if(!m)continue;
+    const lab=x.slice(0,x.search(/\d/)).replace(/\s+/g,' ').trim();
+    if(!lab||FRAIS_EXCLU.test(lab)||/\*/.test(x)){ignores.push(lignes[i]);continue;}
+    const v=num(m[m.length-1]);const k=(FRAIS_MAP.find(([re])=>re.test(lab))||[])[1]||'Divers';
+    postes[k]=Math.round(((postes[k]||0)+v)*100)/100;lus.push({lab,v,k});}
+  const all=L.join('\n');
+  const ht=(all.match(/H\.T\.?\s*:?\s*(\d{1,3}(?:[^\d,.A-Za-z]{1,3}\d{3})*,\d{2})/)||[])[1];
+  const nf=(all.match(/FACTURE\s*:?\s*([A-Z]{2,5}\d{5,})/)||[])[1]||'';
+  return {postes,lus,ignores,ht:ht?num(ht):null,nf};
+}
+async function fraisLireFacture(k){
+  const l=W&&W.lines.find(x=>x._k===k);if(!l)return;
+  const f=(l.ID_Facture&&(DATA.fac||[]).find(x=>x.ID===l.ID_Facture))||null;
+  let p=f?lienPdf(f):'';if(!p){const nm=pdfDansDossier(l);if(nm)p=DOSSIER_REEL.replace(/\/$/,'')+'/'+nm;}
+  if(!p){toast('Choisis d’abord la facture (📂).','wa');return;}
+  let r;
+  try{toast('Lecture de la facture…','ok');const buf=await spFileGet(p);const lib=await loadPdfJs();
+    const doc=await lib.getDocument({data:new Uint8Array(buf.slice(0))}).promise;r=fraisParse(await pdfLignes(doc));}
+  catch(e){toast('🔴 Lecture impossible : '+e.message,'ko');return;}
+  await fraisAppliquer(l,r);
+}
+async function fraisAppliquer(l,r){
+  const keys=['Fret',...POSTE_KEYS];const tot=keys.reduce((s,k)=>s+n0(r.postes[k]),0);
+  if(!tot){toast('Aucun poste reconnu dans cette facture : saisis-les à la main.','wa');return;}
+  const okHT=r.ht!=null&&Math.abs(r.ht-tot)<0.02;
+  const lab=k=>k==='Fret'?'Fret maritime':(POSTES.find(x=>x[0]===k)||[,k])[1];
+  const ok=await showConfirm('🔍 Facture lue',`<div class="${okHT?'rx-ban ok':'rx-ban warn'}" style="margin-bottom:8px">${okHT?`✓ Total des postes = H.T. de la facture (${fmtEur(r.ht)})`:`⚠ Total des postes ${fmtEur(tot)}${r.ht!=null?' ≠ H.T. facture '+fmtEur(r.ht):''} : vérifie avant d’appliquer`}</div>
+    <div style="display:grid;grid-template-columns:1fr auto auto;gap:3px 12px;font-size:12.5px;align-items:baseline"><b class="muted" style="font-size:11px">LIGNE DE LA FACTURE</b><b class="muted" style="font-size:11px">POSTE</b><b class="muted" style="font-size:11px;text-align:right">MONTANT</b>${r.lus.map(x=>`<span>${esc(x.lab)}</span><span>${x.k==='Divers'?'<b style="color:#b45309">Divers</b>':esc(lab(x.k))}</span><span class="mono" style="text-align:right">${fmtN(x.v)}</span>`).join('')}<span style="border-top:1px solid #e2e8f0;padding-top:3px"><b>Total</b></span><span style="border-top:1px solid #e2e8f0"></span><b class="mono" style="text-align:right;border-top:1px solid #e2e8f0;padding-top:3px">${fmtN(tot)}</b></div>
+    ${r.ignores.length?`<div class="muted" style="font-size:11.5px;margin-top:6px">Non repris (TVA, montants pour information) : ${esc(r.ignores.map(x=>x.replace(/\s+/g,' ')).join(' · '))}</div>`:''}
+    <div class="muted" style="font-size:12px;margin-top:6px">Les montants remplacent ceux déjà saisis sur cette facture. Tu peux les corriger ensuite.</div>`,'Appliquer');
+  if(!ok)return;
+  keys.forEach(k=>{l[k]=r.postes[k]?r.postes[k]:null;});if(!l.N_Facture&&r.nf)l.N_Facture=r.nf;
+  if(l._st==='')l._st='mod';markDirty();renderFrais();refreshComputed();toast('✓ Postes reportés : vérifie puis enregistre','ok');
+}
 // ── Frais d'approche : choisir la facture du transitaire parmi les factures reçues (Factures_Frs) ──
 async function fraisChoisirFacture(k){
   const l=W&&W.lines.find(x=>x._k===k);if(!l)return;
@@ -2043,8 +2102,8 @@ async function fraisChoisirFacture(k){
   const id=+((document.querySelector('input[name="ffac"]:checked')||{}).value||0);const f=L.find(x=>x.ID===id);if(!f)return;
   l.N_Facture=f.Title||'';l.ID_Facture=f.ID;if(f.ID_Fournisseur){l.ID_Fournisseur=f.ID_Fournisseur;l.Fournisseur=f.Fournisseur||l.Fournisseur;}
   if(l._st==='')l._st='mod';markDirty();renderFrais();refreshComputed();
-  const p=lienPdf(f);if(p)window.open(pdfAbs(p),'_blank','noopener');
-  toast('✓ Facture '+(f.Title||'')+' liée : reporte le fret et les frais, puis enregistre','ok');
+  toast('✓ Facture '+(f.Title||'')+' liée','ok');
+  if(lienPdf(f))fraisLireFacture(k);
 }
 function renderFrais(){
   const fr=W.lines.filter(l=>l.Type_Ligne==='Frais');
@@ -2053,7 +2112,7 @@ function renderFrais(){
     const inp=(fld,lab)=>`<div class="f"><label>${lab}</label><input data-l="${l._k}" data-f="${fld}" value="${esc(fmtN(l[fld]))}" inputmode="decimal"></div>`;
     return `<div class="frais ${cls}" data-row="${l._k}">
       <div class="frais-h"><div class="f"><label>Transitaire / transporteur</label><input data-l="${l._k}" data-f="Fournisseur" data-req="1" list="dlTrans" value="${esc(l.Fournisseur||'')}" placeholder="à saisir" class="${l.Fournisseur?'':'req-empty'}"></div>
-        <div class="f" style="max-width:260px"><label>N° facture</label><div style="display:flex;gap:4px;align-items:center"><input data-l="${l._k}" data-f="N_Facture" data-req="1" value="${esc(l.N_Facture||'')}" placeholder="à saisir" class="${l.N_Facture?'':'req-empty'}">${pdfLigne(l)}<button class="btn sm" data-fraisfac="${l._k}" title="Choisir la facture dans les factures fournisseurs déjà reçues">📂</button></div></div>
+        <div class="f" style="max-width:260px"><label>N° facture</label><div style="display:flex;gap:4px;align-items:center"><input data-l="${l._k}" data-f="N_Facture" data-req="1" value="${esc(l.N_Facture||'')}" placeholder="à saisir" class="${l.N_Facture?'':'req-empty'}">${pdfLigne(l)}<button class="btn sm" data-fraisfac="${l._k}" title="Choisir la facture dans les factures fournisseurs déjà reçues">📂</button>${l.N_Facture&&(l.ID_Facture||pdfDansDossier(l))?`<button class="btn sm" data-fraislire="${l._k}" title="Lire la facture et reporter le fret et les postes de frais">🔍 Lire</button>`:''}</div></div>
         <button class="rm" data-rm="${l._k}" style="margin-top:14px">${l._st==='del'?'↺':'🗑'}</button></div>
       <div class="frais-g">${inp('Fret','Fret maritime')}${POSTES.map(([k,lab])=>inp(k,lab)).join('')}${inp('Ajustement','Ajustement')}</div>
       <div class="frais-tot">Frais d'approche : <b data-ft="${l._k}">${fmtEur(lineFrais(l))}</b> &nbsp; Total facture : <b data-tt="${l._k}">${fmtEur(lineTotal(l))}</b></div></div>`;}).join('')
@@ -2202,6 +2261,8 @@ document.addEventListener('click',async e=>{
     W.lines.push({_k:++_k,_st:'new',ID_Arrivage:W.id,Type_Ligne:frais?'Frais':'Marchandise',Fournisseur:def?def.Title:'',ID_Fournisseur:def?def.ID:null});
     markDirty();renderLines();renderFrais();refreshComputed();
     const ins=document.querySelectorAll(`[data-l="${_k}"]`);if(ins[0])ins[0].focus();return;}
+  const gt=e.target.closest('[data-goto]');if(gt){e.preventDefault();ficheAller(gt.dataset.goto);return;}
+  const flb=e.target.closest('[data-fraislire]');if(flb){fraisLireFacture(+flb.dataset.fraislire);return;}
   const ffb=e.target.closest('[data-fraisfac]');if(ffb){fraisChoisirFacture(+ffb.dataset.fraisfac);return;}
   const td=e.target.closest('[data-today]');
   if(td){const f=td.dataset.today;W.a[f]=todayKey();const i=document.querySelector(`[data-h="${f}"]`);if(i)i.value=W.a[f];markDirty();refreshComputed();toast('✓ Étape notée à la date du jour','ok');return;}
@@ -3330,7 +3391,9 @@ function renderValidation(){
   if(LS&&!enAttente){actions=st==='Validé'||st==='Clôturé'?`<button class="btn sm" id="btnFichePdf">🖨 Imprimer le dossier (PDF)</button>`:`<span class="muted" style="font-size:12px">${st==='Renvoyé à Patricia'?'Renvoyé à Patricia : en attente de ses corrections.':'Dossier en préparation chez Patricia.'}</span>`;}
   else if(!enAttente&&!valide){
     const manque=[];if(!a.N_Dossier)manque.push('n° dossier Image');if(!c.factOk)manque.push('n° de facture sur chaque ligne');if(!c.nFrais)manque.push('facture du transitaire');
-    actions=`<button class="btn primary" id="btnEnvoiFab" ${pret?'':'disabled'}>📤 Envoyer à Fabrice</button><button class="btn sm" id="btnFichePdf">🖨 Imprimer le dossier (PDF)</button>${manque.length?`<span class="muted" style="font-size:12px">Manque : ${esc(manque.join(', '))}</span>`:''}${(()=>{const al=envoiAlertes();return al.length?`<span style="font-size:12px;color:#b45309;font-weight:600" title="${esc(al.join(' · '))}">⚠ ${al.length} point${al.length>1?'s':''} à vérifier avant l’envoi</span>`:'';})()}`;
+    const GO_M={'n° dossier Image':'ndos','n° de facture sur chaque ligne':'mar','facture du transitaire':'frais'};
+    const pts=manque.map(m=>({t:'Manque : '+m,go:GO_M[m]||'',bloque:true})).concat(envoiAlertes());
+    actions=`<button class="btn primary" id="btnEnvoiFab" ${pret?'':'disabled'}>📤 Envoyer à Fabrice</button><button class="btn sm" id="btnFichePdf">🖨 Imprimer le dossier (PDF)</button>${pts.length?`<div class="env-pts"><b>${pts.length} point${pts.length>1?'s':''} à régler avant l’envoi</b>${pts.some(x=>x.bloque)?' <span class="muted">(en rouge : bloque l’envoi)</span>':''}<ul>${pts.map(x=>`<li class="${x.bloque?'bl':''}">${esc(x.t)}${x.go?` <a href="#" data-goto="${x.go}">→ voir</a>`:''}</li>`).join('')}</ul></div>`:''}`;
   }else if(enAttente&&val){
     actions=`<button class="btn green" id="btnValFab">✅ Valider les coefficients</button><button class="btn danger sm" id="btnRenvoi">↩ Renvoyer à Patricia</button><button class="btn sm" id="btnFichePdf">🖨 Imprimer le dossier (PDF)</button>`;
   }else if(st==='Validé'){
@@ -3362,22 +3425,22 @@ function envoiAlertes(){
     if(RX.err==='colonnes'||RX.err==='acces')return out;
     const rs=rxResume(G);const S=G.filter(g=>g.rx.sess);
     const U=[...new Map(S.map(g=>[g.rx.sess.ID,g])).values()];
-    if(!S.length)out.push('Contrôle magasin pas encore envoyé au portail Scan');
+    if(!S.length)out.push({t:'Contrôle magasin pas encore envoyé au portail Scan',go:'arts'});
     else{
-      if(rs.nOk<rs.nEnv)out.push(`Contrôle magasin pas terminé : ${rs.nOk}/${rs.nEnv} fiche${rs.nEnv>1?'s':''} validée${rs.nOk>1?'s':''}`);
-      if(rs.nSans)out.push(`${rs.nSans} fournisseur${rs.nSans>1?'s':''} sans fiche de contrôle`);
+      if(rs.nOk<rs.nEnv)out.push({t:`Contrôle magasin pas terminé : ${rs.nOk}/${rs.nEnv} fiche${rs.nEnv>1?'s':''} validée${rs.nOk>1?'s':''}`,go:'arts'});
+      if(rs.nSans)out.push({t:`${rs.nSans} fournisseur${rs.nSans>1?'s':''} sans fiche de contrôle`,go:'arts'});
       const sansSuite=U.filter(g=>g.rx.fait&&g.rx.nEc&&!g.rx.lit);
       if(sansSuite.length)out.push(`Écarts sans litige ni régularisation : ${sansSuite.map(g=>`${nomCourtTxt(String(g.rx.sess.Fournisseur||g.l.Fournisseur).split(' / ')[0])} (${g.rx.nEc})`).join(', ')}`);
-      if(!RX.verKo){const F=U.filter(g=>g.rx.fait),t=F.reduce((a,g)=>a+g.rx.nVerTot,0),v=F.reduce((a,g)=>a+g.rx.nVer,0);if(t&&v<t)out.push(`Vérification au bureau incomplète : ${v}/${t} lignes cochées`);}
+      if(!RX.verKo){const F=U.filter(g=>g.rx.fait),t=F.reduce((a,g)=>a+g.rx.nVerTot,0),v=F.reduce((a,g)=>a+g.rx.nVer,0);if(t&&v<t)out.push({t:`Vérification au bureau incomplète : ${v}/${t} lignes cochées`,go:'arts'});}
       if(rs.nOk&&rs.nOk===rs.nEnv){
         const nEc=G.filter(g=>g.rx.fait).reduce((a,g)=>a+g.rx.nEc,0);
         const rep=/\[Contrôle magasin/.test(String(W.a.Anomalies_Depotage||''));
-        if(!rep)out.push('Résultat du contrôle pas reporté dans le dossier (bouton « 📋 Reporter dans le dossier »)');
-        else if((nEc===0)!==(W.a.Controle_OK==='Oui'))out.push('Résultat reporté avant les dernières régularisations : reporte-le à nouveau');
+        if(!rep)out.push({t:'Résultat du contrôle pas reporté dans le dossier (bouton « 📋 Reporter dans le dossier »)',go:'arts'});
+        else if((nEc===0)!==(W.a.Controle_OK==='Oui'))out.push({t:'Résultat reporté avant les dernières régularisations : reporte-le à nouveau',go:'arts'});
       }
     }
     const mt=G.filter(g=>g.ec&&!g.ec.ok);
-    if(mt.length)out.push(`Écart de montant BC ↔ SIFA : ${mt.map(g=>nomCourtTxt(g.l.Fournisseur)).join(', ')}`);
+    if(mt.length)out.push({t:`Écart de montant BC ↔ SIFA : ${mt.map(g=>nomCourtTxt(g.l.Fournisseur)).join(', ')}`,go:'mont'});
   }catch(e){console.warn('envoiAlertes',e);}
   return out;
 }
@@ -3385,7 +3448,7 @@ async function envoyerFabrice(){
   if(W.dirty){toast('⚠️ Enregistre d’abord le dossier (Ctrl+S).','wa');return;}
   const a=W.a;const c=ctrlInfo(W.lines);
   const al=envoiAlertes();
-  const alHtml=al.length?`<div class="rx-ban warn" style="display:block;margin-bottom:10px"><b>⚠ ${al.length} point${al.length>1?'s':''} à vérifier avant d’envoyer :</b><ul style="margin:6px 0 0 18px;padding:0">${al.map(x=>`<li>${esc(x)}</li>`).join('')}</ul><div style="margin-top:6px;font-size:12px">Tu peux envoyer quand même : Fabrice verra le dossier tel qu’il est.</div></div>`:`<div class="rx-ban ok" style="margin-bottom:10px">✓ Contrôle terminé, vérifié et reporté ; montants conformes.</div>`;
+  const alHtml=al.length?`<div class="rx-ban warn" style="display:block;margin-bottom:10px"><b>⚠ ${al.length} point${al.length>1?'s':''} à vérifier avant d’envoyer :</b><ul style="margin:6px 0 0 18px;padding:0">${al.map(x=>`<li>${esc(x.t)}</li>`).join('')}</ul><div style="margin-top:6px;font-size:12px">Tu peux envoyer quand même : Fabrice verra le dossier tel qu’il est.</div></div>`:`<div class="rx-ban ok" style="margin-bottom:10px">✓ Contrôle terminé, vérifié et reporté ; montants conformes.</div>`;
   const ok=await showConfirm('Envoyer à Fabrice ?',`${alHtml}Dossier <b>${esc(a.N_Dossier||a.Title)}</b> — revient réel <b>${fmtCoef(c.coef)}</b>, ${groupesFrs(W.lines).length} fournisseur(s).<br><br>Fabrice reçoit un message Teams et un mail avec le lien vers ce dossier.`,al.length?'Envoyer quand même':'Envoyer');
   if(!ok)return;
   await changerStatut({Statut:'À valider Fabrice',Date_Envoi_Validation:new Date().toISOString(),Total_VM:r2(c.vm),Total_CIF:r2(c.cif),Total_Frais:r2(c.frais),Coef_Reel:c.coef},'📤 Dossier envoyé à Fabrice');
