@@ -2817,8 +2817,16 @@ async function majBlocBLSigne(sessionId){
     box.style.cssText+=';background:#f0fdf4;border-color:#86efac;color:#14532d';
     box.innerHTML=`<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap"><span>✅ <strong>BL signé déposé</strong> — ${_escD(a.FileName)}</span><span style="display:flex;gap:6px"><button class="btn" style="height:28px;font-size:11.5px" onclick="window.open(C.spRoot+encodeURI('${String(a.ServerRelativeUrl||'').replace(/'/g,"\\'")}'),'_blank')">👁 Voir</button>${inp}</span></div>`;
   }else{
-    box.style.cssText+=';background:#fff7ed;border-color:#fdba74;color:#9a3412';
-    box.innerHTML=`<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap"><span>⚠️ <strong>BL signé pas encore déposé.</strong> Photo ou scan du BL signé par le client : il sera repris automatiquement dans la demande BC.</span>${inp}</div>`;
+    // Orange seulement une fois la livraison clôturée par le magasin : avant, c'est normal
+    const _st=_normTxt(f(_sN,'Statut'));
+    const _livre=_st==='terminee'||_st.includes('ecart')||_st.includes('partiel');
+    if(_livre){
+      box.style.cssText+=';background:#fff7ed;border-color:#fdba74;color:#9a3412';
+      box.innerHTML=`<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap"><span>⚠️ <strong>BL signé pas encore déposé.</strong> Photo ou scan du BL signé par le client : il sera repris automatiquement dans la demande BC.</span>${inp}</div>`;
+    }else{
+      box.style.cssText+=';background:#f8fafc;border-color:var(--border);color:var(--text-muted)';
+      box.innerHTML=`<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap"><span>✍️ BL signé : pas encore joint. Tu peux le déposer dès que le client a signé.</span>${inp}</div>`;
+    }
   }
 }
 async function deposerBLSigne(sessionId,file){
@@ -7535,7 +7543,8 @@ function openSessionPanel(id){
       <button class="btn" data-label="1" style="height:28px;font-size:11.5px;background:#c2410c;color:#fff;border-color:#c2410c" onclick="this.disabled=true;corrigerStatutSession(${id})">Corriger → ${_inc.cible}</button>
     </div>`:'';
 
-  const _avecBLS=_livreFinal&&_numS&&!estNumeroFC(_numS)&&!_numS.startsWith('PREP-');
+  // Dès la création du BL (livraison client) : on voit tout de suite si le BL signé est joint
+  const _avecBLS=_normTxt(f(s,'Type_Operation'))==='livraison client'&&_numS&&!estNumeroFC(_numS)&&!_numS.startsWith('PREP-');
   const _blocBLS=_avecBLS?`<div id="sp-blsigne-${id}" style="border:1px solid var(--border);border-radius:var(--radius-sm);padding:9px 12px;margin-bottom:12px;font-size:12.5px;color:var(--text-muted)">✍️ BL signé : vérification…</div>`:'';
   openPanel(iconBLFC(f(s,'Numero_BL'))+' '+(f(s,'Numero_BL')||'BL'),_bandeauInc+_blocBLS+_blocDBC+html);
   if(_avecBLS)majBlocBLSigne(id);
