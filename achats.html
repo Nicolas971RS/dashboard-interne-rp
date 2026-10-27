@@ -522,7 +522,7 @@ fieldset.lockfs .btn{display:none}
 .art-l tr[data-rxc="man"] td{background:#fef2f2!important}.art-l tr[data-rxc="ab"] td{background:#fff1f2!important}
 .art-l tr[data-rxc="exc"] td{background:#fffbeb!important}.art-l tr[data-rxc="ok"] td:nth-last-child(-n+4){background:#f0fdf4!important}
 .rx-obs{font-size:11.5px;color:#92400e;margin-top:2px}
-.rx-reg{font-size:11.5px;color:#1e3a8a;margin-top:2px}.reg-o{display:flex;gap:8px;align-items:flex-start;padding:6px 8px;border:1px solid var(--border,#e2e8f0);border-radius:8px;cursor:pointer}.reg-o input{width:auto;margin-top:3px}.reg-f{margin:-2px 0 4px 30px;font-size:12.5px}
+.rx-reg{font-size:11.5px;color:#1e3a8a;margin-top:2px}.art-l td.c,.art-l th.c{text-align:center}.rx-ver{width:18px;height:18px;cursor:pointer;accent-color:#2e7d32}.art-l tr[data-ver] td:first-child{box-shadow:inset 4px 0 0 #2e7d32}.reg-o{display:flex;gap:8px;align-items:flex-start;padding:6px 8px;border:1px solid var(--border,#e2e8f0);border-radius:8px;cursor:pointer}.reg-o input{width:auto;margin-top:3px}.reg-f{margin:-2px 0 4px 30px;font-size:12.5px}
 .lit-b.art-b{border:0;cursor:pointer}
 #ovLit .lit-box{position:absolute;left:50%;top:4vh;transform:translateX(-50%);width:min(880px,94vw);max-height:92vh;background:#fff;border-radius:14px;box-shadow:var(--shadow-lg);display:flex;flex-direction:column;overflow:hidden}
 .lit-h{display:flex;justify-content:space-between;align-items:flex-start;padding:14px 18px;background:linear-gradient(120deg,var(--navy),var(--navy-mid));color:#fff}
@@ -1408,18 +1408,18 @@ function renderArts(){
       const rxc=!!x.sess;
       const se=!rxc&&!lecture&&!g.partiel?artSousEnsemble(g):null;
       const envP=!rxc&&!lecture&&W.rxQte&&g.bcs.some(b=>b.arts.some(a=>Object.prototype.hasOwnProperty.call(W.rxQte,a.ID)));
-      h+=`<tr class="art-d"><td></td><td colspan="${RXON?8:7}">${se?`<div class="rx-ban warn" style="margin:8px 0 6px">💡 <span>La valeur SIFA (<b>${fmtEur(g.vm)}</b>) ${se.exclus?`correspond au BC <b>sans ${se.exclus.length} article${se.exclus.length>1?'s':''}</b> : ${esc(se.exclus.map(a=>(a.Ref_2||a.Title)+' '+(a.Designation||'')).join(', '))} (${fmtEur(se.exclus.reduce((t,a)=>t+artMontant(a)*artDefaut(a)/(n0(a.Quantite)||1),0))}). ${se.exclus.length>1?'Ils sont':'Il est'} probablement en reliquat.`:`correspond exactement à <b>${se.k} article${se.k>1?'s':''} sur ${se.n}</b> : ${esc(se.arts.slice(0,3).map(a=>a.Designation||a.Ref_2||a.Title).join(', '))}${se.k>3?'…':''} (${fmtEur(se.total)}). Les autres sont probablement des reliquats.`}</span><span class="rx-act"><button class="btn sm primary" data-rxpart="${esc(g.key)}">Ne garder que ${se.k>1?'ces articles':'cet article'}</button></span></div>`:''}${envP?`<div class="rx-ban ${W.rxAuto&&W.rxAuto.has(g.key)?'warn':'info'}" style="margin:8px 0 6px">${W.rxAuto&&W.rxAuto.has(g.key)?`🤖 <span><b>Ajusté automatiquement</b> : la valeur SIFA (${fmtEur(g.vm)}) correspond exactement aux articles en vert. ${g.bcs.flatMap(b=>b.arts).filter(a=>artQteEnvoi(a)===0).length} article(s) mis en reliquat. Vérifie avant d’envoyer au magasin.</span>`:`✏️ Quantités ajustées pour ce conteneur : ${g.bcs.flatMap(b=>b.arts).filter(a=>artQteEnvoi(a)===0).length} article(s) exclu(s) (reliquat).`} <span class="rx-act"><button class="btn sm" data-rxreset="${esc(g.key)}">↺ Reste à livrer</button></span></div>`:''}<table class="art-l"><thead><tr><th>BC</th><th>Réf. RP</th><th>Réf. frs</th><th>Désignation</th><th class="r">Qté BC</th><th>Unité</th><th class="r">PU net</th><th>ARC</th><th class="r">Montant HT</th>${rxc?'':(!lecture?'<th class="r" title="Ce que les magasiniers devront trouver dans ce conteneur (0 = reliquat, pas encore expédié). Ce n’est pas un résultat de contrôle.">Attendu dans ce conteneur</th>':'')}${rxc?'<th class="r">Reçu</th><th class="r">Abîmé</th><th>Écart</th><th>📷</th>':''}</tr></thead><tbody>`+
+      h+=`<tr class="art-d"><td></td><td colspan="${RXON?8:7}">${se?`<div class="rx-ban warn" style="margin:8px 0 6px">💡 <span>La valeur SIFA (<b>${fmtEur(g.vm)}</b>) ${se.exclus?`correspond au BC <b>sans ${se.exclus.length} article${se.exclus.length>1?'s':''}</b> : ${esc(se.exclus.map(a=>(a.Ref_2||a.Title)+' '+(a.Designation||'')).join(', '))} (${fmtEur(se.exclus.reduce((t,a)=>t+artMontant(a)*artDefaut(a)/(n0(a.Quantite)||1),0))}). ${se.exclus.length>1?'Ils sont':'Il est'} probablement en reliquat.`:`correspond exactement à <b>${se.k} article${se.k>1?'s':''} sur ${se.n}</b> : ${esc(se.arts.slice(0,3).map(a=>a.Designation||a.Ref_2||a.Title).join(', '))}${se.k>3?'…':''} (${fmtEur(se.total)}). Les autres sont probablement des reliquats.`}</span><span class="rx-act"><button class="btn sm primary" data-rxpart="${esc(g.key)}">Ne garder que ${se.k>1?'ces articles':'cet article'}</button></span></div>`:''}${envP?`<div class="rx-ban ${W.rxAuto&&W.rxAuto.has(g.key)?'warn':'info'}" style="margin:8px 0 6px">${W.rxAuto&&W.rxAuto.has(g.key)?`🤖 <span><b>Ajusté automatiquement</b> : la valeur SIFA (${fmtEur(g.vm)}) correspond exactement aux articles en vert. ${g.bcs.flatMap(b=>b.arts).filter(a=>artQteEnvoi(a)===0).length} article(s) mis en reliquat. Vérifie avant d’envoyer au magasin.</span>`:`✏️ Quantités ajustées pour ce conteneur : ${g.bcs.flatMap(b=>b.arts).filter(a=>artQteEnvoi(a)===0).length} article(s) exclu(s) (reliquat).`} <span class="rx-act"><button class="btn sm" data-rxreset="${esc(g.key)}">↺ Reste à livrer</button></span></div>`:''}<table class="art-l"><thead><tr><th>BC</th><th>Réf. RP</th><th>Réf. frs</th><th>Désignation</th><th class="r">Qté BC</th><th>Unité</th><th class="r">PU net</th><th>ARC</th><th class="r">Montant HT</th>${rxc?'':(!lecture?'<th class="r" title="Ce que les magasiniers devront trouver dans ce conteneur (0 = reliquat, pas encore expédié). Ce n’est pas un résultat de contrôle.">Attendu dans ce conteneur</th>':'')}${rxc?'<th class="r">Reçu</th><th class="r">Abîmé</th><th>Écart</th><th>📷</th><th class="c" title="Case à cocher quand la ligne est vérifiée au bureau : on retrouve où on en est">Vérifié</th>':''}</tr></thead><tbody>`+
       g.bcs.filter(b=>b.c).map(b=>b.arts.map((a,i)=>{const r=rxc?rxLigneArt(x,a):null;const ar=arcLigne(a,b.c);
         // Envoi partiel visible d'un coup d'œil : proposé (avant clic) ou appliqué (quantités ajustées)
         const qe=artQteEnvoi(a),qb=n0(a.Quantite);
         const env=!rxc&&se?(se.ids.has(a.ID)?'sug-in':'sug-out'):(!rxc&&g.partiel?(qe<=0?'out':qe<qb?'part':'in'):'');
         const envTag={'sug-in':'<span class="env-t in">📦 dans l’envoi SIFA</span>','sug-out':'<span class="env-t out">reliquat probable</span>','out':'<span class="env-t out">reliquat : pas dans ce conteneur</span>','part':`<span class="env-t part">partiel : ${fmtQ(qe)} / ${fmtQ(qb)}</span>`,'in':'<span class="env-t in">📦 dans ce conteneur</span>'}[env]||'';
-        return `<tr${i===0?' class="first"':''}${r&&r.cls?` data-rxc="${r.cls}"`:''}${ar&&ar.etat!=='ok'?' data-arc="ko"':''}${env?` data-env="${env}"`:''}><td class="mono">${i===0?esc(b.n):''}</td><td class="mono"><b>${esc(a.Ref_2||'')}</b></td><td class="mono muted">${esc(a.Title||'')}</td><td>${esc(a.Designation||'')}${envTag}${r&&r.obs?`<div class="rx-obs">💬 ${esc(r.obs)}</div>`:''}${r&&r.regs?rxRegHtml(r.regs):''}</td><td class="r mono"><b>${fmtQ(n0(a.Quantite))}</b>${(()=>{const su=artSuivi(a,W.id);return su.actif&&(su.livre||su.route)?`<div class="sv-mini" title="Déjà livré : ${fmtQ(su.livre)}${su.route?' · en route dans un autre dossier : '+fmtQ(su.route):''}">reste ${fmtQ(su.reste)}</div>`:'';})()}</td><td class="muted">${esc(a.Unite||'')}</td><td class="r mono">${artPU(a)!=null?fmtN(artPU(a),2):''}</td>${arcCellHtml(ar)}<td class="r mono">${fmtN(artMontant(a),2)}</td>${rxc?rxCells(r):(!lecture?`<td class="r"><input class="rxq ${artQteEnvoi(a)!==n0(a.Quantite)?'mod':''}" data-rxq="${a.ID}" inputmode="decimal" value="${fmtQ(artQteEnvoi(a))}"></td>`:'')}</tr>`;}).join('')).join('')+
+        return `<tr${i===0?' class="first"':''}${r&&r.cls?` data-rxc="${r.cls}"`:''}${r&&r.ver?' data-ver="1"':''}${ar&&ar.etat!=='ok'?' data-arc="ko"':''}${env?` data-env="${env}"`:''}><td class="mono">${i===0?esc(b.n):''}</td><td class="mono"><b>${esc(a.Ref_2||'')}</b></td><td class="mono muted">${esc(a.Title||'')}</td><td>${esc(a.Designation||'')}${envTag}${r&&r.obs?`<div class="rx-obs">💬 ${esc(r.obs)}</div>`:''}${r&&r.regs?rxRegHtml(r.regs):''}</td><td class="r mono"><b>${fmtQ(n0(a.Quantite))}</b>${(()=>{const su=artSuivi(a,W.id);return su.actif&&(su.livre||su.route)?`<div class="sv-mini" title="Déjà livré : ${fmtQ(su.livre)}${su.route?' · en route dans un autre dossier : '+fmtQ(su.route):''}">reste ${fmtQ(su.reste)}</div>`:'';})()}</td><td class="muted">${esc(a.Unite||'')}</td><td class="r mono">${artPU(a)!=null?fmtN(artPU(a),2):''}</td>${arcCellHtml(ar)}<td class="r mono">${fmtN(artMontant(a),2)}</td>${rxc?rxCells(r):(!lecture?`<td class="r"><input class="rxq ${artQteEnvoi(a)!==n0(a.Quantite)?'mod':''}" data-rxq="${a.ID}" inputmode="decimal" value="${fmtQ(artQteEnvoi(a))}"></td>`:'')}</tr>`;}).join('')).join('')+
       (x.extra||[]).map(l=>{const gr=estGratuit(l),att=gr?n0(l.Quantite_Attendue):0,rec=n0(l.Quantite_Scannee),ab=n0(l.Quantite_Abimee);
         const cls=gr?(x.fait?(ab?'ab':rec<att?'man':rec>att?'exc':'ok'):(rec?'cours':'gr')):'exc';
         const del=gr&&!x.fait&&!rec&&!ab&&!lecture?` <button class="btn sm" data-grdel="${l.ID}" title="Retirer cet article gratuit">✕</button>`:'';
         const accX=rxRegAccepte(l);const clsX=x.fait&&accX?'ok':cls;
-        return `<tr data-rxc="${clsX}"><td class="mono">${gr?'🎁':esc(l.N_Commande||'')}</td><td class="mono">${esc(l.Reference_Article||'')}</td><td></td><td>${esc(l.Designation||(gr?'Article gratuit':'Article non prévu'))} ${gr?'<span class="art-b gr">🎁 gratuit · non facturé</span>':'<span class="art-b warn">non prévu</span>'}${del}${l.Observation&&!/^Article non facturé/.test(l.Observation)?`<div class="rx-obs">💬 ${esc(l.Observation)}</div>`:''}${rxRegHtml(rxRegs(l))}</td><td class="r mono">${fmtQ(att)}</td><td></td><td class="r mono muted">${gr?'0,00':''}</td><td></td><td class="r mono muted">${gr?'0,00':''}</td>${rxCells({recu:rec,ab,ec:rec-att,ph:!!l.Attachments,id:l.ID,fait:x.fait,acc:accX,regs:rxRegs(l)})}</tr>`;}).join('')+
+        return `<tr data-rxc="${clsX}"${rxVer(l)?' data-ver="1"':''}><td class="mono">${gr?'🎁':esc(l.N_Commande||'')}</td><td class="mono">${esc(l.Reference_Article||'')}</td><td></td><td>${esc(l.Designation||(gr?'Article gratuit':'Article non prévu'))} ${gr?'<span class="art-b gr">🎁 gratuit · non facturé</span>':'<span class="art-b warn">non prévu</span>'}${del}${l.Observation&&!/^Article non facturé/.test(l.Observation)?`<div class="rx-obs">💬 ${esc(l.Observation)}</div>`:''}${rxRegHtml(rxRegs(l))}</td><td class="r mono">${fmtQ(att)}</td><td></td><td class="r mono muted">${gr?'0,00':''}</td><td></td><td class="r mono muted">${gr?'0,00':''}</td>${rxCells({recu:rec,ab,ec:rec-att,ph:!!l.Attachments,id:l.ID,fait:x.fait,acc:accX,regs:rxRegs(l),ver:rxVer(l),vid:l.ID})}</tr>`;}).join('')+
       `</tbody></table></td></tr>`;}
   });
   h+=`</tbody></table>`;
@@ -1446,9 +1446,10 @@ async function rxCharger(){
   for(let i=0;i<ids.length;i+=15){
     const part=ids.slice(i,i+15),set=new Set(part),f=part.map(x=>'Session_ScanId eq '+x).join(' or ');
     let b;const ext='Quantite_Abimee,Fournisseur,N_Commande,ID_Ligne_Cmd,Observation,Attachments';
-    try{b=await spFetch('Lignes_Scan',`$select=${base},${ext}${RX.regKo?'':',Regularisation'}&$filter=${f}&$top=5000`);}
+    try{b=await spFetch('Lignes_Scan',`$select=${base},${ext}${RX.regKo?'':',Regularisation'}${RX.verKo?'':',Verifie'}&$filter=${f}&$top=5000`);}
     catch(e){
       if(!RX.regKo&&/Regularisation/i.test(e.message)){RX.regKo=true;i-=15;continue;}
+      if(!RX.verKo&&/Verifie/i.test(e.message)){RX.verKo=true;i-=15;continue;}
       b=await spFetch('Lignes_Scan',`$select=${base},Attachments&$filter=${f}&$top=5000`);RX.err=RX.err||'colonnes';}
     L.push(...b.filter(l=>set.has(n0(l.Session_ScanId))));
   }
@@ -1515,7 +1516,8 @@ function rxGroupe(g){
     p.Quantite_Abimee=n0(p.Quantite_Abimee)+n0(l.Quantite_Abimee);p.Attachments=p.Attachments||l.Attachments;p.Observation=[p.Observation,l.Observation].filter(Boolean).join(' · ');});
   const extra=lines.filter(l=>!ids.has(n0(l.ID_Ligne_Cmd)));
   const fait=sess.Statut===RX_FAIT,cours=sess.Statut==='En cours de scan';
-  const r={sess,lines,byCmd,extra,fait,cours,lit,nManq:0,nExc:0,nAb:0,nEc:0,nAcc:0,nReg:lines.filter(l=>rxRegs(l).length).length,uRecu:0,uAtt:0,ecarts:[]};
+  const aVerif=[...byCmd.values()].concat(extra.filter(l=>estGratuit(l)||n0(l.Quantite_Scannee)||n0(l.Quantite_Abimee)));
+  const r={sess,lines,byCmd,extra,fait,cours,lit,nVerTot:aVerif.length,nVer:aVerif.filter(l=>rxVer(l)).length,nManq:0,nExc:0,nAb:0,nEc:0,nAcc:0,nReg:lines.filter(l=>rxRegs(l).length).length,uRecu:0,uAtt:0,ecarts:[]};
   g.bcs.forEach(b=>b.arts.forEach(a=>{const l=byCmd.get(a.ID);if(!l)return;   // pas envoyé au magasin : reliquat
     const att=n0(l.Quantite_Attendue),rec=n0(l.Quantite_Scannee),ab=n0(l.Quantite_Abimee);
     r.uRecu+=rec;r.uAtt+=att;const m=Math.max(0,att-rec),e=Math.max(0,rec-att);
@@ -1542,15 +1544,15 @@ function rxLigneArt(x,a){
   const l=x.byCmd.get(a.ID);if(!l)return {recu:null,hors:true,fait:x.fait,cls:'hors'};
   const recu=n0(l.Quantite_Scannee),ab=n0(l.Quantite_Abimee),ec=recu-n0(l.Quantite_Attendue);
   const L=l._lines||[l],acc=L.some(rxRegAccepte),regs=L.flatMap(rxRegs);
-  return {recu,ab,ec,acc,regs,ph:!!l.Attachments,id:l.ID,obs:l.Observation||'',fait:x.fait,cls:x.fait?(acc?'ok':ab>0?'ab':ec<0?'man':ec>0?'exc':'ok'):(recu>0?'cours':'')};
+  return {recu,ab,ec,acc,regs,ver:rxVer(l),vid:L[0].ID,ph:!!l.Attachments,id:l.ID,obs:l.Observation||'',fait:x.fait,cls:x.fait?(acc?'ok':ab>0?'ab':ec<0?'man':ec>0?'exc':'ok'):(recu>0?'cours':'')};
 }
 function rxCells(r){
-  if(r&&r.hors)return '<td colspan="4" class="muted" style="font-size:11.5px">reliquat : pas dans ce conteneur</td>';
-  if(!r||r.recu===null)return '<td class="r muted">—</td><td></td><td></td><td></td>';
+  if(r&&r.hors)return '<td colspan="5" class="muted" style="font-size:11.5px">reliquat : pas dans ce conteneur</td>';
+  if(!r||r.recu===null)return '<td class="r muted">—</td><td></td><td></td><td></td><td></td>';
   const ecart=r.ec!==0||r.ab>0,nr=(r.regs||[]).length;
   let ecB=!r.fait?(r.recu?'<span class="art-b mute">en cours</span>':''):r.acc&&ecart?'<span class="art-b ok" title="Écart accepté sans litige">✓ accepté</span>':r.ec===0&&!r.ab?(nr?'<span class="art-b ok" title="Conforme après régularisation">✓ régularisé</span>':'<span class="art-b ok">✓</span>'):r.ec<0?`<span class="art-b ko">manque ${fmtQ(-r.ec)}</span>`:r.ec>0?`<span class="art-b warn">+${fmtQ(r.ec)}</span>`:`<span class="art-b ko">abîmé ${fmtQ(r.ab)}</span>`;
   if(r.fait&&(ecart||nr)&&rxPeutReg())ecB+=` <button class="btn sm" data-rxreg="${r.id}" title="Régulariser : corriger l’attendu, le recompte, rattacher au BC ou accepter l’écart">✏️</button>`;
-  return `<td class="r mono"><b>${fmtQ(r.recu)}</b></td><td class="r mono">${r.ab?`<b style="color:#b91c1c">${fmtQ(r.ab)}</b>`:''}</td><td style="white-space:nowrap">${ecB}</td><td>${r.ph?`<button class="btn sm" data-rxph="${r.id}" title="Voir les photos">📷</button>`:''}</td>`;
+  return `<td class="r mono"><b>${fmtQ(r.recu)}</b></td><td class="r mono">${r.ab?`<b style="color:#b91c1c">${fmtQ(r.ab)}</b>`:''}</td><td style="white-space:nowrap">${ecB}</td><td>${r.ph?`<button class="btn sm" data-rxph="${r.id}" title="Voir les photos">📷</button>`:''}</td>${rxVerCell(r)}`;
 }
 // ═══ RÉGULARISATION D'UN ÉCART APRÈS CONTRÔLE ═══
 // Le comptage du magasinier reste la preuve : on corrige l'attendu (erreur de notre côté), on rattache un
@@ -1632,11 +1634,32 @@ async function rxRegOuvrir(id){
   }catch(e){toast('🔴 '+e.message,'ko');}
   rxIndexer();renderArts();
 }
+// ═══ CASES « VÉRIFIÉ » (bureau) : on coche chaque ligne contrôlée pour s'y retrouver après une interruption ═══
+// Lignes_Scan.Verifie = « Prénom · date ISO » (vide = pas vérifié). Ligne agrégée : la case est sur sa 1re ligne.
+const rxVer=l=>{const L=l&&l._lines||[l];const v=L.map(x=>x&&x.Verifie).find(Boolean);return v||'';};
+const rxVerTxt=v=>{const [n,d]=String(v).split(' · ');return `Vérifié par ${n||'?'}${d?' le '+new Date(d).toLocaleString('fr-FR',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}):''}`;};
+function rxVerCell(r){
+  if(!r||!r.fait||!r.vid)return '<td></td>';
+  if(RX.verKo)return '<td class="c muted" title="Colonne Verifie à créer dans Lignes_Scan">—</td>';
+  return `<td class="c"><input type="checkbox" class="rx-ver" data-rxver="${r.vid}" ${r.ver?'checked':''} ${rxPeutReg()?'':'disabled'} title="${esc(r.ver?rxVerTxt(r.ver):'Cocher quand la ligne est vérifiée')}"></td>`;
+}
+function rxConformesNonVer(x){
+  const L=[];x.byCmd.forEach(l=>{const ok=n0(l.Quantite_Scannee)===n0(l.Quantite_Attendue)&&!n0(l.Quantite_Abimee);if(ok&&!rxVer(l))L.push((l._lines||[l])[0]);});
+  return L;
+}
+async function rxVerMaj(lines,on){
+  const v=on?`${(sessionStorage.getItem('user_name')||'Bureau').split(' ')[0]} · ${new Date().toISOString()}`:'';
+  try{for(const l of lines){await spPatch('Lignes_Scan',l.ID,{Verifie:v},l);l.Verifie=v;}}
+  catch(e){toast('🔴 '+e.message,'ko');}
+  rxIndexer();renderArts();
+}
 function rxBadge(g){
   const x=g.rx;if(!x.sess)return '<span class="art-b mute">non envoyé</span>';
   const qui=x.sess.Repris_Par||x.sess.Magasinier||'';
   let b=x.fait?(x.nEc?`<span class="art-b ko">⚠ ${x.nEc} écart${x.nEc>1?'s':''}</span>`:`<span class="art-b ok">✓ conforme${x.nReg||x.nAcc?' après régul.':''}</span>`):x.cours?`<span class="art-b warn">🔄 ${esc(qui||'en cours')}</span>`:'<span class="art-b mute">à prendre</span>';
   if(x.fait&&qui)b+=` <span class="muted" style="font-size:11px">${esc(qui)}</span>`;
+  if(x.fait&&x.nVerTot&&!RX.verKo){const fin=x.nVer>=x.nVerTot;b+=` <span class="art-b ${fin?'ok':'mute'}" title="Lignes vérifiées au bureau">☑ ${x.nVer}/${x.nVerTot}</span>`;
+    const nc=rxConformesNonVer(x).length;if(nc&&rxPeutReg())b+=` <button class="btn sm" data-rxverok="${esc(g.key)}" title="Cocher d’un coup les ${nc} lignes conformes pas encore vérifiées">☑ Conformes (${nc})</button>`;}
   if(!x.fait&&!(W.lecture)&&(g.premierF||x.sess.Title===g.key))b+=` <button class="btn sm" data-grnew="${esc(g.key)}" title="Ajouter un article gratuit (non facturé) attendu dans ce conteneur">🎁 ＋</button>`;
   if(x.lit)b+=` <button class="art-b ${litOuvert(x.lit)?'warn':'mute'} lit-b" data-litid="${x.lit.ID}" title="Voir le litige">${esc(x.lit.Title)} · ${esc(x.lit.Statut||'')}</button>`;
   else if(x.fait&&x.nEc&&!(W.lecture))b+=` <button class="btn sm danger" data-litnew="${esc(g.key)}">Ouvrir un litige</button>`;
@@ -1654,6 +1677,9 @@ function rxBandeau(G,rs,lecture){
       <span class="rx-act"><button class="btn sm primary" data-act="rxPrint" title="Tableau du contrôle à imprimer">🖨 Imprimer le contrôle</button>${!lecture?'<button class="btn sm" data-act="rxReporter">📋 Reporter dans le dossier</button>':''}<button class="btn sm" data-act="rxMaj">↻</button></span></div>`
       :`<div class="rx-ban ok">✓ <b>Contrôle magasin terminé : tout est conforme${S.some(g=>g.rx.nReg||g.rx.nAcc)?' après régularisation':''}.</b> <span class="rx-act"><button class="btn sm" data-act="rxPrint" title="Tableau du contrôle à imprimer">🖨 Imprimer le contrôle</button>${!lecture?'<button class="btn sm green" data-act="rxReporter">📋 Reporter dans le dossier</button>':''}</span></div>`;
   }
+  {const U=[...new Map(S.filter(g=>g.rx.fait).map(g=>[g.rx.sess.ID,g.rx])).values()],t=U.reduce((a,x)=>a+x.nVerTot,0),v=U.reduce((a,x)=>a+x.nVer,0);
+   if(t&&!RX.verKo)h+=`<div class="rx-ban ${v>=t?'ok':'info'}" style="padding:6px 12px">☑ <b>Vérification au bureau : ${v} / ${t} ligne${t>1?'s':''}</b>${v>=t?' · tout est vérifié':' · les lignes cochées restent cochées si tu quittes et reviens'}</div>`;
+   else if(t&&RX.verKo&&!lecture)h+=`<div class="rx-ban warn" style="padding:6px 12px">☑ Cases « Vérifié » : crée la colonne <b>Verifie</b> (une seule ligne de texte) dans Lignes_Scan.</div>`;}
   if(rs.nSans&&!lecture)h+=`<div class="rx-ban warn">${rs.nSans} groupe${rs.nSans>1?'s':''} sans fiche de contrôle (lignes ajoutées après l’envoi). <span class="rx-act"><button class="btn sm" data-act="rxEnvoyer">📲 Envoyer ${rs.nSans>1?'les fiches manquantes':'la fiche manquante'}</button></span></div>`;
   if(RX.err==='colonnes')h+=`<div class="rx-ban warn">Colonnes de réception absentes dans Lignes_Scan : quantités abîmées / observations non lues.</div>`;
   return h;
@@ -1864,10 +1890,10 @@ function rxPrint(){
       const att=n0(l.Quantite_Attendue),rec=n0(l.Quantite_Scannee),ab=n0(l.Quantite_Abimee),ec=rec-att,pu=artPU(art);
       const L=l._lines||[l],acc=L.some(rxRegAccepte),regs=L.flatMap(rxRegs);
       const vm=acc?0:(Math.max(0,-ec)+ab)*(pu||0);if(x.fait)vManq+=vm;
-      rows.push({acc,regs,ec:x.fait&&!acc&&(ec||ab),bc:b.n,ref:art.Title||'',rp:art.Ref_2||'',des:art.Designation||'',u:art.Unite||'',att,rec,ab,ecart:ec,pu,vm,obs:l.Observation||'',ph:!!l.Attachments,tag:''});}));
+      rows.push({ver:rxVer(l),acc,regs,ec:x.fait&&!acc&&(ec||ab),bc:b.n,ref:art.Title||'',rp:art.Ref_2||'',des:art.Designation||'',u:art.Unite||'',att,rec,ab,ecart:ec,pu,vm,obs:l.Observation||'',ph:!!l.Attachments,tag:''});}));
     (x.extra||[]).forEach(l=>{const gr=estGratuit(l),att=gr?n0(l.Quantite_Attendue):0,rec=n0(l.Quantite_Scannee),ab=n0(l.Quantite_Abimee);if(!gr&&!rec&&!ab)return;
       const accX=rxRegAccepte(l);
-      rows.push({acc:accX,regs:rxRegs(l),ec:x.fait&&!accX&&(rec-att||ab),bc:gr?'':(l.N_Commande||''),ref:l.Reference_Article||'',rp:'',des:l.Designation||(gr?'Article gratuit':'Article non prévu'),u:'',att,rec,ab,ecart:rec-att,pu:null,vm:0,obs:/^Article non facturé/.test(l.Observation||'')?'':(l.Observation||''),ph:!!l.Attachments,tag:gr?'GRATUIT':'NON PRÉVU'});});
+      rows.push({ver:rxVer(l),acc:accX,regs:rxRegs(l),ec:x.fait&&!accX&&(rec-att||ab),bc:gr?'':(l.N_Commande||''),ref:l.Reference_Article||'',rp:'',des:l.Designation||(gr?'Article gratuit':'Article non prévu'),u:'',att,rec,ab,ecart:rec-att,pu:null,vm:0,obs:/^Article non facturé/.test(l.Observation||'')?'':(l.Observation||''),ph:!!l.Attachments,tag:gr?'GRATUIT':'NON PRÉVU'});});
     rows.sort((p,q)=>(q.ec?1:0)-(p.ec?1:0));
     totManq+=vManq;if(x.fait)nEcTot+=x.nEc;
     const ecTxt=r=>{if(!x.fait)return r.rec?'en cours':'';if(r.acc&&(r.ecart||r.ab))return 'accepté';if(r.regs&&r.regs.length&&!r.ecart&&!r.ab)return '✓ régularisé';const t=[r.ecart<0?`MANQUE ${fmtQ(-r.ecart)}`:r.ecart>0?`+${fmtQ(r.ecart)} en trop`:'',r.ab?`ABÎMÉ ${fmtQ(r.ab)}`:''].filter(Boolean);return t.length?t.join('<br>'):'✓';};
@@ -1876,7 +1902,7 @@ function rxPrint(){
       <div class="bm">Contrôlé par : <b>${esc(qui||'—')}</b>${dt?' · le '+fmtD(dt):''}${x.lit?` · Litige <b>${esc(x.lit.Title)}</b> (${esc(x.lit.Statut||'')})`:x.fait&&x.nEc?' · Litige : ☐ à ouvrir':''}</div>
       <table><colgroup><col style="width:44px"><col style="width:90px"><col><col style="width:52px"><col style="width:52px"><col style="width:52px"><col style="width:82px"><col style="width:62px"><col style="width:70px"><col style="width:150px"><col style="width:24px"></colgroup>
       <thead><tr><th>BC</th><th>Réf. frs / RP</th><th>Désignation</th><th>Attendu</th><th>Reçu</th><th>Abîmé</th><th>Écart</th><th>PU BC</th><th>Valeur écart</th><th>Observation</th><th>✓</th></tr></thead><tbody>
-      ${rows.map(r=>`<tr class="${r.ec?'ec':''}"><td class="m">${esc(r.bc)}</td><td class="m">${esc(r.ref)}${r.rp?`<br><span class="g">RP ${esc(r.rp)}</span>`:''}</td><td>${esc(r.des)}${r.tag?` <span class="tg">${r.tag}</span>`:''}</td><td class="r">${fmtQ(r.att)} ${esc(r.u)}</td><td class="r"><b>${x.fait||r.rec?fmtQ(r.rec):''}</b></td><td class="r">${r.ab?'<b>'+fmtQ(r.ab)+'</b>':''}</td><td class="c">${ecTxt(r)}</td><td class="r">${r.pu!=null?fmtN(r.pu,2):''}</td><td class="r">${r.vm?'<b>'+eur(r.vm)+'</b>':''}</td><td class="o">${esc(r.obs)}${r.ph?' 📷':''}${(r.regs||[]).map(g=>`<div>✏️ ${esc(rxRegTxt(g))}</div>`).join('')}</td><td></td></tr>`).join('')||'<tr><td colspan="11" class="g">Aucune ligne</td></tr>'}
+      ${rows.map(r=>`<tr class="${r.ec?'ec':''}"><td class="m">${esc(r.bc)}</td><td class="m">${esc(r.ref)}${r.rp?`<br><span class="g">RP ${esc(r.rp)}</span>`:''}</td><td>${esc(r.des)}${r.tag?` <span class="tg">${r.tag}</span>`:''}</td><td class="r">${fmtQ(r.att)} ${esc(r.u)}</td><td class="r"><b>${x.fait||r.rec?fmtQ(r.rec):''}</b></td><td class="r">${r.ab?'<b>'+fmtQ(r.ab)+'</b>':''}</td><td class="c">${ecTxt(r)}</td><td class="r">${r.pu!=null?fmtN(r.pu,2):''}</td><td class="r">${r.vm?'<b>'+eur(r.vm)+'</b>':''}</td><td class="o">${esc(r.obs)}${r.ph?' 📷':''}${(r.regs||[]).map(g=>`<div>✏️ ${esc(rxRegTxt(g))}</div>`).join('')}</td><td class="c">${r.ver?'✓':''}</td></tr>`).join('')||'<tr><td colspan="11" class="g">Aucune ligne</td></tr>'}
       </tbody>${vManq?`<tfoot><tr><td colspan="8" class="r">Valeur manquante / abîmée (au prix du BC)</td><td class="r"><b>${eur(vManq)}</b></td><td colspan="2"></td></tr></tfoot>`:''}</table></div>`;});
   const w=window.open('','_blank');if(!w){toast('🔴 Fenêtre bloquée : autorise les fenêtres pour ce site','ko');return;}
   w.document.write(`<!doctype html><html lang="fr"><head><meta charset="utf-8"><title>Résultat contrôle ${esc(a.Title||'')}</title><style>
@@ -2075,6 +2101,8 @@ document.addEventListener('click',async e=>{
   const lb=e.target.closest('[data-litid]');if(lb){e.stopPropagation();litOuvrir({id:+lb.dataset.litid});return;}
   const ln=e.target.closest('[data-litnew]');if(ln){litOuvrir({key:ln.dataset.litnew});return;}
   const ph=e.target.closest('[data-rxph]');if(ph){rxVoirPhotos(+ph.dataset.rxph);return;}
+  const vo=e.target.closest('[data-rxverok]');if(vo){e.stopPropagation();const g=artsGroupes().find(x=>x.key===vo.dataset.rxverok);if(g){g.rx=rxGroupe(g);const L=rxConformesNonVer(g.rx);if(L.length)rxVerMaj(L,true);}return;}
+  if(e.target.matches&&e.target.matches('input[data-rxver]')){e.stopPropagation();const l=RX.lig.find(x=>x.ID===+e.target.dataset.rxver);if(l)rxVerMaj([l],e.target.checked);return;}
   const rg=e.target.closest('[data-rxreg]');if(rg){e.stopPropagation();rxRegOuvrir(+rg.dataset.rxreg);return;}
   const rxa=e.target.closest('[data-act="rxEnvoyer"],[data-act="rxMaj"],[data-act="rxAnnuler"],[data-act="rxReporter"],[data-act="rxPrint"]');
   if(rxa){({rxEnvoyer,rxMaj,rxAnnuler,rxReporter,rxPrint})[rxa.dataset.act]();return;}
