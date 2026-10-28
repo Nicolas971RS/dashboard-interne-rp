@@ -3465,6 +3465,7 @@ function dernierCoef(frsId,exclArr){
   cands.sort((p,q)=>q.d.localeCompare(p.d)||q.l.ID-p.l.ID);
   const c=cands[0];return c?{coef:c.l.Coef_Applique,dossier:c.a?(c.a.N_Dossier||c.a.Title):'',date:c.d}:null;
 }
+const coefKey=l=>'L'+(l.ID||('k'+l._k));
 function coefGroupe(g){const v=g.lignes.map(l=>n0(l.Coef_Applique)).filter(x=>x>0);return v.length&&v.every(x=>x===v[0])?v[0]:(v[0]||null);}
 
 // ── Rendu de la carte « Coefficients et validation » ──
@@ -3473,21 +3474,21 @@ function renderValidation(){
   const a=W.a;const st=a.Statut||'';const c=ctrlInfo(W.lines);const gs=groupesFrs(W.lines);
   const val=estValideur();
   const enAttente=st==='À valider Fabrice';const valide=st==='Validé'||st==='Clôturé';
-  if(!W.coefs){W.coefs={};gs.forEach(g=>{const v=coefGroupe(g);if(v)W.coefs[g.key]=v;});}
+  if(!W.coefs){W.coefs={};gs.forEach(g=>g.lignes.forEach(l=>{const v=n0(l.Coef_Applique);if(v>0)W.coefs[coefKey(l)]=v;}));}
   const editable=enAttente&&val;
   const reel=c.coef;
   let tg=0;
   // Une ligne par facture (comme la saisie dans Image) ; le revient reste par fournisseur (cellule fusionnée)
   const rows=gs.map(g=>{
-    const coef=W.coefs[g.key]??null;
     const der=dernierCoef(g.frsId,W.id);const cli=valClients(g);const L=g.lignes;const n=L.length;
     return L.map((l,i)=>{
+      const coef=W.coefs[coefKey(l)]??null;
       const vm=lineVMnette(l),fret=n0(l.Fret);const gain=coef&&reel?r2(vm*(coef-reel)):null;if(gain!==null)tg+=gain;
       const pdf=pdfLigne(l);
       return `<tr class="${i===0?'val-g0':'val-gn'}">${i===0?`<td rowspan="${n}"><b>${esc(g.nom)}</b>${n>1?` <span class="muted" style="font-size:11px">(${n} factures)</span>`:''}${cli.length?`<div class="val-cli">${cli.map(x=>`<span title="${esc(x.tip)}">👤 ${esc(x.txt)}</span>`).join('')}</div>`:''}</td>`:''}<td class="mono">${esc(l.N_Commande||'')}</td><td class="mono">${esc(l.N_Facture||'—')}${pdf||(l.N_Facture&&FAC_NOMS?' <span class="muted" title="PDF introuvable dans Factures Fournisseurs" style="font-size:10.5px">(pas de PDF)</span>':'')}</td><td class="r mono">${fmtN(vm)}</td><td class="r mono">${fret?fmtN(fret):''}</td><td class="r mono">${fmtN(vm+fret)}</td>
-      ${i===0?`<td class="r" rowspan="${n}" style="vertical-align:middle">${editable?`<input class="n coef-in ${coef?'':'req-empty'}" data-coef="${esc(g.key)}" value="${coef?fmtN(coef,2):''}" inputmode="decimal" placeholder="—" style="width:70px">`:`<b class="mono">${coef?fmtN(coef,coef*100%1?3:2):'—'}</b>`}
-        ${der?`<div class="muted" style="font-size:10.5px;white-space:nowrap">dernier : ${fmtN(der.coef,2)}${der.dossier?' ('+esc(der.dossier)+')':''}</div>`:''}</td>`:''}
-      <td class="r mono" data-gain="${esc(g.key)}|${l._k}" style="color:${gain<0?'var(--red)':'var(--green)'}">${gain===null?'':(gain>0?'+':'')+fmtN(gain)}</td></tr>`;}).join('');}).join('');
+      <td class="r">${editable?`<input class="n coef-in ${coef?'':'req-empty'}" data-coef="${esc(coefKey(l))}" value="${coef?fmtN(coef,2):''}" inputmode="decimal" placeholder="—" style="width:70px">${n>1&&i===0?` <button class="btn sm" data-coefall="${esc(g.key)}" title="Mettre ce revient sur toutes les factures de ${esc(g.nom)}">⇣</button>`:''}`:`<b class="mono">${coef?fmtN(coef,coef*100%1?3:2):'—'}</b>`}
+        ${der&&i===0?`<div class="muted" style="font-size:10.5px;white-space:nowrap">dernier : ${fmtN(der.coef,2)}${der.dossier?' ('+esc(der.dossier)+')':''}</div>`:''}</td>
+      <td class="r mono" data-gain="${esc(coefKey(l))}" style="color:${gain<0?'var(--red)':'var(--green)'}">${gain===null?'':(gain>0?'+':'')+fmtN(gain)}</td></tr>`;}).join('');}).join('');
   let entete='',actions='';
   if(st==='Renvoyé à Patricia')entete=`<div class="fac-box ko">↩ <b>Renvoyé par ${esc(a.Valide_Par||'Fabrice')}</b>${a.Commentaire_Fabrice?` : « ${esc(a.Commentaire_Fabrice)} »`:''}. Corrige puis renvoie le dossier.</div>`;
   if(enAttente)entete=`<div class="fac-box ok">⏳ Envoyé à Fabrice le ${fmtD(dk(a,'Date_Envoi_Validation'))}${val?' — <b>à toi de saisir les coefficients</b>.':', en attente de sa validation.'}</div>`;
@@ -3518,8 +3519,8 @@ function renderValidation(){
 }
 function majGains(){
   const c=ctrlInfo(W.lines);const reel=c.coef;let tg=0;
-  groupesFrs(W.lines).forEach(g=>{const coef=W.coefs[g.key];
-    g.lignes.forEach(l=>{const e=document.querySelector(`[data-gain="${CSS.escape(g.key+'|'+l._k)}"]`);
+  groupesFrs(W.lines).forEach(g=>{
+    g.lignes.forEach(l=>{const coef=W.coefs[coefKey(l)];const e=document.querySelector(`[data-gain="${CSS.escape(coefKey(l))}"]`);
       const gain=coef&&reel?r2(lineVMnette(l)*(coef-reel)):null;if(gain!==null)tg+=gain;
       if(e){e.textContent=gain===null?'':(gain>0?'+':'')+fmtN(gain);e.style.color=gain<0?'var(--red)':'var(--green)';}});});
   const t=$('valTotGain');if(t){t.textContent=(tg>0?'+':'')+fmtN(tg);t.style.color=tg<0?'var(--red)':'var(--green)';}
@@ -3578,17 +3579,17 @@ function busyOn(msg){let o=$('ovBusy');if(!o){o=document.createElement('div');o.
 const busyMsg=m=>{const e=$('busyMsg');if(e)e.textContent=m;};
 const busyOff=()=>{const o=$('ovBusy');if(o)o.classList.remove('open');};
 async function validerFabrice(){
-  const gs=groupesFrs(W.lines);const manque=gs.filter(g=>!(n0(W.coefs[g.key])>0));
-  if(manque.length){toast(`⚠️ Coefficient manquant : ${manque.map(g=>g.nom).join(', ')}`,'wa');document.querySelectorAll('.coef-in').forEach(i=>i.classList.toggle('req-empty',!parseNum(i.value)));return;}
-  const c=ctrlInfo(W.lines);const tg=gs.reduce((s,g)=>s+g.vm*(W.coefs[g.key]-c.coef),0);
+  const gs=groupesFrs(W.lines);const manque=gs.flatMap(g=>g.lignes.filter(l=>!(n0(W.coefs[coefKey(l)])>0)).map(l=>`${g.nom}${g.lignes.length>1?' ('+(l.N_Facture||'?')+')':''}`));
+  if(manque.length){toast(`⚠️ Coefficient manquant : ${manque.join(', ')}`,'wa');document.querySelectorAll('.coef-in').forEach(i=>i.classList.toggle('req-empty',!parseNum(i.value)));return;}
+  const c=ctrlInfo(W.lines);const tg=gs.reduce((s,g)=>s+g.lignes.reduce((t,l)=>t+lineVMnette(l)*(W.coefs[coefKey(l)]-c.coef),0),0);
   const com=await demanderTexte('Valider les coefficients ?',`Revient réel <b>${fmtCoef(c.coef)}</b> · gain / perte total <b style="color:${tg<0?'var(--red)':'var(--green)'}">${tg>0?'+':''}${fmtN(tg)} €</b>.<br>Patricia sera prévenue pour les saisir dans Image.`,'Commentaire pour Patricia (facultatif)','Valider');
   if(com===null)return;
   if(SAVING)return;SAVING=true;busyOn('Validation des coefficients…');
   try{
     let nL=0;const tL=gs.reduce((s,g)=>s+g.lignes.length,0);
-    for(const g of gs){const coef=W.coefs[g.key];
-      for(const l of g.lignes){busyMsg(`Validation des coefficients… ${++nL}/${tL}`);const body={Coef_Applique:coef,Gain_Perte:r2(lineVMnette(l)*(coef-c.coef))};await spPatch('Lignes_Arrivage',l.ID,body,DATA.lig.find(x=>x.ID===l.ID));Object.assign(l,body);}}
-    const a=W.a;const resume=gs.map(g=>`${g.nom} : ${fmtN(W.coefs[g.key],2)}`).join('\n');
+    for(const g of gs){
+      for(const l of g.lignes){const coef=W.coefs[coefKey(l)];busyMsg(`Validation des coefficients… ${++nL}/${tL}`);const body={Coef_Applique:coef,Gain_Perte:r2(lineVMnette(l)*(coef-c.coef))};await spPatch('Lignes_Arrivage',l.ID,body,DATA.lig.find(x=>x.ID===l.ID));Object.assign(l,body);}}
+    const a=W.a;const resume=gs.flatMap(g=>g.lignes.map(l=>`${g.nom}${g.lignes.length>1?' · '+(l.N_Facture||''):''} : ${fmtN(W.coefs[coefKey(l)],2)}`)).join('\n');
     const body={Statut:'Validé',Valide_Par:sessionStorage.getItem('user_name')||'',Date_Validation:new Date().toISOString(),Commentaire_Fabrice:com||null,Coef_Reel:c.coef,Total_VM:r2(c.vm),Total_CIF:r2(c.cif),Total_Frais:r2(c.frais),Resume_Validation:resume};
     await spPatch('Arrivages',W.id,body,DATA.arr.find(x=>x.ID===W.id));Object.assign(a,body);
     busyMsg('Création de la fiche PDF…');
@@ -3729,7 +3730,7 @@ async function fichePDF(arrId){
   doc.addPage();
   y=entete('Gestion du coefficient de revient',valide?`Validé par ${cl(a.Valide_Par||'—')} le ${fmtD(dk(a,'Date_Validation'))||'—'}`:'En attente de validation');
   const gs=groupesFrs(lines);let tR=0,tA=0;
-  const body=gs.flatMap(g=>{const ca=coefGroupe(g);return g.lignes.map((l,i)=>{const vm=lineVMnette(l);const vr=vm*(c.coef||0);const va=ca?vm*ca:null;tR+=vr;if(va!==null)tA+=va;
+  const body=gs.flatMap(g=>{return g.lignes.map((l,i)=>{const ca=n0(l.Coef_Applique)>0?n0(l.Coef_Applique):null;const vm=lineVMnette(l);const vr=vm*(c.coef||0);const va=ca?vm*ca:null;tR+=vr;if(va!==null)tA+=va;
     const gp=va!==null?va-vr:null;
     return [i===0?cl(g.nom):'',cl(l.N_Facture||'—'),nb(vm),nb(c.coef,3),nb(vr),ca?nb(ca):'—',va!==null?nb(va):'',gp===null?'':(gp>0?'+':'')+nb(gp)];});});
   const tg=tA&&valide?tA-tR:null;
@@ -3792,6 +3793,12 @@ document.addEventListener('click',e=>{
   else if(e.target.closest('#btnRenvoi'))renvoyerPatricia();
   else if(e.target.closest('#btnPrixImage'))prixAJour();
   else if(e.target.closest('#btnFichePdf'))telechargerFiche();
+});
+document.addEventListener('click',e=>{
+  const b=e.target.closest&&e.target.closest('[data-coefall]');if(!b||!W)return;
+  const g=groupesFrs(W.lines).find(x=>x.key===b.dataset.coefall);if(!g)return;const v=W.coefs[coefKey(g.lignes[0])];
+  if(!(v>0)){toast('Saisis d’abord le revient de la première facture.','wa');return;}
+  g.lignes.forEach(l=>{W.coefs[coefKey(l)]=v;const i=document.querySelector(`.coef-in[data-coef="${CSS.escape(coefKey(l))}"]`);if(i){i.value=fmtN(v,2);i.classList.remove('req-empty');}});majGains();
 });
 document.addEventListener('input',e=>{
   const i=e.target.closest&&e.target.closest('.coef-in');if(!i||!W)return;
