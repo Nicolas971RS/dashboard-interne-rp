@@ -3928,15 +3928,22 @@ function achSugHtml(item,qManu){
   const sans=refs.filter(r=>!I.idx.has(r)).map(r=>(lignes.find(x=>x.ref===r)||{}).brut||r);
   const q=qManu!==undefined?qManu:(window._achRefQ&&window._achRefQ.id===item.ID?window._achRefQ.q:'');
   const R=q?achRefGrouper(achRefCherche(q)):[];
+  const ouvert=!!((window._achSugOuvert||{})[item.ID])||!!q;
   let h=`<div style="margin:2px 0 10px;border:1px solid var(--border);border-radius:var(--radius-sm);overflow:hidden">
-    <div style="font-size:11px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:.04em;padding:6px 10px;background:var(--bg,#f8fafc);border-bottom:1px solid var(--border-light)">🔎 Où sont les articles de ce BC ? <span style="font-weight:400;text-transform:none">BC fournisseurs des ${ACH_REF_MOIS} derniers mois</span></div>`;
+    <div onclick="achSugBasculer(${item.ID})" title="Afficher / masquer" style="cursor:pointer;user-select:none;display:flex;align-items:center;gap:8px;font-size:11px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:.04em;padding:7px 10px;background:var(--bg,#f8fafc);border-bottom:${ouvert?'1px solid var(--border-light)':'none'}">
+      <span style="font-size:10px;width:10px;flex-shrink:0">${ouvert?'▼':'▶'}</span><span style="white-space:nowrap">🔎 Où sont les articles de ce BC ?</span>
+      ${G.length?`<span style="background:var(--navy);color:#fff;border-radius:9px;padding:1px 8px;font-size:10.5px;text-transform:none;letter-spacing:0;white-space:nowrap;flex-shrink:0">${G.length} BC frs</span>`:''}
+      <span style="font-weight:400;text-transform:none;letter-spacing:0;margin-left:auto;font-size:10.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0">${ACH_REF_MOIS} derniers mois</span></div>
+    <div style="display:${ouvert?'block':'none'}">`;
   if(!refs.length)h+=`<div style="padding:6px 10px;font-size:11.5px;color:var(--text-muted)">Pas de référence Image dans les articles de ce BC : utilise la recherche ci-dessous.</div>`;
   else if(!G.length)h+=`<div style="padding:6px 10px;font-size:11.5px;color:var(--text-muted)">Aucune de ces références (${e(refs.length)}) n’est sur un BC fournisseur récent : article en stock, commande non importée au Portail Achats ou plus ancienne.</div>`;
   else h+=G.map(g=>achRefLigneHtml(g,item,actuels,refs.length)).join('')+(sans.length?`<div style="padding:5px 10px;font-size:11px;color:var(--text-muted)">Sans BC fournisseur récent : ${sans.slice(0,12).map(e).join(', ')}${sans.length>12?'…':''}</div>`:'');
   h+=`<div style="padding:6px 10px;border-top:1px solid var(--border-light);display:flex;gap:6px;align-items:center"><input id="m-bcfrs-q" placeholder="🔍 autre référence ou désignation…" value="${e(q)}" oninput="achRefTaper(${item.ID},this.value)" style="flex:1;height:28px;font-size:12px;font-family:var(--font-mono)"></div>
-    <div id="m-bcfrs-res">${q?(R.length?R.map(g=>achRefLigneHtml(g,item,actuels,0)).join(''):`<div style="padding:6px 10px;font-size:11.5px;color:var(--text-muted)">${q.trim().length<3?'3 caractères minimum.':'Aucun BC fournisseur récent pour « '+e(q)+' ».'}</div>`):''}</div></div>`;
+    <div id="m-bcfrs-res">${q?(R.length?R.map(g=>achRefLigneHtml(g,item,actuels,0)).join(''):`<div style="padding:6px 10px;font-size:11.5px;color:var(--text-muted)">${q.trim().length<3?'3 caractères minimum.':'Aucun BC fournisseur récent pour « '+e(q)+' ».'}</div>`):''}</div></div></div>`;
   return h;
 }
+// Bloc replié par défaut (la liste peut être longue) ; reste ouvert pendant une recherche
+function achSugBasculer(id){window._achSugOuvert=window._achSugOuvert||{};window._achSugOuvert[id]=!window._achSugOuvert[id];achSugMaj(id);}
 function achSugMaj(id){
   const el=document.getElementById('m-bcfrs-sug');if(!el)return;
   const it=(DATA.suivi||[]).find(x=>x.ID===id);if(!it)return;
