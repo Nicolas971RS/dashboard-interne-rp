@@ -2833,13 +2833,21 @@ async function deposerBLSigne(sessionId,file){
   if(!file)return;
   const s=(DATA.sessionsScan||[]).find(x=>x.ID===sessionId);
   const ext=(file.name.split('.').pop()||'pdf').toLowerCase();
-  const nom=`BL_signe_${String(f(s,'Numero_BL')||sessionId).replace(/[^\w-]/g,'')}_${new Date().toISOString().slice(0,10).replace(/-/g,'')}.${ext}`;
+  // Date ET heure locales dans le nom : remplacer le BL signé le même jour
+  // redonnait le même nom et SharePoint refusait (« Le nom spécifié est déjà utilisé »)
+  const _hl=new Date().toLocaleString('sv-SE',{timeZone:'America/Guadeloupe'}).replace(/\D/g,'').slice(0,14);
+  const nom=`BL_signe_${String(f(s,'Numero_BL')||sessionId).replace(/[^\w-]/g,'')}_${_hl.slice(0,8)}_${_hl.slice(8)}.${ext}`;
   const box=document.getElementById('sp-blsigne-'+sessionId);
   if(box)box.innerHTML='⏳ Envoi du BL signé…';
   try{
+    // Anciens BL signés relevés AVANT l'envoi : on ne les retire qu'une fois le nouveau bien déposé
+    let anciens=[];
+    try{anciens=((await getAttachments('sites/BondeCommande','Sessions_Scan',sessionId))||[]).filter(_estBLSigne).map(a=>a.FileName).filter(n=>n!==nom);}catch(e){}
     await spAddAttachment('sites/BondeCommande','Sessions_Scan',sessionId,nom,await file.arrayBuffer());
-    try{if(typeof histoAjouter==='function'&&_historiqueDispo)await histoAjouter(sessionId,[histoEntree(s,'bl_signe','BL signé déposé : '+nom)]);}catch(e){}
-    toast('✍️ BL signé déposé');
+    let nonRetires=0;
+    for(const n of anciens){try{await spDeleteAttachment('sites/BondeCommande','Sessions_Scan',sessionId,n);}catch(e){nonRetires++;console.warn('[BL signé] ancien non retiré',n,e.message);}}
+    try{if(typeof histoAjouter==='function'&&_historiqueDispo)await histoAjouter(sessionId,[histoEntree(s,'bl_signe',(anciens.length?'BL signé remplacé : ':'BL signé déposé : ')+nom)]);}catch(e){}
+    toast(anciens.length?(nonRetires?`✍️ BL signé remplacé (${nonRetires} ancien(s) non retiré(s), le plus récent est utilisé)`:'✍️ BL signé remplacé'):'✍️ BL signé déposé');
   }catch(e){toast('🔴 BL signé non déposé : '+e.message,'ko');}
   majBlocBLSigne(sessionId);
 }
@@ -12855,7 +12863,8 @@ function joindreBLSigneSession(numero,file,sessionExistante){
 }
 async function _blsEnvoyer(numero,file,sessionExistante,avecToast){
   const ext=(file.name.split('.').pop()||'pdf').toLowerCase();
-  const nom=`BL_signe_${numero.replace(/[^\w-]/g,'')}_${new Date().toISOString().slice(0,10).replace(/-/g,'')}.${ext}`;
+  const _hl=new Date().toLocaleString('sv-SE',{timeZone:'America/Guadeloupe'}).replace(/\D/g,'').slice(0,14);
+  const nom=`BL_signe_${numero.replace(/[^\w-]/g,'')}_${_hl.slice(0,8)}_${_hl.slice(8)}.${ext}`;
   let sess=sessionExistante||null;
   for(const w of(sess?[]:[1500,2500,4000,6000,10000,15000,20000])){
     await new Promise(r=>setTimeout(r,w));
