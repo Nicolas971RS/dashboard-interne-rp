@@ -1871,8 +1871,8 @@ function pxCellHtml(a,ar,lecture){
   const pc=pxConf(a),pb=artPUBC(a),nt=pxNote(a);
   const bt=!lecture&&pxPeut()?` <button class="px-ed" data-pxed="${a.ID}" title="${pc!=null?'Modifier ou annuler le prix confirmé':'Le tarif du BC n’est pas à jour : saisir le prix de la facture'}">✏️</button>`:'';
   if(pc==null)return `<td class="r mono">${pb!=null?fmtN(pb,2):''}${bt}</td>`;
-  const tip=`Prix du BC ${pb!=null?fmtN(pb,2):'?'} → ${fmtN(pc,2)}${nt&&nt.f?' · facture '+nt.f:''}${nt?' · '+(nt.par||'')+(nt.d?' '+fmtD(dkeyLocal(nt.d)):''):''}${nt&&nt.img?' · Image à jour':' · à mettre à jour dans Image'}`;
-  return `<td class="r mono" title="${esc(tip)}">${pb!=null?`<s class="muted" style="font-size:11px">${fmtN(pb,2)}</s><br>`:''}<b style="color:#1565c0">${fmtN(pc,2)}</b>${bt}<div class="px-t">${nt&&nt.img?'✓ Image':'confirmé'}</div></td>`;
+  const tip=`${nt&&nt.grat?`${fmtQ(nt.grat)} unité(s) gratuite(s) sur ${fmtQ(n0(a.Quantite))} : PU moyen `:''}Prix du BC ${pb!=null?fmtN(pb,2):'?'} → ${fmtN(pc,2)}${nt&&nt.f?' · facture '+nt.f:''}${nt?' · '+(nt.par||'')+(nt.d?' '+fmtD(dkeyLocal(nt.d)):''):''}${nt&&nt.img?' · Image à jour':' · à mettre à jour dans Image'}`;
+  return `<td class="r mono" title="${esc(tip)}">${pb!=null?`<s class="muted" style="font-size:11px">${fmtN(pb,2)}</s><br>`:''}<b style="color:#1565c0">${fmtN(pc,2)}</b>${bt}<div class="px-t">${nt&&nt.grat?`🎁 ${fmtQ(nt.grat)} gratuit${nt.grat>1?'s':''}`:nt&&nt.img?'✓ Image':'confirmé'}</div></td>`;
 }
 async function pxOuvrir(id){
   if(!pxPeut())return;
@@ -1883,6 +1883,7 @@ async function pxOuvrir(id){
   const html=`<div style="font-size:13px;margin-bottom:8px"><b class="mono">${esc(a.Ref_2||a.Title||'')}</b> ${esc(a.Designation||'')}<br><span class="muted">${esc(c?c.Fournisseur||'':'')} · BC ${esc(c?c.Title:'')} · qté ${fmtQ(n0(a.Quantite))}</span></div>
     <div class="art-tiles" style="grid-template-columns:repeat(${ar&&ar.pa!=null?3:2},1fr);margin-bottom:10px"><div class="art-t"><div class="lab">PU net du BC</div><div class="val">${pb!=null?fmtN(pb,2):'—'}</div></div>${ar&&ar.pa!=null?`<div class="art-t"><div class="lab">Prix ARC</div><div class="val">${fmtN(ar.pa,2)}</div></div>`:''}<div class="art-t"><div class="lab">Prix confirmé</div><div class="val">${pc!=null?fmtN(pc,2):'—'}</div></div></div>
     <div class="fgrid2"><div class="f req"><label>PU net remisé de la facture</label><input id="pxV" inputmode="decimal" value="${pc!=null?fmtN(pc,2):''}" placeholder="ex. 6,13"></div><div class="f"><label>N° de facture</label><input id="pxF" value="${esc(pxNote(a)&&pxNote(a).f||fac)}"></div></div>
+    <div class="f" style="margin-top:8px"><label>…ou unités gratuites sur cette ligne (le fournisseur en offre une partie)</label><div style="display:flex;gap:6px;align-items:center"><input id="pxG" inputmode="decimal" placeholder="ex. 4" value="${(pxNote(a)||{}).grat||''}" style="width:90px" oninput="(()=>{const g=parseFloat(this.value.replace(',','.'));const q=${n0(a.Quantite)},pb=${pb!=null?pb:'null'};const o=document.getElementById('pxGi');if(!(g>0)||pb===null||g>q){o.textContent='';return;}const v=Math.round(pb*(q-g)/q*10000)/10000;document.getElementById('pxV').value=String(v.toFixed(2)).replace('.',',');o.textContent=(q-g)+' payé(s) × '+pb.toFixed(2).replace('.',',')+' sur '+q+' reçus → PU moyen '+v.toFixed(2).replace('.',',');})()"><span id="pxGi" class="muted" style="font-size:12px"></span></div></div>
     ${ar&&ar.pa!=null&&ar.pa!==pc?`<button class="btn sm" type="button" style="margin-top:8px" onclick="document.getElementById('pxV').value='${fmtN(ar.pa,2)}'">Prendre le prix de l’ARC (${fmtN(ar.pa,2)})</button>`:''}
     <div class="muted" style="font-size:12px;margin-top:8px">Le prix du BC reste affiché barré. Le contrôle des montants et le total du BC utilisent le prix confirmé. Pense à mettre le tarif à jour dans Image (rappel dans « À faire »).</div>
     ${pc!=null?`<label style="display:flex;gap:6px;align-items:center;margin-top:8px;font-size:12.5px"><input type="checkbox" id="pxDel" style="width:auto"> Revenir au prix du BC (annuler la correction)</label>`:''}`;
@@ -1890,7 +1891,9 @@ async function pxOuvrir(id){
   let body;
   if($('pxDel')&&$('pxDel').checked)body={Prix_Confirme:null,Prix_Note:''};
   else{const v=parseNum($('pxV').value);if(v===null||isNaN(v)||v<0){toast('Prix invalide.','ko');return;}
-    const old=pxNote(a);body={Prix_Confirme:Math.round(v*10000)/10000,Prix_Note:JSON.stringify({a:pb!=null?Math.round(pb*10000)/10000:null,f:_trunc(($('pxF').value||'').trim(),40),par:(sessionStorage.getItem('user_name')||'Bureau').split(' ')[0],d:new Date().toISOString(),dos:W.id,img:old&&old.img&&n0(old.v)===v?old.img:null,v})};}
+    const old=pxNote(a);const gr=parseNum(($('pxG')&&$('pxG').value)||'');const grat=gr>0&&gr<=n0(a.Quantite)?gr:null;
+    // Une gratuité n'est pas un changement de tarif : pas de rappel « à mettre à jour dans Image »
+    body={Prix_Confirme:Math.round(v*10000)/10000,Prix_Note:JSON.stringify({a:pb!=null?Math.round(pb*10000)/10000:null,f:_trunc(($('pxF').value||'').trim(),40),par:(sessionStorage.getItem('user_name')||'Bureau').split(' ')[0],d:new Date().toISOString(),dos:W.id,img:grat?new Date().toISOString():(old&&old.img&&n0(old.v)===v?old.img:null),v,grat})};}
   try{await spPatch('Lignes_Commande_Frs',a.ID,body,a);Object.assign(a,body);toast('✓ Prix enregistré','ok');}catch(e){toast('🔴 '+e.message,'ko');}
   renderArts();
 }
