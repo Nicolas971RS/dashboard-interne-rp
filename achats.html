@@ -1220,7 +1220,10 @@ function artsGroupesBruts(){
 }
 // Quantité attendue DANS CE CONTENEUR (par défaut celle du BC ; 0 = reliquat, non expédié). Choisie avant l'envoi au magasin.
 // Montant de la partie de l'article attendue dans ce conteneur
-function artMontantEnvoi(a){const q=n0(a.Quantite),e=artQteEnvoi(a);return q>0?artMontant(a)*e/q:artMontant(a);}
+// Valeur de l'envoi = PU × quantité attendue dans ce conteneur. Le PU d'abord : sur une réimpression de reliquat,
+// la quantité du BC est le reste (ex. 1) alors que le montant est celui d'origine (35 × 1,68 = 58,80).
+function artMontantEnvoi(a){const q=n0(a.Quantite),e=artQteEnvoi(a),pu=artPU(a);
+  if(pu!=null)return Math.round(pu*e*100)/100;return q>0?artMontant(a)*e/q:artMontant(a);}
 // Après l'envoi, les quantités choisies sont relues dans les fiches du magasin (Lignes_Scan) : article sans ligne = reliquat.
 function rxInitQte(){
   if(!W)return;const sig=RX.sess.length+'|'+RX.lig.length;if(W.rxQteSig===sig)return;W.rxQteSig=sig;
