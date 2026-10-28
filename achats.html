@@ -526,7 +526,7 @@ fieldset.lockfs .btn{display:none}
 #ovBusy{position:fixed;inset:0;background:rgba(10,31,61,.35);display:none;align-items:center;justify-content:center;z-index:9999}#ovBusy.open{display:flex}
 .busy-b{background:#fff;border-radius:12px;padding:22px 30px;text-align:center;box-shadow:0 10px 40px rgba(0,0,0,.25);min-width:280px;font-weight:600;color:#0a1f3d;display:grid;gap:8px;justify-items:center}
 .busy-s{width:34px;height:34px;border:4px solid #e3f2fd;border-top-color:#1565c0;border-radius:50%;animation:busyR .8s linear infinite}@keyframes busyR{to{transform:rotate(360deg)}}
-.px-ed{border:0;background:none;cursor:pointer;font-size:11px;padding:0 0 0 3px;opacity:.45}.px-ed:hover{opacity:1}.px-t{font-size:10px;color:#1565c0;font-family:inherit}.env-pts{flex-basis:100%;margin-top:8px;background:#fffbeb;border:1px solid #fcd34d;border-radius:8px;padding:8px 12px;font-size:12.5px;color:#78350f}.env-pts ul{margin:4px 0 0 18px;padding:0}.env-pts li{margin:2px 0}.env-pts li.bl{color:#b91c1c;font-weight:600}.env-pts a{font-weight:600}
+.lit-b{text-decoration:none;cursor:pointer}.px-ed{border:0;background:none;cursor:pointer;font-size:11px;padding:0 0 0 3px;opacity:.45}.px-ed:hover{opacity:1}.px-t{font-size:10px;color:#1565c0;font-family:inherit}.env-pts{flex-basis:100%;margin-top:8px;background:#fffbeb;border:1px solid #fcd34d;border-radius:8px;padding:8px 12px;font-size:12.5px;color:#78350f}.env-pts ul{margin:4px 0 0 18px;padding:0}.env-pts li{margin:2px 0}.env-pts li.bl{color:#b91c1c;font-weight:600}.env-pts a{font-weight:600}
 .flash-go{animation:flashGo 1.6s ease-out}@keyframes flashGo{0%{box-shadow:0 0 0 4px #f59e0b}100%{box-shadow:0 0 0 0 transparent}}.rx-sug{font-size:11.5px;color:#0d47a1;margin-top:3px;background:#e3f2fd;border-radius:6px;padding:2px 6px;display:inline-block}.art-l td.c,.art-l th.c{text-align:center}.rx-ver{width:18px;height:18px;cursor:pointer;accent-color:#2e7d32}.art-l tr[data-ver] td:first-child{box-shadow:inset 4px 0 0 #2e7d32}.reg-o{display:flex;gap:8px;align-items:flex-start;padding:6px 8px;border:1px solid var(--border,#e2e8f0);border-radius:8px;cursor:pointer}.reg-o input{width:auto;margin-top:3px}.reg-f{margin:-2px 0 4px 30px;font-size:12.5px}
 .lit-b.art-b{border:0;cursor:pointer}
 #ovLit .lit-box{position:absolute;left:50%;top:4vh;transform:translateX(-50%);width:min(880px,94vw);max-height:92vh;background:#fff;border-radius:14px;box-shadow:var(--shadow-lg);display:flex;flex-direction:column;overflow:hidden}
@@ -1739,7 +1739,7 @@ function rxBadge(g){
   if(x.fait&&x.nVerTot&&!RX.verKo){const fin=x.nVer>=x.nVerTot;b+=` <span class="art-b ${fin?'ok':'mute'}" title="Lignes vérifiées au bureau">☑ ${x.nVer}/${x.nVerTot}</span>`;
     const nc=rxConformesNonVer(x).length;if(nc&&rxPeutReg())b+=` <button class="btn sm" data-rxverok="${esc(g.key)}" title="Cocher d’un coup les ${nc} lignes conformes pas encore vérifiées">☑ Conformes (${nc})</button>`;}
   if(!x.fait&&!(W.lecture)&&(g.premierF||x.sess.Title===g.key))b+=` <button class="btn sm" data-grnew="${esc(g.key)}" title="Ajouter un article gratuit (non facturé) attendu dans ce conteneur">🎁 ＋</button>`;
-  if(x.lit)b+=` <button class="art-b ${litOuvert(x.lit)?'warn':'mute'} lit-b" data-litid="${x.lit.ID}" title="Voir le litige">${esc(x.lit.Title)} · ${esc(x.lit.Statut||'')}</button>`;
+  if(x.lit)b+=` <a href="#" role="button" class="art-b ${litOuvert(x.lit)?'warn':'mute'} lit-b" data-litid="${x.lit.ID}" title="Ouvrir le suivi du litige">${esc(x.lit.Title)} · ${esc(x.lit.Statut||'')}</a>`;
   else if(x.fait&&x.nEc&&!(W.lecture))b+=` <button class="btn sm danger" data-litnew="${esc(g.key)}">Ouvrir un litige</button>`;
   return b;
 }
@@ -1927,7 +1927,7 @@ function rxTodoBlocks(actifs){
   const lit=(DATA.lit||[]).filter(litOuvert).map(l=>{const a=DATA.arr.find(x=>x.ID===l.ID_Arrivage);if(!a)return null;
     const ref=dk(l,'Date_Relance')||dk(l,'Date_Reclamation');const j=ref?daysBetween(ref,t):null;
     const txt=`${l.Title} · ${nomCourtTxt(l.Fournisseur)} · ${l.Statut||'Ouvert'}`+(l.Statut==='Ouvert'?' : réclamation à envoyer':j!==null&&j>=7?` : relancer (${j} j)`:'');
-    return {a,txt,urg:l.Statut==='Ouvert'||(j!==null&&j>=7)};}).filter(Boolean).sort((x,y)=>y.urg-x.urg);
+    return {a,txt,urg:l.Statut==='Ouvert'||(j!==null&&j>=7),go:'lit:'+l.ID};}).filter(Boolean).sort((x,y)=>y.urg-x.urg);
   const pxD=new Map();pxAImage().forEach(l=>{const n=pxNote(l)||{};const a=DATA.arr.find(x=>x.ID===n.dos);if(!a)return;pxD.set(a.ID,(pxD.get(a.ID)||0)+1);});
   const px=[...pxD].map(([id,n])=>({a:DATA.arr.find(x=>x.ID===id),txt:`${n} tarif${n>1?'s':''} à mettre à jour dans Image (liste dans Commandes)`,go:'tarifs'}));
   return [{ic:'📲',t:'Contrôles magasin',c:'var(--teal-mid)',items:ctl},{ic:'⚠️',t:'Litiges fournisseurs',c:'var(--red)',items:lit},{ic:'🏷',t:'Tarifs Image',c:'#1565c0',items:px}];
@@ -2329,7 +2329,7 @@ document.addEventListener('change',e=>{
   if(t.dataset.h==='Transitaire'){const f=matchFrs(t.value,['Transitaire','Transporteur','Autre']);W.a.ID_Transitaire=f?f.ID:null;if(f){W.a.Transitaire=f.Title;t.value=f.Title;}}
 });
 document.addEventListener('click',async e=>{
-  const gtb=e.target.closest('[data-gotab]');if(gtb){if(gtb.dataset.gotab==='tarifs'){setTab('commandes');renderCommandes();setTimeout(()=>{const c=$('cardTarifs');if(c){c.scrollIntoView({behavior:'smooth',block:'start'});c.classList.remove('flash-go');void c.offsetWidth;c.classList.add('flash-go');}},150);}return;}
+  const gtb=e.target.closest('[data-gotab]');if(gtb){if(/^lit:\d+$/.test(gtb.dataset.gotab)){litOuvrir({id:+gtb.dataset.gotab.slice(4)});return;}if(gtb.dataset.gotab==='tarifs'){setTab('commandes');renderCommandes();setTimeout(()=>{const c=$('cardTarifs');if(c){c.scrollIntoView({behavior:'smooth',block:'start'});c.classList.remove('flash-go');void c.offsetWidth;c.classList.add('flash-go');}},150);}return;}
   const o=e.target.closest('[data-open]');if(o){openFiche(+o.dataset.open);return;}
   const tab=e.target.closest('.tab');if(tab){setTab(tab.dataset.tab);return;}
   const ch=e.target.closest('[data-filtre]');if(ch){FILTRE=ch.dataset.filtre;renderDossiers();return;}
@@ -2346,7 +2346,7 @@ document.addEventListener('click',async e=>{
   if(e.target.closest('input.rxq'))return;
   const gn=e.target.closest('[data-grnew]');if(gn){e.stopPropagation();rxGratuitAjouter(gn.dataset.grnew);return;}
   const gd=e.target.closest('[data-grdel]');if(gd){e.stopPropagation();rxGratuitRetirer(+gd.dataset.grdel);return;}
-  const lb=e.target.closest('[data-litid]');if(lb){e.stopPropagation();litOuvrir({id:+lb.dataset.litid});return;}
+  const lb=e.target.closest('[data-litid]');if(lb){e.preventDefault();e.stopPropagation();litOuvrir({id:+lb.dataset.litid});return;}
   const ln=e.target.closest('[data-litnew]');if(ln){litOuvrir({key:ln.dataset.litnew});return;}
   const ph=e.target.closest('[data-rxph]');if(ph){rxVoirPhotos(+ph.dataset.rxph);return;}
   const ra=e.target.closest('[data-rxratall]');if(ra){e.stopPropagation();rxRattacherTout(ra.dataset.rxratall);return;}
