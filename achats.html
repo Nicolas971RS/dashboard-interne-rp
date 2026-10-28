@@ -1020,7 +1020,7 @@ function renderTodo(){
   $('todoGrid').innerHTML=blocks.map(b=>{
     if(b.t!=='Arrivées des 10 prochains jours')total+=b.items.length;
     return `<div class="todo"><div class="todo-h"><span class="ic">${b.ic}</span><span class="t">${b.t}</span><span class="c" style="--c:${b.c}">${b.items.length}</span></div><div class="todo-b">${
-      b.items.length?b.items.map(i=>`<div class="todo-i" data-open="${i.a.ID}"><span><b>${esc(i.a.Title)}</b> <span class="muted">${esc(i.a.Transitaire||'')}</span></span><span class="muted" style="text-align:right">${esc(i.txt)}</span></div>`).join(''):'<div class="todo-none">✓ Rien en attente</div>'}</div></div>`;
+      b.items.length?b.items.map(i=>`<div class="todo-i" ${i.go?`data-gotab="${i.go}"`:`data-open="${i.a.ID}"`}><span><b>${esc(i.a.Title)}</b> <span class="muted">${esc(i.a.Transitaire||'')}</span></span><span class="muted" style="text-align:right">${esc(i.txt)}</span></div>`).join(''):'<div class="todo-none">✓ Rien en attente</div>'}</div></div>`;
   }).join('');
   const cnt=$('cntAfaire');cnt.style.display=total?'':'none';cnt.textContent=total;
 }
@@ -1910,7 +1910,7 @@ async function pxImageFait(id){
 }
 function pxImageHtml(){
   const L=pxAImage();if(!L.length)return '';const byId=new Map((DATA.cmd||[]).map(c=>[c.ID,c]));
-  return `<div class="card" style="margin-bottom:14px;border-left:4px solid #1565c0"><div class="card-h"><h3>🏷 Tarifs à mettre à jour dans Image <span class="tag">${L.length}</span></h3><span class="muted" style="font-size:12px">prix confirmés sur facture, différents du tarif du BC</span></div>
+  return `<div class="card" id="cardTarifs" style="margin-bottom:14px;border-left:4px solid #1565c0"><div class="card-h"><h3>🏷 Tarifs à mettre à jour dans Image <span class="tag">${L.length}</span></h3><span class="muted" style="font-size:12px">prix confirmés sur facture, différents du tarif du BC</span></div>
     <div class="tblwrap"><table class="ltable"><thead><tr><th>Réf. RP</th><th>Désignation</th><th>Fournisseur</th><th>BC</th><th class="r">Tarif BC</th><th class="r">Prix facture</th><th class="r">Écart</th><th>Facture</th><th></th></tr></thead><tbody>
     ${L.map(l=>{const c=byId.get(l.ID_Commande_Frs)||{};const n=pxNote(l)||{};const v=pxConf(l),o=n.a;const pct=o?((v-o)/o*100):null;
       return `<tr><td class="mono"><b>${esc(l.Ref_2||'')}</b></td><td>${esc(l.Designation||'')}</td><td>${esc(c.Fournisseur||'')}</td><td class="mono">${esc(c.Title||'')}</td><td class="r mono">${o!=null?fmtN(o,2):''}</td><td class="r mono"><b>${fmtN(v,2)}</b></td><td class="r mono" style="color:${pct>0?'var(--red)':'var(--green)'}">${pct!=null?(pct>0?'+':'')+fmtN(pct,1)+' %':''}</td><td class="mono muted">${esc(n.f||'')}</td><td><button class="btn sm green" data-pximg="${l.ID}">✓ Fait dans Image</button></td></tr>`;}).join('')}
@@ -1929,7 +1929,7 @@ function rxTodoBlocks(actifs){
     const txt=`${l.Title} · ${nomCourtTxt(l.Fournisseur)} · ${l.Statut||'Ouvert'}`+(l.Statut==='Ouvert'?' : réclamation à envoyer':j!==null&&j>=7?` : relancer (${j} j)`:'');
     return {a,txt,urg:l.Statut==='Ouvert'||(j!==null&&j>=7)};}).filter(Boolean).sort((x,y)=>y.urg-x.urg);
   const pxD=new Map();pxAImage().forEach(l=>{const n=pxNote(l)||{};const a=DATA.arr.find(x=>x.ID===n.dos);if(!a)return;pxD.set(a.ID,(pxD.get(a.ID)||0)+1);});
-  const px=[...pxD].map(([id,n])=>({a:DATA.arr.find(x=>x.ID===id),txt:`${n} tarif${n>1?'s':''} à mettre à jour dans Image (liste dans Commandes)`}));
+  const px=[...pxD].map(([id,n])=>({a:DATA.arr.find(x=>x.ID===id),txt:`${n} tarif${n>1?'s':''} à mettre à jour dans Image (liste dans Commandes)`,go:'tarifs'}));
   return [{ic:'📲',t:'Contrôles magasin',c:'var(--teal-mid)',items:ctl},{ic:'⚠️',t:'Litiges fournisseurs',c:'var(--red)',items:lit},{ic:'🏷',t:'Tarifs Image',c:'#1565c0',items:px}];
 }
 
@@ -2329,6 +2329,7 @@ document.addEventListener('change',e=>{
   if(t.dataset.h==='Transitaire'){const f=matchFrs(t.value,['Transitaire','Transporteur','Autre']);W.a.ID_Transitaire=f?f.ID:null;if(f){W.a.Transitaire=f.Title;t.value=f.Title;}}
 });
 document.addEventListener('click',async e=>{
+  const gtb=e.target.closest('[data-gotab]');if(gtb){if(gtb.dataset.gotab==='tarifs'){setTab('commandes');renderCommandes();setTimeout(()=>{const c=$('cardTarifs');if(c){c.scrollIntoView({behavior:'smooth',block:'start'});c.classList.remove('flash-go');void c.offsetWidth;c.classList.add('flash-go');}},150);}return;}
   const o=e.target.closest('[data-open]');if(o){openFiche(+o.dataset.open);return;}
   const tab=e.target.closest('.tab');if(tab){setTab(tab.dataset.tab);return;}
   const ch=e.target.closest('[data-filtre]');if(ch){FILTRE=ch.dataset.filtre;renderDossiers();return;}
