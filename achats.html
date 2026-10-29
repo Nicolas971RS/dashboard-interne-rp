@@ -1400,7 +1400,7 @@ function renderArts(){
   const lecture=W.lecture||(typeof lectureSeule==='function'&&lectureSeule());
   let tMag;
   if(RX.err==='colonnes')tMag=tile('Contrôle magasin','—','colonnes SharePoint à créer (voir guide)','warn');
-  else if(!RXON)tMag=`<div class="art-t"><div class="lab">Contrôle magasin</div><div class="val" style="font-size:15px;margin:5px 0">${lecture?'Pas encore envoyé':`<button class="btn sm primary" data-act="rxEnvoyer">📲 Envoyer au magasin</button>`}</div><div class="hint">${new Set(G.map(g=>g.fkey)).size} fiche${new Set(G.map(g=>g.fkey)).size>1?'s':''} (une par fournisseur) dans le portail Scan</div></div>`;
+  else if(!RXON)tMag=`<div class="art-t"><div class="lab">Contrôle magasin</div><div class="val" style="font-size:15px;margin:5px 0">${lecture?'Pas encore envoyé':(estLivDirecte(W.a)?`<button class="btn sm primary" data-act="rxBureau" title="Livraison directe : pas de contrôle magasin, validation sur factures et avis de livraison">✅ Contrôle au bureau</button> <button class="btn sm" data-act="rxEnvoyer">📲 Magasin</button>`:`<button class="btn sm primary" data-act="rxEnvoyer">📲 Envoyer au magasin</button> <button class="btn sm" data-act="rxBureau" title="Livraison directe (ex. Saint-Martin) : validation sur factures et avis de livraison, sans magasinier">✅ Bureau</button>`)}</div><div class="hint">${new Set(G.map(g=>g.fkey)).size} fiche${new Set(G.map(g=>g.fkey)).size>1?'s':''} (une par fournisseur) dans le portail Scan</div></div>`;
   else tMag=tile('Contrôle magasin',`${rs.nOk}<small> / ${rs.n}</small>`,rs.nOk===rs.n?(rs.nEc?`terminé · <b>${rs.nEc}</b> écart${rs.nEc>1?'s':''}`:'terminé · tout conforme ✓'):`${rs.nCours} en cours · ${rs.nAtt} à prendre`,rs.nOk===rs.n?(rs.nEc?'ko':'ok'):'warn');
   let h=`<div class="art-tiles c5">
     ${tile('BC du conteneur',`${nBC-nMan}<small> / ${nBC}</small>`,nMan?`<b>${nMan}</b> à importer dans Commandes`:'tous dans le portail ✓',nMan?'warn':'ok')}
@@ -1433,7 +1433,7 @@ function renderArts(){
         const del=gr&&!x.fait&&!rec&&!ab&&!lecture?` <button class="btn sm" data-grdel="${l.ID}" title="Retirer cet article gratuit">✕</button>`:'';
         const accX=rxRegAccepte(l);const clsX=x.fait&&accX?'ok':cls;
         return `<tr data-rxc="${clsX}"${rxVer(l)?' data-ver="1"':''}><td class="mono">${gr?'🎁':esc(l.N_Commande||'')}</td><td class="mono">${esc(l.Reference_Article||'')}</td><td></td><td>${esc(l.Designation||(gr?'Article gratuit':'Article non prévu'))} ${gr?'<span class="art-b gr">🎁 gratuit · non facturé</span>':'<span class="art-b warn">non prévu</span>'}${del}${l.Observation&&!/^Article non facturé/.test(l.Observation)?`<div class="rx-obs">💬 ${esc(l.Observation)}</div>`:''}${rxRegHtml(rxRegs(l))}${x.fait&&!gr&&rxPeutReg()?(()=>{const sg=(x._sug||(x._sug=rxSuggestions(x.sess))).find(z=>z.l.ID===l.ID);return sg?`<div class="rx-sug">↪ Probablement <b class="mono">${esc(sg.c.a.Ref_2||sg.c.a.Title||'')}</b> ${esc(sg.c.a.Designation||'')} (BC ${esc(sg.c.bc)}, mis en reliquat)</div>`:'';})():''}</td><td class="r mono">${fmtQ(att)}</td><td></td><td class="r mono muted">${gr?'0,00':''}</td><td></td><td class="r mono muted">${gr?'0,00':''}</td>${rxCells({recu:rec,ab,ec:rec-att,ph:!!l.Attachments,id:l.ID,fait:x.fait,acc:accX,regs:rxRegs(l),ver:rxVer(l),vid:l.ID})}</tr>`;}).join('')+
-      `</tbody></table>${!lecture?`<div class="bc-act"><button class="btn sm" data-bcadd="${esc(g.key)}" title="La facture couvre aussi un autre BC de ce fournisseur (le fournisseur n’en a écrit qu’un)">＋ Ajouter un BC à cette facture</button><button class="btn sm" data-artadd="${esc(g.key)}" title="Article facturé qui n’est pas dans le BC du portail (BC d’origine non enregistré, réimpression de reliquat…)">＋ Ajouter un article au BC</button><span class="muted" style="font-size:11.5px">Facture ${esc(g.l.N_Facture||'?')} : BC ${esc(g.bcs.map(b=>b.n).join(' + ')||'?')} · total BC ${g.totBC!==null?fmtEur(g.totBC):'—'} · valeur SIFA ${g.vm!==null?fmtEur(g.vm):'—'}</span></div>`:''}</td></tr>`;}
+      `</tbody></table>${!lecture?`<div class="bc-act"><button class="btn sm" data-bcadd="${esc(g.key)}" title="La facture couvre aussi un autre BC de ce fournisseur (le fournisseur n’en a écrit qu’un)">＋ Ajouter un BC à cette facture</button><button class="btn sm" data-artadd="${esc(g.key)}" title="Article facturé qui n’est pas dans le BC du portail (BC d’origine non enregistré, réimpression de reliquat…)">＋ Ajouter un article au BC</button>${!g.rx||!g.rx.fait?`<button class="btn sm" data-bcexcl="${esc(g.key)}" title="BC déclaré dans ce conteneur mais marchandise absente (déjà reçue avant, ou arrivera plus tard) : retiré du contrôle magasin">🚫 BC absent du conteneur</button>`:''}<span class="muted" style="font-size:11.5px">Facture ${esc(g.l.N_Facture||'?')} : BC ${esc(g.bcs.map(b=>b.n).join(' + ')||'?')} · total BC ${g.totBC!==null?fmtEur(g.totBC):'—'} · valeur SIFA ${g.vm!==null?fmtEur(g.vm):'—'}</span></div>`:''}</td></tr>`;}
   });
   h+=`</tbody></table>`;
   box.innerHTML=h;
@@ -1748,7 +1748,7 @@ function rxBandeau(G,rs,lecture){
   const enCours=[...new Map(S.filter(g=>g.rx.cours).map(g=>[g.rx.sess.ID,`${esc(nomCourtTxt(String(g.rx.sess.Fournisseur||g.l.Fournisseur).split(' / ')[0]))} (${esc(g.rx.sess.Magasinier||'?')})`])).values()];
   let h='';
   if(rs.nOk<rs.nEnv)h=`<div class="rx-ban info">📲 <b>Contrôle magasin : ${rs.nOk}/${rs.nEnv} fiche${rs.nEnv>1?'s':''} validée${rs.nOk>1?'s':''}</b>${enCours.length?` · en cours : ${enCours.join(', ')}`:''}${rs.nAtt?` · ${rs.nAtt} à prendre dans le portail Scan`:''}
-    <span class="rx-act"><button class="btn sm" data-act="rxPrint" title="Imprimer l’état du contrôle (provisoire tant que toutes les fiches ne sont pas validées)">🖨 Imprimer</button><button class="btn sm" data-act="rxMaj">↻ Actualiser</button>${!lecture&&!rs.compte?'<button class="btn sm" data-act="rxAnnuler">Annuler l’envoi</button>':''}</span></div>`;
+    <span class="rx-act">${!lecture?'<button class="btn sm" data-act="rxBureau" title="Livraison directe : valider sur factures et avis de livraison, sans magasinier">✅ Valider au bureau</button>':''}<button class="btn sm" data-act="rxPrint" title="Imprimer l’état du contrôle (provisoire tant que toutes les fiches ne sont pas validées)">🖨 Imprimer</button><button class="btn sm" data-act="rxMaj">↻ Actualiser</button>${!lecture&&!rs.compte?'<button class="btn sm" data-act="rxAnnuler">Annuler l’envoi</button>':''}</span></div>`;
   else{
     const sansLit=S.filter(g=>g.rx.nEc&&!g.rx.lit);
     h=rs.nEc?`<div class="rx-ban ko">⚠ <b>Contrôle magasin terminé : ${rs.nEc} écart${rs.nEc>1?'s':''}</b> sur ${S.filter(g=>g.rx.nEc).length} fournisseur${S.filter(g=>g.rx.nEc).length>1?'s':''}. Les lignes en écart sont colorées ci-dessous.${sansLit.length?` <b>${sansLit.length}</b> litige${sansLit.length>1?'s':''} à ouvrir.`:''}
@@ -1828,6 +1828,73 @@ function rxVerifNouveaux(){
   RX_VUS=new Set(faits.map(x=>x.ID));
 }
 // À faire : contrôles magasin reçus et litiges
+// ═══ BC DÉCLARÉ DANS LE CONTENEUR MAIS MARCHANDISE ABSENTE : retiré du contrôle magasin ═══
+async function bcExclure(key){
+  const g=artsGroupes().find(x=>x.key===key);if(!g)return;g.rx=rxGroupe(g);
+  const B=g.bcs.filter(b=>b.c&&b.arts.length);if(!B.length){toast('Aucun article de BC à retirer.','wa');return;}
+  if(g.rx.sess&&g.rx.fait){toast('La fiche est déjà validée : sur chaque ligne, ✏️ → « Corriger l’attendu » à 0.','wa');return;}
+  const ok=await showConfirm('🚫 BC absent du conteneur',`<div class="muted" style="font-size:12.5px;margin-bottom:8px">Le BC reste dans le dossier (il est déclaré et facturé ici) mais ses articles ne seront pas à contrôler par le magasin.</div>
+    <div class="f"><label>BC concerné</label><select id="bxBC">${B.map(b=>`<option value="${esc(b.n)}">BC ${esc(b.n)} · ${b.arts.length} article(s)</option>`).join('')}</select></div>
+    <label class="reg-o" style="margin-top:8px"><input type="radio" name="bxT" value="avant" checked><span><b>Déjà reçu dans un conteneur précédent</b><br><span class="muted" style="font-size:12px">Le BC est marqué livré : il ne sera plus attendu nulle part.</span></span></label>
+    <label class="reg-o" style="margin-top:4px"><input type="radio" name="bxT" value="apres"><span><b>Arrivera dans un prochain conteneur</b><br><span class="muted" style="font-size:12px">Reliquat : il reste attendu.</span></span></label>
+    <div class="f" style="margin-top:8px"><label>Remarque (reprise dans le dossier)</label><input id="bxCom" placeholder="ex. reçu dans le conteneur TIIU710967/8, non déclaré"></div>`,'Retirer du contrôle');
+  if(!ok)return;
+  const n=$('bxBC').value,t=(document.querySelector('input[name="bxT"]:checked')||{}).value,com=($('bxCom').value||'').trim();
+  const b=B.find(x=>String(x.n)===String(n));if(!b)return;
+  try{
+    if(t==='avant')for(const a of b.arts){if(n0(a.Qte_Livree_Avant)>=n0(a.Quantite))continue;const body={Qte_Livree_Avant:n0(a.Quantite)};await spPatch('Lignes_Commande_Frs',a.ID,clean('Lignes_Commande_Frs',body),a);Object.assign(a,body);}
+    W.rxQte=W.rxQte||{};b.arts.forEach(a=>W.rxQte[a.ID]=0);
+    // fiche déjà envoyée mais pas commencée : on retire les lignes de ce BC
+    if(g.rx.sess){const ids=new Set(b.arts.map(a=>a.ID));for(const l of RX.lig.filter(l=>n0(l.Session_ScanId)===g.rx.sess.ID&&ids.has(n0(l.ID_Ligne_Cmd))&&!n0(l.Quantite_Scannee)&&!n0(l.Quantite_Abimee))){await spDelete('Lignes_Scan',l.ID,l);RX.lig=RX.lig.filter(x=>x!==l);}rxIndexer();}
+    const note=`BC ${n} : déclaré dans ce conteneur, ${t==='avant'?'déjà reçu dans un conteneur précédent':'arrivera dans un prochain conteneur'}${com?' — '+com:''}`;
+    const el=document.querySelector('#fiche [data-h="Anomalies_Depotage"]');const v=String(W.a.Anomalies_Depotage||'');
+    if(!v.includes(`BC ${n} : déclaré`)){W.a.Anomalies_Depotage=(v?v+'\n':'')+note;if(el)el.value=W.a.Anomalies_Depotage;markDirty();}
+    toast(`✓ BC ${n} retiré du contrôle magasin : enregistre le dossier`,'ok');
+  }catch(e){toast('🔴 '+e.message,'ko');}
+  renderArts();refreshComputed();
+}
+// ═══ CONTRÔLE AU BUREAU (livraison directe, ex. Saint-Martin) : pas de magasinier, validation sur factures et avis de livraison ═══
+const estLivDirecte=a=>/NORD|MARTIN|SXM|BARTH/i.test([a&&a.Categorie,a&&a.Title,a&&a.Conteneur].join(' '));
+async function rxValiderBureau(){
+  if(!W)return;if(W.dirty){toast('Enregistre d’abord le dossier.','ko');return;}
+  if(RX.err==='colonnes'||RX.err==='acces'){toast('🔴 Portail Scan pas prêt','ko');return;}
+  const G=artsGroupes();G.forEach(g=>g.rx=rxGroupe(g));
+  const enCours=[...new Map(G.filter(g=>g.rx.sess&&g.rx.cours).map(g=>[g.rx.sess.ID,g])).values()];
+  const ok=await showConfirm('✅ Contrôle au bureau',`<div style="font-size:13px">Pas de contrôle par les magasiniers : tu valides toi-même la marchandise <b>sur les factures et l’avis de livraison</b>. Les quantités reçues sont mises égales aux quantités attendues.</div>
+    ${enCours.length?`<div class="rx-ban warn" style="margin-top:8px">⚠ ${enCours.length} fiche(s) déjà commencée(s) par un magasinier : leurs comptages sont gardés, seules les lignes pas encore comptées sont validées.</div>`:''}
+    <div class="f req" style="margin-top:10px"><label>Motif</label><input id="vbMotif" value="${estLivDirecte(W.a)?'Livraison directe Saint-Martin':'Livraison directe client'} : validé sur factures et avis de livraison"></div>
+    <label style="display:flex;gap:6px;align-items:center;margin-top:8px;font-size:12.5px"><input type="checkbox" id="vbOk" style="width:auto"> J’ai vérifié les quantités sur l’avis de livraison / le bon signé</label>
+    <div class="muted" style="font-size:12px;margin-top:6px">Un écart sur l’avis de livraison ? Valide d’abord, puis corrige la ligne avec ✏️ (ou ouvre un litige).</div>`,'Valider');
+  if(!ok)return;
+  if(!$('vbOk').checked){toast('Coche la case de vérification de l’avis de livraison.','ko');return;}
+  const motif=($('vbMotif').value||'').trim()||'Contrôle au bureau';const qui=(sessionStorage.getItem('user_name')||'Bureau').split(' ')[0];
+  busyOn('Validation au bureau…');
+  try{
+    // 1. fiches manquantes créées comme pour le magasin
+    const F=new Map();G.filter(g=>!g.rx.sess).forEach(g=>{if(!F.has(g.fkey))F.set(g.fkey,[]);F.get(g.fkey).push(g);});
+    const cont=String(W.a.Conteneur||W.a.Title||'').trim();
+    for(const gs of F.values()){
+      const frs=[...new Set(gs.flatMap(g=>String(g.l.Fournisseur||'').split(' / ')).filter(Boolean))].join(' / ');
+      const sess=await spPost('Sessions_Scan',{Title:gs[0].fkey,Numero_BL:_trunc(`${cont} · ${nomCourtTxt(frs.split(' / ')[0])}`),Client:_trunc(frs),Type_Operation:RX_TYPE,Statut:'BL Émis',Date_Emission:new Date().toISOString(),ID_Arrivage:W.id,Conteneur:_trunc(cont),Fournisseur:_trunc(frs)});
+      let i=0;for(const g of gs)for(const b of g.bcs)for(const a of b.arts){const q=artQteEnvoi(a);if(!(q>0))continue;
+        await spPostSilencieux('Lignes_Scan',{Title:`RX-${sess.ID}-${++i}`,Session_ScanId:sess.ID,Reference_Article:_trunc(a.Title||a.Ref_2||''),Designation:_trunc(a.Designation||''),Quantite_Attendue:q,Quantite_Scannee:0,Quantite_Abimee:0,Fournisseur:_trunc(frs),N_Commande:b.n,ID_Ligne_Cmd:a.ID});}
+    }
+    await rxCharger();
+    // 2. validation de toutes les fiches non validées du dossier
+    const S=RX.sess.filter(x=>x.ID_Arrivage===W.id&&x.Statut!==RX_FAIT);let n=0;
+    for(const x of S){
+      for(const l of RX.lig.filter(l=>n0(l.Session_ScanId)===x.ID&&!n0(l.Quantite_Scannee)&&!n0(l.Quantite_Abimee)&&n0(l.Quantite_Attendue)>0)){busyMsg(`Validation au bureau… ${++n}`);
+        const body={Quantite_Scannee:n0(l.Quantite_Attendue),Observation:_trunc(motif,255)};await spPatch('Lignes_Scan',l.ID,body,l);Object.assign(l,body);}
+      const body={Statut:RX_FAIT,Magasinier:x.Magasinier||qui,Repris_Par:'Bureau ('+qui+')',Date_Scan:new Date().toISOString(),Nb_Ecarts:0};
+      await spPatch('Sessions_Scan',x.ID,body,x);Object.assign(x,body);
+    }
+    const note=`[Contrôle bureau ${fmtD(todayKey())} — ${qui}] ${motif}`;
+    const el=document.querySelector('#fiche [data-h="Anomalies_Depotage"]');const v=String(W.a.Anomalies_Depotage||'');
+    if(!v.includes('[Contrôle bureau')){W.a.Anomalies_Depotage=(v?v+'\n':'')+note;if(el)el.value=W.a.Anomalies_Depotage;markDirty();}
+    busyOff();toast('✅ Contrôle validé au bureau : vérifie les lignes, puis « Reporter dans le dossier » et enregistre','ok');
+  }catch(e){busyOff();toast('🔴 '+e.message,'ko');}
+  await rxCharger().catch(()=>{});rxIndexer();renderArts();
+}
 // ═══ COMPOSITION DE LA FACTURE : BC supplémentaire, article ajouté à la main ═══
 async function bcAjouter(key){
   const g=artsGroupes().find(x=>x.key===key);if(!g)return;
@@ -2353,8 +2420,8 @@ document.addEventListener('click',async e=>{
   const vo=e.target.closest('[data-rxverok]');if(vo){e.stopPropagation();const g=artsGroupes().find(x=>x.key===vo.dataset.rxverok);if(g){g.rx=rxGroupe(g);const L=rxConformesNonVer(g.rx);if(L.length)rxVerMaj(L,true);}return;}
   if(e.target.matches&&e.target.matches('input[data-rxver]')){e.stopPropagation();const l=RX.lig.find(x=>x.ID===+e.target.dataset.rxver);if(l)rxVerMaj([l],e.target.checked);return;}
   const rg=e.target.closest('[data-rxreg]');if(rg){e.stopPropagation();rxRegOuvrir(+rg.dataset.rxreg);return;}
-  const rxa=e.target.closest('[data-act="rxEnvoyer"],[data-act="rxMaj"],[data-act="rxAnnuler"],[data-act="rxReporter"],[data-act="rxPrint"]');
-  if(rxa){({rxEnvoyer,rxMaj,rxAnnuler,rxReporter,rxPrint})[rxa.dataset.act]();return;}
+  const rxa=e.target.closest('[data-act="rxEnvoyer"],[data-act="rxMaj"],[data-act="rxAnnuler"],[data-act="rxReporter"],[data-act="rxPrint"],[data-act="rxBureau"]');
+  if(rxa){({rxEnvoyer,rxMaj,rxAnnuler,rxReporter,rxPrint,rxBureau:rxValiderBureau})[rxa.dataset.act]();return;}
   const atg=e.target.closest('[data-arttg]');if(atg){const k=atg.dataset.arttg;ARTS_OUV.has(k)?ARTS_OUV.delete(k):ARTS_OUV.add(k);renderArts();return;}
   if(e.target.closest('[data-act="arcDossier"]')){arcControlerDossier();return;}
   const aa=e.target.closest('[data-act="artsToggle"],[data-act="artsPrint"]');if(aa){aa.dataset.act==='artsPrint'?artsPrint():artsToggle();return;}
@@ -2364,6 +2431,7 @@ document.addEventListener('click',async e=>{
     W.lines.push({_k:++_k,_st:'new',ID_Arrivage:W.id,Type_Ligne:frais?'Frais':'Marchandise',Fournisseur:def?def.Title:'',ID_Fournisseur:def?def.ID:null});
     markDirty();renderLines();renderFrais();refreshComputed();
     const ins=document.querySelectorAll(`[data-l="${_k}"]`);if(ins[0])ins[0].focus();return;}
+  const bxe=e.target.closest('[data-bcexcl]');if(bxe){e.stopPropagation();bcExclure(bxe.dataset.bcexcl);return;}
   const bca=e.target.closest('[data-bcadd]');if(bca){e.stopPropagation();bcAjouter(bca.dataset.bcadd);return;}
   const ara=e.target.closest('[data-artadd]');if(ara){e.stopPropagation();artAjouter(ara.dataset.artadd);return;}
   const ard=e.target.closest('[data-artdel]');if(ard){e.stopPropagation();artRetirer(+ard.dataset.artdel);return;}
@@ -4441,15 +4509,21 @@ function arcAnalyse(pages,c){
   // lignes : chaque ligne du BC cherchée par sa réf. fournisseur (puis réf. Réseaux Plus)
   const pris=new Set();
   const lireLigne=(row,refs)=>{
-    const its=row.items.filter(it=>!refs.includes(arcNorm(it.s)));
+    const its=row.items.filter(it=>!refs.includes(arcNorm(it.s))&&!refs.some(r=>r.length>=5&&arcNorm(it.s).includes(r)&&arcNum(it.s)==null));
     const ns=its.map(it=>arcNum(it.s)).filter(n=>n!=null);
     const des=its.filter(it=>arcNum(it.s)==null).map(it=>it.s).join(' ');
     return {ns,des};
   };
   for(const l of cmdLignes(c.ID)){
     const refs=[l.Title,l.Ref_2].filter(x=>x&&x!=='(sans réf.)').map(arcNorm).filter(x=>x.length>=3);
+    // morceaux distinctifs de la réf. fournisseur (« C450 SPA00013TS » → SPA00013TS) : lettres + chiffres, ou 6 chiffres et plus
+    const toks=String(l.Title||'').toUpperCase().split(/[\s\/,;]+/).map(arcNorm).filter(t=>(t.length>=5&&/\d/.test(t)&&/[A-Z]/.test(t))||(t.length>=6&&/^\d+$/.test(t)));
     let idx=-1;
     for(let i=0;i<rows.length;i++){if(pris.has(i))continue;if(rows[i].items.some(it=>refs.includes(arcNorm(it.s))||refs.some(rf=>arcNorm(it.s.split(/\s+/)[0])===rf))){idx=i;break;}}
+    if(idx<0&&toks.length){const RXT=toks.map(t=>new RegExp('(^|[^A-Z0-9])'+t.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')+'($|[^A-Z0-9])'));
+      for(let i=0;i<rows.length;i++){if(pris.has(i))continue;const tx=rows[i].items.map(it=>String(it.s).toUpperCase().replace(/[.\-\/]/g,' ')).join(' ');const tj=arcNorm(tx);
+        if(RXT.some(r=>r.test(tx))||toks.some(t=>t.length>=8&&tj.includes(t))){idx=i;break;}}}
+    if(idx>=0)toks.forEach(t=>{if(!refs.includes(t))refs.push(t);});
     const qb=l.Quantite,mb=l.Montant_HT,pb=l.Prix_Unitaire!=null?l.Prix_Unitaire*(1-(l.Remise||0)/100):(mb!=null&&qb?mb/qb:null);
     const o={id:l.ID,ref:l.Title,ref2:l.Ref_2||'',des:l.Designation||'',qb,pb,mb,trouve:idx>=0,qa:null,pa:null,ma:null,ecarts:[]};
     if(idx>=0){
