@@ -900,6 +900,23 @@ function renderRibbons(){
   if(miss.length)h+=`<div class="warn-ribbon">⚠️ Colonnes absentes dans SharePoint, ignorées sans bloquer le portail — ${esc(miss.join(' · '))}</div>`;
   $('ribbons').innerHTML=h;
 }
+// ═══ NOUVEAU FOURNISSEUR (Monique / Patricia) : fiche créée dans la liste Fournisseurs depuis une facture ═══
+async function frsCreer(opt){
+  opt=opt||{};const nom0=String(opt.nom||'').trim().toUpperCase();const mail=String(opt.mail||'').trim();
+  const ok=await showConfirm('＋ Nouveau fournisseur',`<div class="muted" style="font-size:12.5px;margin-bottom:8px">Vérifie d’abord qu’il n’existe pas sous un autre nom (tape une partie du nom dans le champ Fournisseur). Le code comptable peut être ajouté plus tard.</div>
+    <div class="fgrid2"><div class="f req"><label>Nom (comme sur la facture)</label><input id="nfNom" value="${esc(nom0)}"></div><div class="f"><label>Nom court / alias</label><input id="nfAlias" placeholder="ex. SAMCOM"></div></div>
+    <div class="fgrid2" style="margin-top:8px"><div class="f"><label>Code comptable</label><input id="nfCC" placeholder="ex. FF00xxx"></div><div class="f"><label>Code Image</label><input id="nfCI" placeholder="ex. F2xx"></div></div>
+    <div class="fgrid2" style="margin-top:8px"><div class="f"><label>Type</label><select id="nfTT">${['Fournisseur','Transitaire','Transporteur','Autre'].map(x=>`<option>${x}</option>`).join('')}</select></div><div class="f"><label>Achat</label><select id="nfTA"><option>Local</option><option>Import</option></select></div></div>
+    <div class="fgrid2" style="margin-top:8px"><div class="f"><label>Délai de paiement (jours)</label><input id="nfDP" inputmode="numeric" placeholder="ex. 30"></div><div class="f"><label>Adresse mail d’envoi des factures</label><input id="nfMail" value="${esc(mail)}"></div></div>`,'Créer');
+  if(!ok)return null;
+  const nom=($('nfNom').value||'').trim().toUpperCase();if(!nom){toast('Le nom est obligatoire.','ko');return null;}
+  const ex=matchFrs(nom,null);if(ex&&nCore(ex.Title)===nCore(nom)){toast(`« ${ex.Title} » existe déjà : choisis-le dans la liste.`,'wa');return ex;}
+  const dp=parseInt($('nfDP').value,10);
+  const body={Title:_trunc(nom),Alias:($('nfAlias').value||'').trim()||null,Code_Compta:($('nfCC').value||'').trim()||null,Code_Image:($('nfCI').value||'').trim()||null,Type_Tiers:$('nfTT').value,Type_Achat:$('nfTA').value,
+    Delai_Paiement_Jours:isNaN(dp)?null:dp,Emails_Expediteurs:($('nfMail').value||'').trim()||null,Actif:'Oui'};
+  try{const r=await spPost('Fournisseurs',body);const f={...body,ID:r.ID};DATA.frs.push(f);buildDatalists();toast(`✓ Fournisseur ${nom} créé${body.Code_Compta?'':' (code comptable à compléter)'}`,'ok');return f;}
+  catch(e){toast('🔴 '+e.message,'ko');return null;}
+}
 function buildDatalists(){
   const actifs=DATA.frs.filter(f=>f.Actif!=='Non');
   $('dlFrs').innerHTML=actifs.filter(f=>(f.Type_Tiers||'Fournisseur')==='Fournisseur').map(f=>`<option value="${esc(f.Title)}">${esc(f.Code_Image||'')}</option>`).join('');
@@ -1111,7 +1128,7 @@ ${VUE_F?`      <div class="card" id="cardVal"><div class="card-h"><h3>🧮 Revie
           ${fField('Contrôle au dépotage','Controle_OK',{type:'select',options:['Oui','Non']})}${fField('Nombre de conteneurs','Nb_Conteneurs',{type:'number',ph:'1',help:'Pour un lot de plusieurs conteneurs (stats par conteneur)'})}${fField('Manquants, casse, remarques','Anomalies_Depotage',{type:'textarea',span:2})}
         </div></div></div>
       <div class="card"><div class="card-h"><h3>📦 Marchandise <span class="tag" id="nMar"></span></h3><button class="btn sm" data-act="addMar">＋ Ligne marchandise</button></div>
-        <div class="card-b tblwrap" style="padding:6px 10px 10px"><table class="ltable"><thead><tr><th style="width:22%">Fournisseur</th><th>N° cde</th><th>N° facture</th><th>Produits</th><th class="r">Valeur march.</th><th class="r" title="Frais facturés par le fournisseur (port, emballage…)">Frais frs</th><th class="r" title="Remise, avoir, correction (négatif possible)">Ajustement</th><th class="r">Total CIF</th><th>Client</th><th></th></tr></thead>
+        <div class="card-b tblwrap" style="padding:6px 10px 10px"><table class="ltable"><thead><tr><th style="width:22%">Fournisseur</th><th>N° cde</th><th>N° facture</th><th>Produits</th><th class="r">Valeur march.</th><th class="r" title="Frais facturés par le fournisseur (port, emballage…)">Frais frs</th><th class="r" title="Remise, avoir, correction (négatif possible)">Ajustement</th><th class="r" title="Valeur marchandise + frais fournisseur + ajustement">Total</th><th>Client</th><th></th></tr></thead>
         <tbody id="tbMar"></tbody><tfoot><tr><td colspan="4">Total marchandise</td><td class="r" id="ftVM"></td><td class="r" id="ftFret"></td><td class="r" id="ftAj"></td><td class="r" id="ftCIF"></td><td colspan="2"></td></tr></tfoot></table></div></div>
       <div class="card" id="cardArts"><div class="card-h"><h3>📋 Contenu du conteneur — articles des BC <span class="tag" id="nArts"></span></h3><div style="display:flex;gap:6px"><button class="btn sm" data-act="arcDossier" title="Relit l’ARC joint à chaque BC du dossier et marque les articles dont le prix ou la quantité diffère">🔍 Contrôler les ARC</button><button class="btn sm" data-act="artsToggle" id="btnArtsTg">⊞ Tout déplier</button><button class="btn sm primary" data-act="artsPrint" title="Feuille pré-remplie pour le contrôle à l’arrivée (remplace le formulaire papier)">🖨 Feuille de contrôle</button></div></div>
         <div class="card-b" id="artsBox" style="padding:10px 12px"></div></div>
@@ -1131,7 +1148,7 @@ ${VUE_F?`      <div class="card" id="cardVal"><div class="card-h"><h3>🧮 Revie
           ${fField('Contrôle au dépotage','Controle_OK',{type:'select',options:['Oui','Non']})}${fField('Nombre de conteneurs','Nb_Conteneurs',{type:'number',ph:'1',help:'Pour un lot de plusieurs conteneurs (stats par conteneur)'})}${fField('Manquants, casse, remarques','Anomalies_Depotage',{type:'textarea',span:2})}
         </div></div></div>
 ${LOCK?`<div class="lock-ban">🔒 <b>Montants verrouillés</b> : le dossier est ${esc(a.Statut==='À valider Fabrice'?'en validation chez Fabrice':'validé')}. Pour corriger, Fabrice doit le renvoyer.</div><fieldset disabled class="lockfs">`:''}      <div class="card"><div class="card-h"><h3>📦 Marchandise <span class="tag" id="nMar"></span></h3><button class="btn sm" data-act="addMar">＋ Ligne marchandise</button></div>
-        <div class="card-b tblwrap" style="padding:6px 10px 10px"><table class="ltable"><thead><tr><th style="width:22%">Fournisseur</th><th>N° cde</th><th>N° facture</th><th>Produits</th><th class="r">Valeur march.</th><th class="r" title="Frais facturés par le fournisseur (port, emballage…)">Frais frs</th><th class="r" title="Remise, avoir, correction (négatif possible)">Ajustement</th><th class="r">Total CIF</th><th>Client</th><th></th></tr></thead>
+        <div class="card-b tblwrap" style="padding:6px 10px 10px"><table class="ltable"><thead><tr><th style="width:22%">Fournisseur</th><th>N° cde</th><th>N° facture</th><th>Produits</th><th class="r">Valeur march.</th><th class="r" title="Frais facturés par le fournisseur (port, emballage…)">Frais frs</th><th class="r" title="Remise, avoir, correction (négatif possible)">Ajustement</th><th class="r" title="Valeur marchandise + frais fournisseur + ajustement">Total</th><th>Client</th><th></th></tr></thead>
         <tbody id="tbMar"></tbody><tfoot><tr><td colspan="4">Total marchandise</td><td class="r" id="ftVM"></td><td class="r" id="ftFret"></td><td class="r" id="ftAj"></td><td class="r" id="ftCIF"></td><td colspan="2"></td></tr></tfoot></table></div></div>
       <div class="card" id="cardArts"><div class="card-h"><h3>📋 Contenu du conteneur — articles des BC <span class="tag" id="nArts"></span></h3><div style="display:flex;gap:6px"><button class="btn sm" data-act="arcDossier" title="Relit l’ARC joint à chaque BC du dossier et marque les articles dont le prix ou la quantité diffère">🔍 Contrôler les ARC</button><button class="btn sm" data-act="artsToggle" id="btnArtsTg">⊞ Tout déplier</button><button class="btn sm primary" data-act="artsPrint" title="Feuille pré-remplie pour le contrôle à l’arrivée (remplace le formulaire papier)">🖨 Feuille de contrôle</button></div></div>
         <div class="card-b" id="artsBox" style="padding:10px 12px"></div></div>
@@ -2332,7 +2349,7 @@ function refreshComputed(){
     <div class="sumrow"><span>Fret maritime (transitaire)</span><b>${fmtEur(c.fretTrans)}</b></div>
     <div class="sumrow"><span>Total CIF</span><b>${fmtEur(c.cif)}</b></div>
     <div class="sumrow"><span>Frais d'approche</span><b>${fmtEur(c.frais)}</b></div>
-    <div class="sumrow tot"><span>Coût total rendu</span><b>${fmtEur(c.total)}</b></div>
+    <div class="sumrow tot"><span style="color:#c62828;font-weight:700">Coût total rendu</span><b style="color:#c62828;font-weight:800">${fmtEur(c.total)}</b></div>
     <div class="muted" style="font-size:11.5px;margin-top:6px">Coefficient = coût total rendu ÷ valeur marchandise nette (même formule que l'Excel).</div>`;
   const checks=[
     [c.nMar>0,`${c.nMar} ligne${c.nMar>1?'s':''} marchandise`,'Aucune ligne marchandise'],
@@ -3241,7 +3258,7 @@ function renderFacForm(){
     ${v.image?'<div class="fac-note">🖼️ PDF scanné (image) : rien n’a pu être lu automatiquement, saisis les champs.</div>':v.src.fx?'<div class="fac-note ok">⚡ Facture électronique (Factur-X) : données exactes lues dans le fichier.</div>':v.lu?'<div class="fac-note">📄 Les champs marqués « lu » viennent du PDF : un coup d’œil suffit.</div>':''}
     ${f.Expediteur?`<div class="muted" style="font-size:12px;margin-bottom:8px">De : ${esc(f.Expediteur)}</div>`:''}
     <div class="f req"><label>Fournisseur ${facChip(v.src.frs)}</label><div style="display:flex;gap:6px;align-items:center"><input data-ff="frs" list="dlFrsAll" value="${esc(v.frs)}" class="${v.frsId?'':'req-empty'}" placeholder="tape le nom ou l’alias"><span class="${v.frsId?'frs-ok':'frs-ko'}">${v.frsId?'✓':'⚠'}</span></div>
-      <div class="help">${k.fr?`${esc(k.fr.Code_Compta||'sans code compta')} · ${esc(k.fr.Type_Tiers||'')}${d!==null?` · paiement à ${d} j`:''}`:'Fournisseur non reconnu : choisis-le dans la liste.'}</div></div>
+      <div class="help">${k.fr?`${esc(k.fr.Code_Compta||'sans code compta')} · ${esc(k.fr.Type_Tiers||'')}${d!==null?` · paiement à ${d} j`:''}`:`Fournisseur non reconnu : choisis-le dans la liste, ou <a href="#" data-frsnew="1"><b>＋ créer ce fournisseur</b></a>.`}</div></div>
     <div class="f"><label>Type ${facChip(v.src.type)}</label><div class="seg"><button data-fft="Facture" class="${v.type==='Facture'?'on':''}">Facture</button><button data-fft="Avoir" class="${v.type==='Avoir'?'on':''}">Avoir</button></div></div>
     <div class="f req"><label>${v.sansPdf?'N° ou libellé':'N° de facture'} ${facChip(v.src.numero)}</label><input data-ff="numero" class="${v.sansPdf?'':'mono'} ${req(v.numero)?'req-empty':''}" value="${esc(v.numero)}" placeholder="${v.sansPdf?'ex. Cotisation octobre 2026':'à saisir'}"></div>
     <div class="fgrid2"><div class="f req"><label>Date ${facChip(v.src.date)}</label><input data-ff="date" type="date" value="${esc(v.date)}" class="${req(v.date)?'req-empty':''}"></div>
@@ -3404,6 +3421,12 @@ document.addEventListener('click',e=>{
   if(e.target.closest('#btnSansPdf')){openSansPdf();return;}
   if(e.target.closest('#btnFacDel')){supprimerFacture();return;}
   if(e.target.closest('#btnFacSuppr')){supprimerTraitee();return;}
+});
+document.addEventListener('click',async e=>{
+  const nf=e.target.closest&&e.target.closest('[data-frsnew]');if(!nf)return;e.preventDefault();
+  const v=FACV.form;const inp=document.querySelector('#facForm [data-ff="frs"]');
+  const ex=String((facCur()||{}).Expediteur||'').replace(/^\//,'');const f=await frsCreer({nom:inp?inp.value:'',mail:/reseauxplus/i.test(ex)?'':ex});
+  if(f&&inp){inp.value=f.Title;inp.dispatchEvent(new Event('change',{bubbles:true}));}
 });
 document.addEventListener('change',e=>{
   if(e.target.id==='facUpload'){facDeposer(e.target.files);e.target.value='';return;}
@@ -4600,7 +4623,8 @@ function cmdFrsDe(r){
   if(r.code){const f=DATA.frs.find(x=>String(x.Code_Image||'').trim().toUpperCase()===r.code.toUpperCase());if(f)return f;}
   return r.fournisseur?matchFrs(r.fournisseur):null;
 }
-function cmdEstImport(c){if(/import/i.test(c.Type_Commande||''))return true;if(/local/i.test(c.Type_Commande||''))return false;const f=c.ID_Fournisseur?frsById(c.ID_Fournisseur):null;return !f||f.Type_Achat!=='Local';}
+function cmdEstImport(c){const f0=c.ID_Fournisseur?frsById(c.ID_Fournisseur):null;if(f0&&f0.Type_Achat==='Local')return false;   // fournisseur local : prime sur le type écrit sur le BC
+  if(/import/i.test(c.Type_Commande||''))return true;if(/local/i.test(c.Type_Commande||''))return false;const f=c.ID_Fournisseur?frsById(c.ID_Fournisseur):null;return !f||f.Type_Achat!=='Local';}
 // Dossier d'arrivage contenant cette commande (via n° de l'extrait SIFA)
 function cmdArrivage(c){
   const n=cmdNum(c.Title);if(!n)return null;
@@ -4627,6 +4651,8 @@ function cmdEtat(c){
   if(dk(c,'Date_ARC')&&/^\[ARC\] ⚠/m.test(c.Commentaire||''))return {k:'arc',lbl:'ARC reçu · BPA à envoyer',cls:'st-valid',ouverte:true,alerte:{lvl:'r',txt:'ARC différent du BC : à régler avant le BPA'}};
   if(dk(c,'Date_ARC')){const j=daysBetween(dk(c,'Date_ARC'),t);return {k:'arc',lbl:'ARC reçu · BPA à envoyer',cls:'st-valid',ouverte:true,alerte:j>=param('SEUIL_BPA_J')?{lvl:j>=2*param('SEUIL_BPA_J')?'r':'a',txt:`ARC reçu il y a ${j} j, BPA pas encore envoyé`}:null};}
   const j=dc?daysBetween(dc,t):0;
+  if(!imp){const fr=c.ID_Fournisseur?frsById(c.ID_Fournisseur):null;const dl=n0(fr&&fr.Delai_Appro_Jours)||7;
+    return {k:'cmd',lbl:'Commandée · livraison attendue (BL signé)',cls:'st-prep',ouverte:true,alerte:j>dl?{lvl:j>2*dl?'r':'a',txt:`Pas livrée depuis ${j} j (délai ${dl} j) : relancer le fournisseur`}:null};}
   return {k:'cmd',lbl:'Commandée · ARC attendu',cls:'st-prep',ouverte:true,alerte:j>=param('SEUIL_ARC_J')?{lvl:j>=2*param('SEUIL_ARC_J')?'r':'a',txt:`Pas d’ARC depuis ${j} j : relancer le fournisseur`}:null};
 }
 const CMD_ETAPES=[['cmd','Commandée'],['arc','ARC'],['bpa','BPA'],['dispo','Dispo'],['route','Expédiée'],['recue','Reçue']];
@@ -4801,7 +4827,7 @@ async function cmdJoindre(id,file,quoi){
     try{await spAddAttachment('Commandes_Frs',id,nom,buf);}
     catch(e){if(!/d[ée]j[àa]|already|2130575257/i.test(e.message))throw e;nom=`${base} ${new Date().toISOString().slice(0,19).replace(/\D/g,'')}${ext}`;await spAddAttachment('Commandes_Frs',id,nom,buf);}
     delete CMDV.att[id];
-    const body=quoi==='ARC'?(dk(c,'Date_ARC')?{}:{Date_ARC:toSP(todayKey())}):(dk(c,'Date_BPA')?{Mode_BPA:'BPA signé'}:{Date_BPA:toSP(todayKey()),Mode_BPA:'BPA signé'});
+    const body=quoi==='BL signé'?(dk(c,'Date_Reception')?{}:{Date_Reception:toSP(todayKey())}):quoi==='ARC'?(dk(c,'Date_ARC')?{}:{Date_ARC:toSP(todayKey())}):(dk(c,'Date_BPA')?{Mode_BPA:'BPA signé'}:{Date_BPA:toSP(todayKey()),Mode_BPA:'BPA signé'});
     if(quoi==='BPA'&&!dk(c,'Date_ARC'))body.Date_ARC=toSP(todayKey());
     // contrôle automatique si le PDF contient du texte (l'ARC signé = BPA est contrôlé aussi)
     let r=null;
@@ -4942,25 +4968,25 @@ function cmdDetailHtml(c,e){
   const a=e.a||cmdArrivage(c);
   return `<div class="cmd-det">
     <div class="cmd-cols">
-      <div><div class="muted" style="font-size:12px">Type</div>${esc(c.Type_Commande||(cmdEstImport(c)?'Import':'Local'))}</div>
+      <div><div class="muted" style="font-size:12px">Type</div>${esc(cmdEstImport(c)?(c.Type_Commande||'Import'):('Local'+(/import/i.test(c.Type_Commande||'')?' (fournisseur local)':'')))}</div>
       <div><div class="muted" style="font-size:12px">Livraison</div>${esc(c.Adresse_Livraison||'—')}</div>
       <div><div class="muted" style="font-size:12px">Documents</div>${lien} <span id="cmdAtt"><span class="muted">…</span></span></div>
       ${a?`<div><div class="muted" style="font-size:12px">Dossier d'arrivage</div><a href="#" data-open="${a.ID}">🚢 ${esc(a.Title)}</a> · ${esc(statutAuto(a))}</div>`:''}
     </div>
     ${c.ID_Fournisseur?'':`<div class="warn-ribbon" style="border-radius:8px;margin:8px 0">⚠ Fournisseur « ${esc(c.Fournisseur||'')} » non reconnu : choisis-le <input list="dlFrs" data-cmdfrs="${c.ID}" placeholder="fournisseur" style="width:240px" ${dis}> (ajoute son nom en alias pour les prochains BC).</div>`}
     <div class="cmd-act">
-      <label>ARC reçu le<input type="date" data-cmdd="Date_ARC" value="${dk(c,'Date_ARC')}" ${dis}></label>
+      ${cmdEstImport(c)?`<label>ARC reçu le<input type="date" data-cmdd="Date_ARC" value="${dk(c,'Date_ARC')}" ${dis}></label>
       <label>BPA envoyé le<input type="date" data-cmdd="Date_BPA" value="${dk(c,'Date_BPA')}" ${dis}></label>
-      <label>Mode BPA<select data-cmdd="Mode_BPA" ${dis}>${['','Courriel','BPA signé'].map(m=>`<option ${c.Mode_BPA===m?'selected':''}>${m}</option>`).join('')}</select></label>
+      <label>Mode BPA<select data-cmdd="Mode_BPA" ${dis}>${['','Courriel','BPA signé'].map(m=>`<option ${c.Mode_BPA===m?'selected':''}>${m}</option>`).join('')}</select></label>`:''}
       ${cmdEstImport(c)?`<label>Dispo annoncée le<input type="date" data-cmdd="Date_Dispo_Prevue" value="${dk(c,'Date_Dispo_Prevue')}" ${dis}></label>`:''}
-      <label>Reçue le${cmdEstImport(c)?' (hors conteneur)':''}<input type="date" data-cmdd="Date_Reception" value="${dk(c,'Date_Reception')}" ${dis}></label>
+      <label>${cmdEstImport(c)?'Reçue le (hors conteneur)':'Livrée le (BL signé)'}<input type="date" data-cmdd="Date_Reception" value="${dk(c,'Date_Reception')}" ${dis}></label>
     </div>
     ${ed?`<div class="cmd-btns">
-      ${!dk(c,'Date_ARC')?`<button class="btn sm" data-cmdq="arc">✓ ARC reçu aujourd’hui</button>`:''}
+      ${cmdEstImport(c)?`${!dk(c,'Date_ARC')?`<button class="btn sm" data-cmdq="arc">✓ ARC reçu aujourd’hui</button>`:''}
       ${dk(c,'Date_ARC')&&!dk(c,'Date_BPA')?`<button class="btn sm primary" data-cmdq="bpa">✅ BPA envoyé par courriel</button>`:''}
       <label class="btn sm">📎 Joindre l’ARC<input type="file" data-cmdj="ARC" accept=".pdf,image/*" hidden></label>
-      <label class="btn sm">📎 Joindre le BPA signé<input type="file" data-cmdj="BPA" accept=".pdf,image/*" hidden></label>
-      <button class="btn sm" data-cmdq="ctrl" title="Compare l’ARC joint (PDF avec texte) au BC : quantités, prix, total, date de livraison">🔍 Contrôler l’ARC</button><input type="file" id="cmdCtlFile" accept=".pdf" hidden>
+      <label class="btn sm">📎 Joindre le BPA signé<input type="file" data-cmdj="BPA" accept=".pdf,image/*" hidden></label>`:`<label class="btn sm ${dk(c,'Date_Reception')?'':'primary'}" title="Commande locale : le BL signé à la livraison remplace l’ARC. La commande passe en livrée.">📎 Joindre le BL signé<input type="file" data-cmdj="BL signé" accept=".pdf,image/*" hidden></label>`}
+      <button class="btn sm" data-cmdq="ctrl" title="Compare le document joint (PDF avec texte) au BC : quantités, prix, total">🔍 Contrôler ${cmdEstImport(c)?'l’ARC':'le BL'}</button><input type="file" id="cmdCtlFile" accept=".pdf" hidden>
       ${c.Lien_BC?`<button class="btn sm" data-cmdq="relire" title="Relit le PDF du BC (après modification dans Image)">🔁 Relire le BC</button>`:''}
       <button class="btn sm" data-cmdq="solde" title="Commande déjà reçue ou terminée, sorte du suivi">${/^Sold/i.test(c.Statut||'')?'↺ Remettre en suivi':'✔ Solder (déjà reçue)'}</button>
       <button class="btn sm ${c.Annulee==='Oui'?'':'danger'}" data-cmdq="annul">${c.Annulee==='Oui'?'↺ Réactiver':'✕ Annuler la commande'}</button>
@@ -5170,11 +5196,12 @@ async function daEnregistrer(){
     const t=todayKey(),pre='DA-'+t.slice(2).replace(/-/g,'');const n=(DATA.da||[]).filter(d=>String(d.Title||'').startsWith(pre)).length+1;
     const u=sessionStorage.getItem('user_name')||'';
     const d=await spPost('Demandes_Achat',{Title:`${pre}-${n}`,Zone:F.zone,Transport:F.transport,Motif:F.motif,Client:daHasCli(F.motif)?_trunc(F.clients.join(' ; ')):null,N_Devis:daHasCli(F.motif)&&daDevisTxt(F)?_trunc(daDevisTxt(F)):null,N_Devis_Frs:daNums(F.devisFrs)?_trunc(daNums(F.devisFrs)):null,
-      Demandeur:_trunc(u),Statut:'Validée',Valide_Par:_trunc(u),Date_Demande:toSP(t),Date_Validation:toSP(t),Commentaire:F.com.trim()||null});
+      Demandeur:_trunc(u),Statut:daPeutValider()?'Validée':'À valider',Valide_Par:daPeutValider()?_trunc(u):null,Date_Demande:toSP(t),Date_Validation:daPeutValider()?toSP(t):null,Commentaire:F.com.trim()||null});
     for(const l of L){const fr=l.frs?matchFrs(l.frs):null;
       await spPostSilencieux('Lignes_Demande_Achat',sansVide({Title:_trunc(l.ref.trim().toUpperCase()),ID_Demande:d.ID,Designation:_trunc(l.des.trim()+(daMulti(F)&&MISSING.Lignes_Demande_Achat&&MISSING.Lignes_Demande_Achat.has('Client')?' · '+l.cli:'')),Quantite:parseNum(l.qte),ID_Fournisseur:fr?fr.ID:null,Fournisseur:fr?fr.Title:(l.frs.trim()||null),Client:daHasCli(F.motif)&&l.cli?_trunc(l.cli):null}));}
     // Notification : le flux Power Automate envoie Resume_Notif par mail quand Notif = « À envoyer », puis met « Envoyée »
-    try{await spPatch('Demandes_Achat',d.ID,{Notif:'À envoyer',Resume_Notif:daResumeMail(d.Title,F,L,u)});}catch(e){console.warn('[DA notif]',e);}
+    // validée d'office si Fabrice la saisit (mail « à commander ») ; sinon mail de validation à Fabrice
+    try{await spPatch('Demandes_Achat',d.ID,{Notif:daPeutValider()?'À envoyer':'À valider',Resume_Notif:daResumeMail(d.Title,F,L,u)});}catch(e){console.warn('[DA notif]',e);}
     daFermer();await reloadAll();setTab('commandes');
     const n2=await daRapprocherTout();
     toast(`✓ Demande ${d.Title} enregistrée (${L.length} ligne${L.length>1?'s':''})${n2?` · ${n2} déjà sur un BC importé`:''}`,'ok');
@@ -5293,7 +5320,7 @@ function daBlocHtml(){
     <div style="display:flex;gap:8px"><button class="btn sm" id="daRappr" title="Relie les lignes aux BC déjà importés (même réf. Réseaux Plus)">🔗 Rapprocher avec les BC</button><button class="btn sm primary" onclick="daOuvrir()">＋ Demande de commande</button></div></div>
     <div class="card-b">${avNotif}${daBlocAValider()}${groupes.length?groupes.map(([f,L])=>`<div class="da-g"><div class="da-gh"><b>${esc(f)}</b> <span class="muted">${L.length} article${L.length>1?'s':''}</span></div>
       <table class="da-grid"><thead><tr><th style="width:110px">Réf.</th><th>Désignation</th><th class="r" style="width:60px">Qté</th><th style="width:120px">Demande</th><th style="width:190px">Pour</th><th style="width:150px">Livraison</th><th style="width:160px">${ed?'N° BC si déjà passé':''}</th></tr></thead><tbody>${L.map(l=>{const d=dem(l.ID_Demande);return `<tr><td class="mono"><b>${esc(l.Title)}</b></td><td>${esc(daDes(l))}</td><td class="r"><b>${fmtN(l.Quantite,0)}</b></td>
-        <td>${daPeutModifier(d)?`<a href="#" data-damodif="${d.ID}" title="Modifier cette demande">✎ ${esc(d.Title||'')}</a>`:esc(d.Title||'')}<div class="muted" style="font-size:11px">${fmtD(dk(d,'Date_Demande'))}</div></td>
+        <td>${daPeutModifier(d)?`<a href="#" data-damodif="${d.ID}" title="Modifier cette demande">✎ ${esc(d.Title||'')}</a>`:esc(d.Title||'')}<div class="muted" style="font-size:11px">${fmtD(dk(d,'Date_Demande'))} · par ${esc(String(d.Demandeur||'?').split(' ')[0])}</div>${d.Valide_Par?`<div style="font-size:11px;color:#2e7d32">✅ validée par ${esc(String(d.Valide_Par).split(' ')[0])}${dk(d,'Date_Validation')?' le '+fmtD(dk(d,'Date_Validation')):''}</div>`:''}</td>
         <td>${esc(daPour(d,l))}${d.N_Devis_Frs?`<div class="muted" style="font-size:11px">devis frs ${esc(d.N_Devis_Frs)}</div>`:''}</td>
         <td>${esc(d.Zone||'')}<div class="muted" style="font-size:11px">${esc(d.Transport||'')}</div></td>
         <td>${ed?`<input data-dalier="${l.ID}" placeholder="n° BC" style="width:140px;font-size:12px">`:''}</td></tr>`;}).join('')}</tbody></table></div>`).join('')
@@ -5302,7 +5329,7 @@ function daBlocHtml(){
       <label style="font-size:12px;display:inline-flex;gap:4px;align-items:center;margin:8px 0"><input type="checkbox" id="daTout" ${DAV.tout?'checked':''} style="width:auto"> afficher aussi les commandées et annulées</label>
       ${liste.map(d=>{const e=daEtat(d);const L=daLignes(d.ID);const cli=daHasCli(d.Motif);return `<div class="da-card">
         <div class="da-card-h"><div class="da-card-t"><b class="mono">${esc(d.Title)}</b><span class="st ${e.cls}">${esc(e.lbl)}</span></div>
-          <div class="da-card-m"><span><i>Date</i>${fmtD(dk(d,'Date_Demande'))}</span><span><i>Pour</i>${esc(cli?daPour(d).replace(/^Client /,'Client : '):'Stock')}</span><span><i>Livraison</i>${esc((d.Zone||'')+' · '+(d.Transport||''))}</span><span><i>Demandeur</i>${esc(d.Demandeur||'')}</span>${d.N_Devis?`<span><i>Devis client</i>${esc(d.N_Devis)}</span>`:''}${d.N_Devis_Frs?`<span><i>Devis frs</i>${esc(d.N_Devis_Frs)}</span>`:''}</div>
+          <div class="da-card-m"><span><i>Date</i>${fmtD(dk(d,'Date_Demande'))}</span><span><i>Pour</i>${esc(cli?daPour(d).replace(/^Client /,'Client : '):'Stock')}</span><span><i>Livraison</i>${esc((d.Zone||'')+' · '+(d.Transport||''))}</span><span><i>Demandée par</i>${esc(d.Demandeur||'?')}</span><span><i>Validation</i>${d.Statut==='À valider'?'<b style="color:#b45309">en attente de Fabrice</b>':d.Valide_Par?`${d.Statut==='Refusée'?'refusée':'✅ validée'} par <b>${esc(d.Valide_Par)}</b>${dk(d,'Date_Validation')?' le '+fmtD(dk(d,'Date_Validation')):''}${d.Valide_Par===d.Demandeur&&d.Statut!=='Refusée'?' (saisie par la direction)':''}`:'—'}</span>${d.N_Devis?`<span><i>Devis client</i>${esc(d.N_Devis)}</span>`:''}${d.N_Devis_Frs?`<span><i>Devis frs</i>${esc(d.N_Devis_Frs)}</span>`:''}</div>
           <div class="da-card-a">${daPeutModifier(d)?`<button class="btn ghost sm" data-damodif="${d.ID}" title="Modifier la demande (destination, transport, clients, articles)">✎ Modifier</button>`:''}${ed&&d.Statut!=='Annulée'&&e.k!=='cmd'?`<button class="btn ghost sm" data-daannul="${d.ID}" title="Annuler la demande" style="color:#b91c1c">✕ Annuler</button>`:''}</div></div>
         <table class="da-grid"><thead><tr><th style="width:110px">Réf.</th><th>Désignation</th><th class="r" style="width:60px">Qté</th>${cli?'<th style="width:170px">Client</th>':''}<th style="width:150px">Fournisseur</th><th style="width:250px">Commande fournisseur</th></tr></thead><tbody>
         ${L.map(l=>{const c=l.ID_Commande_Frs?cmdById(l.ID_Commande_Frs):(l.N_Commande?cmdByNum(l.N_Commande):null);const ce=c?cmdEtat(c):null;
