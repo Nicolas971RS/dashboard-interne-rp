@@ -4358,8 +4358,13 @@ async function chargerBCClients(){
   };
   try{
     let rows;
-    try{rows=await lire('ID,Title,N_BC_Fournisseur,Vendeurencharge,Statut,StatutBCLivr_x00e9_etFC,Created,Client/Title','Client');}
-    catch(e){rows=await lire('ID,Title,N_BC_Fournisseur,Vendeurencharge,Statut,Created');}
+    try{rows=await lire('ID,Title,N_BC_Fournisseur,Vendeurencharge,Statut,StatutBCLivr_x00e9_etFC,N_x00b0_BL,DateBL,Created,Client/Title','Client');}
+    catch(e){try{rows=await lire('ID,Title,N_BC_Fournisseur,Vendeurencharge,Statut,StatutBCLivr_x00e9_etFC,Created,Client/Title','Client');}
+      catch(e2){rows=await lire('ID,Title,N_BC_Fournisseur,Vendeurencharge,Statut,Created');}}
+    DATA.bccTous={};rows.forEach(r=>{const st=String(r.Statut||'').trim();
+      DATA.bccTous[r.ID]={ID:r.ID,Title:r.Title||('BC-'+r.ID),Statut:st,BL:r.N_x00b0_BL||'',DateBL:r.DateBL||'',Vendeur:r.Vendeurencharge||'',
+        livre:/^(terminé|livré|facturé)$/i.test(st)||/entièrement livré/i.test(st)||r.StatutBCLivr_x00e9_etFC===true||r.StatutBCLivr_x00e9_etFC==='Oui',
+        partiel:/partiel/i.test(st)};});
     DATA.bcc=rows.filter(r=>r.N_BC_Fournisseur).map(r=>({ID:r.ID,Title:r.Title||('BC-'+r.ID),nums:bccNums(r.N_BC_Fournisseur),
       Client:(r.Client&&r.Client.Title)||'',Vendeur:r.Vendeurencharge||'',Statut:r.Statut||'',Created:r.Created,
       fini:/^(annulé|terminé|livré|facturé)$/i.test(String(r.Statut||'').trim())||/entièrement livré/i.test(r.Statut||'')||r.StatutBCLivr_x00e9_etFC===true||r.StatutBCLivr_x00e9_etFC==='Oui'}));
@@ -5309,6 +5314,38 @@ async function daRapprocherTout(){
   let n=0;for(const c of DATA.cmd.filter(c=>c.Annulee!=='Oui'))n+=await daRapprocher(c.ID);
   if(n&&typeof renderCommandes==='function')renderCommandes();return n;
 }
+// Répartit un article d'une demande entre le client et le stock (2 lignes, même BC fournisseur)
+async function daRepartir(lid){
+  const l=(DATA.lda||[]).find(x=>x.ID===lid);if(!l)return;const d=(DATA.da||[]).find(x=>x.ID===+l.ID_Demande);if(!d)return;
+  if(typeof MISSING!=='undefined'&&MISSING.Lignes_Demande_Achat&&MISSING.Lignes_Demande_Achat.has('Client')){toast('Colonne « Client » absente de Lignes_Demande_Achat : répartition impossible','ko');return;}
+  const memes=(DATA.lda||[]).filter(x=>+x.ID_Demande===+d.ID&&x.Title===l.Title&&(x.N_Commande||'')===(l.N_Commande||''));
+  const ls=memes.find(x=>x.Client==='Stock'),lc=memes.find(x=>x.Client!=='Stock');
+  const nom=(lc&&lc.Client)||d.Client||String(daPour(d)).replace(/^Client\s*/,'').replace(/\s*\+\s*stock$/i,'')||'client';
+  const qc=lc?+lc.Quantite||0:0,qs=ls?+ls.Quantite||0:0;
+  const inp='style="width:90px;text-align:right;padding:6px 8px;font-size:14px"';
+  if(!await showConfirm('Répartir client / stock',`<div><b class="mono">${esc(l.Title)}</b> — ${esc(daDes(l))}${l.N_Commande?` · BC ${esc(l.N_Commande)}`:''}</div>
+    <div style="display:grid;grid-template-columns:auto auto;gap:8px 12px;align-items:center;margin:12px 0">
+      <label>Pour le client <b>${esc(nom)}</b></label><input id="daSpC" ${inp} inputmode="decimal" value="${qc}">
+      <label>Pour le stock</label><input id="daSpS" ${inp} inputmode="decimal" value="${qs}"></div>
+    <div class="muted" style="font-size:12px">Total actuel : <b>${qc+qs}</b>. La commande fournisseur n’est pas modifiée : seule la destination de la marchandise change.</div>`,'Enregistrer'))return;
+  const nb=id=>{const v=parseFloat(String(($(id)||{}).value||'').replace(',','.'));return isNaN(v)?-1:v;};
+  const nc=nb('daSpC'),ns=nb('daSpS');
+  if(nc<0||ns<0||nc+ns<=0){toast('Quantités invalides','ko');return;}
+  const modele=lc||ls;const copie=['Title','ID_Demande','Designation','N_Commande','ID_Commande_Frs','Fournisseur'].reduce((o,k)=>(modele[k]!=null&&modele[k]!==''?(o[k]=modele[k],o):o),{});
+  const appliquer=async(ligne,q,cli)=>{
+    if(ligne&&q>0){const b={Quantite:q,Client:cli};if(ligne.Qte_Commandee)b.Qte_Commandee=q;if(+ligne.Quantite!==q||ligne.Client!==cli){await spPatch('Lignes_Demande_Achat',ligne.ID,b,ligne);Object.assign(ligne,b);}}
+    else if(ligne&&q<=0){await spDelete('Lignes_Demande_Achat',ligne.ID,ligne);DATA.lda=DATA.lda.filter(x=>x.ID!==ligne.ID);}
+    else if(q>0){const b={...copie,Quantite:q,Client:cli};if(modele.Qte_Commandee)b.Qte_Commandee=q;const id=await spPostSilencieux('Lignes_Demande_Achat',b);DATA.lda.push({...b,ID:id});}
+  };
+  try{busyOn&&busyOn('Répartition…');
+    await appliquer(lc,nc,nom);await appliquer(ls,ns,'Stock');
+    const L=(DATA.lda||[]).filter(x=>+x.ID_Demande===+d.ID);const hc=L.some(x=>x.Client!=='Stock'),hs=L.some(x=>x.Client==='Stock');
+    const motif=hc&&hs?'Client + Stock':hs?'Stock':'Client';
+    if(motif!==d.Motif){await spPatch('Demandes_Achat',d.ID,{Motif:motif},d);d.Motif=motif;}
+    toast(`✓ ${l.Title} : ${nc} client · ${ns} stock`,'ok');
+  }catch(e){toast('🔴 '+e.message,'ko');}
+  finally{typeof busyOff==='function'&&busyOff();renderDemandes();if(typeof renderCommandes==='function')renderCommandes();}
+}
 async function daLierManuel(lid,num){
   const l=(DATA.lda||[]).find(x=>x.ID===lid);if(!l)return;
   const v=cmdNum(num);const c=v?cmdByNum(v):null;
@@ -5324,7 +5361,8 @@ async function daAnnuler(id){
 // ── Rendu (dans l'onglet Commandes) ──
 // ── Demandes des vendeurs (Dashboard RP) : validation par Fabrice ──
 const daPeutValider=()=>typeof estValideur==='function'&&estValideur();
-function daBcClient(d){if(!d.ID_BC_Client)return '';const b=(DATA.bcc||[]).find(x=>+x.ID===+d.ID_BC_Client);if(b)return b.Title;const m=/pour le BC <b>([^<]+)<\/b>/.exec(d.Resume_Notif||'');return m?m[1].trim():'#'+d.ID_BC_Client;}
+function daBcInfo(d){return d&&d.ID_BC_Client&&DATA.bccTous?DATA.bccTous[+d.ID_BC_Client]||null:null;}
+function daBcClient(d){if(!d.ID_BC_Client)return '';const t=daBcInfo(d);if(t)return t.Title;const b=(DATA.bcc||[]).find(x=>+x.ID===+d.ID_BC_Client);if(b)return b.Title;const m=/pour le BC <b>([^<]+)<\/b>/.exec(d.Resume_Notif||'');return m?m[1].trim():'#'+d.ID_BC_Client;}
 function daBlocAValider(){
   const A=(DATA.da||[]).filter(d=>d.Statut==='À valider').sort((a,b)=>a.ID-b.ID);if(!A.length)return '';
   const v=daPeutValider();
@@ -5411,7 +5449,9 @@ function daLigneFait(l,T){
   return 3;
 }
 function daParcours(d){
-  const T=daType(d),E=daEtapes(T),L=daLignes(d.ID);
+  const T=daType(d),L=daLignes(d.ID);const E=daEtapes(T);
+  const BCI=daHasCli(d.Motif)&&d.ID_BC_Client?(daBcInfo(d)||{Title:daBcClient(d),inconnu:true}):null;
+  const nAch=E.length;if(BCI)E.push('Livrée au client');
   if(d.Statut==='Annulée')return {T,E,fait:0,k:'annulee',coul:'#9e9e9e',action:'Demande annulée.'};
   if(d.Statut==='Refusée')return {T,E,fait:1,k:'refus',coul:'#c62828',action:`Refusée par ${d.Valide_Par||'Fabrice'}${d.Commentaire?' : '+String(d.Commentaire).split('\n')[0].replace(/^\[Refus[^\]]*\]\s*/,''):''}`};
   if(d.Statut==='À valider')return {T,E,fait:1,k:'aval',coul:'#7b1fa2',action:daPeutValider()?'Valider ou refuser cette demande (boutons à droite).':'Attendre la validation de Fabrice (il a reçu un mail).'};
@@ -5419,6 +5459,11 @@ function daParcours(d){
   const cmdDe=l=>l.ID_Commande_Frs?cmdById(l.ID_Commande_Frs):cmdByNum(cmdNum(l.N_Commande));
   const at=P.filter(x=>x.f===fait).map(x=>x.l);
   let action='',bt='',k='cours',coul='#1565c0';
+  const bcT=t=>/^BC/i.test(String(t||''))?esc(t):'BC '+esc(t);
+  const blTxt=b=>b.BL?` · BL ${esc(b.BL)}${b.DateBL?' du '+fmtD(String(b.DateBL).slice(0,10)):''}`:'';
+  if(BCI&&fait>=nAch){
+    if(BCI.livre)return {T,E,fait:E.length,k:'fini',coul:'#2e7d32',action:`✓ Reçue et livrée au client : ${bcT(BCI.Title)} ${esc((BCI.Statut||'').toLowerCase())}${blTxt(BCI)}. Demande terminée.`};
+    return {T,E,fait:nAch,k:'cours',coul:'#1565c0',action:`Marchandise reçue : le vendeur${BCI.Vendeur?' ('+esc(BCI.Vendeur)+')':''} livre le client et met à jour le <b>${bcT(BCI.Title)}</b> dans Suivi BC${BCI.partiel?' (déjà livré en partie'+blTxt(BCI)+')':''}.${BCI.inconnu?' <span class="muted">(BC client non trouvé dans Suivi BC)</span>':''}`};}
   if(fait>=E.length){return {T,E,fait,k:'fini',coul:'#2e7d32',action:'✓ Tout est reçu : demande terminée.'};}
   if(fait===2){k='acmd';coul='#ef6c00';
     const parF={};at.forEach(l=>{const f=l.Fournisseur||'fournisseur à choisir';(parF[f]=parF[f]||[]).push(l.Title);});
@@ -5427,7 +5472,7 @@ function daParcours(d){
   else if(fait===3){const sans=at.filter(l=>!cmdDe(l));
     if(sans.length){action=`Importer le BC ${esc([...new Set(sans.map(l=>cmdNum(l.N_Commande)))].join(', '))} dans Commandes (PDF dans « Bon de commande »).`;bt=`<button class="btn sm" data-gotab="bcimp">Aller aux BC à importer</button>`;}
     else{const c=cmdDe(at[0]);const e=cmdEtat(c);const j=daysBetween(dk(c,'Date_Commande')||dkeyLocal(c.Created||''),todayKey());
-      action=T.loc?`Attendre la livraison de <b>${esc(c.Fournisseur||'')}</b> (BC ${esc(c.Title)}, commandé il y a ${j} j). À la livraison : « Joindre le BL signé ».`
+      action=T.loc?(BCI&&BCI.livre?`Le client est déjà livré (${bcT(BCI.Title)}${blTxt(BCI)}) : joindre le BL signé de <b>${esc(c.Fournisseur||'')}</b> (BC ${esc(c.Title)}) pour clôturer.`:`Attendre la livraison de <b>${esc(c.Fournisseur||'')}</b> (BC ${esc(c.Title)}, commandé il y a ${j} j). À la livraison : « Joindre le BL signé ».`)
         :`Attendre l’ARC de <b>${esc(c.Fournisseur||'')}</b> (BC ${esc(c.Title)}, commandé il y a ${j} j)${e.alerte?' : <b style="color:#c62828">relancer le fournisseur</b>':''}. Quand il arrive : « Joindre l’ARC ».`;
       if(e.alerte){coul='#ef6c00';k='retard';}
       bt=`<button class="btn sm" data-gotab="cmd:${c.ID}">Ouvrir la commande</button>`;}}
@@ -5439,7 +5484,7 @@ function daParcours(d){
     if(a)bt=`<button class="btn sm" data-open="${a.ID}">Ouvrir le dossier</button>`;}
   return {T,E,fait,k,coul,action,bt};
 }
-const DA_AIDE={'Demandée':'Demande saisie (vendeur, Fabrice ou Patricia).','Validée':'Fabrice a accepté la demande : elle est à commander.','Commandée':'Commande passée dans Image et BC importé dans le portail.','ARC reçu':'Le fournisseur a confirmé la commande (accusé de réception). Ensuite : BPA (notre accord).','En mer':'Marchandise partie : elle est dans un dossier d’arrivage (conteneur).','Expédiée (aérien)':'Marchandise partie par avion : elle est dans un dossier d’arrivage.','Reçue':'Marchandise reçue et contrôlée à l’entrepôt.','Livrée (BL signé)':'Commande locale livrée : BL signé joint à la commande.'};
+const DA_AIDE={'Demandée':'Demande saisie (vendeur, Fabrice ou Patricia).','Validée':'Fabrice a accepté la demande : elle est à commander.','Commandée':'Commande passée dans Image et BC importé dans le portail.','ARC reçu':'Le fournisseur a confirmé la commande (accusé de réception). Ensuite : BPA (notre accord).','En mer':'Marchandise partie : elle est dans un dossier d’arrivage (conteneur).','Expédiée (aérien)':'Marchandise partie par avion : elle est dans un dossier d’arrivage.','Reçue':'Marchandise reçue et contrôlée à l’entrepôt.','Livrée (BL signé)':'Commande locale livrée : BL signé joint à la commande.','Livrée au client':'Le BC client est livré ou terminé dans Suivi BC (mis à jour par le vendeur).'};
 const daTxt=h=>String(h||'').replace(/<[^>]+>/g,'').replace(/\s+/g,' ').trim();
 function daStepsHtml(P){
   return `<div class="da-steps">${P.E.map((x,i)=>{const st=i<P.fait?'on':i===P.fait&&P.k!=='annulee'?'cur':'';const aide=DA_AIDE[x]||(/^Reçue à/.test(x)?'Marchandise livrée aux Îles du Nord : contrôle au bureau sur factures et avis de livraison.':'');
@@ -5464,7 +5509,7 @@ function renderDemandes(){
       <span style="margin-left:auto;display:flex;gap:4px">${DAV.vue==='dem'?`<button class="chip" data-daall="1">⊞ Tout déplier</button><button class="chip" data-daall="0">⊟ Tout replier</button>`:''}<button class="chip ${DAV.vue==='dem'?'on':''}" data-davue="dem" title="Une carte par demande, avec son parcours">🗂 Par demande</button><button class="chip ${DAV.vue==='frs'?'on':''}" data-davue="frs" title="Les articles à commander regroupés par fournisseur (pour passer une commande groupée)">🏭 Par fournisseur</button></span></div>`;
   if(DAV.vue==='frs'){box.innerHTML=head+daBlocHtml();return;}
   const ligne=(d,l)=>{const c=l.ID_Commande_Frs?cmdById(l.ID_Commande_Frs):(l.N_Commande?cmdByNum(l.N_Commande):null);const ce=c?cmdEtat(c):null;
-    return `<tr><td class="mono"><b>${esc(l.Title)}</b></td><td>${esc(daDes(l))}</td><td class="r"><b>${fmtN(l.Quantite,0)}</b></td>${daHasCli(d.Motif)?`<td>${esc(l.Client||d.Client||'')}</td>`:''}<td>${esc((c&&c.Fournisseur)||l.Fournisseur||'—')}</td>
+    return `<tr><td class="mono"><b>${esc(l.Title)}</b></td><td>${esc(daDes(l))}</td><td class="r"><b>${fmtN(l.Quantite,0)}</b>${ed&&daHasCli(d.Motif)&&!['Annulée','Refusée'].includes(d.Statut)?` <button class="btn ghost sm" data-dasplit="${l.ID}" data-tip="Répartir la quantité entre le client et le stock" style="padding:0 4px;font-size:11px">✏️</button>`:''}</td>${daHasCli(d.Motif)?`<td>${esc(l.Client||d.Client||'')}</td>`:''}<td>${esc((c&&c.Fournisseur)||l.Fournisseur||'—')}</td>
       <td>${l.N_Commande?(c?`<a href="#" data-cmdgo="${c.ID}"><b>BC ${esc(l.N_Commande)}</b></a> <span class="muted">· ${esc(ce.lbl)}</span>`:`<b>BC ${esc(l.N_Commande)}</b> <span class="muted">(pas encore importé)</span>`)+(ed?` <button class="btn ghost sm" data-dadelier="${l.ID}" title="Retirer le lien avec ce BC" style="padding:0 4px;font-size:11px">✕</button>`:'')
         :(ed&&d.Statut==='Validée'?`<input data-dalier="${l.ID}" placeholder="n° BC si déjà passé" style="width:150px;font-size:12px">`:'<span class="muted">—</span>')}</td></tr>`;};
   box.innerHTML=head+(daPeutValider()?daBlocAValider():'')+(V.length?V.map(({d,P})=>{const L=daLignes(d.ID);const cli=daHasCli(d.Motif);
@@ -5527,6 +5572,7 @@ document.addEventListener('click',e=>{
   if(e.target.closest('#daAdd')){daLireForm();DAV.form.lignes.push({ref:'',des:'',qte:'',frs:''});daRender();return;}
   const del=e.target.closest('[data-dadel]');if(del){daLireForm();DAV.form.lignes.splice(+del.dataset.dadel,1);if(!DAV.form.lignes.length)DAV.form.lignes.push({ref:'',des:'',qte:'',frs:''});daRender();return;}
   if(e.target.closest('#daSave')){daEnregistrer();return;}
+  const dsp=e.target.closest('[data-dasplit]');if(dsp){daRepartir(+dsp.dataset.dasplit);return;}
   const dl=e.target.closest('[data-dadelier]');if(dl){(async()=>{const l=(DATA.lda||[]).find(x=>x.ID===+dl.dataset.dadelier);if(!l)return;if(!await showConfirm('Retirer le lien',`Délier <b>${esc(l.Title)}</b> du BC <b>${esc(l.N_Commande)}</b> ? La ligne revient dans « À commander ».`,'Retirer le lien'))return;daLierManuel(l.ID,'');})();return;}
   if(e.target.closest('#daAnnulDem')){const id=DAV.form&&DAV.form.editId;if(id){daFermer();daAnnuler(id);}return;}
   if(e.target.closest('#daRappr')){(async()=>{const n=await daRapprocherTout();toast(n?`✓ ${n} ligne(s) rapprochée(s) avec un BC`:'Aucune ligne à rapprocher pour l’instant',n?'ok':'wa');renderCommandes();})();return;}
