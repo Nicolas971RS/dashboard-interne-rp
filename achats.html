@@ -607,6 +607,7 @@ input.sv-in.mod{border-color:#16a34a;background:#f0fdf4}
 .pay-gbt{margin-left:14px;display:inline-flex;gap:4px;vertical-align:middle}
 .pay-t tr.pay-mod-p td{background:#fff7ed}.pay-t tr.pay-mod-p td:first-child{box-shadow:inset 4px 0 0 #f59e0b}.pay-t tr.pay-mod-r td{background:#f1f5f9;color:#64748b}.pay-t tr.pay-mod-r td:first-child{box-shadow:inset 4px 0 0 #64748b}.pay-t tr.pay-mod-x td{opacity:.45}
 .pay-barre{text-decoration:line-through}.pay-sous{font-size:11.5px;font-weight:700;line-height:1.3;margin-top:2px}.pay-sous.p{color:#b45309}.pay-sous.r{color:#475569}.pay-sous.x{color:#64748b;font-weight:600}
+.pay-stick{position:sticky;bottom:0;z-index:20;background:#fff;margin:12px -16px -14px;padding:12px 16px;border-top:2px solid var(--navy);border-radius:0 0 var(--radius-lg) var(--radius-lg);box-shadow:0 -6px 14px rgba(15,23,42,.10)}.pay-stick .pay-sum{margin:0;font-size:14.5px}.pay-stick .pay-sum b{font-size:16px}
 .pay-kpi{cursor:pointer}.pay-kpi:hover{box-shadow:var(--shadow-md,0 4px 12px rgba(0,0,0,.12));transform:translateY(-1px)}.pay-flt{margin:4px 0 8px}
 .pay-aut{margin-top:12px}.pay-aut summary{cursor:pointer;font-weight:600;color:var(--navy);padding:4px 0}
 </style>
@@ -5838,7 +5839,7 @@ function payVuePreparer(){
     <div class="card-b"><div class="muted" style="font-size:12.5px;margin-bottom:8px">${ed?`Factures échues et à échéance jusqu’au <b>${fmtD(cut)}</b>, reliquats en rouge. Décoche ce que tu ne veux pas présenter, puis envoie à Fabrice : il reçoit un mail et décide ligne par ligne.`:`Aucune proposition en cours. Voici ce qui arrive à échéance jusqu’au <b>${fmtD(cut)}</b> ; Monique te l’enverra pour validation.`}</div>
     ${(()=>{const x=payFiltrer(rows);return x.bar+payTable(x.R,'prep',{ed,vide:x.actif?'Aucune facture pour ce filtre.':'Rien à payer jusqu’à cette date.'});})()}
     ${ed&&autres.length?`<details class="pay-aut"><summary>＋ Ajouter une facture à échéance plus lointaine (${autres.length})</summary><table class="pay-t">${autres.slice(0,150).map(f=>`<tr><td style="width:28px">${payPdf(f)}</td><td>${esc(payNom(f))}</td><td class="mono">${esc(f.Title)}</td><td>${payEchBadge(f)}</td><td class="r">${payEur(payReste(f))}</td><td style="width:90px"><button class="btn ghost sm" data-payaj="${f.ID}">＋ Ajouter</button></td></tr>`).join('')}</table></details>`:''}
-    ${ed?`<div class="pay-foot"><div><b>${sel.length}</b> pièce${sel.length>1?'s':''} sélectionnée${sel.length>1?'s':''} · total <b style="font-size:16px">${payEur(tot)}</b></div><button class="btn primary" data-payact="envoyer" ${sel.length?'':'disabled'}>📤 Envoyer à Fabrice</button></div>`:''}</div></div>`;
+    ${ed?`<div class="pay-foot pay-stick"><div><b>${sel.length}</b> pièce${sel.length>1?'s':''} sélectionnée${sel.length>1?'s':''} · total <b style="font-size:16px">${payEur(tot)}</b></div><button class="btn primary" data-payact="envoyer" ${sel.length?'':'disabled'}>📤 Envoyer à Fabrice</button></div>`:''}</div></div>`;
 }
 // 2. Décision de Fabrice
 function payDecision(l){const x=PAYV.dec.get(l.ID);if(x)return x;const d=l.Decision||'Payer';return {d,m:d==='Partiel'?(+l.Montant_Valide||0):(+l.Montant_Du||0)};}
@@ -5850,10 +5851,10 @@ function payVueDecider(p){
       <div style="display:flex;gap:8px">${payPeutEditer()?'<button class="btn sm" data-payact="retirer" data-tip="Fabrice ne la voit plus ; tu peux la refaire">↩ Retirer l’envoi</button>':''}<button class="btn sm" data-payact="imprimer">🖨 Imprimer</button></div></div>
     <div class="card-b"><div class="muted" style="font-size:12.5px;margin-bottom:8px">Envoyée par <b>${esc(p.Envoye_Par||'?')}</b> le ${fmtD(dkeyLocal(p.Date_Envoi||p.Created))} · échéances jusqu’au ${fmtD(dk(p,'Date_Limite'))}.
       ${ed?' Tout est sur « Payer » par défaut : change seulement les exceptions. <b>✂ Partiel</b> = tu paies une partie, le reste revient le mois prochain en reliquat. Clique 📄 pour voir la facture.':''}</div>
-    <div class="pay-sum"><span>Proposé <b>${payEur(tp)}</b></span><span>Validé <b style="color:#1b5e20">${payEur(tv)}</b></span><span>Reporté <b style="color:#b45309">${payEur(tp-tv)}</b>${nr?` (${nr} ligne${nr>1?'s':''})`:''}</span></div>
     ${(()=>{const x=payFiltrer(rows);return x.bar+payTable(x.R,'decide',{ed,vide:'Aucune facture pour ce filtre.'});})()}
     ${ed?`<div class="f" style="margin-top:10px"><label>Commentaire pour Monique (facultatif)</label><textarea id="payCom" rows="2">${esc(p.Commentaire||'')}</textarea></div>
-      <div class="pay-foot"><div>Validé : <b style="font-size:16px">${payEur(tv)}</b> sur ${payEur(tp)}</div><button class="btn primary" data-payact="valider">✅ Valider les paiements</button></div>`:''}</div></div>`;
+`:''}
+    <div class="pay-foot pay-stick"><div class="pay-sum"><span>Proposé <b>${payEur(tp)}</b></span><span>Validé <b style="color:#1b5e20">${payEur(tv)}</b></span><span>Reporté <b style="color:#b45309">${payEur(r2(tp-tv))}</b>${tp-tv>0.005?` <span class="muted">(${L.filter(l=>payDecision(l).d!=='Payer').length} ligne${L.filter(l=>payDecision(l).d!=='Payer').length>1?'s':''} modifiée${L.filter(l=>payDecision(l).d!=='Payer').length>1?'s':''})</span>`:''}</span></div>${ed?'<button class="btn primary" data-payact="valider">✅ Valider les paiements</button>':''}</div></div></div>`;
 }
 // 3. Paiements à faire (Monique)
 const payPaieProp=(p,l)=>(DATA.pay||[]).filter(x=>+x.ID_Proposition===+p.ID&&+x.ID_Facture===+l.ID_Facture);
