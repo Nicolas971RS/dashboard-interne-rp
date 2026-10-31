@@ -608,6 +608,10 @@ input.sv-in.mod{border-color:#16a34a;background:#f0fdf4}
 .pay-t tr.pay-mod-p td{background:#fff7ed}.pay-t tr.pay-mod-p td:first-child{box-shadow:inset 4px 0 0 #f59e0b}.pay-t tr.pay-mod-r td{background:#f1f5f9;color:#64748b}.pay-t tr.pay-mod-r td:first-child{box-shadow:inset 4px 0 0 #64748b}.pay-t tr.pay-mod-x td{opacity:.45}
 .pay-barre{text-decoration:line-through}.pay-sous{font-size:11.5px;font-weight:700;line-height:1.3;margin-top:2px}.pay-sous.p{color:#b45309}.pay-sous.r{color:#475569}.pay-sous.x{color:#64748b;font-weight:600}
 .pay-stick{position:sticky;bottom:0;z-index:20;background:#fff;margin:12px -16px -14px;padding:12px 16px;border-top:2px solid var(--navy);border-radius:0 0 var(--radius-lg) var(--radius-lg);box-shadow:0 -6px 14px rgba(15,23,42,.10)}.pay-stick .pay-sum{margin:0;font-size:14.5px}.pay-stick .pay-sum b{font-size:16px}
+.pay-bq{display:flex;gap:14px;align-items:center;flex-wrap:wrap;background:#f0f9ff;border:1px solid #bae6fd;border-radius:8px;padding:8px 12px;margin:0 0 10px;font-size:13px}.pay-bq-t{font-weight:700;color:#075985}.pay-bq input{width:120px;text-align:right;padding:4px 6px;border:1px solid #7dd3fc;border-radius:6px;margin-left:4px}.pay-bq-tot{margin-left:auto}
+.pay-neg{color:#c62828}.pay-pos{color:#1b5e20}.pay-bqt{margin:0 0 10px;max-width:640px}
+.pay-ana{display:grid;grid-template-columns:1fr 1fr;gap:14px}.pay-ana>.card{margin:0}.pay-ana>.card:last-child{grid-column:1/-1}@media(max-width:900px){.pay-ana{grid-template-columns:1fr}}
+.pay-bars{display:flex;flex-direction:column;gap:6px}.pay-br{display:grid;grid-template-columns:150px 1fr 230px;gap:10px;align-items:center;font-size:12.5px}.pay-bl{color:#334155;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.pay-bt{background:#f1f5f9;border-radius:4px;height:16px;overflow:hidden}.pay-bt i{display:block;height:100%;border-radius:4px}.pay-bv{text-align:right;font-weight:700;white-space:nowrap}.pay-bv .muted{font-weight:400;font-size:11.5px}
 .pay-kpi{cursor:pointer}.pay-kpi:hover{box-shadow:var(--shadow-md,0 4px 12px rgba(0,0,0,.12));transform:translateY(-1px)}.pay-flt{margin:4px 0 8px}
 .pay-aut{margin-top:12px}.pay-aut summary{cursor:pointer;font-weight:600;color:var(--navy);padding:4px 0}
 </style>
@@ -5691,7 +5695,7 @@ async function init(){
 // ═══════════════════════════════════════════════════════════════════════════
 const PAY_LISTES={
   Paiements_Frs:[['ID_Facture','Number'],['Date_Paiement','DateTime'],['Montant','Number'],['Mode','Text'],['Banque','Text'],['ID_Proposition','Number'],['Commentaire','Note'],['Saisi_Par','Text']],
-  Propositions_Paiement:[['Date_Limite','DateTime'],['Statut','Text'],['Date_Envoi','DateTime'],['Envoye_Par','Text'],['Date_Validation','DateTime'],['Valide_Par','Text'],['Total_Propose','Number'],['Total_Valide','Number'],['Commentaire','Note'],['Notif','Text'],['Resume_Notif','Note']],
+  Propositions_Paiement:[['Date_Limite','DateTime'],['Statut','Text'],['Date_Envoi','DateTime'],['Envoye_Par','Text'],['Date_Validation','DateTime'],['Valide_Par','Text'],['Total_Propose','Number'],['Total_Valide','Number'],['Commentaire','Note'],['Notif','Text'],['Resume_Notif','Note'],['Banques','Note']],
   Lignes_Proposition:[['ID_Proposition','Number'],['ID_Facture','Number'],['Fournisseur','Text'],['Montant_Du','Number'],['Decision','Text'],['Montant_Valide','Number'],['Reliquat','Text'],['Commentaire','Text']]
 };
 Object.entries(PAY_LISTES).forEach(([l,c])=>{SCHEMA[l]=['ID','Title',...c.map(x=>x[0]),'Created'];ESSENTIAL[l]=['ID','Title'];});
@@ -5764,9 +5768,10 @@ function renderPaiements(){
   const kpi=(l,v,n,c,tip,k)=>`<div class="kpi pay-kpi" style="--c:${c}" data-tip="${esc(tip)} — clique pour voir la liste" data-paykpi="${k}"><div class="lab">${l}</div><div class="val" style="font-size:20px">${payEur(v)}</div><div class="muted" style="font-size:12px">${n} facture${n>1?'s':''}</div></div>`;
   const sansImport=!F.some(f=>f.Source==='Import échéancier');
   let h=(sansImport?`<div class="warn-ribbon" style="border-radius:8px;margin-bottom:12px">⚠️ L’échéancier Excel n’est pas encore importé : seules les factures saisies dans le portail depuis le 7 octobre apparaissent ici. Les montants seront complets après l’import${peutImporter()?' (bouton « 📥 Importer l’échéancier Excel »)':' fait par Nicolas'}.</div>`:'')+`<div class="kpis">${kpi('Encours total',S(du),du.length,'#1565c0','Tout ce qui reste à payer, quelle que soit l’échéance','apayer')}${kpi('Échu non payé',S(echu),echu.length,'#c62828','Échéance dépassée, pas encore payé','echu')}${kpi('À payer d’ici le '+fmtD(cut).slice(0,5),S(aCut),aCut.length,'#ef6c00','Échus + échéance jusqu’au '+fmtD(cut),'cut')}${kpi('Reliquats',S(rel),rel.length,'#b71c1c','Solde de factures payées en partie, reportées par Fabrice ou marquées reliquat dans l’Excel','rel')}</div>
-  <div class="filters"><button class="chip ${PAYV.vue==='mois'?'on':''}" data-payvue="mois">🗓 Paiements du mois</button><button class="chip ${PAYV.vue==='factures'?'on':''}" data-payvue="factures">📚 Toutes les factures</button><button class="chip ${PAYV.vue==='hist'?'on':''}" data-payvue="hist">🗂 Propositions passées</button></div>`;
+  <div class="filters"><button class="chip ${PAYV.vue==='mois'?'on':''}" data-payvue="mois">🗓 Paiements du mois</button><button class="chip ${PAYV.vue==='factures'?'on':''}" data-payvue="factures">📚 Toutes les factures</button><button class="chip ${PAYV.vue==='hist'?'on':''}" data-payvue="hist">🗂 Propositions passées</button><button class="chip ${PAYV.vue==='ana'?'on':''}" data-payvue="ana">📊 Analyses</button></div>`;
   if(PAYV.vue==='factures')h+=payVueFactures();
   else if(PAYV.vue==='hist')h+=payVueHist();
+  else if(PAYV.vue==='ana')h+=payVueAnalyses();
   else{const p=payPropOuverte();
     h+=!p?payVuePreparer():p.Statut==='Validée'?payVuePayer(p):payVueDecider(p);}
   box.innerHTML=h;
@@ -5811,6 +5816,19 @@ function payTable(rows,mode,opt={}){
     return `<tbody><tr class="pay-g"><td colspan="${span}"><b class="pay-gn">${esc(g.nom)}</b> <span class="muted">${g.R.length} pièce${g.R.length>1?'s':''}</span>${btn}</td>
       <td class="r pay-gt">${payEur(tot)}${totPrep!=null&&Math.abs(totPrep-tot)>0.005?`<div class="pay-sous x">présenté ${payEur(totPrep)}</div>`:''}</td>${cDecG}</tr>${lignes}</tbody>`;}).join('')}</table>`;
 }
+// ── Disponible en banque (saisi par Monique, vu et ajustable par Fabrice) ──
+const payNomsBanques=()=>paramStr('BANQUES','BRED;CEPAC').split(/[;,]/).map(x=>x.trim()).filter(Boolean);
+function payBanquesDe(p){try{const v=JSON.parse(p&&p.Banques||'[]');return Array.isArray(v)?v:[];}catch(e){return [];}}
+const payDispo=L=>r2(L.reduce((s,x)=>s+(+x.m||0),0));
+const payNb=v=>{const x=parseFloat(String(v??'').replace(/\s/g,'').replace(/\u202f/g,'').replace(',','.'));return isFinite(x)?r2(x):null;};
+function payBanqSaisie(L,ed,cle){
+  const noms=[...new Set([...payNomsBanques(),...L.map(x=>x.b)])];const v=b=>{const x=L.find(y=>y.b===b);return x&&x.m!=null?String(x.m).replace('.',','):'';};
+  return `<div class="pay-bq"><span class="pay-bq-t">🏦 Disponible en banque${ed?' <span class="muted">(à la date de la proposition)</span>':''}</span>${noms.map(b=>`<label>${esc(b)} ${ed?`<input data-paybq="${esc(b)}" data-paybqk="${cle}" inputmode="decimal" value="${v(b)}" placeholder="0,00">`:`<b>${v(b)?payEur(+String(v(b)).replace(',','.')):'—'}</b>`}</label>`).join('')}<span class="pay-bq-tot">Total <b>${payEur(payDispo(L))}</b></span></div>`;
+}
+function payEcartHtml(dispo,montant,lbl){
+  if(!(dispo>0))return '';const r=r2(dispo-montant);
+  return `<span>Disponible <b>${payEur(dispo)}</b></span><span>${lbl} <b class="${r<0?'pay-neg':'pay-pos'}">${payEur(r)}</b>${r<0?' <span class="pay-neg" style="font-weight:700">⚠ dépasse le disponible</span>':''}</span>`;
+}
 // Barre de filtre (affichage seulement : la sélection et les totaux restent sur toute la liste)
 const PAY_PK=[['tout','Tout'],['echu','Échues',f=>payEch(f)&&payEch(f)<todayKey()],['rel','Reliquats',f=>payReliquat(f)],['cotis','Cotisations',payEstCotis],['avoir','Avoirs',f=>payReste(f)<0||(+f.Montant_TTC||0)<0]];
 function payFiltrer(rows){
@@ -5837,9 +5855,10 @@ function payVuePreparer(){
       <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">${ed?`<label class="muted" style="font-size:12px">Échéances jusqu’au <input type="date" id="payCut" value="${cut}" style="padding:4px 6px"></label>`:''}
       <button class="btn sm" data-payact="imprimer">🖨 Imprimer</button></div></div>
     <div class="card-b"><div class="muted" style="font-size:12.5px;margin-bottom:8px">${ed?`Factures échues et à échéance jusqu’au <b>${fmtD(cut)}</b>, reliquats en rouge. Décoche ce que tu ne veux pas présenter, puis envoie à Fabrice : il reçoit un mail et décide ligne par ligne.`:`Aucune proposition en cours. Voici ce qui arrive à échéance jusqu’au <b>${fmtD(cut)}</b> ; Monique te l’enverra pour validation.`}</div>
+    ${ed?payBanqSaisie(PAYV.banq||[],true,'prep'):''}
     ${(()=>{const x=payFiltrer(rows);return x.bar+payTable(x.R,'prep',{ed,vide:x.actif?'Aucune facture pour ce filtre.':'Rien à payer jusqu’à cette date.'});})()}
     ${ed&&autres.length?`<details class="pay-aut"><summary>＋ Ajouter une facture à échéance plus lointaine (${autres.length})</summary><table class="pay-t">${autres.slice(0,150).map(f=>`<tr><td style="width:28px">${payPdf(f)}</td><td>${esc(payNom(f))}</td><td class="mono">${esc(f.Title)}</td><td>${payEchBadge(f)}</td><td class="r">${payEur(payReste(f))}</td><td style="width:90px"><button class="btn ghost sm" data-payaj="${f.ID}">＋ Ajouter</button></td></tr>`).join('')}</table></details>`:''}
-    ${ed?`<div class="pay-foot pay-stick"><div><b>${sel.length}</b> pièce${sel.length>1?'s':''} sélectionnée${sel.length>1?'s':''} · total <b style="font-size:16px">${payEur(tot)}</b></div><button class="btn primary" data-payact="envoyer" ${sel.length?'':'disabled'}>📤 Envoyer à Fabrice</button></div>`:''}</div></div>`;
+    ${ed?`<div class="pay-foot pay-stick"><div class="pay-sum"><span><b>${sel.length}</b> pièce${sel.length>1?'s':''} · proposé <b>${payEur(tot)}</b></span>${payEcartHtml(payDispo(PAYV.banq||[]),tot,'Reste après paiement')}</div><button class="btn primary" data-payact="envoyer" ${sel.length?'':'disabled'}>📤 Envoyer à Fabrice</button></div>`:''}</div></div>`;
 }
 // 2. Décision de Fabrice
 function payDecision(l){const x=PAYV.dec.get(l.ID);if(x)return x;const d=l.Decision||'Payer';return {d,m:d==='Partiel'?(+l.Montant_Valide||0):(+l.Montant_Du||0)};}
@@ -5851,10 +5870,11 @@ function payVueDecider(p){
       <div style="display:flex;gap:8px">${payPeutEditer()?'<button class="btn sm" data-payact="retirer" data-tip="Fabrice ne la voit plus ; tu peux la refaire">↩ Retirer l’envoi</button>':''}<button class="btn sm" data-payact="imprimer">🖨 Imprimer</button></div></div>
     <div class="card-b"><div class="muted" style="font-size:12.5px;margin-bottom:8px">Envoyée par <b>${esc(p.Envoye_Par||'?')}</b> le ${fmtD(dkeyLocal(p.Date_Envoi||p.Created))} · échéances jusqu’au ${fmtD(dk(p,'Date_Limite'))}.
       ${ed?' Tout est sur « Payer » par défaut : change seulement les exceptions. <b>✂ Partiel</b> = tu paies une partie, le reste revient le mois prochain en reliquat. Clique 📄 pour voir la facture.':''}</div>
+    ${payBanqSaisie(payBanquesDe(p),ed||payPeutEditer(),'prop')}
     ${(()=>{const x=payFiltrer(rows);return x.bar+payTable(x.R,'decide',{ed,vide:'Aucune facture pour ce filtre.'});})()}
     ${ed?`<div class="f" style="margin-top:10px"><label>Commentaire pour Monique (facultatif)</label><textarea id="payCom" rows="2">${esc(p.Commentaire||'')}</textarea></div>
 `:''}
-    <div class="pay-foot pay-stick"><div class="pay-sum"><span>Proposé <b>${payEur(tp)}</b></span><span>Validé <b style="color:#1b5e20">${payEur(tv)}</b></span><span>Reporté <b style="color:#b45309">${payEur(r2(tp-tv))}</b>${tp-tv>0.005?` <span class="muted">(${L.filter(l=>payDecision(l).d!=='Payer').length} ligne${L.filter(l=>payDecision(l).d!=='Payer').length>1?'s':''} modifiée${L.filter(l=>payDecision(l).d!=='Payer').length>1?'s':''})</span>`:''}</span></div>${ed?'<button class="btn primary" data-payact="valider">✅ Valider les paiements</button>':''}</div></div></div>`;
+    <div class="pay-foot pay-stick"><div class="pay-sum"><span>Proposé <b>${payEur(tp)}</b></span><span>Validé <b style="color:#1b5e20">${payEur(tv)}</b></span><span>Reporté <b style="color:#b45309">${payEur(r2(tp-tv))}</b>${tp-tv>0.005?` <span class="muted">(${L.filter(l=>payDecision(l).d!=='Payer').length} ligne${L.filter(l=>payDecision(l).d!=='Payer').length>1?'s':''} modifiée${L.filter(l=>payDecision(l).d!=='Payer').length>1?'s':''})</span>`:''}</span>${payEcartHtml(payDispo(payBanquesDe(p)),tv,'Reste en banque')}</div>${ed?'<button class="btn primary" data-payact="valider">✅ Valider les paiements</button>':''}</div></div></div>`;
 }
 // 3. Paiements à faire (Monique)
 const payPaieProp=(p,l)=>(DATA.pay||[]).filter(x=>+x.ID_Proposition===+p.ID&&+x.ID_Facture===+l.ID_Facture);
@@ -5870,6 +5890,7 @@ function payVuePayer(p){
   return `<div class="card"><div class="card-h"><h3>💸 ${esc(p.Title)} — validée, à payer</h3><div style="display:flex;gap:8px"><button class="btn sm" data-payact="imprimer">🖨 Imprimer</button>${ed?'<button class="btn sm" data-payact="cloturer">🔒 Clôturer</button>':''}${ed&&!(DATA.pay||[]).some(x=>+x.ID_Proposition===+p.ID)?'<button class="btn sm" data-payact="retirer" data-tip="Aucun paiement enregistré : la proposition est supprimée (test, erreur)">🗑 Annuler la proposition</button>':''}</div></div>
     <div class="card-b"><div class="muted" style="font-size:12.5px;margin-bottom:8px">Validée par <b>${esc(p.Valide_Par||'?')}</b> le ${fmtD(dkeyLocal(p.Date_Validation||p.Modified||''))} · ${A.length} paiement${A.length>1?'s':''} pour <b>${payEur(tot)}</b>${R.length?` · ${R.length} reporté${R.length>1?'s':''}`:''}.
       ${p.Commentaire?`<div class="pay-com">💬 <b>Fabrice :</b> ${esc(p.Commentaire)}</div>`:''}</div>
+    ${payBqSuivi(p)}
     ${ed?`<div class="pay-bar"><label>Date du virement <input type="date" id="payDateP" value="${dP}"></label><label>Mode <select id="payMode">${PAY_MODES.map(m=>`<option ${m===PAYV.modeP?'selected':''}>${m}</option>`).join('')}</select></label><label>Banque <input id="payBanque" list="payBanques" value="${esc(PAYV.banque)}" placeholder="facultatif" style="width:120px"><datalist id="payBanques"><option>BRED</option><option>CEPAC</option></datalist></label>
       ${reste.length?`<button class="btn primary" data-payact="toutpayer">💸 Tout marquer payé (${reste.length})</button>`:'<span class="pay-ok">✓ Tout est payé</span>'}</div>`:''}
     ${FX.bar}<table class="pay-t"><thead><tr><th style="width:28px"></th><th>N° facture</th><th style="width:150px">Échéance</th><th class="r" style="width:110px">Reste dû</th><th class="r" style="width:120px">À payer (validé)</th><th style="width:250px">Paiement</th></tr></thead>
@@ -5879,6 +5900,50 @@ function payVuePayer(p){
         ${ed&&rs>0.005?`${P.length?'<br>':''}<button class="btn sm primary" data-paypay="${l.ID}">💸 Payé</button> <button class="btn ghost sm" data-payautre="${l.ID}" data-tip="Payer un autre montant">✏️</button>`:''}</td></tr>`;}).join('')}</tbody>`).join('')}</table>
     ${R.length?`<details class="pay-aut"><summary>⏸ Reportées par Fabrice (${R.length}) — reviendront dans la prochaine proposition</summary><table class="pay-t">${R.map(l=>{const f=payFacById(l.ID_Facture)||{};return `<tr><td style="width:28px">${f.ID?payPdf(f):''}</td><td>${esc(l.Fournisseur||'')}</td><td class="mono">${esc(l.Title)}</td><td class="r">${payEur(+l.Montant_Du||0)}</td></tr>`;}).join('')}</table></details>`:''}
     </div></div>`;
+}
+function payBqSuivi(p){
+  const BQ=payBanquesDe(p);const P=(DATA.pay||[]).filter(x=>+x.ID_Proposition===+p.ID);if(!BQ.length&&!P.length)return '';
+  const noms=[...new Set([...BQ.map(x=>x.b),...P.map(x=>x.Banque||'Non précisée')])];
+  return `<table class="pay-t pay-bqt"><thead><tr><th>Banque</th><th class="r">Disponible</th><th class="r">Payé (cette proposition)</th><th class="r">Reste</th></tr></thead><tbody>${noms.map(b=>{const d=(BQ.find(x=>x.b===b)||{}).m;const pay=r2(P.filter(x=>(x.Banque||'Non précisée')===b).reduce((s,x)=>s+(+x.Montant||0),0));const r=d!=null?r2(d-pay):null;
+    return `<tr><td><b>${esc(b)}</b></td><td class="r">${d!=null?payEur(+d):'—'}</td><td class="r">${payEur(pay)}</td><td class="r"><b class="${r!=null&&r<0?'pay-neg':''}">${r!=null?payEur(r):'—'}</b></td></tr>`;}).join('')}</tbody></table>
+    <div class="muted" style="font-size:12px;margin:-4px 0 10px">Choisis la banque dans la barre ci-dessous avant de marquer payé : le suivi par banque se met à jour.</div>`;
+}
+// 5. Analyses (reprend le tableau de bord de l'Excel : cash flow, balance âgée, fournisseurs, décaissements, délais)
+function payBarres(items,opt={}){
+  const max=Math.max(1,...items.map(x=>Math.abs(x.v)));
+  return `<div class="pay-bars">${items.map(x=>`<div class="pay-br" ${x.tip?`data-tip="${esc(x.tip)}"`:''}><span class="pay-bl">${x.l}</span><span class="pay-bt"><i style="width:${Math.max(x.v?1:0,Math.round(100*Math.abs(x.v)/max))}%;background:${x.c||'#1565c0'}"></i></span><span class="pay-bv">${opt.fmt?opt.fmt(x.v):payEur(x.v)}${x.s?` <span class="muted">${x.s}</span>`:''}</span></div>`).join('')}</div>`;
+}
+function payVueAnalyses(){
+  const t=todayKey();const F=payFacs();const du=F.filter(f=>payReste(f)>0.005);const S=a=>r2(a.reduce((s,f)=>s+payReste(f),0));
+  // 1. Cash flow prévisionnel : échu + 8 semaines (lundi → dimanche) + au-delà
+  const d0=new Date(t+'T12:00:00Z');const lun=addDays(t,-((d0.getUTCDay()+6)%7));
+  const sem=Array.from({length:8},(_,i)=>({a:addDays(lun,7*i),b:addDays(lun,7*i+6)}));
+  const echu=du.filter(f=>payEch(f)&&payEch(f)<t),sansE=du.filter(f=>!payEch(f));
+  let cum=S(echu)+S(sansE);
+  const cf=[{l:'Échu',v:S(echu),c:'#c62828',s:`${echu.length} fact.`},...sem.map((w,i)=>{const L=du.filter(f=>payEch(f)&&payEch(f)>=(i?w.a:t)&&payEch(f)<=w.b);const v=S(L);cum+=v;return {l:`${fmtD(i?w.a:t).slice(0,5)} → ${fmtD(w.b).slice(0,5)}`,v,c:'#1565c0',s:`${L.length} fact. · cumul ${payEur(r2(cum))}`};}),
+    (()=>{const L=du.filter(f=>payEch(f)&&payEch(f)>sem[7].b);return {l:'Au-delà',v:S(L),c:'#90a4ae',s:`${L.length} fact.`};})()];
+  // 2. Balance âgée (jours de retard sur l'échéance)
+  const ret=f=>payEch(f)?daysBetween(payEch(f),t):0;
+  const tr=[['Non échu',f=>ret(f)<=0,'#2e7d32'],['1 à 30 j',f=>ret(f)>=1&&ret(f)<=30,'#f9a825'],['31 à 60 j',f=>ret(f)>=31&&ret(f)<=60,'#ef6c00'],['61 à 90 j',f=>ret(f)>=61&&ret(f)<=90,'#d84315'],['Plus de 90 j',f=>ret(f)>90,'#b71c1c']];
+  const ba=tr.map(([l,fn,c])=>{const L=du.filter(fn);return {l,v:S(L),c,s:`${L.length} fact.`};});
+  // 3. Fournisseurs (encours, dont échu)
+  const G=new Map();du.forEach(f=>{const k=payNom(f);const g=G.get(k)||{v:0,e:0,n:0};g.v+=payReste(f);if(ret(f)>0)g.e+=payReste(f);g.n++;G.set(k,g);});
+  const top=[...G.entries()].sort((a,b)=>b[1].v-a[1].v).slice(0,12).map(([k,g])=>({l:esc(k),v:r2(g.v),c:g.e>0?'#ef6c00':'#1565c0',s:`${g.n} fact.${g.e>0?' · échu '+payEur(r2(g.e)):''}`}));
+  // 4. Décaissements et délais de paiement par mois (12 derniers mois)
+  const mois=[];{let [y,m]=t.split('-').map(Number);for(let i=0;i<12;i++){mois.unshift(`${y}-${String(m).padStart(2,'0')}`);m--;if(!m){m=12;y--;}}}
+  const fac=new Map((DATA.fac||[]).map(f=>[f.ID,f]));
+  const M=mois.map(k=>{const P=(DATA.pay||[]).filter(x=>String(dk(x,'Date_Paiement')).slice(0,7)===k&&(+x.Montant||0)>0);const v=r2(P.reduce((s,x)=>s+(+x.Montant||0),0));
+    let wd=0,wr=0,w=0;P.forEach(x=>{const f=fac.get(+x.ID_Facture);if(!f)return;const dp=dk(x,'Date_Paiement'),df=dk(f,'Date_Facture'),de=dk(f,'Date_Echeance');const m=+x.Montant||0;if(df&&dp){const j=daysBetween(df,dp);if(j>=0&&j<400){wd+=j*m;w+=m;if(de)wr+=daysBetween(de,dp)*m;}}});
+    return {k,v,n:P.length,del:w?Math.round(wd/w):null,ret:w?Math.round(wr/w):null};});
+  const lbM=k=>['janv.','févr.','mars','avr.','mai','juin','juil.','août','sept.','oct.','nov.','déc.'][+k.slice(5)-1]+' '+k.slice(2,4);
+  return `<div class="pay-ana">
+  <div class="card"><div class="card-h"><h3>📅 Cash flow prévisionnel — 8 semaines</h3><span class="muted" style="font-size:12px">Reste dû par semaine d’échéance (avoirs non déduits)</span></div><div class="card-b">${payBarres(cf)}</div></div>
+  <div class="card"><div class="card-h"><h3>⏳ Balance âgée</h3><span class="muted" style="font-size:12px">Reste dû selon le retard sur l’échéance</span></div><div class="card-b">${payBarres(ba)}</div></div>
+  <div class="card"><div class="card-h"><h3>🏭 Fournisseurs — encours</h3><span class="muted" style="font-size:12px">12 plus gros encours · orange = une partie est échue</span></div><div class="card-b">${payBarres(top)}</div></div>
+  <div class="card"><div class="card-h"><h3>💸 Décaissements et délais de paiement — 12 mois</h3></div><div class="card-b">${payBarres(M.map(x=>({l:lbM(x.k),v:x.v,c:'#00897b',s:`${x.n} paiement${x.n>1?'s':''}`})))}
+    <table class="pay-t" style="margin-top:12px"><thead><tr><th>Mois</th><th class="r">Payé</th><th class="r" data-tip="Moyenne pondérée par le montant : jours entre la date de facture et le paiement">Délai moyen facture → paiement</th><th class="r" data-tip="Moyenne pondérée : jours entre l’échéance et le paiement (négatif = payé en avance)">Retard moyen sur l’échéance</th></tr></thead><tbody>
+    ${M.slice().reverse().map(x=>`<tr><td>${PAY_MOIS[+x.k.slice(5)-1]} ${x.k.slice(0,4)}</td><td class="r">${payEur(x.v)}</td><td class="r">${x.del!=null?x.del+' j':'—'}</td><td class="r"><b class="${x.ret>0?'pay-neg':''}">${x.ret!=null?(x.ret>0?'+':'')+x.ret+' j':'—'}</b></td></tr>`).join('')}</tbody></table></div></div>
+  </div>`;
 }
 // 4. Toutes les factures
 const PAY_FILTRES=[['apayer','À payer',f=>payReste(f)>0.005],['cut','À payer d’ici le 10',f=>payReste(f)>0.005&&(!payEch(f)||payEch(f)<=(PAYV.cutoff||payCutoffDefaut()))],['echu','Échues',f=>payReste(f)>0.005&&payEch(f)&&payEch(f)<todayKey()],['rel','Reliquats',f=>payReliquat(f)&&payReste(f)>0.005],['payee','Payées',f=>payEtat(f)==='payee'],['avoir','Avoirs / crédits',f=>(+f.Montant_TTC||0)<0||payReste(f)<-0.005],['cotis','Cotisations',payEstCotis],['tout','Toutes',()=>true]];
@@ -5917,6 +5982,10 @@ async function payPool(items,fn,n=4,lbl='Enregistrement'){
   const w=async()=>{while(i<items.length){const k=i++;try{await fn(items[k],k);}catch(e){err.push(e);console.warn(e);}done++;if(done%10===0||done===items.length)busyMsg(`${lbl}… ${done} / ${items.length}`);}};
   await Promise.all(Array.from({length:Math.min(n,items.length)},w));return err;
 }
+function payBqMail(BQ,montant,lbl){
+  const d=payDispo(BQ);if(!(d>0))return '';const r=r2(d-montant);
+  return `<p>Disponible en banque : ${BQ.map(x=>`${esc(x.b)} <b>${fmtN(+x.m||0,2)} €</b>`).join(' · ')} = <b>${fmtN(d,2)} €</b><br>${lbl} : <b>${fmtN(montant,2)} €</b> → reste après paiement : <b style="color:${r<0?'#c62828':'#1b5e20'}">${fmtN(r,2)} €</b>${r<0?' <b style="color:#c62828">(dépasse le disponible)</b>':''}</p>`;
+}
 function payResumeHtml(p,lignes,valid){
   const G=new Map();lignes.forEach(l=>{const k=l.Fournisseur||'?';if(!G.has(k))G.set(k,{n:0,du:0,v:0,rel:0});const g=G.get(k);g.n++;g.du+=+l.Montant_Du||0;g.v+=l.Decision==='Reporter'?0:(l.Decision==='Partiel'?+l.Montant_Valide||0:+l.Montant_Du||0);if(l.Reliquat==='Oui')g.rel++;});
   const td='style="border:1px solid #d1d5db;padding:4px 8px"';const lien=location.origin+location.pathname.replace(/[^\/]*$/,'')+'achats.html?tab=paiements';
@@ -5934,11 +6003,13 @@ async function payEnvoyer(){
   busyOn('Création de la proposition…');
   try{
     const titre='Paiements '+payMoisLbl(cut);
-    const p=await spPost('Propositions_Paiement',{Title:titre,Date_Limite:toSP(cut),Statut:'Brouillon',Envoye_Par:payUser(),Total_Propose:tot});
+    const BQ=(PAYV.banq||[]).filter(x=>x.m!=null);
+    const p=await spPost('Propositions_Paiement',{Title:titre,Date_Limite:toSP(cut),Statut:'Brouillon',Envoye_Par:payUser(),Total_Propose:tot,Banques:BQ.length?JSON.stringify(BQ):null});
+    p.Banques=BQ.length?JSON.stringify(BQ):null;
     const L=F.map(f=>({Title:_trunc(f.Title||''),ID_Proposition:p.ID,ID_Facture:f.ID,Fournisseur:_trunc(payNom(f)),Montant_Du:payReste(f),Decision:'Payer',Montant_Valide:payReste(f),Reliquat:payReliquat(f)?'Oui':'Non'}));
     const err=await payPool(L,async b=>{const id=await spPostSilencieux('Lignes_Proposition',b);DATA.lprop.push({...b,ID:id});},4,'Lignes');
     if(err.length)throw new Error(`${err.length} ligne(s) non créée(s) : ${err[0].message}`);
-    const res=`<p><b>${esc(payUser())}</b> te propose les paiements fournisseurs (<b>${esc(titre)}</b>, échéances jusqu’au ${fmtD(cut)}). <b>Ils attendent ta validation.</b></p>`+payResumeHtml(p,L,false);
+    const res=`<p><b>${esc(payUser())}</b> te propose les paiements fournisseurs (<b>${esc(titre)}</b>, échéances jusqu’au ${fmtD(cut)}). <b>Ils attendent ta validation.</b></p>`+payBqMail(BQ,tot,'Proposé')+payResumeHtml(p,L,false);
     const body={Statut:'À valider Fabrice',Date_Envoi:new Date().toISOString(),Notif:'À valider',Resume_Notif:res};
     await spPatch('Propositions_Paiement',p.ID,body,p);DATA.prop.push({...p,...body});
     PAYV.exclus.clear();PAYV.ajouts.clear();toast('✓ Proposition envoyée à Fabrice','ok');
@@ -5966,7 +6037,7 @@ async function payValider(){
   try{
     const err=await payPool(ch,async([l,b])=>{await spPatch('Lignes_Proposition',l.ID,b,l);Object.assign(l,b);},4,'Décisions');
     if(err.length)throw new Error(err[0].message);
-    const res=`<p><b>${esc(payUser())}</b> a validé les paiements <b>${esc(p.Title)}</b> : <b>${fmtN(tv,2)} €</b> à payer.</p>${com?`<p>Commentaire : ${esc(com)}</p>`:''}`+payResumeHtml(p,L,true);
+    const res=`<p><b>${esc(payUser())}</b> a validé les paiements <b>${esc(p.Title)}</b> : <b>${fmtN(tv,2)} €</b> à payer.</p>${com?`<p>Commentaire : ${esc(com)}</p>`:''}`+payBqMail(payBanquesDe(p),tv,'Validé')+payResumeHtml(p,L,true);
     const body={Statut:'Validée',Date_Validation:new Date().toISOString(),Valide_Par:payUser(),Total_Valide:tv,Commentaire:com||null,Notif:'Validée',Resume_Notif:res};
     await spPatch('Propositions_Paiement',p.ID,body,p);Object.assign(p,body);PAYV.dec.clear();toast('✓ Paiements validés : Monique est prévenue','ok');
   }catch(e){toast('🔴 '+e.message,'ko');}finally{busyOff();renderPaiements();}
@@ -6286,6 +6357,7 @@ document.addEventListener('click',e=>{
 document.addEventListener('change',e=>{
   const t=e.target;
   if(t.id==='payCut'){PAYV.cutoff=t.value||null;renderPaiements();}
+  else if(t.dataset&&t.dataset.paybq){payBqChange(t);}
   else if(t.id==='payPFrs'){PAYV.pfrs=t.value;renderPaiements();}
   else if(t.id==='payFFrs'){PAYV.ffrs=t.value;PAYV.lim=200;renderPaiements();}
   else if(t.id==='payImpFile'&&t.files&&t.files[0]){const f=t.files[0];t.value='';payImportLire(f);}
@@ -6296,6 +6368,15 @@ let _payRechT=null;
 document.addEventListener('input',e=>{if(e.target.id==='payPQ'){clearTimeout(_payRechT);const v=e.target.value;_payRechT=setTimeout(()=>{PAYV.pq=v;renderPaiements();const i=$('payPQ');if(i){i.focus();i.setSelectionRange(v.length,v.length);}},250);return;}
   if(e.target.id==='payRech'){clearTimeout(_payRechT);const v=e.target.value;_payRechT=setTimeout(()=>{PAYV.rech=v;PAYV.lim=200;renderPaiements();const i=$('payRech');if(i){i.focus();i.setSelectionRange(v.length,v.length);}},250);}});
 
+async function payBqChange(t){
+  const b=t.dataset.paybq,m=payNb(t.value);
+  if(t.dataset.paybqk==='prep'){const L=(PAYV.banq||[]).filter(x=>x.b!==b);if(m!=null)L.push({b,m});PAYV.banq=L;renderPaiements();return;}
+  const p=payPropOuverte();if(!p)return;const L=payBanquesDe(p).filter(x=>x.b!==b);if(m!=null)L.push({b,m});
+  const v=L.length?JSON.stringify(L):null;
+  try{await spPatch('Propositions_Paiement',p.ID,{Banques:v},p);p.Banques=v;if(MISSING.Propositions_Paiement&&MISSING.Propositions_Paiement.has('Banques'))toast('🔴 Colonne « Banques » absente de Propositions_Paiement : le disponible n’est pas enregistré','ko');}
+  catch(e){toast('🔴 '+e.message,'ko');}
+  renderPaiements();
+}
 // ── Démo : quelques factures et un reliquat ──
 function payDemoSeed(){
   const S=window.__FAKE_SP__;if(!S||S.__paySeed)return;S.__paySeed=true;
