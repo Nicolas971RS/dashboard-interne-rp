@@ -5756,7 +5756,8 @@ function renderPaiements(){
   const aCut=du.filter(f=>!payEch(f)||payEch(f)<=cut),rel=du.filter(payReliquat);
   const S=a=>a.reduce((s,f)=>s+payReste(f),0);
   const kpi=(l,v,n,c,tip)=>`<div class="kpi" style="--c:${c}" data-tip="${esc(tip)}"><div class="lab">${l}</div><div class="val" style="font-size:20px">${payEur(v)}</div><div class="muted" style="font-size:12px">${n} facture${n>1?'s':''}</div></div>`;
-  let h=`<div class="kpis">${kpi('Encours total',S(du),du.length,'#1565c0','Tout ce qui reste à payer, quelle que soit l’échéance')}${kpi('Échu non payé',S(echu),echu.length,'#c62828','Échéance dépassée, pas encore payé')}${kpi('À payer d’ici le '+fmtD(cut).slice(0,5),S(aCut),aCut.length,'#ef6c00','Échus + échéance jusqu’au '+fmtD(cut))}${kpi('Reliquats',S(rel),rel.length,'#b71c1c','Factures payées en partie : il reste un solde')}</div>
+  const sansImport=!F.some(f=>f.Source==='Import échéancier');
+  let h=(sansImport?`<div class="warn-ribbon" style="border-radius:8px;margin-bottom:12px">⚠️ L’échéancier Excel n’est pas encore importé : seules les factures saisies dans le portail depuis le 7 octobre apparaissent ici. Les montants seront complets après l’import${peutImporter()?' (bouton « 📥 Importer l’échéancier Excel »)':' fait par Nicolas'}.</div>`:'')+`<div class="kpis">${kpi('Encours total',S(du),du.length,'#1565c0','Tout ce qui reste à payer, quelle que soit l’échéance')}${kpi('Échu non payé',S(echu),echu.length,'#c62828','Échéance dépassée, pas encore payé')}${kpi('À payer d’ici le '+fmtD(cut).slice(0,5),S(aCut),aCut.length,'#ef6c00','Échus + échéance jusqu’au '+fmtD(cut))}${kpi('Reliquats',S(rel),rel.length,'#b71c1c','Factures payées en partie : il reste un solde')}</div>
   <div class="filters"><button class="chip ${PAYV.vue==='mois'?'on':''}" data-payvue="mois">🗓 Paiements du mois</button><button class="chip ${PAYV.vue==='factures'?'on':''}" data-payvue="factures">📚 Toutes les factures</button><button class="chip ${PAYV.vue==='hist'?'on':''}" data-payvue="hist">🗂 Propositions passées</button></div>`;
   if(PAYV.vue==='factures')h+=payVueFactures();
   else if(PAYV.vue==='hist')h+=payVueHist();
@@ -6127,9 +6128,10 @@ function payImportAnalyser(rows){
   const estCotis=r=>PAY_ORGS.includes(String(r.frs).toUpperCase())||!r.code&&/TRESOR|URSSAF|CGSS|CGRR|DGFIP/i.test(r.frs)||!r.frs;
   parFrs.forEach(M=>M.forEach((L,num)=>{const tete=L.filter(r=>!racine.has(r));if(tete.length>1&&!estCotis(tete[0]))tete.slice(1).forEach(r=>dt(r,`N° ${num} déjà présent ligne ${tete[0].row} : importé à part`));}));
   rows.filter(r=>PAYIMP_AN.includes(r.row)).forEach(r=>dt(r,'Année sur 3 chiffres dans l’Excel (ex. 226) : lue comme 2026'));
-  // factures déjà saisies dans le portail (depuis le 7 octobre, exportées par F2) : même n° et même fournisseur, ou n° unique et même montant
+  // factures déjà saisies dans le portail (depuis le 7 octobre, exportées par F2 dans l'Excel)
   const fac=[];const exist=new Map(),parNum=new Map();
-  (DATA.fac||[]).forEach(f=>{const n=payNum(f.Title);exist.set(nFull(f.Fournisseur||'')+'|'+n,f);if(f.ID_Fournisseur)exist.set('#'+f.ID_Fournisseur+'|'+n,f);if(!parNum.has(n))parNum.set(n,[]);parNum.get(n).push(f);});
+  const ajK=(k,f)=>{if(!exist.has(k))exist.set(k,[]);exist.get(k).push(f);};
+  (DATA.fac||[]).forEach(f=>{const n=payNum(f.Title);ajK(nFull(f.Fournisseur||'')+'|'+n,f);if(f.ID_Fournisseur)ajK('#'+f.ID_Fournisseur+'|'+n,f);if(!parNum.has(n))parNum.set(n,[]);parNum.get(n).push(f);});
   const vus=new Set();
   chaines.forEach((L,b)=>{L.sort((x,y)=>x.row-y.row);
     L.forEach(r=>{if(r.mt==null)dt(r,'Montant vide ou illisible : compté 0');
@@ -6138,13 +6140,22 @@ function payImportAnalyser(rows){
     const fr=payFrsPour(b.frs,b.code);const cotis=estCotis(b);let titre=b.num;
     if(cotis&&(b.ech||b.date)&&!/\d{2}\/\d{2}/.test(titre)){const d=(b.ech||b.date);titre=b.num+' '+d.slice(5,7)+'/'+d.slice(2,4);}
     const cle=nFull(b.frs)+'|'+titre;let k2=cle,i=2;while(vus.has(k2)){k2=cle+' ('+i+')';i++;}if(k2!==cle)titre=titre+' ('+(i-1)+')';vus.add(k2);
-    const tot0=r2(L.reduce((s,r)=>s+(r.mt||0),0));const pn=parNum.get(payNum(b.num))||[];
-    const ex=exist.get(nFull(b.frs||'TRESOR PUBLIC')+'|'+payNum(titre))||(fr&&(exist.get('#'+fr.ID+'|'+payNum(titre))||exist.get(nFull(fr.Title)+'|'+payNum(titre))))||(titre===b.num&&exist.get(nFull(b.frs)+'|'+payNum(b.num)))||(fr&&(exist.get('#'+fr.ID+'|'+payNum(b.num))||exist.get(nFull(fr.Title)+'|'+payNum(b.num))))||(!cotis&&pn.length===1&&Math.abs((+pn[0].Montant_TTC||0)-tot0)<0.01?pn[0]:null);
+    // portail : candidats par fournisseur + n° (titre importé ou n° Excel)
+    const noms=[nFull(b.frs)];if(fr){noms.push('#'+fr.ID,nFull(fr.Title));}
+    const cand=[...new Set(noms.flatMap(k=>[titre,b.num].flatMap(n=>exist.get(k+'|'+payNum(n))||[])))];
+    const pn=(parNum.get(payNum(b.num))||[]).filter(f=>!cotis);
     const pays=L.filter(r=>r.pay&&r.mt).map(r=>({date:r.pay,mt:r.mt,num:r.num}));
     const com=[...new Set(L.map(r=>r.com).filter(Boolean))].join(' · ');
-    if(ex&&Math.abs((+ex.Montant_TTC||0)-tot)>0.01&&!pays.length)dt(b,`Déjà dans le portail avec ${fmtN(+ex.Montant_TTC||0,2)} € (Excel ${fmtN(tot,2)} €) : montant du portail gardé`);
-    fac.push({rel:L.some(r=>r.rel),titre,frs:b.frs||'TRESOR PUBLIC',fr,code:b.code||(fr&&fr.Code_Compta)||'',date:b.date||der.date,ech:der.ech||b.ech,tot,pays,lignes:L.map(r=>r.num+' (l.'+r.row+')'),com,pdf:(L.find(r=>r.pdf)||{}).pdf||'',ex,cotis,chaine:L.length>1});
+    fac.push({rel:L.some(r=>r.rel),titre,frs:b.frs||'TRESOR PUBLIC',fr,code:b.code||(fr&&fr.Code_Compta)||'',date:b.date||der.date,ech:der.ech||b.ech,tot,pays,lignes:L.map(r=>r.num+' (l.'+r.row+')'),com,pdf:(L.find(r=>r.pdf)||{}).pdf||'',ex:null,cotis,chaine:L.length>1,cand,pn,b,row:b.row});
   });
+  // rapprochement en 2 passes : d'abord à montant égal, puis (hors cotisations) au plus récent même n° + fournisseur
+  const pris=new Set();const eq=(f,x)=>Math.abs((+f.Montant_TTC||0)-x.tot)<0.01;
+  const ordre=[...fac].sort((x,y)=>y.row-x.row);
+  ordre.forEach(x=>{const f=x.cand.find(f=>!pris.has(f.ID)&&eq(f,x))||(x.pn.length===1&&!pris.has(x.pn[0].ID)&&eq(x.pn[0],x)?x.pn[0]:null);if(f){x.ex=f;pris.add(f.ID);}});
+  ordre.forEach(x=>{if(x.ex||x.cotis)return;const f=x.cand.find(f=>!pris.has(f.ID));if(!f)return;x.ex=f;pris.add(f.ID);
+    if(!x.pays.length)dt(x.b,`Déjà dans le portail avec ${fmtN(+f.Montant_TTC||0,2)} € (Excel ${fmtN(x.tot,2)} €) : montant du portail gardé`);
+    else dt(x.b,`Rapprochée de la facture du portail ${f.Title} (${fmtN(+f.Montant_TTC||0,2)} €) malgré un montant différent (Excel ${fmtN(x.tot,2)} €)`);});
+  fac.forEach(x=>{delete x.cand;delete x.pn;delete x.b;});
   const paye=f=>r2(f.pays.reduce((s,p)=>s+p.mt,0));
   return {rows,fac,doutes,
     n:{lignes:rows.length,fac:fac.length,nouv:fac.filter(f=>!f.ex).length,ex:fac.filter(f=>f.ex).length,pays:fac.reduce((s,f)=>s+f.pays.length,0),chaines:fac.filter(f=>f.chaine).length,
