@@ -3695,7 +3695,7 @@ function davLigneHtml(i,l){
   return `<tr data-davl="${i}"><td><input class="dav-ref" list="dav-cat" value="${_escD(l.ref||'')}" placeholder="réf." style="width:100%;font-family:var(--font-mono);padding:6px 8px;border:1px solid var(--border);border-radius:6px;font-size:13px;box-sizing:border-box" oninput="davRefChange(this)"></td>
     <td><input class="dav-des" value="${_escD(l.des||'')}" placeholder="désignation" style="width:100%;padding:6px 8px;border:1px solid var(--border);border-radius:6px;font-size:13px;box-sizing:border-box"></td>
     <td><input class="dav-qte" value="${_escD(l.qte||'')}" inputmode="decimal" style="width:100%;text-align:right;padding:6px 8px;border:1px solid var(--border);border-radius:6px;font-size:13px;box-sizing:border-box"></td>
-    <td><input class="dav-stk" value="${_escD(l.stk||'')}" inputmode="decimal" placeholder="—" title="Part pour le stock" style="width:100%;text-align:right;padding:6px 8px;border:1px solid var(--border);border-radius:6px;font-size:13px;box-sizing:border-box"></td>
+    <td class="dav-c-stk"><input class="dav-stk" value="${_escD(l.stk||'')}" inputmode="decimal" placeholder="0" title="Quantité pour le stock" style="width:100%;text-align:right;padding:6px 8px;border:1px solid var(--border);border-radius:6px;font-size:13px;box-sizing:border-box"></td>
     <td><button type="button" onclick="this.closest('tr').remove()" style="background:none;border:0;cursor:pointer;color:var(--text-muted)">✕</button></td></tr>`;
 }
 function davRefChange(inp){
@@ -3719,11 +3719,12 @@ function openDemandeVendeur(id){
     <div style="display:flex;flex-wrap:wrap;gap:16px;margin-bottom:10px">
       <div class="mf"><label>Destination</label><div>${radio('dav-zone',DAV_ZONES,'Guadeloupe')}</div></div>
       <div class="mf"><label>Transport</label><div>${radio('dav-tr',['Maritime','Aérien','Local'],'Maritime')}</div></div>
-      <div class="mf"><label>Pour</label><div>${radio('dav-motif',['Client','Stock'],'Client')}</div></div>
+      <div class="mf"><label>Pour <span style="font-weight:400;text-transform:none;letter-spacing:0">(les deux possibles)</span></label><div>${['Client','Stock'].map(o=>`<label style="display:inline-flex;gap:4px;align-items:center;margin-right:12px;font-size:13px;text-transform:none;letter-spacing:0;font-weight:500"><input type="checkbox" class="dav-pour" value="${o}" ${o==='Client'?'checked':''} onchange="davPourMaj()"> ${o}</label>`).join('')}</div></div>
     </div>
-    <div class="mf" style="margin-bottom:8px"><label>Client</label><input id="dav-client" value="${_escD(cli)}"></div>
-    <table style="width:100%;border-collapse:separate;border-spacing:0 4px;font-size:13px;table-layout:fixed;min-width:0" class="dav-t"><colgroup><col style="width:130px"><col><col style="width:76px"><col style="width:76px"><col style="width:30px"></colgroup><thead><tr style="text-align:left;color:var(--text-muted);font-size:11px"><th>RÉF.</th><th>DÉSIGNATION</th><th>QTÉ TOTALE</th><th title="Partie de la quantité pour le stock (le reste est pour le client)">DONT STOCK</th><th></th></tr></thead><tbody id="dav-lignes"></tbody></table>
-    <div style="font-size:11.5px;color:var(--text-muted);margin-top:-2px">« Dont stock » : si on commande plus que le besoin du client (ex. 20 dont 4 pour le stock), mets la part du stock. Laisse vide si tout est pour le client.</div>
+    <div class="mf" style="margin-bottom:8px" id="dav-client-wrap"><label>Client</label><input id="dav-client" value="${_escD(cli)}"></div>
+    <style>.dav-t:not(.dav-both) .dav-c-stk{display:none}.dav-t th{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}</style>
+    <table style="width:100%;border-collapse:separate;border-spacing:0 4px;font-size:13px;table-layout:fixed;min-width:0" class="dav-t" id="dav-t"><thead><tr style="text-align:left;color:var(--text-muted);font-size:11px"><th style="width:130px">RÉF.</th><th>DÉSIGNATION</th><th style="width:100px" id="dav-h-qte">QTÉ</th><th style="width:100px" class="dav-c-stk" title="Quantité pour le stock">QTÉ STOCK</th><th style="width:30px"></th></tr></thead><tbody id="dav-lignes"></tbody></table>
+    <div id="dav-aide-both" style="display:none;font-size:11.5px;color:var(--text-muted);margin-top:-2px">Client + stock : mets la quantité du client et celle du stock sur la même ligne (ex. rehausses : 16 client, 4 stock). Le Portail Achats garde les deux parts séparées.</div>
     <div style="display:flex;gap:8px;margin:8px 0">
       <button type="button" onclick="davAjouterLigne()" style="border:1px solid var(--border);background:#fff;border-radius:6px;padding:4px 10px;cursor:pointer">＋ Ligne</button>
       <button type="button" onclick="davReprendreBC(${id})" style="border:1px solid var(--border);background:#fff;border-radius:6px;padding:4px 10px;cursor:pointer">↧ Reprendre les articles non livrés du BC</button>
@@ -3731,24 +3732,33 @@ function openDemandeVendeur(id){
     <div class="mf"><label>Commentaire</label><textarea id="dav-com" rows="2" placeholder="Délai souhaité, précisions pour Fabrice…"></textarea></div>
     <div style="font-size:12px;color:var(--text-muted);margin-top:6px">La demande part à Fabrice pour validation. Tu suivras ici son statut puis la commande fournisseur.</div>`,
     ()=>davEnregistrer(item));
-  davAjouterLigne();davAjouterLigne();
+  davAjouterLigne();davAjouterLigne();davPourMaj();
+}
+function davPourMaj(){
+  const P=[...document.querySelectorAll('.dav-pour:checked')].map(x=>x.value);const cli=P.includes('Client'),stk=P.includes('Stock');
+  const t=document.getElementById('dav-t');if(t)t.classList.toggle('dav-both',cli&&stk);
+  const h=document.getElementById('dav-h-qte');if(h)h.textContent=cli&&stk?'QTÉ CLIENT':'QTÉ';h.title=cli&&stk?'Quantité pour le client':'';
+  const w=document.getElementById('dav-client-wrap');if(w)w.style.display=cli?'':'none';
+  const a=document.getElementById('dav-aide-both');if(a)a.style.display=cli&&stk?'':'none';
 }
 async function davEnregistrer(item){
   const v=n=>{const x=document.querySelector(`input[name="${n}"]:checked`);return x?x.value:'';};
-  const zone=v('dav-zone'),tr=v('dav-tr'),motif=v('dav-motif');
+  const zone=v('dav-zone'),tr=v('dav-tr');
+  const P=[...document.querySelectorAll('.dav-pour:checked')].map(x=>x.value);const pCli=P.includes('Client'),pStk=P.includes('Stock');
+  if(!pCli&&!pStk)throw new Error('Coche « Client », « Stock » ou les deux');
+  const motif=pCli?'Client':'Stock';
   const client=(document.getElementById('dav-client').value||'').trim();const com=(document.getElementById('dav-com').value||'').trim();
   const nb=x=>{const v=parseFloat(String(x||'').replace(',','.'));return isNaN(v)?0:v;};
-  const L=[...document.querySelectorAll('#dav-lignes tr')].map(t=>({ref:t.querySelector('.dav-ref').value.trim().toUpperCase(),des:t.querySelector('.dav-des').value.trim(),qte:nb(t.querySelector('.dav-qte').value),stk:nb((t.querySelector('.dav-stk')||{}).value)})).filter(l=>l.ref||l.des||l.qte);
+  const L=[...document.querySelectorAll('#dav-lignes tr')].map(t=>({ref:t.querySelector('.dav-ref').value.trim().toUpperCase(),des:t.querySelector('.dav-des').value.trim(),qte:nb(t.querySelector('.dav-qte').value),stk:pCli&&pStk?nb((t.querySelector('.dav-stk')||{}).value):0})).filter(l=>l.ref||l.des||l.qte||l.stk);
   const err=[];if(!L.length)err.push('au moins un article');
-  L.forEach((l,i)=>{if(!l.ref)err.push(`réf. ligne ${i+1}`);if(!(l.qte>0))err.push(`quantité ligne ${i+1}`);if(l.stk<0||l.stk>l.qte)err.push(`« dont stock » ligne ${i+1} (entre 0 et ${l.qte||'la quantité'})`);});
+  L.forEach((l,i)=>{if(!l.ref)err.push(`réf. ligne ${i+1}`);if(l.qte<0||l.stk<0||!(l.qte+l.stk>0))err.push(`quantité ligne ${i+1}`);});
   if(motif==='Client'&&!client)err.push('le client');
   if(err.length)throw new Error('Manque : '+err.join(', '));
   const u=sessionStorage.getItem('user_name')||vendeurConnecte()||'';
   // une ligne avec une part stock devient deux lignes : client + Stock (même convention que le Portail Achats)
-  const avecStock=motif==='Client'&&L.some(l=>l.stk>0);const motifF=avecStock?'Client + Stock':motif;
-  const LS=[];L.forEach(l=>{if(motif!=='Client'){LS.push({...l,cli:null});return;}
-    if(l.stk>0&&l.stk<l.qte){LS.push({...l,qte:l.qte-l.stk,cli:client});LS.push({...l,qte:l.stk,cli:'Stock'});}
-    else LS.push({...l,cli:l.stk>=l.qte&&l.stk>0?'Stock':client});});
+  const avecStock=pCli&&pStk&&L.some(l=>l.stk>0);const motifF=avecStock?'Client + Stock':motif;
+  const LS=[];L.forEach(l=>{if(!pCli){LS.push({...l,cli:null});return;}
+    if(l.qte>0)LS.push({...l,cli:client});if(l.stk>0)LS.push({...l,qte:l.stk,cli:'Stock'});});
   const t=new Date();const pre='DA-'+String(t.getFullYear()).slice(2)+String(t.getMonth()+1).padStart(2,'0')+String(t.getDate()).padStart(2,'0');
   let n=1;try{const ex=await spFetch('sites/BondeCommande','Demandes_Achat',`$select=ID,Title&$filter=startswith(Title,'${pre}')&$top=500`);n=ex.length+1;}catch(e){n=((DATA.achats.da||[]).filter(d=>String(d.Title).startsWith(pre)).length)+1;}
   const num=`${pre}-${n}`,bc=f(item,'Title')||('BC-'+item.ID);
@@ -3818,14 +3828,21 @@ const achSrcCmd=()=>DATA.achats&&DATA.achats.cmd;
 function achPhaseCmd(c){
   const st={c:'#5d4037',bg:'#efebe9',bd:'#bcaaa4'};
   if(c.Date_Reception)return {k:'recue',rang:3,ic:'🏬',lbl:'Reçue',date:c.Date_Reception,txt:`Commande reçue le ${fmtDate(c.Date_Reception)}`,c:'#0d47a1',bg:'#e3f2fd',bd:'#90caf9'};
-  if(c.Date_Dispo_Prevue)return {k:'dispo',rang:0,ic:'🛒',lbl:'Dispo annoncée',txt:`Commandée le ${fmtDate(c.Date_Commande)} — fournisseur : marchandise prête vers le ${fmtDate(c.Date_Dispo_Prevue)}, pas encore expédiée`,...st};
+  if(c.Date_Dispo_Prevue)return {k:'dispo',rang:0,prevu:c.Date_Dispo_Prevue,ic:'🛒',lbl:'Dispo annoncée',txt:`Commandée le ${fmtDate(c.Date_Commande)} — fournisseur : marchandise prête vers le ${fmtDate(c.Date_Dispo_Prevue)}, pas encore expédiée`,...st};
   if(c.Date_BPA)return {k:'bpa',rang:0,ic:'🛒',lbl:'Confirmée',txt:`Commandée le ${fmtDate(c.Date_Commande)} — confirmée au fournisseur (BPA) le ${fmtDate(c.Date_BPA)}, en préparation`,...st};
   if(c.Date_ARC)return {k:'arc',rang:0,ic:'🛒',lbl:'ARC reçu',txt:`Commandée le ${fmtDate(c.Date_Commande)} — accusé de réception du fournisseur reçu le ${fmtDate(c.Date_ARC)}`,...st};
   return {k:'cmd',rang:0,ic:'🛒',lbl:'Commandée',txt:`Commandée le ${fmtDate(c.Date_Commande)} — en attente de l’accusé du fournisseur`,...st};
 }
 // Liens d'un BC → {nums, liens:[{num,a,ph,lignes}], absents:[n°]} ou null si aucun n° BC frs.
+// N° BC frs d'un BC client : ceux saisis par le vendeur + ceux des demandes de commande faites pour ce BC
+function achBrutBC(item){
+  const base=getBCFrs(item)||'';if(!item||!item.ID||!DATA.achats)return base;
+  const deja=achNums(base);
+  const plus=[...new Set(davDemandes(item).filter(d=>!['Refusée','Annulée'].includes(d.Statut)).flatMap(d=>davLignes(d).map(l=>achNums(l.N_Commande)[0])).filter(n=>n&&!deja.includes(n)))];
+  return [base,...plus].filter(Boolean).join(' - ');
+}
 function achLiens(item,valeur){
-  const brut=valeur!==undefined?valeur:getBCFrs(item);
+  const brut=valeur!==undefined?valeur:achBrutBC(item);
   const nums=achNums(brut);if(!nums.length)return null;
   const idx=achIndex();if(!idx)return {nums,liens:[],absents:[],indispo:true};
   const cle=(item&&item.ID)+'|'+brut;
@@ -11135,7 +11152,7 @@ async function openTraiterModal(id,numBC,client){
         </div>
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
           <div class="mf"><label>Date de livraison <span style="font-weight:400;color:var(--text-muted)">(retrait client)</span></label><input id="m-eta" type="date" value="${curETA?curETA.slice(0,10):''}"></div>
-          <div class="mf"><label>Arrivage attendu <span style="font-weight:400;color:var(--text-muted)">(optionnel)</span></label><input id="m-arrivage" type="date" value="${curArrivage?curArrivage.slice(0,10):''}"></div>
+          <div class="mf"><label>Arrivage attendu <span style="font-weight:400;color:var(--text-muted)">(optionnel)</span></label><input id="m-arrivage" type="date" value="${curArrivage?curArrivage.slice(0,10):''}">${(()=>{const L=achLiens(currentItem);if(!L||!L.liens.length)return '';const a=dateArrivageAttendu(currentItem);return `<div style="font-size:11px;color:var(--green);margin-top:3px">${a?'Automatique : '+fmtDate(a)+' (Portail Achats)':'Suivi automatique par le Portail Achats'} — rien à saisir</div>`;})()}</div>
         </div>
         <div class="mf"><label>N° BC fournisseur <span style="font-weight:400;color:var(--text-muted)">(n° Image, plusieurs séparés par « - » — optionnel)</span></label><input id="m-bcfrs" value="${_escD(getBCFrs(currentItem))}" placeholder="ex : 8412 - 8415" oninput="achMajModal(${currentItem.ID||0},this.value)" style="font-family:var(--font-mono)"></div>
         <div id="m-bcfrs-arr">${achBlocHtml(currentItem)}</div>
