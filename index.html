@@ -3662,6 +3662,20 @@ function davEtat(d){
   if(nums.length)return {lbl:'En partie commandée · BC frs '+nums.join(' - '),c:'#0d47a1',bg:'#e3f2fd',nums};
   return {lbl:'Validée · commande à passer',c:'#0d47a1',bg:'#e3f2fd'};
 }
+// Fenêtre Traiter : demandes de commande faites pour ce BC client, et n° de BC Image dès qu'ils sont connus
+function davTraiterHtml(item){
+  if(!DATA.achats||!item||!item.ID)return '';
+  const D=davDemandes(item).filter(d=>d.Statut!=='Annulée');if(!D.length)return '';
+  const champ=document.getElementById('m-bcfrs');const actuels=achNums(champ?champ.value:getBCFrs(item));
+  return `<div style="margin:2px 0 10px;border:1px solid var(--border);border-radius:var(--radius-sm);padding:6px 10px;font-size:12.5px">
+    <div style="font-size:11px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:.04em;margin-bottom:4px">📝 Demandes de commande pour ce BC</div>
+    ${D.map(d=>{const e=davEtat(d);const L=davLignes(d);const nums=[...new Set(L.map(l=>achNums(l.N_Commande)[0]).filter(Boolean))];
+      return `<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;padding:4px 0;border-top:1px solid var(--border-light)">
+        <strong class="mono">${_escD(d.Title)}</strong><span style="font-size:11px;padding:2px 8px;border-radius:9px;background:${e.bg};color:${e.c};font-weight:600">${_escD(d.Statut==='À valider'?'à valider (Fabrice)':d.Statut==='Refusée'?'refusée':nums.length?'commandée':'à commander')}</span>
+        <span style="color:var(--text-muted)">${_escD(d.Demandeur||'')} · ${fmtDate(d.Date_Demande)}</span>
+        ${nums.map(n=>actuels.includes(n)?`<span style="font-size:11.5px;color:var(--green);font-weight:600">✓ BC Image ${_escD(n)} rattaché</span>`:`<button type="button" class="btn navy" style="height:24px;font-size:11px" onclick="achRattacher(${item.ID},'${_escD(n)}')">＋ Rattacher le BC Image ${_escD(n)}</button>`).join(' ')}
+        ${!nums.length&&d.Statut!=='Refusée'?`<span style="font-size:11.5px;color:var(--text-muted)">n° de BC Image pas encore connu</span>`:''}</div>`;}).join('')}</div>`;
+}
 function davBlocHtml(item){
   if(!DATA.achats)return '';
   const D=davDemandes(item);
@@ -3681,6 +3695,7 @@ function davLigneHtml(i,l){
   return `<tr data-davl="${i}"><td><input class="dav-ref" list="dav-cat" value="${_escD(l.ref||'')}" placeholder="réf." style="width:100%;font-family:var(--font-mono);padding:6px 8px;border:1px solid var(--border);border-radius:6px;font-size:13px;box-sizing:border-box" oninput="davRefChange(this)"></td>
     <td><input class="dav-des" value="${_escD(l.des||'')}" placeholder="désignation" style="width:100%;padding:6px 8px;border:1px solid var(--border);border-radius:6px;font-size:13px;box-sizing:border-box"></td>
     <td><input class="dav-qte" value="${_escD(l.qte||'')}" inputmode="decimal" style="width:100%;text-align:right;padding:6px 8px;border:1px solid var(--border);border-radius:6px;font-size:13px;box-sizing:border-box"></td>
+    <td><input class="dav-stk" value="${_escD(l.stk||'')}" inputmode="decimal" placeholder="—" title="Part pour le stock" style="width:100%;text-align:right;padding:6px 8px;border:1px solid var(--border);border-radius:6px;font-size:13px;box-sizing:border-box"></td>
     <td><button type="button" onclick="this.closest('tr').remove()" style="background:none;border:0;cursor:pointer;color:var(--text-muted)">✕</button></td></tr>`;
 }
 function davRefChange(inp){
@@ -3707,7 +3722,8 @@ function openDemandeVendeur(id){
       <div class="mf"><label>Pour</label><div>${radio('dav-motif',['Client','Stock'],'Client')}</div></div>
     </div>
     <div class="mf" style="margin-bottom:8px"><label>Client</label><input id="dav-client" value="${_escD(cli)}"></div>
-    <table style="width:100%;border-collapse:separate;border-spacing:0 4px;font-size:13px;table-layout:fixed;min-width:0" class="dav-t"><colgroup><col style="width:130px"><col><col style="width:76px"><col style="width:30px"></colgroup><thead><tr style="text-align:left;color:var(--text-muted);font-size:11px"><th>RÉF.</th><th>DÉSIGNATION</th><th>QTÉ</th><th></th></tr></thead><tbody id="dav-lignes"></tbody></table>
+    <table style="width:100%;border-collapse:separate;border-spacing:0 4px;font-size:13px;table-layout:fixed;min-width:0" class="dav-t"><colgroup><col style="width:130px"><col><col style="width:76px"><col style="width:76px"><col style="width:30px"></colgroup><thead><tr style="text-align:left;color:var(--text-muted);font-size:11px"><th>RÉF.</th><th>DÉSIGNATION</th><th>QTÉ TOTALE</th><th title="Partie de la quantité pour le stock (le reste est pour le client)">DONT STOCK</th><th></th></tr></thead><tbody id="dav-lignes"></tbody></table>
+    <div style="font-size:11.5px;color:var(--text-muted);margin-top:-2px">« Dont stock » : si on commande plus que le besoin du client (ex. 20 dont 4 pour le stock), mets la part du stock. Laisse vide si tout est pour le client.</div>
     <div style="display:flex;gap:8px;margin:8px 0">
       <button type="button" onclick="davAjouterLigne()" style="border:1px solid var(--border);background:#fff;border-radius:6px;padding:4px 10px;cursor:pointer">＋ Ligne</button>
       <button type="button" onclick="davReprendreBC(${id})" style="border:1px solid var(--border);background:#fff;border-radius:6px;padding:4px 10px;cursor:pointer">↧ Reprendre les articles non livrés du BC</button>
@@ -3721,27 +3737,36 @@ async function davEnregistrer(item){
   const v=n=>{const x=document.querySelector(`input[name="${n}"]:checked`);return x?x.value:'';};
   const zone=v('dav-zone'),tr=v('dav-tr'),motif=v('dav-motif');
   const client=(document.getElementById('dav-client').value||'').trim();const com=(document.getElementById('dav-com').value||'').trim();
-  const L=[...document.querySelectorAll('#dav-lignes tr')].map(t=>({ref:t.querySelector('.dav-ref').value.trim().toUpperCase(),des:t.querySelector('.dav-des').value.trim(),qte:parseFloat(String(t.querySelector('.dav-qte').value).replace(',','.'))})).filter(l=>l.ref||l.des||l.qte);
+  const nb=x=>{const v=parseFloat(String(x||'').replace(',','.'));return isNaN(v)?0:v;};
+  const L=[...document.querySelectorAll('#dav-lignes tr')].map(t=>({ref:t.querySelector('.dav-ref').value.trim().toUpperCase(),des:t.querySelector('.dav-des').value.trim(),qte:nb(t.querySelector('.dav-qte').value),stk:nb((t.querySelector('.dav-stk')||{}).value)})).filter(l=>l.ref||l.des||l.qte);
   const err=[];if(!L.length)err.push('au moins un article');
-  L.forEach((l,i)=>{if(!l.ref)err.push(`réf. ligne ${i+1}`);if(!(l.qte>0))err.push(`quantité ligne ${i+1}`);});
+  L.forEach((l,i)=>{if(!l.ref)err.push(`réf. ligne ${i+1}`);if(!(l.qte>0))err.push(`quantité ligne ${i+1}`);if(l.stk<0||l.stk>l.qte)err.push(`« dont stock » ligne ${i+1} (entre 0 et ${l.qte||'la quantité'})`);});
   if(motif==='Client'&&!client)err.push('le client');
   if(err.length)throw new Error('Manque : '+err.join(', '));
   const u=sessionStorage.getItem('user_name')||vendeurConnecte()||'';
+  // une ligne avec une part stock devient deux lignes : client + Stock (même convention que le Portail Achats)
+  const avecStock=motif==='Client'&&L.some(l=>l.stk>0);const motifF=avecStock?'Client + Stock':motif;
+  const LS=[];L.forEach(l=>{if(motif!=='Client'){LS.push({...l,cli:null});return;}
+    if(l.stk>0&&l.stk<l.qte){LS.push({...l,qte:l.qte-l.stk,cli:client});LS.push({...l,qte:l.stk,cli:'Stock'});}
+    else LS.push({...l,cli:l.stk>=l.qte&&l.stk>0?'Stock':client});});
   const t=new Date();const pre='DA-'+String(t.getFullYear()).slice(2)+String(t.getMonth()+1).padStart(2,'0')+String(t.getDate()).padStart(2,'0');
   let n=1;try{const ex=await spFetch('sites/BondeCommande','Demandes_Achat',`$select=ID,Title&$filter=startswith(Title,'${pre}')&$top=500`);n=ex.length+1;}catch(e){n=((DATA.achats.da||[]).filter(d=>String(d.Title).startsWith(pre)).length)+1;}
   const num=`${pre}-${n}`,bc=f(item,'Title')||('BC-'+item.ID);
   const td='style="border:1px solid #d1d5db;padding:4px 8px"';
   const portail=location.origin+location.pathname.replace(/[^\/]*$/,'')+'achats.html?tab=commandes';
   const resume=`<p><b>${_escD(u)}</b> demande une commande fournisseur (<b>${_escD(num)}</b>) pour le BC <b>${_escD(bc)}</b>. <b>Elle attend ta validation.</b></p>
-<p>Pour : <b>${motif==='Client'?'Client '+_escD(client):'Stock'}</b><br>Destination : <b>${_escD(zone)}</b> · Transport : <b>${_escD(tr)}</b></p>
-<table style="border-collapse:collapse;font-family:Arial;font-size:13px"><tr style="background:#f1f5f9"><th ${td}>Réf.</th><th ${td}>Désignation</th><th ${td}>Qté</th></tr>
-${L.map(l=>`<tr><td ${td}><b>${_escD(l.ref)}</b></td><td ${td}>${_escD(l.des)}</td><td ${td} align="right">${l.qte}</td></tr>`).join('')}</table>
+<p>Pour : <b>${motif==='Client'?'Client '+_escD(client)+(avecStock?' + stock':''):'Stock'}</b><br>Destination : <b>${_escD(zone)}</b> · Transport : <b>${_escD(tr)}</b></p>
+<table style="border-collapse:collapse;font-family:Arial;font-size:13px"><tr style="background:#f1f5f9"><th ${td}>Réf.</th><th ${td}>Désignation</th><th ${td}>Qté</th>${avecStock?`<th ${td}>Pour</th>`:''}</tr>
+${LS.map(l=>`<tr><td ${td}><b>${_escD(l.ref)}</b></td><td ${td}>${_escD(l.des)}</td><td ${td} align="right">${l.qte}</td>${avecStock?`<td ${td}>${_escD(l.cli||'')}</td>`:''}</tr>`).join('')}</table>
 ${com?`<p>Commentaire : ${_escD(com)}</p>`:''}<p><a href="${_escD(portail)}">Valider ou refuser dans le Portail Achats › Commandes</a></p>`;
   const today=t.toISOString().slice(0,10)+'T12:00:00Z';
-  const d=await spPost('sites/BondeCommande','Demandes_Achat',{Title:num,Zone:zone,Transport:tr,Motif:motif,Client:motif==='Client'?client:null,
+  const d=await spPost('sites/BondeCommande','Demandes_Achat',{Title:num,Zone:zone,Transport:tr,Motif:motifF,Client:motif==='Client'?client:null,
     Demandeur:u,Statut:'À valider',Date_Demande:today,Commentaire:com||null,ID_BC_Client:item.ID,Notif:'À valider',Resume_Notif:resume});
   const id=d.Id??d.ID;
-  for(const l of L)await spPost('sites/BondeCommande','Lignes_Demande_Achat',{Title:l.ref,ID_Demande:id,Designation:l.des||null,Quantite:l.qte});
+  for(const l of LS){const b={Title:l.ref,ID_Demande:id,Designation:l.des||null,Quantite:l.qte};
+    if(l.cli&&motif==='Client'){try{await spPost('sites/BondeCommande','Lignes_Demande_Achat',{...b,Client:l.cli});continue;}
+      catch(e){if(!/Client/i.test(e.message||''))throw e;b.Designation=((l.des||'')+' · '+l.cli).trim();}}   // colonne Client absente : précisé dans la désignation
+    await spPost('sites/BondeCommande','Lignes_Demande_Achat',b);}
   return `Demande ${num} envoyée à Fabrice pour validation`;
 }
 
@@ -3947,6 +3972,7 @@ function achSugBasculer(id){window._achSugOuvert=window._achSugOuvert||{};window
 function achSugMaj(id){
   const el=document.getElementById('m-bcfrs-sug');if(!el)return;
   const it=(DATA.suivi||[]).find(x=>x.ID===id);if(!it)return;
+  const dv=document.getElementById('m-bcfrs-dav');if(dv)dv.innerHTML=davTraiterHtml(it);
   const q=document.getElementById('m-bcfrs-q');const foc=q&&document.activeElement===q;const pos=q?q.selectionStart:0;
   el.innerHTML=achSugHtml(it);
   if(foc){const n=document.getElementById('m-bcfrs-q');if(n){n.focus();n.setSelectionRange(pos,pos);}}
@@ -11113,6 +11139,7 @@ async function openTraiterModal(id,numBC,client){
         </div>
         <div class="mf"><label>N° BC fournisseur <span style="font-weight:400;color:var(--text-muted)">(n° Image, plusieurs séparés par « - » — optionnel)</span></label><input id="m-bcfrs" value="${_escD(getBCFrs(currentItem))}" placeholder="ex : 8412 - 8415" oninput="achMajModal(${currentItem.ID||0},this.value)" style="font-family:var(--font-mono)"></div>
         <div id="m-bcfrs-arr">${achBlocHtml(currentItem)}</div>
+        <div id="m-bcfrs-dav">${davTraiterHtml(currentItem)}</div>
         <div id="m-bcfrs-sug">${achSugHtml(currentItem)}</div>
         <div id="m-field-prep" style="border:1px solid var(--border);border-radius:var(--radius-sm);padding:10px 14px">
           <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer">
