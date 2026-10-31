@@ -526,7 +526,20 @@ fieldset.lockfs .btn{display:none}
 #ovBusy{position:fixed;inset:0;background:rgba(10,31,61,.35);display:none;align-items:center;justify-content:center;z-index:9999}#ovBusy.open{display:flex}
 .busy-b{background:#fff;border-radius:12px;padding:22px 30px;text-align:center;box-shadow:0 10px 40px rgba(0,0,0,.25);min-width:280px;font-weight:600;color:#0a1f3d;display:grid;gap:8px;justify-items:center}
 .busy-s{width:34px;height:34px;border:4px solid #e3f2fd;border-top-color:#1565c0;border-radius:50%;animation:busyR .8s linear infinite}@keyframes busyR{to{transform:rotate(360deg)}}
-.lit-b{text-decoration:none;cursor:pointer}.px-ed{border:0;background:none;cursor:pointer;font-size:11px;padding:0 0 0 3px;opacity:.45}.px-ed:hover{opacity:1}.px-t{font-size:10px;color:#1565c0;font-family:inherit}.env-pts{flex-basis:100%;margin-top:8px;background:#fffbeb;border:1px solid #fcd34d;border-radius:8px;padding:8px 12px;font-size:12.5px;color:#78350f}.env-pts ul{margin:4px 0 0 18px;padding:0}.env-pts li{margin:2px 0}.env-pts li.bl{color:#b91c1c;font-weight:600}.env-pts a{font-weight:600}
+.lit-b{text-decoration:none;cursor:pointer}.todo-sw{display:flex;gap:6px;margin-bottom:10px}.tp-s{background:#fff;border:1px solid var(--border,#e2e8f0);border-left:5px solid var(--tc);border-radius:10px;margin-bottom:12px;overflow:hidden}
+.tp-h{background:var(--tb);color:var(--tc);font-weight:700;padding:8px 14px;font-size:14px}.tp-n{display:inline-block;min-width:22px;text-align:center;background:var(--tc);color:#fff;border-radius:10px;font-size:12px;padding:0 6px;margin-left:4px}
+.tp-i{display:grid;grid-template-columns:150px 1fr auto;gap:10px;padding:9px 14px;border-top:1px solid #f1f5f9;cursor:pointer;font-size:13px;align-items:center}.tp-i:hover{background:#f8fafc}
+.tp-r{font-size:11.5px;color:#64748b}.tp-t{text-align:right;color:#334155}
+@media(max-width:700px){.tp-i{grid-template-columns:1fr}.tp-t{text-align:left}}
+.da-c{background:#fff;border:1px solid var(--border,#e2e8f0);border-left:5px solid var(--dc);border-radius:10px;padding:12px 16px;margin-bottom:12px;box-shadow:0 1px 3px rgba(15,23,42,.05)}
+.da-c-h{display:flex;justify-content:space-between;gap:10px;align-items:flex-start}.da-ty{font-size:11px;font-weight:700;padding:2px 8px;border-radius:9px;background:#eef2f7;color:#0a1f3d;margin-left:4px}
+.da-steps{display:flex;margin:12px 0 8px}.da-st{flex:1;position:relative;text-align:center;font-size:11px;color:#94a3b8}.da-st i{display:block;width:14px;height:14px;border-radius:50%;background:#e2e8f0;margin:0 auto 4px;position:relative;z-index:1;border:2px solid #fff;box-shadow:0 0 0 1px #cbd5e1}
+.da-st:not(:first-child)::before{content:'';position:absolute;top:7px;right:50%;width:100%;height:3px;background:#e2e8f0}.da-st.on::before,.da-st.cur::before{background:var(--dc)}
+.da-st.on i{background:var(--dc);box-shadow:0 0 0 1px var(--dc)}.da-st.on{color:#334155}.da-st.cur i{background:#fff;box-shadow:0 0 0 3px var(--dc)}.da-st.cur{color:var(--dc);font-weight:700}
+.da-next{background:#f8fafc;border-radius:8px;padding:8px 12px;font-size:13px;display:flex;gap:6px;align-items:center;flex-wrap:wrap}.da-next .rx-act{margin-left:auto}
+.da-art summary{cursor:pointer;font-size:12px;color:#475569;margin-top:8px}
+.px-det>summary{list-style:none}.px-det>summary::-webkit-details-marker{display:none}
+.px-ed{border:0;background:none;cursor:pointer;font-size:11px;padding:0 0 0 3px;opacity:.45}.px-ed:hover{opacity:1}.px-t{font-size:10px;color:#1565c0;font-family:inherit}.env-pts{flex-basis:100%;margin-top:8px;background:#fffbeb;border:1px solid #fcd34d;border-radius:8px;padding:8px 12px;font-size:12.5px;color:#78350f}.env-pts ul{margin:4px 0 0 18px;padding:0}.env-pts li{margin:2px 0}.env-pts li.bl{color:#b91c1c;font-weight:600}.env-pts a{font-weight:600}
 .flash-go{animation:flashGo 1.6s ease-out}@keyframes flashGo{0%{box-shadow:0 0 0 4px #f59e0b}100%{box-shadow:0 0 0 0 transparent}}.rx-sug{font-size:11.5px;color:#0d47a1;margin-top:3px;background:#e3f2fd;border-radius:6px;padding:2px 6px;display:inline-block}.art-l td.c,.art-l th.c{text-align:center}.rx-ver{width:18px;height:18px;cursor:pointer;accent-color:#2e7d32}.art-l tr[data-ver] td:first-child{box-shadow:inset 4px 0 0 #2e7d32}.reg-o{display:flex;gap:8px;align-items:flex-start;padding:6px 8px;border:1px solid var(--border,#e2e8f0);border-radius:8px;cursor:pointer}.reg-o input{width:auto;margin-top:3px}.reg-f{margin:-2px 0 4px 30px;font-size:12.5px}
 .lit-b.art-b{border:0;cursor:pointer}
 #ovLit .lit-box{position:absolute;left:50%;top:4vh;transform:translateX(-50%);width:min(880px,94vw);max-height:92vh;background:#fff;border-radius:14px;box-shadow:var(--shadow-lg);display:flex;flex-direction:column;overflow:hidden}
@@ -607,6 +620,7 @@ input.sv-in.mod{border-color:#16a34a;background:#f0fdf4}
     <button class="tab active" data-tab="afaire">🏠 À faire <span class="cnt" id="cntAfaire" style="display:none"></span></button>
     <button class="tab" data-tab="dossiers">🚢 Dossiers <span class="cnt a" id="cntDossiers" style="display:none"></span></button>
     <button class="tab" data-tab="factures">🧾 Factures <span class="cnt a" id="cntFactures" style="display:none"></span></button>
+    <button class="tab" data-tab="demandes" title="Demandes de commande : à valider, à commander, suivi jusqu’à la réception">📝 Demandes <span class="cnt a" id="cntDem" style="display:none"></span></button>
     <button class="tab" data-tab="commandes">🛒 Commandes <span class="cnt a" id="cntCmd" style="display:none"></span></button>
     <button class="tab" data-tab="validations">✅ Validations <span class="cnt a" id="cntValid" style="display:none"></span></button>
     <button class="tab" data-tab="tirelire">💰 Tirelire</button>
@@ -617,6 +631,7 @@ input.sv-in.mod{border-color:#16a34a;background:#f0fdf4}
     <section class="section active" id="sec-afaire">
       <div class="page-head"><div><h1 id="helloTitle">Bonjour</h1><div class="sub">Ce qui demande ton attention aujourd'hui. Clique sur une ligne pour ouvrir le dossier.</div></div>
         <button class="btn primary" onclick="openNewDossier()">＋ Nouveau dossier</button></div>
+      <div id="todoPrio"></div>
       <div class="todo-grid" id="todoGrid"></div>
     </section>
     <!-- DOSSIERS -->
@@ -638,6 +653,11 @@ input.sv-in.mod{border-color:#16a34a;background:#f0fdf4}
         <div class="card fac-form" id="facForm"></div>
       </div>
       <div class="drop-hint">⬆️ Dépose tes PDF ici</div>
+    </section>
+    <section class="section" id="sec-demandes">
+      <div class="page-head"><div><h1>Demandes de commande</h1><div class="sub">Chaque demande suit son chemin : validée par Fabrice, commandée, confirmée, en route, reçue. La ligne « ➜ À faire » dit la prochaine action.</div></div>
+        <div style="display:flex;gap:8px"><button class="btn" id="daRappr" title="Relie les lignes aux BC déjà importés (même réf. Réseaux Plus)">🔗 Rapprocher avec les BC</button><button class="btn primary" onclick="daOuvrir()">＋ Demande de commande</button></div></div>
+      <div id="demBox"></div>
     </section>
     <section class="section" id="sec-commandes">
       <div class="page-head"><div><h1>Commandes fournisseurs</h1><div class="sub">Les BC sortis d’Image et rangés dans « Dossier partage › Bon de commande » sont lus automatiquement (n°, fournisseur, articles). Suivi : ARC → BPA → dispo → expédition (extrait SIFA) → réception.</div></div>
@@ -1012,12 +1032,13 @@ function setTab(t){
   document.querySelectorAll('.tab').forEach(b=>b.classList.toggle('active',b.dataset.tab===t));
   document.querySelectorAll('.section').forEach(s=>s.classList.toggle('active',s.id==='sec-'+t));
   if(t==='commandes'&&typeof renderCommandes==='function'){CMDV.fichiers=null;renderCommandes();}
+  if(t==='demandes'&&typeof renderDemandes==='function')renderDemandes();
   if(t==='factures'){renderFactures();const s0=facAF().sort((a,b)=>a.ID-b.ID)[0];if(!FACV.sel&&s0&&FACV.filtre==='af')openFacture(s0.ID);}
 }
 function statutBadge(s){return `<span class="st ${STATUT_CLS[s]||'st-prep'}">${esc(s||'En préparation')}</span>`;}
 function miniSteps(a){
   const c=ctrlInfo(linesOf(a.ID));const cur=etapeCourante(a,c);
-  return `<div class="mini-steps" title="Étapes 5 à 14">${ETAPES.map(e=>`<i class="${e.done(a,c)?'on':(cur===e?'cur':'')}"></i>`).join('')}</div>`;
+  return `<div class="mini-steps">${ETAPES.map(e=>{const ok=e.done(a,c),d=ok&&e.date?e.date(a):'';return `<i class="${ok?'on':(cur===e?'cur':'')}" title="${esc(`${e.n}. ${e.lbl} — ${ok?'fait'+(d?' le '+fmtD(d):''):cur===e?'étape en cours'+(e.todo?' : '+e.todo:''):'à venir'}`)}"></i>`;}).join('')}</div>`;
 }
 
 function renderTodo(){
@@ -1033,14 +1054,31 @@ function renderTodo(){
     ...rxTodoBlocks(actifs),
     {ic:'🧭',t:'En préparation',c:'var(--grey)',items:actifs.filter(a=>statutAuto(a)==='En préparation').map(a=>({a,txt:'Dates de départ et d’arrivée à saisir'}))}
   ];
+  // ── Liste unique par urgence : 🔴 bloquant · 🟠 à faire aujourd'hui · 🔵 suivi
+  const niv=(b,i)=>{if(b.t==='Retards à traiter')return 'r';if(b.t==='Retours de Fabrice')return /^↩/.test(i.txt)?'r':'a';
+    if(b.t==='Litiges fournisseurs')return i.urg?'a':'b';if(['Reçus à finaliser','Contrôles magasin'].includes(b.t))return 'a';return 'b';};
+  const P=[];blocks.forEach(b=>b.items.forEach(i=>P.push({niv:niv(b,i),ic:b.ic,rub:b.t,titre:i.a.Title,sous:i.a.Transitaire||'',txt:i.txt,att:i.go?`data-gotab="${i.go}"`:`data-open="${i.a.ID}"`})));
+  if(DATA.da&&typeof daParcours==='function')(DATA.da||[]).forEach(d=>{const x=daParcours(d);
+    if(x.k==='aval')P.push({niv:daPeutValider()?'a':'b',ic:'📝',rub:'Demande',titre:d.Title,sous:d.Demandeur||'',txt:daPeutValider()?'à valider':'en attente de la validation de Fabrice',att:`data-gotab="da:${d.ID}"`});
+    else if(x.k==='acmd')P.push({niv:'a',ic:'📝',rub:'Demande',titre:d.Title,sous:x.T.lbl,txt:'à commander dans Image',att:`data-gotab="da:${d.ID}"`});
+    else if(x.k==='retard')P.push({niv:'a',ic:'📝',rub:'Demande',titre:d.Title,sous:x.T.lbl,txt:'commande sans réponse du fournisseur : relancer',att:`data-gotab="da:${d.ID}"`});});
+  (DATA.cmd||[]).forEach(c=>{const e=cmdEtat(c);if(e.alerte&&e.ouverte&&!(DATA.lda||[]).some(l=>+l.ID_Commande_Frs===c.ID))P.push({niv:'a',ic:'🛒',rub:'Commande',titre:'BC '+c.Title,sous:c.Fournisseur||'',txt:e.alerte.txt,att:`data-gotab="cmd:${c.ID}"`});});
+  const NIV=[['r','🔴 Bloquant','à régler en premier','#c62828','#fdecea'],['a','🟠 À faire aujourd’hui','','#ef6c00','#fff3e0'],['b','🔵 À suivre','rien d’urgent','#1565c0','#e3f2fd']];
+  const vueR=(()=>{try{return localStorage.getItem('todo_vue')==='rub';}catch(_){return false;}})();
+  const lst=$('todoPrio');
+  if(lst)lst.innerHTML=`<div class="todo-sw"><button class="chip ${vueR?'':'on'}" data-todovue="prio">Par urgence</button><button class="chip ${vueR?'on':''}" data-todovue="rub">Par rubrique</button></div>`+(vueR?'':NIV.map(([k,lab,sub,c,bg])=>{const L=P.filter(x=>x.niv===k);
+    return `<div class="tp-s" style="--tc:${c};--tb:${bg}"><div class="tp-h">${lab} <span class="tp-n">${L.length}</span>${sub?` <span class="muted" style="font-weight:400;font-size:12px">${sub}</span>`:''}</div>${L.length?L.map(x=>`<div class="tp-i" ${x.att}><span class="tp-r">${x.ic} ${esc(x.rub)}</span><span><b>${esc(x.titre)}</b> <span class="muted">${esc(x.sous)}</span></span><span class="tp-t">${esc(x.txt)}</span></div>`).join(''):'<div class="todo-none">✓ Rien</div>'}</div>`;}).join(''));
+  $('todoGrid').style.display=vueR?'':'none';
   let total=0;
   $('todoGrid').innerHTML=blocks.map(b=>{
     if(b.t!=='Arrivées des 10 prochains jours')total+=b.items.length;
     return `<div class="todo"><div class="todo-h"><span class="ic">${b.ic}</span><span class="t">${b.t}</span><span class="c" style="--c:${b.c}">${b.items.length}</span></div><div class="todo-b">${
       b.items.length?b.items.map(i=>`<div class="todo-i" ${i.go?`data-gotab="${i.go}"`:`data-open="${i.a.ID}"`}><span><b>${esc(i.a.Title)}</b> <span class="muted">${esc(i.a.Transitaire||'')}</span></span><span class="muted" style="text-align:right">${esc(i.txt)}</span></div>`).join(''):'<div class="todo-none">✓ Rien en attente</div>'}</div></div>`;
   }).join('');
+  total=P.filter(x=>x.niv!=='b').length;
   const cnt=$('cntAfaire');cnt.style.display=total?'':'none';cnt.textContent=total;
 }
+document.addEventListener('click',e=>{const b=e.target.closest&&e.target.closest('[data-todovue]');if(!b)return;try{localStorage.setItem('todo_vue',b.dataset.todovue);}catch(_){}renderTodo();});
 
 function renderDossiers(){
   const t=todayKey();
@@ -1057,7 +1095,8 @@ function renderDossiers(){
   ].map(k=>`<div class="kpi" style="--c:${k.c}"><div class="lab">${k.l}</div><div class="val">${k.v}</div><div class="hint">${k.h}</div></div>`).join('');
   const cntD=$('cntDossiers');const nAl=actifs.filter(a=>alertes(a).length).length;cntD.style.display=nAl?'':'none';cntD.textContent=nAl;
   const groupes=[['actifs','Tous les dossiers en cours',a=>!estHisto(a)],...['En préparation','En transit','Arrivé port','Reçu entrepôt'].map(s=>[s,s,a=>!estHisto(a)&&statutAuto(a)===s]),['alertes','⚠ Avec alerte',a=>alertes(a).length>0],['histo','Historique',a=>estHisto(a)]];
-  $('filters').innerHTML=groupes.map(([k,l,f])=>`<button class="chip ${FILTRE===k?'on':''}" data-filtre="${esc(k)}">${esc(l)}<span class="n">${DATA.arr.filter(f).length}</span></button>`).join('')+`<input class="search" id="search" placeholder="🔎 Conteneur, n° dossier, commande, facture, fournisseur…" value="${esc(RECH)}">`;
+  const AIDE_F={actifs:'Tous les dossiers pas encore clôturés.','En préparation':'Dossier créé, départ pas encore confirmé : saisir la date de départ et l’ETA (extrait SIFA).','En transit':'Le conteneur est parti : il est en mer ou en vol. Rien à faire jusqu’à l’arrivée au port.','Arrivé port':'Arrivé au port : faire confirmer la date par le transitaire, réserver le transporteur.','Reçu entrepôt':'Arrivé chez nous : contrôle magasin, factures, frais SIFA, n° Image, puis envoi à Fabrice.',alertes:'Dossiers avec un retard ou une information manquante (voir la pastille sur le dossier).',histo:'Dossiers clôturés : prix à jour dans Image.'};
+  $('filters').innerHTML=groupes.map(([k,l,f])=>`<button class="chip ${FILTRE===k?'on':''}" data-filtre="${esc(k)}" title="${esc(AIDE_F[k]||'')}">${esc(l)}<span class="n">${DATA.arr.filter(f).length}</span></button>`).join('')+`<input class="search" id="search" placeholder="🔎 Conteneur, n° dossier, commande, facture, fournisseur…" value="${esc(RECH)}">`;
   const fn=(groupes.find(g=>g[0]===FILTRE)||groupes[0])[2];
   const q=nFull(RECH);
   let L=DATA.arr.filter(fn);
@@ -1994,11 +2033,11 @@ async function pxImageFait(id){
 }
 function pxImageHtml(){
   const L=pxAImage();if(!L.length)return '';const byId=new Map((DATA.cmd||[]).map(c=>[c.ID,c]));
-  return `<div class="card" id="cardTarifs" style="margin-bottom:14px;border-left:4px solid #1565c0"><div class="card-h"><h3>🏷 Tarifs à mettre à jour dans Image <span class="tag">${L.length}</span></h3><span class="muted" style="font-size:12px">prix confirmés sur facture, différents du tarif du BC</span></div>
+  return `<details class="card px-det" id="cardTarifs" style="margin-bottom:14px;border-left:4px solid #c62828"><summary class="card-h" style="cursor:pointer"><h3>🏷 Tarifs à mettre à jour dans Image <span class="tag" style="background:#fdecea;color:#c62828">${L.length} à faire</span></h3><span style="font-size:12px;color:#c62828;font-weight:600">prix confirmés sur facture, différents du tarif Image · clique pour ouvrir</span></summary>
     <div class="tblwrap"><table class="ltable"><thead><tr><th>Réf. RP</th><th>Désignation</th><th>Fournisseur</th><th>BC</th><th class="r">Tarif BC</th><th class="r">Prix facture</th><th class="r">Écart</th><th>Facture</th><th></th></tr></thead><tbody>
     ${L.map(l=>{const c=byId.get(l.ID_Commande_Frs)||{};const n=pxNote(l)||{};const v=pxConf(l),o=n.a;const pct=o?((v-o)/o*100):null;
       return `<tr><td class="mono"><b>${esc(l.Ref_2||'')}</b></td><td>${esc(l.Designation||'')}</td><td>${esc(c.Fournisseur||'')}</td><td class="mono">${esc(c.Title||'')}</td><td class="r mono">${o!=null?fmtN(o,2):''}</td><td class="r mono"><b>${fmtN(v,2)}</b></td><td class="r mono" style="color:${pct>0?'var(--red)':'var(--green)'}">${pct!=null?(pct>0?'+':'')+fmtN(pct,1)+' %':''}</td><td class="mono muted">${esc(n.f||'')}</td><td><button class="btn sm green" data-pximg="${l.ID}">✓ Fait dans Image</button></td></tr>`;}).join('')}
-    </tbody></table></div></div>`;
+    </tbody></table></div></details>`;
 }
 function rxTodoBlocks(actifs){
   const parA=new Map();RX.sess.forEach(x=>{if(!parA.has(x.ID_Arrivage))parA.set(x.ID_Arrivage,[]);parA.get(x.ID_Arrivage).push(x);});
@@ -2413,7 +2452,13 @@ document.addEventListener('change',e=>{
   if(t.dataset.h==='Transitaire'){const f=matchFrs(t.value,['Transitaire','Transporteur','Autre']);W.a.ID_Transitaire=f?f.ID:null;if(f){W.a.Transitaire=f.Title;t.value=f.Title;}}
 });
 document.addEventListener('click',async e=>{
-  const gtb=e.target.closest('[data-gotab]');if(gtb){if(/^lit:\d+$/.test(gtb.dataset.gotab)){litOuvrir({id:+gtb.dataset.gotab.slice(4)});return;}if(gtb.dataset.gotab==='tarifs'){setTab('commandes');renderCommandes();setTimeout(()=>{const c=$('cardTarifs');if(c){c.scrollIntoView({behavior:'smooth',block:'start'});c.classList.remove('flash-go');void c.offsetWidth;c.classList.add('flash-go');}},150);}return;}
+  const gtb=e.target.closest('[data-gotab]');if(gtb){const gv=gtb.dataset.gotab;e.preventDefault();
+    const flash=id=>setTimeout(()=>{const c=$(id);if(c){c.scrollIntoView({behavior:'smooth',block:'start'});c.classList.remove('flash-go');void c.offsetWidth;c.classList.add('flash-go');}},150);
+    if(/^da:\d+$/.test(gv)){DAV.filtre='tout';setTab('demandes');flash('da-card-'+gv.slice(3));return;}
+    if(gv==='demandes'){setTab('demandes');return;}
+    if(/^cmd:\d+$/.test(gv)){CMDV.filtre='tout';CMDV.q='';CMDV.ouvert=+gv.slice(4);setTab('commandes');flash('cmdRow'+gv.slice(4));return;}
+    if(gv==='bcimp'){setTab('commandes');flash('cardBcImp');return;}
+    if(/^lit:\d+$/.test(gv)){litOuvrir({id:+gv.slice(4)});return;}if(gv==='tarifs'){setTab('commandes');renderCommandes();setTimeout(()=>{const c=$('cardTarifs');if(c)c.open=true;},50);setTimeout(()=>{const c=$('cardTarifs');if(c){c.scrollIntoView({behavior:'smooth',block:'start'});c.classList.remove('flash-go');void c.offsetWidth;c.classList.add('flash-go');}},150);}return;}
   const o=e.target.closest('[data-open]');if(o){openFiche(+o.dataset.open);return;}
   const tab=e.target.closest('.tab');if(tab){setTab(tab.dataset.tab);return;}
   const ch=e.target.closest('[data-filtre]');if(ch){FILTRE=ch.dataset.filtre;renderDossiers();return;}
@@ -3092,7 +3137,7 @@ async function facTraiterTousOrphelins(){
 }
 function facOrphHtml(){
   const L=FAC_ORPH||[];if(!L.length||!['af','arr'].includes(FACV.filtre))return '';
-  return `<div class="fac-orph"><div style="display:flex;justify-content:space-between;align-items:center;gap:6px"><b>📂 Rangées à la main, sans fiche (${L.length})</b><button class="btn sm" id="facOrphTout">Tout mettre en file</button></div>
+  return `<div class="fac-orph"><div style="display:flex;justify-content:space-between;align-items:center;gap:6px"><b title="PDF enregistrés directement dans le dossier « Factures Fournisseurs », sans passer par le portail : clique sur une facture pour la traiter">📂 Rangées à la main, sans fiche (${L.length})</b><button class="btn sm" id="facOrphTout">Tout mettre en file</button></div>
     <div class="muted" style="font-size:11.5px;margin:2px 0 6px">PDF enregistrés directement dans « Factures Fournisseurs ». Clique pour la traiter.</div>
     ${L.slice(0,60).map(o=>`<div class="fac-i" data-facorph="${esc(o.path)}"><div class="t">${esc(o.nom.replace(/\.pdf$/i,''))}</div><div class="d">${relDay(dkeyLocal(o.date||''))}</div></div>`).join('')}</div>`;
 }
@@ -3136,7 +3181,7 @@ function renderFacListe(){
   if(q)rows=rows.filter(f=>lpNorm([f.Title,f.Fournisseur,f.Code_Compta,facNom(lienPdf(f)),f.Montant_TTC].join(' ')).includes(q));
   const nOk=DATA.fac.length-af.length;
   const nArr=(FAC_ORPH||[]).length;
-  $('facChips').innerHTML=`<button class="chip ${FACV.filtre==='arr'?'on':''} ${nArr?'arr':''}" data-facf="arr" title="PDF arrivés dans « Factures Fournisseurs », pas encore ouverts">📥 Arrivées<span class="n">${nArr}</span></button><button class="chip ${FACV.filtre==='af'?'on':''}" data-facf="af">À compléter<span class="n">${af.length}</span></button><button class="chip ${FACV.filtre==='ok'?'on':''}" data-facf="ok">Traitées<span class="n">${nOk}</span></button>`;
+  $('facChips').innerHTML=`<button class="chip ${FACV.filtre==='arr'?'on':''} ${nArr?'arr':''}" data-facf="arr" title="PDF arrivés dans « Factures Fournisseurs », pas encore ouverts">📥 Arrivées<span class="n">${nArr}</span></button><button class="chip ${FACV.filtre==='af'?'on':''}" data-facf="af" title="Factures ouvertes auxquelles il manque une information (souvent le montant ou le fournisseur) : à compléter puis Valider">À compléter<span class="n">${af.length}</span></button><button class="chip ${FACV.filtre==='ok'?'on':''}" data-facf="ok" title="Factures validées : renommées, rangées et envoyées à l’échéancier">Traitées<span class="n">${nOk}</span></button>`;
   const src=f=>({'Mail auto':'✉️','Saisie manuelle':'⬆️','DocuWare':'⚡'}[f.Source]||'✉️');
   $('facListe').innerHTML=rows.length?rows.slice(0,200).map(f=>{
     const fr=f.ID_Fournisseur?frsById(f.ID_Fournisseur):null;
@@ -4907,7 +4952,7 @@ function renderCommandes(){
   const ouv=tous.filter(x=>x.e.ouverte);
   const k={arc:ouv.filter(x=>x.e.k==='cmd').length,bpa:ouv.filter(x=>x.e.k==='arc').length,route:ouv.filter(x=>['bpa','dispo','route'].includes(x.e.k)).length,al:ouv.filter(x=>x.e.alerte).length};
   const nAval=typeof daPeutValider==='function'&&daPeutValider()?(DATA.da||[]).filter(d=>d.Statut==='À valider').length:0;
-  const cnt=$('cntCmd');if(cnt){cnt.style.display=k.al+nAval?'':'none';cnt.textContent=k.al+nAval;}
+  const cnt=$('cntCmd');if(cnt){cnt.style.display=k.al?'':'none';cnt.textContent=k.al;}
   const F=CMDV.fichiers;const aImp=cmdAImporter();
   const filtres=[['cours','En cours',x=>x.e.ouverte],['cmd','ARC attendu',x=>x.e.k==='cmd'],['arc','BPA à envoyer',x=>x.e.k==='arc'],['route','En route',x=>['bpa','dispo','route'].includes(x.e.k)],['alertes','⚠ Alertes',x=>!!x.e.alerte],['recue','Reçues',x=>x.e.k==='recue'],['tout','Toutes',()=>true]];
   const fl=filtres.find(f=>f[0]===CMDV.filtre)||filtres[0];
@@ -4924,9 +4969,9 @@ function renderCommandes(){
       const prixKo=(DATA.cmd||[]).filter(c=>c.Lien_BC&&cmdLignes(c.ID).some(l=>l.Prix_Unitaire==null&&l.Remise!=null&&l.Montant_HT!=null));
       return (vieux.length&&peutModifierCmd()?`<div class="warn-ribbon" style="border-radius:8px;margin-bottom:10px;display:flex;gap:10px;align-items:center;flex-wrap:wrap">🧹 <b>${vieux.length}</b> commande(s) encore « en cours » passée(s) il y a plus de <input type="number" id="cmdJSolde" value="${CMDV.joursSolde}" min="1" style="width:56px"> jours, sans dossier d’arrivage : probablement déjà reçues. <button class="btn sm" id="cmdSolderVieux">✔ Les solder (${vieux.length})</button><span class="muted" style="font-size:12px">Vérifie d’abord la liste avec le filtre « ARC attendu ».</span></div>`:'')
        +(prixKo.length&&peutModifierCmd()?`<div class="warn-ribbon" style="border-radius:8px;margin-bottom:10px">🔁 <b>${prixKo.length}</b> BC importé(s) avec une version précédente du lecteur : prix rangés dans la colonne remise. <button class="btn sm" id="cmdRelirePrix">Relire ces BC</button></div>`:'');})()}
-    ${typeof daBlocHtml==='function'?daBlocHtml():''}
     ${pxImageHtml()}
-    <div class="card" style="margin-bottom:14px"><div class="card-h"><h3>📂 Nouveaux BC dans « Bon de commande » ${aImp.length?`<span class="tag">${aImp.length}</span>`:''}</h3>
+    ${(()=>{const n=(DATA.lda||[]).filter(daLigneOuverte).length;return n?`<div class="rx-ban warn" style="margin-bottom:12px">📝 <b>${n} article${n>1?'s':''} à commander</b> dans les demandes. <span class="rx-act"><button class="btn sm" data-gotab="demandes">Voir les demandes</button></span></div>`:'';})()}
+    <div class="card" id="cardBcImp" style="margin-bottom:14px"><div class="card-h"><h3>📂 Nouveaux BC dans « Bon de commande » ${aImp.length?`<span class="tag">${aImp.length}</span>`:''}</h3>
       <div style="display:flex;gap:8px;align-items:center">${F&&F.D?`<a href="${pdfAbs(F.D)}" target="_blank" rel="noopener" style="font-size:12px">Ouvrir le dossier ↗</a>`:''}
       <label style="font-size:12px;display:flex;gap:4px;align-items:center"><input type="checkbox" id="cmdTout" ${CMDV.tout?'checked':''} style="width:auto"> plus de ${CMD_JOURS_LISTE} j</label>
       ${(()=>{const sel=aImp.filter(f=>CMDV.sel&&CMDV.sel.has(f.path));return sel.length?`<button class="btn sm primary" id="cmdImpSel">⬇ Importer la sélection (${sel.length})</button><button class="btn sm" id="cmdSelNone">Tout décocher</button>`:'';})()}${aImp.length>1?`<button class="btn sm ${CMDV.sel&&CMDV.sel.size?'':'primary'}" id="cmdImpTout">⬇ Importer tout (${aImp.length})</button>`:''}</div></div>
@@ -4936,10 +4981,11 @@ function renderCommandes(){
     ${cmdOuEstHtml(q)}
     ${cmdLegendeHtml()}
     <div class="card"><div class="tblwrap"><table class="ltable cmd-t"><thead><tr><th>N°</th><th>Fournisseur</th><th>Objet</th><th>Date</th><th>Étapes</th><th>Où en est-elle</th><th class="r">Articles</th><th class="r">Montant HT</th></tr></thead><tbody>
-    ${rows.length?rows.map(({c,e})=>`<tr class="cmd-r ${CMDV.ouvert===c.ID?'sel':''}" data-cmd="${c.ID}"><td class="mono"><b>${esc(c.Title)}</b></td><td>${esc(c.Fournisseur||'?')}${c.ID_Fournisseur?'':' <span class="frs-ko" title="Fournisseur non reconnu">⚠</span>'}</td><td class="muted">${esc(c.Objet||'')}</td><td>${fmtD(dk(c,'Date_Commande'))}</td><td>${cmdPastilles(c,e)}</td>
+    ${rows.length?rows.map(({c,e})=>`<tr class="cmd-r ${CMDV.ouvert===c.ID?'sel':''}" id="cmdRow${c.ID}" data-cmd="${c.ID}"><td class="mono"><b>${esc(c.Title)}</b></td><td>${esc(c.Fournisseur||'?')}${c.ID_Fournisseur?'':' <span class="frs-ko" title="Fournisseur non reconnu">⚠</span>'}</td><td class="muted">${esc(c.Objet||'')}</td><td>${fmtD(dk(c,'Date_Commande'))}</td><td>${cmdPastilles(c,e)}</td>
       <td><span class="st ${e.cls}">${esc(e.lbl)}</span>${e.alerte?`<div style="font-size:12px;margin-top:2px;color:${e.alerte.lvl==='r'?'var(--red)':'#b45309'}">⚠ ${esc(e.alerte.txt)}</div>`:''}</td><td class="r">${c.Nb_Lignes??cmdLignes(c.ID).length}</td><td class="r">${c.Montant_HT?fmtEur(c.Montant_HT):'—'}</td></tr>
       ${CMDV.ouvert===c.ID?`<tr class="cmd-d"><td colspan="8">${cmdDetailHtml(c,e)}</td></tr>`:''}`).join(''):`<tr><td colspan="8" class="muted" style="text-align:center;padding:18px">Aucune commande suivie${q?' pour cette recherche':''}.${cmdHorsSuivi(q)}</td></tr>`}
     </tbody></table></div></div>`;
+  if(typeof renderDemandes==='function')renderDemandes();
   if(CUR_TAB==='commandes'&&typeof daCompleterDesignations==='function')daCompleterDesignations();
   if(!F&&CUR_TAB==='commandes')cmdFichiers().then(()=>{if(CUR_TAB==='commandes')renderCommandes();});
   if(CMDV.ouvert)cmdAttachments(CMDV.ouvert).then(a=>{const el=$('cmdAtt');if(el)el.innerHTML=a.length?a.map(f=>`<span class="cmd-pj"><a href="${esc(f.ServerRelativeUrl&&f.ServerRelativeUrl.startsWith('/')?C.spRoot+f.ServerRelativeUrl:f.ServerRelativeUrl)}" target="_blank" rel="noopener">📎 ${esc(f.FileName)}</a>${peutModifierCmd()?`<button class="cmd-pjdel" data-cmdpjdel="${esc(f.FileName)}" title="Supprimer cette pièce jointe">✕</button>`:''}</span>`).join(' '):'<span class="muted">Aucune pièce jointe</span>';});
@@ -5202,7 +5248,7 @@ async function daEnregistrer(){
     // Notification : le flux Power Automate envoie Resume_Notif par mail quand Notif = « À envoyer », puis met « Envoyée »
     // validée d'office si Fabrice la saisit (mail « à commander ») ; sinon mail de validation à Fabrice
     try{await spPatch('Demandes_Achat',d.ID,{Notif:daPeutValider()?'À envoyer':'À valider',Resume_Notif:daResumeMail(d.Title,F,L,u)});}catch(e){console.warn('[DA notif]',e);}
-    daFermer();await reloadAll();setTab('commandes');
+    daFermer();await reloadAll();setTab('demandes');
     const n2=await daRapprocherTout();
     toast(`✓ Demande ${d.Title} enregistrée (${L.length} ligne${L.length>1?'s':''})${n2?` · ${n2} déjà sur un BC importé`:''}`,'ok');
   }catch(e){toast('🔴 '+e.message,'ko');btn.disabled=false;btn.textContent='Enregistrer la demande';}
@@ -5218,7 +5264,7 @@ async function daEnregistrerModif(F,L,btn){
       if(l.id){gardees.add(l.id);if(l.lock)continue;const old=avant.find(x=>x.ID===l.id);await spPatch('Lignes_Demande_Achat',l.id,body,old);}
       else await spPostSilencieux('Lignes_Demande_Achat',sansVide({...body,ID_Demande:id}));}
     for(const o of avant){if(!gardees.has(o.ID)&&!o.N_Commande)await spDelete('Lignes_Demande_Achat',o.ID,o);}
-    daFermer();await reloadAll();setTab('commandes');await daRapprocherTout();
+    daFermer();await reloadAll();setTab('demandes');await daRapprocherTout();
     toast(`✓ Demande ${F.num} modifiée`,'ok');
   }catch(e){toast('🔴 '+e.message,'ko');btn.disabled=false;btn.textContent='Enregistrer les modifications';}
 }
@@ -5305,6 +5351,91 @@ async function daRefuser(id){
     toast(`${d.Title} refusée`,'ok');renderCommandes();
   }catch(e){toast('🔴 '+e.message,'ko');}
 }
+// ═══ ONGLET DEMANDES : une carte par demande, son parcours et la prochaine action ═══
+function daType(d){
+  const tr=String(d.Transport||''),z=String(d.Zone||'');const loc=/local/i.test(tr),air=/a[ée]rien/i.test(tr),nord=/martin|barth/i.test(z);
+  const ile=/barth/i.test(z)?'Saint-Barthélemy':'Saint-Martin';
+  return {loc,air,nord,ile,lbl:loc?'Commande locale':(air?'Aérien':'Maritime')+(nord?' · '+ile:'')};
+}
+// Étapes selon le type : locale (BL signé) / import maritime ou aérien, livraison Guadeloupe ou Îles du Nord
+function daEtapes(T){
+  return T.loc?['Demandée','Validée','Commandée','Livrée (BL signé)']
+    :['Demandée','Validée','Commandée','ARC reçu',T.air?'Expédiée (aérien)':'En mer',T.nord?'Reçue à '+T.ile:'Reçue'];
+}
+// Nombre d'étapes faites pour une ligne de demande
+function daLigneFait(l,T){
+  if(!l.N_Commande&&!l.ID_Commande_Frs)return 2;
+  const c=l.ID_Commande_Frs?cmdById(l.ID_Commande_Frs):cmdByNum(cmdNum(l.N_Commande));if(!c)return 3;
+  const e=cmdEtat(c);
+  if(T.loc)return ['recue','asolder'].includes(e.k)||dk(c,'Date_Reception')?4:3;
+  if(['recue','asolder'].includes(e.k))return 6;
+  if(e.k==='route'||e.a)return 5;
+  if(['arc','bpa','dispo'].includes(e.k))return 4;
+  return 3;
+}
+function daParcours(d){
+  const T=daType(d),E=daEtapes(T),L=daLignes(d.ID);
+  if(d.Statut==='Annulée')return {T,E,fait:0,k:'annulee',coul:'#9e9e9e',action:'Demande annulée.'};
+  if(d.Statut==='Refusée')return {T,E,fait:1,k:'refus',coul:'#c62828',action:`Refusée par ${d.Valide_Par||'Fabrice'}${d.Commentaire?' : '+String(d.Commentaire).split('\n')[0].replace(/^\[Refus[^\]]*\]\s*/,''):''}`};
+  if(d.Statut==='À valider')return {T,E,fait:1,k:'aval',coul:'#7b1fa2',action:daPeutValider()?'Valider ou refuser cette demande (boutons à droite).':'Attendre la validation de Fabrice (il a reçu un mail).'};
+  const P=L.map(l=>({l,f:daLigneFait(l,T)}));const fait=P.length?Math.min(...P.map(x=>x.f)):2;
+  const cmdDe=l=>l.ID_Commande_Frs?cmdById(l.ID_Commande_Frs):cmdByNum(cmdNum(l.N_Commande));
+  const at=P.filter(x=>x.f===fait).map(x=>x.l);
+  let action='',bt='',k='cours',coul='#1565c0';
+  if(fait>=E.length){return {T,E,fait,k:'fini',coul:'#2e7d32',action:'✓ Tout est reçu : demande terminée.'};}
+  if(fait===2){k='acmd';coul='#ef6c00';
+    const parF={};at.forEach(l=>{const f=l.Fournisseur||'fournisseur à choisir';(parF[f]=parF[f]||[]).push(l.Title);});
+    action=`Passer la commande dans Image : ${Object.entries(parF).map(([f,r])=>`<b>${esc(f)}</b> (${esc(r.join(', '))})`).join(' · ')}. Puis enregistrer le BC « FOURNISSEUR - N° » et l’importer.`;
+    bt=`<button class="btn sm" data-gotab="bcimp">Aller aux BC à importer</button>`;}
+  else if(fait===3){const sans=at.filter(l=>!cmdDe(l));
+    if(sans.length){action=`Importer le BC ${esc([...new Set(sans.map(l=>cmdNum(l.N_Commande)))].join(', '))} dans Commandes (PDF dans « Bon de commande »).`;bt=`<button class="btn sm" data-gotab="bcimp">Aller aux BC à importer</button>`;}
+    else{const c=cmdDe(at[0]);const e=cmdEtat(c);const j=daysBetween(dk(c,'Date_Commande')||dkeyLocal(c.Created||''),todayKey());
+      action=T.loc?`Attendre la livraison de <b>${esc(c.Fournisseur||'')}</b> (BC ${esc(c.Title)}, commandé il y a ${j} j). À la livraison : « Joindre le BL signé ».`
+        :`Attendre l’ARC de <b>${esc(c.Fournisseur||'')}</b> (BC ${esc(c.Title)}, commandé il y a ${j} j)${e.alerte?' : <b style="color:#c62828">relancer le fournisseur</b>':''}. Quand il arrive : « Joindre l’ARC ».`;
+      if(e.alerte){coul='#ef6c00';k='retard';}
+      bt=`<button class="btn sm" data-gotab="cmd:${c.ID}">Ouvrir la commande</button>`;}}
+  else if(fait===4){const c=cmdDe(at[0]);const e=cmdEtat(c);
+    action=e.k==='arc'?`Envoyer le BPA à <b>${esc(c.Fournisseur||'')}</b> (BC ${esc(c.Title)}).`:`Attendre l’expédition (BC ${esc(c.Title)}${dk(c,'Date_Dispo_Prevue')?', dispo annoncée le '+fmtD(dk(c,'Date_Dispo_Prevue')):''}). La commande arrivera avec l’extrait ${T.air?'de l’envoi aérien':'SIFA'}.`;
+    bt=`<button class="btn sm" data-gotab="cmd:${c.ID}">Ouvrir la commande</button>`;}
+  else if(fait===5){const c=cmdDe(at[0]);const a=c&&cmdEtat(c).a;
+    action=a?`En route dans <b>${esc(a.Title)}</b>${dk(a,'ETA_Port')?' · arrivée prévue le '+fmtD(dk(a,'ETA_Port')):''}${T.nord?` · livraison à ${T.ile} : contrôle au bureau`:''}.`:'En route.';
+    if(a)bt=`<button class="btn sm" data-open="${a.ID}">Ouvrir le dossier</button>`;}
+  return {T,E,fait,k,coul,action,bt};
+}
+function daStepsHtml(P){
+  return `<div class="da-steps">${P.E.map((x,i)=>`<div class="da-st ${i<P.fait?'on':i===P.fait&&P.k!=='annulee'?'cur':''}" title="${esc(x)}"><i></i><span>${esc(x)}</span></div>`).join('')}</div>`;
+}
+const DA_FILTRES=[['cours','En cours',P=>!['fini','annulee','refus'].includes(P.k)],['aval','À valider',P=>P.k==='aval'],['acmd','À commander',P=>P.k==='acmd'],['suivi','Commandées',P=>['cours','retard'].includes(P.k)],['fini','Terminées',P=>P.k==='fini'],['tout','Toutes',()=>true]];
+function renderDemandes(){
+  const box=$('demBox');if(!box)return;
+  if(!DATA.da){box.innerHTML=typeof daBlocHtml==='function'?daBlocHtml():'';return;}
+  const ed=!(typeof lectureSeule==='function'&&lectureSeule());
+  const D=(DATA.da||[]).map(d=>({d,P:daParcours(d)}));
+  const n=k=>D.filter(x=>x.P.k===k).length;
+  const cnt=$('cntDem');const nb=n('acmd')+(daPeutValider()?n('aval'):0)+n('retard');if(cnt){cnt.style.display=nb?'':'none';cnt.textContent=nb;}
+  DAV.filtre=DAV.filtre||'cours';DAV.vue=DAV.vue||'dem';
+  const fl=DA_FILTRES.find(f=>f[0]===DAV.filtre)||DA_FILTRES[0];
+  const ordre={aval:0,acmd:1,retard:2,cours:3,fini:4,refus:5,annulee:6};
+  const V=D.filter(x=>fl[2](x.P)).sort((a,b)=>(ordre[a.P.k]-ordre[b.P.k])||b.d.ID-a.d.ID);
+  const head=`<div class="kpis">${[['À valider (Fabrice)',n('aval'),'#7b1fa2'],['À commander',n('acmd'),'#ef6c00'],['En cours de livraison',n('cours')+n('retard'),'#1565c0'],['Terminées',n('fini'),'#2e7d32']].map(([l,v,c])=>`<div class="kpi" style="--c:${c}"><div class="lab">${l}</div><div class="val">${v}</div></div>`).join('')}</div>
+    <div class="filters">${DA_FILTRES.map(f=>`<button class="chip ${f[0]===fl[0]?'on':''}" data-daf="${f[0]}">${f[1]}<span class="n">${D.filter(x=>f[2](x.P)).length}</span></button>`).join('')}
+      <span style="margin-left:auto;display:flex;gap:4px"><button class="chip ${DAV.vue==='dem'?'on':''}" data-davue="dem" title="Une carte par demande, avec son parcours">🗂 Par demande</button><button class="chip ${DAV.vue==='frs'?'on':''}" data-davue="frs" title="Les articles à commander regroupés par fournisseur (pour passer une commande groupée)">🏭 Par fournisseur</button></span></div>`;
+  if(DAV.vue==='frs'){box.innerHTML=head+daBlocHtml();return;}
+  const ligne=(d,l)=>{const c=l.ID_Commande_Frs?cmdById(l.ID_Commande_Frs):(l.N_Commande?cmdByNum(l.N_Commande):null);const ce=c?cmdEtat(c):null;
+    return `<tr><td class="mono"><b>${esc(l.Title)}</b></td><td>${esc(daDes(l))}</td><td class="r"><b>${fmtN(l.Quantite,0)}</b></td>${daHasCli(d.Motif)?`<td>${esc(l.Client||d.Client||'')}</td>`:''}<td>${esc((c&&c.Fournisseur)||l.Fournisseur||'—')}</td>
+      <td>${l.N_Commande?(c?`<a href="#" data-cmdgo="${c.ID}"><b>BC ${esc(l.N_Commande)}</b></a> <span class="muted">· ${esc(ce.lbl)}</span>`:`<b>BC ${esc(l.N_Commande)}</b> <span class="muted">(pas encore importé)</span>`)+(ed?` <button class="btn ghost sm" data-dadelier="${l.ID}" title="Retirer le lien avec ce BC" style="padding:0 4px;font-size:11px">✕</button>`:'')
+        :(ed&&d.Statut==='Validée'?`<input data-dalier="${l.ID}" placeholder="n° BC si déjà passé" style="width:150px;font-size:12px">`:'<span class="muted">—</span>')}</td></tr>`;};
+  box.innerHTML=head+(daPeutValider()?daBlocAValider():'')+(V.length?V.map(({d,P})=>{const L=daLignes(d.ID);const cli=daHasCli(d.Motif);
+    return `<div class="da-c" id="da-card-${d.ID}" style="--dc:${P.coul}">
+      <div class="da-c-h"><div><b class="mono" style="font-size:15px">${esc(d.Title)}</b> <span class="da-ty">${esc(P.T.lbl)}</span> <span class="muted">· ${esc(cli?daPour(d).replace(/^Client /,'Client : '):'Stock')}${d.Zone&&!P.T.nord?' · '+esc(d.Zone):''}</span>
+        <div class="muted" style="font-size:12px;margin-top:2px">Demandée par <b>${esc(d.Demandeur||'?')}</b> le ${fmtD(dk(d,'Date_Demande'))}${d.Valide_Par&&d.Statut!=='À valider'?` · ${d.Statut==='Refusée'?'refusée':'validée'} par <b>${esc(d.Valide_Par)}</b>${dk(d,'Date_Validation')?' le '+fmtD(dk(d,'Date_Validation')):''}`:''}${d.N_Devis?' · devis client '+esc(d.N_Devis):''}${d.N_Devis_Frs?' · devis frs '+esc(d.N_Devis_Frs):''}</div></div>
+        <div class="da-card-a">${daPeutModifier(d)?`<button class="btn ghost sm" data-damodif="${d.ID}">✎ Modifier</button>`:''}${ed&&!['Annulée'].includes(d.Statut)&&P.k!=='fini'?`<button class="btn ghost sm" data-daannul="${d.ID}" style="color:#b91c1c">✕ Annuler</button>`:''}</div></div>
+      ${daStepsHtml(P)}
+      <div class="da-next">➜ <b>À faire :</b> <span>${P.action}</span>${P.bt?` <span class="rx-act">${P.bt}</span>`:''}</div>
+      <details class="da-art" ${P.k==='acmd'?'open':''}><summary>${L.length} article${L.length>1?'s':''}</summary>
+      <table class="da-grid"><thead><tr><th style="width:110px">Réf.</th><th>Désignation</th><th class="r" style="width:60px">Qté</th>${cli?'<th style="width:150px">Client</th>':''}<th style="width:150px">Fournisseur</th><th style="width:260px">Commande fournisseur</th></tr></thead><tbody>${L.map(l=>ligne(d,l)).join('')}</tbody></table></details>
+      ${d.Commentaire?`<div class="da-card-c">💬 ${esc(d.Commentaire)}</div>`:''}</div>`;}).join(''):'<div class="card"><div class="card-b muted">Aucune demande dans ce filtre.</div></div>');
+}
 function daBlocHtml(){
   if(!DATA.da)return `<div class="warn-ribbon" style="border-radius:8px;margin-bottom:12px">⚠️ Listes <b>Demandes_Achat</b> / <b>Lignes_Demande_Achat</b> non disponibles : ${esc(DA_ERR.slice(0,160))}</div>`;
   const sansNotif=typeof MISSING!=='undefined'&&MISSING.Demandes_Achat&&(MISSING.Demandes_Achat.has('Notif')||MISSING.Demandes_Achat.has('Resume_Notif'));
@@ -5351,12 +5482,14 @@ document.addEventListener('click',e=>{
   const dl=e.target.closest('[data-dadelier]');if(dl){(async()=>{const l=(DATA.lda||[]).find(x=>x.ID===+dl.dataset.dadelier);if(!l)return;if(!await showConfirm('Retirer le lien',`Délier <b>${esc(l.Title)}</b> du BC <b>${esc(l.N_Commande)}</b> ? La ligne revient dans « À commander ».`,'Retirer le lien'))return;daLierManuel(l.ID,'');})();return;}
   if(e.target.closest('#daAnnulDem')){const id=DAV.form&&DAV.form.editId;if(id){daFermer();daAnnuler(id);}return;}
   if(e.target.closest('#daRappr')){(async()=>{const n=await daRapprocherTout();toast(n?`✓ ${n} ligne(s) rapprochée(s) avec un BC`:'Aucune ligne à rapprocher pour l’instant',n?'ok':'wa');renderCommandes();})();return;}
-  const go=e.target.closest('[data-cmdgo]');if(go){e.preventDefault();CMDV.filtre='tout';CMDV.q='';CMDV.ouvert=+go.dataset.cmdgo;renderCommandes();const r=document.querySelector(`[data-cmd="${go.dataset.cmdgo}"]`);if(r)r.scrollIntoView({behavior:'smooth',block:'center'});return;}
+  const go=e.target.closest('[data-cmdgo]');if(go){e.preventDefault();CMDV.filtre='tout';CMDV.q='';CMDV.ouvert=+go.dataset.cmdgo;if(CUR_TAB!=='commandes')setTab('commandes');renderCommandes();const r=document.querySelector(`[data-cmd="${go.dataset.cmdgo}"]`);if(r)r.scrollIntoView({behavior:'smooth',block:'center'});return;}
   const va=e.target.closest('[data-daval]');if(va){daValider(+va.dataset.daval);return;}
   const rf=e.target.closest('[data-darefus]');if(rf){daRefuser(+rf.dataset.darefus);return;}
   const mo=e.target.closest('[data-damodif]');if(mo){e.preventDefault();daModifier(+mo.dataset.damodif);return;}
   const an=e.target.closest('[data-daannul]');if(an){daAnnuler(+an.dataset.daannul);return;}
   if(e.target.closest('#daDet summary')){DAV.ouvertListe=!$('daDet').open;}
+  const daf=e.target.closest('[data-daf]');if(daf){DAV.filtre=daf.dataset.daf;renderDemandes();return;}
+  const dav=e.target.closest('[data-davue]');if(dav){DAV.vue=dav.dataset.davue;renderDemandes();return;}
 });
 document.addEventListener('change',e=>{
   if(!e.target.closest)return;
