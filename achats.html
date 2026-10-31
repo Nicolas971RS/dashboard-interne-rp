@@ -603,6 +603,10 @@ input.sv-in.mod{border-color:#16a34a;background:#f0fdf4}
 .pay-foot{display:flex;justify-content:space-between;align-items:center;gap:12px;margin-top:12px;padding-top:12px;border-top:1px solid var(--border-light);flex-wrap:wrap}
 .pay-sum{display:flex;gap:22px;margin:4px 0 10px;font-size:13px;flex-wrap:wrap}.pay-bar{display:flex;gap:14px;align-items:center;flex-wrap:wrap;background:#f8fafc;border:1px solid var(--border-light);border-radius:8px;padding:8px 12px;margin-bottom:10px;font-size:12.5px}.pay-bar input,.pay-bar select{padding:4px 6px;margin-left:4px}
 .pay-ok{color:#1b5e20;font-weight:600;font-size:12.5px}.pay-com{margin-top:6px;background:#fffde7;border:1px solid #fff59d;border-radius:6px;padding:6px 10px;color:#5d4037}
+.pay-t tr.pay-g td.pay-gt{font-size:15px;font-weight:800;color:var(--navy);white-space:nowrap}.pay-gn{font-size:14px}.pay-gv{font-size:13px;color:#1b5e20;white-space:nowrap}.pay-gv b{font-size:15px}.pay-gv.mod{color:#b45309}
+.pay-gbt{margin-left:14px;display:inline-flex;gap:4px;vertical-align:middle}
+.pay-t tr.pay-mod-p td{background:#fff7ed}.pay-t tr.pay-mod-p td:first-child{box-shadow:inset 4px 0 0 #f59e0b}.pay-t tr.pay-mod-r td{background:#f1f5f9;color:#64748b}.pay-t tr.pay-mod-r td:first-child{box-shadow:inset 4px 0 0 #64748b}.pay-t tr.pay-mod-x td{opacity:.45}
+.pay-barre{text-decoration:line-through}.pay-sous{font-size:11.5px;font-weight:700;line-height:1.3;margin-top:2px}.pay-sous.p{color:#b45309}.pay-sous.r{color:#475569}.pay-sous.x{color:#64748b;font-weight:600}
 .pay-kpi{cursor:pointer}.pay-kpi:hover{box-shadow:var(--shadow-md,0 4px 12px rgba(0,0,0,.12));transform:translateY(-1px)}.pay-flt{margin:4px 0 8px}
 .pay-aut{margin-top:12px}.pay-aut summary{cursor:pointer;font-weight:600;color:var(--navy);padding:4px 0}
 </style>
@@ -5785,21 +5789,27 @@ function payTable(rows,mode,opt={}){
   const ed=mode==='decide'&&opt.ed;
   const extraH=mode==='prep'?'<th style="width:34px"></th>':'';
   const decH=mode==='decide'?'<th style="width:330px">Décision de Fabrice</th>':mode==='lecture'&&opt.colDec?'<th>Décision</th>':'';
-  return `<table class="pay-t"><thead><tr>${extraH}<th style="width:28px"></th><th>N° facture</th><th style="width:96px">Date</th><th style="width:150px">Échéance</th><th class="r" style="width:110px">Montant</th><th class="r" style="width:100px">Déjà payé</th><th class="r" style="width:110px">Reste dû</th>${decH}</tr></thead>
-  ${G.map(g=>{let tot=0,totV=0;
+  return `<table class="pay-t"><thead><tr>${extraH}<th style="width:28px"></th><th>N° facture</th><th style="width:96px">Date</th><th style="width:150px">Échéance</th><th class="r" style="width:110px">Montant</th><th class="r" style="width:100px">Déjà payé</th><th class="r" style="width:130px">Reste dû</th>${decH}</tr></thead>
+  ${G.map(g=>{let tot=0,totV=0,nMod=0;
     const lignes=g.R.map(r=>{const f=r.f,rel=payReliquat(f),du=r.du!=null?r.du:payReste(f);tot+=du;
-      let cDec='';
-      if(mode==='decide'){const d=payDecision(r.l);totV+=d.d==='Reporter'?0:d.m;
+      let cDec='',mod='',sous='';
+      if(mode==='decide'){const d=payDecision(r.l);const v=d.d==='Reporter'?0:d.m;totV+=v;
+        if(d.d==='Reporter'){mod='pay-mod-r';sous='<div class="pay-sous r">⏸ reporté</div>';nMod++;}
+        else if(d.d==='Partiel'){mod='pay-mod-p';sous=`<div class="pay-sous p">✂ payé ${payEur(v)}<br>reliquat ${payEur(r2(du-v))}</div>`;nMod++;}
         cDec=`<td><div class="pay-dec" data-paydl="${r.l.ID}">${[['Payer','✅ Payer'],['Partiel','✂ Partiel'],['Reporter','⏸ Reporter']].map(([k,lb])=>`<button class="pay-db ${d.d===k?'on '+k:''}" data-paydec="${k}" ${ed?'':'disabled'}>${lb}</button>`).join('')}
           ${d.d==='Partiel'?`<input class="pay-dm" data-paym="${r.l.ID}" value="${String(d.m).replace('.',',')}" inputmode="decimal" ${ed?'':'disabled'}>`:''}</div></td>`;}
       else if(mode==='lecture'&&opt.colDec){const d=r.l?{d:r.l.Decision,m:+r.l.Montant_Valide||0}:null;cDec=`<td>${d?(d.d==='Reporter'?'⏸ reporté':d.d==='Partiel'?'✂ partiel : <b>'+payEur(d.m)+'</b>':'✅ payer'):''}</td>`;}
       const chk=mode==='prep'?`<td><input type="checkbox" data-paychk="${f.ID}" ${PAYV.exclus.has(f.ID)?'':'checked'} ${opt.ed?'':'disabled'}></td>`:'';
-      return `<tr class="${rel?'pay-rel':''}${du<0?' pay-av':''}">${chk}<td>${payPdf(f)}</td><td class="mono">${esc(f.Title||'')}${rel?' <span class="pay-tag" data-tip="Facture déjà payée en partie : ceci est le solde">reliquat</span>':''}${payEstCotis(f)?' <span class="pay-tag c">cotisation</span>':''}${du<0?' <span class="pay-tag a" data-tip="Montant négatif : déduit du total du fournisseur">avoir</span>':''}${f.Commentaire?` <span class="muted" data-tip="${esc(f.Commentaire)}">💬</span>`:''}</td>
-        <td>${fmtD(dk(f,'Date_Facture'))}</td><td>${payEchBadge(f)}</td><td class="r">${payEur(+f.Montant_TTC||0)}</td><td class="r muted">${payPaye(f)?payEur(payPaye(f)):''}</td><td class="r"><b>${payEur(du)}</b></td>${cDec}</tr>`;}).join('');
-    const cols=7+(mode==='prep'?1:0)+(decH?1:0);
-    return `<tbody><tr class="pay-g"><td colspan="${cols}"><b>${esc(g.nom)}</b> <span class="muted">· ${g.R.length} pièce${g.R.length>1?'s':''} · ${payEur(tot)}${mode==='decide'?` · validé ${payEur(totV)}`:''}</span>${ed?` <span style="float:right"><button class="btn ghost sm" data-paygrp="Payer" data-paygn="${esc(g.nom)}">✅ tout payer</button> <button class="btn ghost sm" data-paygrp="Reporter" data-paygn="${esc(g.nom)}">⏸ tout reporter</button></span>`:''}</td></tr>${lignes}</tbody>`;}).join('')}</table>`;
+      if(mode==='prep'&&PAYV.exclus.has(f.ID))mod='pay-mod-x';
+      return `<tr class="${rel?'pay-rel ':''}${du<0?'pay-av ':''}${mod}">${chk}<td>${payPdf(f)}</td><td class="mono">${esc(f.Title||'')}${rel?' <span class="pay-tag" data-tip="Solde d’une facture payée en partie ou reportée">reliquat</span>':''}${payEstCotis(f)?' <span class="pay-tag c">cotisation</span>':''}${du<0?' <span class="pay-tag a" data-tip="Montant négatif : déduit du total du fournisseur">avoir</span>':''}${f.Commentaire?` <span class="muted" data-tip="${esc(f.Commentaire)}">💬</span>`:''}</td>
+        <td>${fmtD(dk(f,'Date_Facture'))}</td><td>${payEchBadge(f)}</td><td class="r">${payEur(+f.Montant_TTC||0)}</td><td class="r muted">${payPaye(f)?payEur(payPaye(f)):''}</td><td class="r"><b class="${mod==='pay-mod-r'?'pay-barre':''}">${payEur(du)}</b>${sous}</td>${cDec}</tr>`;}).join('');
+    const btn=ed?`<span class="pay-gbt"><button class="btn ghost sm" data-paygrp="Payer" data-paygn="${esc(g.nom)}">✅ tout payer</button><button class="btn ghost sm" data-paygrp="Reporter" data-paygn="${esc(g.nom)}">⏸ tout reporter</button></span>`:'';
+    const totPrep=mode==='prep'?g.R.filter(r=>!PAYV.exclus.has(r.f.ID)).reduce((s,r)=>s+payReste(r.f),0):null;
+    const span=mode==='prep'?7:6;
+    const cDecG=mode==='decide'?`<td class="pay-gv ${nMod?'mod':''}">validé <b>${payEur(totV)}</b>${nMod?`<div class="pay-sous ${totV?'p':'r'}">${nMod} modif. · reporté ${payEur(r2(tot-totV))}</div>`:''}</td>`:decH?'<td></td>':'';
+    return `<tbody><tr class="pay-g"><td colspan="${span}"><b class="pay-gn">${esc(g.nom)}</b> <span class="muted">${g.R.length} pièce${g.R.length>1?'s':''}</span>${btn}</td>
+      <td class="r pay-gt">${payEur(tot)}${totPrep!=null&&Math.abs(totPrep-tot)>0.005?`<div class="pay-sous x">présenté ${payEur(totPrep)}</div>`:''}</td>${cDecG}</tr>${lignes}</tbody>`;}).join('')}</table>`;
 }
-
 // Barre de filtre (affichage seulement : la sélection et les totaux restent sur toute la liste)
 const PAY_PK=[['tout','Tout'],['echu','Échues',f=>payEch(f)&&payEch(f)<todayKey()],['rel','Reliquats',f=>payReliquat(f)],['cotis','Cotisations',payEstCotis],['avoir','Avoirs',f=>payReste(f)<0||(+f.Montant_TTC||0)<0]];
 function payFiltrer(rows){
