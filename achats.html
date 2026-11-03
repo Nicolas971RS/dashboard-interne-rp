@@ -5738,7 +5738,7 @@ function payEchBadge(f){
   const e=payEch(f);if(!e)return '<span class="muted">—</span>';const j=daysBetween(todayKey(),e);
   return `${fmtD(e)} <span class="pay-j ${j<0?'r':j===0?'o':''}">${j<0?'échu '+(-j)+' j':j===0?'aujourd’hui':'J-'+j}</span>`;
 }
-const payPdf=f=>lienPdf(f)?`<a class="pay-pdf" href="${pdfAbs(lienPdf(f))}" target="_blank" rel="noopener" data-tip="Voir la facture">📄</a>`:'<span class="pay-pdf off" data-tip="Pas de PDF">📄</span>';
+const payPdf=f=>lienPdf(f)?`<a class="pay-pdf" href="${pdfAbs(lienPdf(f))}" target="_blank" rel="noopener" data-tip="Voir la facture">📄</a>`:(f&&f.ID>0&&payPeutEditer()?`<span class="pay-pdf off" data-paylier="${f.ID}" data-tip="Pas de PDF — clique pour en choisir un dans le dossier" style="cursor:pointer">📄</span>`:'<span class="pay-pdf off" data-tip="Pas de PDF">📄</span>');
 const payEur=v=>fmtN(v,2)+' €';
 
 // Factures à proposer : reste ≠ 0 et échéance ≤ date limite (avoirs : seulement si le fournisseur a quelque chose à payer)
@@ -6366,6 +6366,7 @@ document.addEventListener('click',e=>{
   if(t.closest('#payCreerListes')){payCreerListes();return;}
   if(t.closest('#btnPayCot')){payCotisation();return;}
   if(t.closest('#btnPayLiens')){payReparerLiens();return;}
+  const lp=t.closest('[data-paylier]');if(lp){e.preventDefault();payLierPdf(+lp.dataset.paylier);return;}
   if(t.closest('[data-payliens="go"]')){payReparerGo();return;}
   const ou=t.closest('[data-payouv]');if(ou&&!t.closest('a,button')){const id=+ou.dataset.payouv;if(PAYV.ouv.has(id))PAYV.ouv.delete(id);else PAYV.ouv.add(id);renderPaiements();return;}
 });
@@ -6392,25 +6393,59 @@ async function payBqChange(t){
   catch(e){toast('🔴 '+e.message,'ko');}
   renderPaiements();
 }
+// ── Tous les PDF du dossier Factures Fournisseurs, sous-dossiers compris (2 niveaux) ──
+let PAY_PDFS=null;
+async function payListePdfs(){
+  if(PAY_PDFS)return PAY_PDFS;const dos=await facDossierReel();const out=[];
+  const lire=async(p,niv)=>{
+    try{const r=await spTry('dossier',p,'/Files','$select=Name&$top=5000',{});if(r.ok){((await r.json()).value||[]).forEach(x=>{if(/\.pdf$/i.test(x.Name))out.push({n:x.Name,path:p+'/'+x.Name});});}}catch(e){console.warn(e);}
+    if(niv>=2)return;
+    try{const r=await spTry('dossier',p,'/Folders','$select=Name&$top=500',{});if(r.ok){const F=((await r.json()).value||[]).map(x=>x.Name).filter(n=>n&&n!=='Forms');for(const n of F)await lire(p+'/'+n,niv+1);}}catch(e){console.warn(e);}
+  };
+  await lire(dos,0);PAY_PDFS=out;return out;
+}
+// « HUOT - FA123.pdf », « HUOT- FA123.pdf », « HUOT -FA123.pdf » ; sinon tout le nom
+function payNomPdf(x){const b=x.n.replace(/\.pdf$/i,'');const m=b.match(/^(.+?)\s*-\s+(.+)$/)||b.match(/^(.+?)\s+-\s*(.+)$/);return {...x,frs:lpNorm(m?m[1]:''),num:lpNorm(m?m[2]:b),all:lpNorm(b)};}
+function payPdfPour(f,idx){
+  const num=lpNorm(String(f.Title||'').replace(/\s*\(\d+\)$/,'').replace(/\s\d{2}\/\d{2}$/,''));if(num.length<2)return {bon:null,C:[]};
+  const c=[payNom(f),f.Fournisseur,(payFrs(f)||{}).Title,(payFrs(f)||{}).Nom_Court].map(lpNorm).filter(Boolean);
+  const frsOk=x=>x.frs?c.some(a=>a.includes(x.frs)||x.frs.includes(a)):c.some(a=>a.length>=3&&x.all.startsWith(a.slice(0,Math.min(a.length,6))));
+  let C=idx.filter(x=>x.num===num);
+  if(C.length>1||num.length<5)C=C.filter(frsOk);
+  if(!C.length&&num.length>=5)C=idx.filter(x=>(x.num.includes(num)||(x.num.length>=5&&num.includes(x.num)))&&(frsOk(x)||(!x.frs&&num.length>=7)));
+  const dg=num.replace(/\D/g,'');if(!C.length&&dg.length>=5)C=idx.filter(x=>x.num.replace(/\D/g,'')===dg&&frsOk(x));
+  if(C.length>1){const r=C.filter(x=>!/\/_A_TRAITER\//i.test(x.path));if(r.length===1)C=r;}
+  return {bon:C.length===1?C[0].path:null,C};
+}
+async function payLierPdf(fid){
+  const f=payFacById(fid);if(!f)return;busyOn('Lecture du dossier Factures Fournisseurs…');
+  let idx=[];try{idx=(await payListePdfs()).map(payNomPdf);}catch(e){}finally{busyOff();}
+  const {C}=payPdfPour(f,idx);const num=lpNorm(f.Title).replace(/\D/g,'');
+  const sug=(C.length?C:idx.filter(x=>num.length>=4&&x.all.replace(/\D/g,'').includes(num.slice(-5)))).slice(0,8);
+  if(!await showConfirm('📎 Lier un PDF',`<div>${esc(payNom(f))} · <b class="mono">${esc(f.Title)}</b></div>
+    ${sug.length?`<div class="muted" style="font-size:12px;margin:8px 0 4px">Suggestions :</div>${sug.map((x,i)=>`<label style="display:block;font-size:12.5px;margin:2px 0"><input type="radio" name="plS" value="${esc(x.path)}" ${i?'':'checked'}> ${esc(x.n)}</label>`).join('')}`:'<div class="muted" style="font-size:12px;margin:8px 0">Aucun PDF proche trouvé.</div>'}
+    <div class="f" style="margin-top:8px"><label>Ou tape le nom du fichier</label><input id="plN" list="plList" placeholder="FOURNISSEUR - N°.pdf"><datalist id="plList">${idx.slice(0,3000).map(x=>`<option value="${esc(x.n)}">`).join('')}</datalist></div>`,'📎 Lier'))return;
+  const tape=($('plN').value||'').trim();const radio=document.querySelector('input[name="plS"]:checked');
+  const x=tape?idx.find(y=>y.n.toLowerCase()===tape.toLowerCase()):null;const path=x?x.path:(tape?null:(radio&&radio.value));
+  if(!path){toast('🔴 Fichier introuvable dans le dossier','ko');return;}
+  const go=async v=>{const r=await fetch(`${listUrl('Factures_Frs')}(${f.ID})`,{method:'POST',headers:{...H_JSON(),'X-HTTP-Method':'MERGE','IF-MATCH':'*'},body:JSON.stringify({Lien_PDF:v})});await _check(r,'Lien PDF');};
+  try{try{await go(FACV.lienMode==='url'?{Url:pdfAbs(path),Description:facNom(path)}:path);}catch(e){if(/Lien_PDF|URL|Url/i.test(e.message)){FACV.lienMode='url';await go({Url:pdfAbs(path),Description:facNom(path)});}else throw e;}
+    f.Lien_PDF=path;logAction('PATCH','Factures_Frs',f.ID,'Lien_PDF','',facNom(path),'Lien PDF choisi à la main','');toast('✓ PDF lié : '+facNom(path),'ok');}
+  catch(e){toast('🔴 '+e.message,'ko');}
+  renderPaiements();
+}
 // ── Réparation des liens PDF des factures importées (Nicolas) ──
 let PAYLIENS=null;
 async function payReparerLiens(){
   busyOn('Lecture du dossier Factures Fournisseurs…');
   try{
-    const dos=await facDossierReel();FAC_NOMS=null;const noms=await nomsDossier();
-    if(!noms.length)throw new Error('Dossier Factures Fournisseurs vide ou illisible');
-    const idx=noms.filter(n=>/\.pdf$/i.test(n)).map(n=>{const m=n.replace(/\.pdf$/i,'');const i=m.indexOf(' - ');return {n,frs:lpNorm(i>0?m.slice(0,i):''),num:lpNorm(i>0?m.slice(i+3):m)};});
-    const frsOk=(f,x)=>{if(!x.frs)return false;const c=[payNom(f),f.Fournisseur,(payFrs(f)||{}).Title,(payFrs(f)||{}).Nom_Court].map(lpNorm).filter(Boolean);return c.some(a=>a.includes(x.frs)||x.frs.includes(a));};
-    const L=(DATA.fac||[]).filter(f=>f.Source==='Import échéancier');const out=[];
+    PAY_PDFS=null;const idx=(await payListePdfs()).map(payNomPdf);
+    if(!idx.length)throw new Error('Dossier Factures Fournisseurs vide ou illisible');
+    const L=(DATA.fac||[]).filter(f=>f.Statut_Saisie===FAC_OK&&(f.Source==='Import échéancier'||!lienPdf(f)));const out=[];
     for(const f of L){
-      const num=lpNorm(String(f.Title||'').replace(/\s*\(\d+\)$/,''));const cur=lienPdf(f);
-      let C=num.length>=3?idx.filter(x=>x.num===num):[];
-      if(C.length>1||num.length<5)C=C.filter(x=>frsOk(f,x));
-      if(!C.length&&num.length>=5)C=idx.filter(x=>x.num.length>=5&&(x.num.includes(num)||num.includes(x.num))&&frsOk(f,x));
-      // même partie chiffrée (F67223 = FA67223), même fournisseur
-      const dg=num.replace(/\D/g,'');if(!C.length&&dg.length>=5)C=idx.filter(x=>x.num.replace(/\D/g,'')===dg&&frsOk(f,x));
-      const bon=C.length===1?dos+'/'+C[0].n:null;
-      const curOk=cur&&num.length>=3&&lpNorm(facNom(cur)).includes(num);
+      const num=lpNorm(String(f.Title||'').replace(/\s*\(\d+\)$/,'').replace(/\s\d{2}\/\d{2}$/,''));const cur=lienPdf(f);
+      const {bon}=payPdfPour(f,idx);
+      const curOk=cur&&num.length>=3&&(lpNorm(facNom(cur)).includes(num)||lpNorm(facNom(cur)).replace(/\D/g,'').includes(num.replace(/\D/g,'')||'x'));
       if(bon&&cur!==bon&&!curOk)out.push({f,de:cur,vers:bon});
       else if(!bon&&cur&&!curOk)out.push({f,de:cur,vers:null});
     }
@@ -6418,7 +6453,7 @@ async function payReparerLiens(){
     let ov=$('ovPay');if(!ov){ov=document.createElement('div');ov.className='ov';ov.id='ovPay';ov.innerHTML='<div class="modal" id="payModal" style="width:min(980px,96vw)"></div>';document.body.appendChild(ov);}
     $('payModal').innerHTML=`<div class="card-h"><h3>🔗 Réparation des liens PDF</h3><button class="btn ghost sm" data-payimp="fermer">✕</button></div>
     <div style="padding:14px 18px;overflow:auto">
-      <p>${L.length} factures importées vérifiées dans « Factures Fournisseurs » (${idx.length} PDF).</p>
+      <p>${L.length} factures vérifiées (importées, ou sans lien) dans « Factures Fournisseurs » et ses sous-dossiers (${idx.length} PDF).</p>
       <p><b>${nC}</b> lien${nC>1?'s':''} à corriger vers le bon PDF · <b>${nV}</b> lien${nV>1?'s':''} faux retiré${nV>1?'s':''} (aucun PDF à ce n° dans le dossier : l’icône 📄 sera grisée) · ${L.length-out.length} déjà bons ou sans PDF.</p>
       <table class="pay-t"><thead><tr><th>Fournisseur</th><th>N°</th><th>Lien actuel</th><th>Nouveau lien</th></tr></thead><tbody>${out.slice(0,300).map(x=>`<tr><td>${esc(payNom(x.f))}</td><td class="mono">${esc(x.f.Title)}</td><td class="muted">${esc(facNom(x.de)||'—')}</td><td>${x.vers?esc(facNom(x.vers)):'<span class="muted">retiré</span>'}</td></tr>`).join('')}</tbody></table>
       ${out.length>300?`<p class="muted">… et ${out.length-300} autres.</p>`:''}
