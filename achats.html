@@ -5816,16 +5816,19 @@ function payTable(rows,mode,opt={}){
     return `<tbody><tr class="pay-g"><td colspan="${span}"><b class="pay-gn">${esc(g.nom)}</b> <span class="muted">${g.R.length} pièce${g.R.length>1?'s':''}</span>${btn}</td>
       <td class="r pay-gt">${payEur(tot)}${totPrep!=null&&Math.abs(totPrep-tot)>0.005?`<div class="pay-sous x">présenté ${payEur(totPrep)}</div>`:''}</td>${cDecG}</tr>${lignes}</tbody>`;}).join('')}</table>`;
 }
-// ── Disponible en banque (saisi par Monique, vu et ajustable par Fabrice) ──
+// ── Disponible en banque — masqué à la demande de Fabrice (03/11/2026). Remettre true pour le réafficher. ──
+const PAY_DISPO_ON=false;
 const payNomsBanques=()=>paramStr('BANQUES','BRED;CEPAC').split(/[;,]/).map(x=>x.trim()).filter(Boolean);
 function payBanquesDe(p){try{const v=JSON.parse(p&&p.Banques||'[]');return Array.isArray(v)?v:[];}catch(e){return [];}}
 const payDispo=L=>r2(L.reduce((s,x)=>s+(+x.m||0),0));
 const payNb=v=>{const x=parseFloat(String(v??'').replace(/\s/g,'').replace(/\u202f/g,'').replace(',','.'));return isFinite(x)?r2(x):null;};
 function payBanqSaisie(L,ed,cle){
+  if(!PAY_DISPO_ON)return '';
   const noms=[...new Set([...payNomsBanques(),...L.map(x=>x.b)])];const v=b=>{const x=L.find(y=>y.b===b);return x&&x.m!=null?String(x.m).replace('.',','):'';};
   return `<div class="pay-bq"><span class="pay-bq-t">🏦 Disponible en banque${ed?' <span class="muted">(à la date de la proposition)</span>':''}</span>${noms.map(b=>`<label>${esc(b)} ${ed?`<input data-paybq="${esc(b)}" data-paybqk="${cle}" inputmode="decimal" value="${v(b)}" placeholder="0,00">`:`<b>${v(b)?payEur(+String(v(b)).replace(',','.')):'—'}</b>`}</label>`).join('')}<span class="pay-bq-tot">Total <b>${payEur(payDispo(L))}</b></span></div>`;
 }
 function payEcartHtml(dispo,montant,lbl){
+  if(!PAY_DISPO_ON)return '';
   if(!(dispo>0))return '';const r=r2(dispo-montant);
   return `<span>Disponible <b>${payEur(dispo)}</b></span><span>${lbl} <b class="${r<0?'pay-neg':'pay-pos'}">${payEur(r)}</b>${r<0?' <span class="pay-neg" style="font-weight:700">⚠ dépasse le disponible</span>':''}</span>`;
 }
@@ -5902,6 +5905,7 @@ function payVuePayer(p){
     </div></div>`;
 }
 function payBqSuivi(p){
+  if(!PAY_DISPO_ON)return '';
   const BQ=payBanquesDe(p);const P=(DATA.pay||[]).filter(x=>+x.ID_Proposition===+p.ID);if(!BQ.length&&!P.length)return '';
   const noms=[...new Set([...BQ.map(x=>x.b),...P.map(x=>x.Banque||'Non précisée')])];
   return `<table class="pay-t pay-bqt"><thead><tr><th>Banque</th><th class="r">Disponible</th><th class="r">Payé (cette proposition)</th><th class="r">Reste</th></tr></thead><tbody>${noms.map(b=>{const d=(BQ.find(x=>x.b===b)||{}).m;const pay=r2(P.filter(x=>(x.Banque||'Non précisée')===b).reduce((s,x)=>s+(+x.Montant||0),0));const r=d!=null?r2(d-pay):null;
@@ -5983,6 +5987,7 @@ async function payPool(items,fn,n=4,lbl='Enregistrement'){
   await Promise.all(Array.from({length:Math.min(n,items.length)},w));return err;
 }
 function payBqMail(BQ,montant,lbl){
+  if(!PAY_DISPO_ON)return '';
   const d=payDispo(BQ);if(!(d>0))return '';const r=r2(d-montant);
   return `<p>Disponible en banque : ${BQ.map(x=>`${esc(x.b)} <b>${fmtN(+x.m||0,2)} €</b>`).join(' · ')} = <b>${fmtN(d,2)} €</b><br>${lbl} : <b>${fmtN(montant,2)} €</b> → reste après paiement : <b style="color:${r<0?'#c62828':'#1b5e20'}">${fmtN(r,2)} €</b>${r<0?' <b style="color:#c62828">(dépasse le disponible)</b>':''}</p>`;
 }
