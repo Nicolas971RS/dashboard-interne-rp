@@ -6877,10 +6877,14 @@ function renderPreparations(){
               <div style="font-weight:700;font-size:13.5px">${iconBLFC(bl)} ${bl} <span style="font-weight:400;color:var(--text-muted);font-size:12px">· ${client}</span></div>
               <div style="font-size:11.5px;color:var(--text-muted);margin-top:2px">Vendeur : <strong>${vendeur}</strong> · Préparé par : <strong>${mag}</strong></div>
             </div>
+            <div style="display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end">
+            <button class="btn" onclick="openModifierPrete(${s.ID})" title="Corriger le client, le N° BL/FC ou le vendeur — ou remettre la préparation dans « À affecter »"
+              style="height:32px;font-size:12px;white-space:nowrap">✏️ Modifier</button>
             <button class="btn" onclick="validerLivraisonPrete(${s.ID},'${bl.replace(/'/g,"\\'")}')"
               style="background:#16a34a;color:white;border-color:#16a34a;height:32px;font-size:12px;white-space:nowrap">
               📦 Valider livraison
             </button>
+            </div>
           </div>`;
         }).join('');
       }
@@ -7959,7 +7963,7 @@ function histoBlocHTML(s){
   const h=histoLire(s);
   const esc=v=>String(v??'').replace(/&/g,'&amp;').replace(/</g,'&lt;');
   const dh=iso=>{try{return dateHeureGP(iso);}catch(e){return fmtDate(iso);}};
-  const ico={reouverture:'🔓',ajout:'➕',fusion:'➕',modif:'✏️',suppr:'🗑️',prep:'📦',verrou:'🔒',ecart_traite:'🟠'};
+  const ico={reouverture:'🔓',ajout:'➕',fusion:'➕',modif:'✏️',suppr:'🗑️',prep:'📦',verrou:'🔒',ecart_traite:'🟠',affectation:'🏷️',correction:'✏️',desaffectation:'↩️'};
   const items=[];
   items.push(`<li><span class="hc-ic">📄</span><div><strong>BL émis</strong>${f(s,'Vendeur_Emetteur')?' par '+esc(f(s,'Vendeur_Emetteur')):''}<div class="hc-d">${fmtDate(f(s,'Date_Emission')||f(s,'Created'))}</div></div></li>`);
   h.forEach(e=>{
@@ -9306,6 +9310,116 @@ async function openFacturerModal(id,numBC,client){
   });
 }
 
+// ═══ MODIFIER UNE LIVRAISON « PRÊTE À LIVRER » ═══
+// Cas terrain : deux préparations en cours, le N° BL saisi sur la mauvaise et
+// validée pour le magasinier. Tant que le magasin n'a pas livré (statut
+// « Prête à livrer »), on peut :
+//  • corriger client / N° BL-FC / vendeur sur place ;
+//  • remettre la préparation dans « À affecter » (référence PREP- d'origine),
+//    pour affecter ensuite le BL à la bonne préparation.
+function _prepRefOrigine(s){
+  // Référence notée à l'affectation (depuis ce correctif), sinon reconstruite
+  // comme le portail : PREP-AAAAMMJJ-HHMM à partir de la création (heure GP)
+  const h=histoLire(s).filter(e=>e.k==='affectation'&&e.prep);
+  if(h.length)return{ref:h[h.length-1].prep,cli0:h[h.length-1].cli0||'',sur:true};
+  const d=new Date(dateCreation(s)||Date.now());
+  const x=d.toLocaleString('sv-SE',{timeZone:'America/Guadeloupe'}).replace(/\D/g,'');
+  return{ref:`PREP-${x.slice(0,8)}-${x.slice(8,12)}`,cli0:'',sur:false};
+}
+function _bcsDuBL(num){
+  const n=String(num||'').trim().toLowerCase();
+  if(!n)return[];
+  return (DATA.suivi||[]).filter(i=>String(f(i,'N_x00b0_BL')||'').toLowerCase().split(/[^0-9a-z-]+/).includes(n));
+}
+function openModifierPrete(sessionId){
+  const sess=(DATA.sessionsScan||[]).find(s=>s.ID===sessionId);
+  if(!sess){toast('🔴 Session introuvable — actualise.','ko');return;}
+  const st=_normTxt(f(sess,'Statut'));
+  if(st!=='prete a livrer'){toast(`Le magasin a déjà pris cette livraison (statut « ${f(sess,'Statut')} ») : passe par « Voir » pour la rouvrir.`,'ko');return;}
+  const blAct=String(f(sess,'Numero_BL')||'').trim();
+  const cliAct=String(f(sess,'Client')||'').trim();
+  const vAct=String(f(sess,'Vendeur_Emetteur')||'').trim();
+  const orig=_prepRefOrigine(sess);
+  const bcs=_bcsDuBL(blAct);
+  const acInput=`width:100%;border:1px solid var(--border);border-radius:var(--radius-sm);padding:8px 10px;font-size:13px;font-family:var(--font-body);outline:none;box-sizing:border-box;`;
+  const acDrop=`position:absolute;top:100%;left:0;right:0;z-index:9999;background:white;border:1px solid var(--teal-mid);border-radius:0 0 var(--radius-sm) var(--radius-sm);max-height:200px;overflow-y:auto;box-shadow:var(--shadow-md);display:none;`;
+  const vOpts=[...new Set([...VENDEURS_FIXES,vAct].filter(Boolean))].map(v=>`<option value="${_escD(v)}"${v===vAct?' selected':''}>${_escD(v)}</option>`).join('');
+  openModal(`✏️ Modifier — ${blAct}`,`
+    <div style="font-size:12px;color:var(--text-muted);margin-bottom:12px">Préparé par <strong>${_escD(f(sess,'Magasinier')||'—')}</strong> · ${f(sess,'Nb_Articles_Scannes')??'—'} référence(s) · statut <strong>Prête à livrer</strong> (pas encore livrée)</div>
+    ${bcs.length?`<div style="background:#fff7ed;border:1px solid #fdba74;border-radius:var(--radius-sm);padding:8px 11px;margin-bottom:12px;font-size:12px;color:#9a3412">⚠️ Le N° BL ${_escD(blAct)} est aussi saisi dans Suivi BC : <strong>${bcs.map(b=>_escD(f(b,'Title')||'BC-'+b.ID)).join(', ')}</strong>. Si tu le changes ici, corrige-le aussi dans <em>Traiter</em>.</div>`:''}
+    <div style="font-weight:700;font-size:12.5px;margin-bottom:6px">1. Corriger cette livraison</div>
+    <div class="mf"><label>N° BL ou FC *</label><input id="mp-numbl" value="${_escD(blAct)}" style="font-family:var(--font-mono)"></div>
+    <div class="mf"><label>Client *</label>
+      <div style="position:relative">
+        <input id="mp-client-search" autocomplete="off" value="${_escD(cliAct)}" style="${acInput}">
+        <input type="hidden" id="mp-client-id">
+        <div id="mp-client-drop" style="${acDrop}"></div>
+      </div>
+    </div>
+    <div class="mf"><label>Vendeur *</label><select id="mp-vendeur" style="${acInput}">${vOpts}</select></div>
+    <div style="border-top:1px dashed var(--border);margin:14px 0 10px"></div>
+    <div style="font-weight:700;font-size:12.5px;margin-bottom:4px">2. Ou : BL saisi sur la mauvaise préparation</div>
+    <div style="font-size:12px;color:var(--text-muted);margin-bottom:8px;line-height:1.5">Remet cette préparation dans <strong>« À affecter »</strong> sous la référence <span style="font-family:var(--font-mono)">${_escD(orig.ref)}</span>${orig.sur?'':' (reconstituée d\'après sa date de création)'}, articles conservés. Le N° BL <strong>${_escD(blAct)}</strong> redevient libre : tu peux alors « Prendre en charge » la bonne préparation avec ce numéro.</div>
+    <button type="button" class="btn" style="height:30px;font-size:12px;background:#ede9fe;color:#5b21b6;border-color:#c4b5fd;font-weight:700" onclick="remettreAAffecter(${sessionId})">↩️ Remettre dans « À affecter »</button>`,
+  async()=>{
+    const numBL=document.getElementById('mp-numbl').value.trim();
+    const clientVal=document.getElementById('mp-client-search').value.trim();
+    const vendeurVal=document.getElementById('mp-vendeur').value.trim();
+    if(!numBL){document.getElementById('mp-numbl').classList.add('err');throw new Error('Le N° BL ou FC est obligatoire.');}
+    if(numBL.toUpperCase().startsWith('PREP-'))throw new Error('Pour revenir à une préparation, utilise « Remettre dans « À affecter » ».');
+    if(!clientVal){document.getElementById('mp-client-search').classList.add('err');throw new Error('Le client est obligatoire.');}
+    if(!vendeurVal)throw new Error('Le vendeur est obligatoire.');
+    const body={},chg=[];
+    if(numBL!==blAct){
+      const doublon=(DATA.sessionsScan||[]).find(x=>x.ID!==sessionId&&String(f(x,'Numero_BL')||'').trim().toLowerCase()===numBL.toLowerCase());
+      if(doublon)throw new Error(`Le N° ${numBL} est déjà utilisé (session ${doublon.ID}${f(doublon,'Client')?' · '+f(doublon,'Client'):''}).`);
+      body.Numero_BL=numBL;chg.push(`BL ${blAct} → ${numBL}`);
+    }
+    if(clientVal!==cliAct){body.Client=clientVal;chg.push(`client ${cliAct||'—'} → ${clientVal}`);}
+    if(vendeurVal!==vAct){body.Vendeur_Emetteur=vendeurVal;chg.push(`vendeur ${vAct||'—'} → ${vendeurVal}`);}
+    if(!chg.length)return 'Aucune modification';
+    body.Title=`${numBL} - ${clientVal}`;
+    Object.assign(body,histoCorps(sess,[histoEntree(sess,'correction','Correction · '+chg.join(' · '))]));
+    await spPatch('sites/BondeCommande','Sessions_Scan',sessionId,body);
+    Object.assign(sess,body);
+    renderPreparations();updateBadges();
+    if(body.Numero_BL&&bcs.length)setTimeout(()=>toast(`⚠️ Pense à corriger le N° BL dans Traiter : ${bcs.map(b=>f(b,'Title')||'BC-'+b.ID).join(', ')}`,'ko'),1900);
+    return `${numBL} — ${chg.join(', ')}`;
+  });
+  setTimeout(()=>{
+    const clientData=Object.entries(DATA.clients||{}).map(([cid,cname])=>({id:cid,name:cname}));
+    setupAC('mp-client-search','mp-client-id','mp-client-drop',clientData);
+  },50);
+}
+async function remettreAAffecter(sessionId){
+  const sess=(DATA.sessionsScan||[]).find(s=>s.ID===sessionId);
+  if(!sess)return;
+  if(_normTxt(f(sess,'Statut'))!=='prete a livrer'){toast('Le magasin a déjà pris cette livraison : actualise.','ko');return;}
+  const blAct=String(f(sess,'Numero_BL')||'').trim();
+  const orig=_prepRefOrigine(sess);
+  let ref=orig.ref;
+  // Ne jamais créer deux préparations avec la même référence
+  if((DATA.sessionsScan||[]).some(x=>x.ID!==sessionId&&String(f(x,'Numero_BL')||'')===ref))ref=`${ref}-${sessionId}`;
+  const ok=await showConfirm(`Remettre ${blAct} dans « À affecter » ?`,
+    `La préparation reprend la référence ${ref} et retourne dans « Préparations en attente d'affectation », articles conservés. Le N° ${blAct} ne sera plus utilisé.`,
+    'Remettre à affecter','ok');
+  if(!ok)return;
+  // Le panneau « À affecter » ne retient que : Type « Préparation matériel » +
+  // statut clôturé + référence PREP-. On garde le statut « Terminée » de la
+  // préparation (le magasinier avait fini de la scanner).
+  const body={Numero_BL:ref,Type_Operation:'Préparation matériel',Statut:'Terminée',
+    Client:orig.cli0||null,Title:orig.cli0?`${ref} - ${orig.cli0}`:ref,
+    ...histoCorps(sess,[histoEntree(sess,'desaffectation',`Désaffectation · BL ${blAct} retiré, retour en ${ref}`)])};
+  try{
+    await spPatch('sites/BondeCommande','Sessions_Scan',sessionId,body);
+    Object.assign(sess,body);
+    closeModal();
+    renderPreparations();updateBadges();
+    const bcs=_bcsDuBL(blAct);
+    toast(`↩️ ${ref} remise dans « À affecter » — le N° ${blAct} est libre${bcs.length?` (⚠️ encore saisi dans Traiter : ${bcs.map(b=>f(b,'Title')||'BC-'+b.ID).join(', ')})`:''}`);
+  }catch(e){toast('🔴 '+e.message,'ko');}
+}
+
 // ── Valider livraison depuis le dashboard (statut "Prête à livrer" → "Terminée") ──
 async function validerLivraisonPrete(sessionId, numBL){
   const ok=await showConfirm(
@@ -9471,7 +9585,8 @@ function openPrendreEnChargePrepLibre(sessionId){
       // en attente d'affectation, c'est désormais une vraie livraison avec client et BL/FC,
       // et elle doit se comporter comme telle partout ailleurs dans le dashboard
       // (tableau "BL livrés récemment", filtres, badges...).
-      const body={Client:clientVal,Numero_BL:numBL,Title:`${numBL} - ${clientVal}`,Statut:'Prête à livrer',Type_Operation:'Livraison client',Vendeur_Emetteur:vendeurVal};
+      const body={Client:clientVal,Numero_BL:numBL,Title:`${numBL} - ${clientVal}`,Statut:'Prête à livrer',Type_Operation:'Livraison client',Vendeur_Emetteur:vendeurVal,
+        ...histoCorps(sess,[histoEntree(sess,'affectation',`Affectation ${refPrep} → BL ${numBL} · ${clientVal}`,null)].map(e=>({...e,prep:refPrep,cli0:clientIndiquePrep(sess)||''})))};
       await spPatch('sites/BondeCommande','Sessions_Scan',sessionId,body);
       Object.assign(sess,body);
     }else{
@@ -9487,7 +9602,8 @@ function openPrendreEnChargePrepLibre(sessionId){
         Magasinier:f(sess,'Magasinier')||'',
         Date_Emission:f(sess,'Date_Emission')||new Date().toISOString(),
         Statut:'Prête à livrer',
-        Nb_Articles_Scannes:coches.length
+        Nb_Articles_Scannes:coches.length,
+        ...histoCorps({},[{...histoEntree({},'affectation',`Affectation ${refPrep} (en partie) → BL ${numBL} · ${clientVal}`),prep:refPrep,cli0:clientIndiquePrep(sess)||''}])
       };
       const created=await spPost('sites/BondeCommande','Sessions_Scan',newSessBody);
       const newId=created?.ID??created?.Id;
