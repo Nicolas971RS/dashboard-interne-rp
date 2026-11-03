@@ -5699,6 +5699,7 @@ const PAY_LISTES={
   Lignes_Proposition:[['ID_Proposition','Number'],['ID_Facture','Number'],['Fournisseur','Text'],['Montant_Du','Number'],['Decision','Text'],['Montant_Valide','Number'],['Reliquat','Text'],['Commentaire','Text']]
 };
 Object.entries(PAY_LISTES).forEach(([l,c])=>{SCHEMA[l]=['ID','Title',...c.map(x=>x[0]),'Created'];ESSENTIAL[l]=['ID','Title'];});
+if(!SCHEMA.Factures_Frs.includes('Doublon_Verifie'))SCHEMA.Factures_Frs.push('Doublon_Verifie');   // « Oui — qui, quand » : doublon possible vérifié
 const PAY_ORGS=['TRESOR PUBLIC','DGFIP','CGSS','CGRR','URSSAF'];
 const PAY_MODES=['Virement','Prélèvement','Chèque','LCR','Espèces','Compensation'];
 let PAY_ERR='',PAYX=new Map();
@@ -5720,9 +5721,10 @@ function payIndex(){PAYX=new Map();(DATA.pay||[]).forEach(p=>{const k=+p.ID_Fact
 //  « num » = même n° (tous fournisseurs ; même fournisseur exigé pour un n° court ou une cotisation)
 //  « mt »  = même fournisseur + même montant, factures à moins de 15 jours d'écart, n° différents
 let PAYDBL=new Map();
+const payDblOk=f=>/^Oui/i.test(String(f.Doublon_Verifie||''))||/\[pas un doublon\]/i.test(String(f.Commentaire||''));
 const payNumNorm=f=>lpNorm(String(f.Title||'').replace(/\s*\(\d+\)$/,'').replace(/\s\d{2}\/\d{2}$/,''));
 function payIndexDoublons(){
-  PAYDBL=new Map();const F=payFacs();const aj=(f,t,o)=>{const x=PAYDBL.get(f.ID)||{num:[],mt:[]};if(!x[t].includes(o))x[t].push(o);PAYDBL.set(f.ID,x);};
+  PAYDBL=new Map();const F=payFacs();const aj=(f,t,o)=>{if(payDblOk(f)&&payDblOk(o))return;const x=PAYDBL.get(f.ID)||{num:[],mt:[]};if(!x[t].includes(o))x[t].push(o);PAYDBL.set(f.ID,x);};
   const parN=new Map();F.forEach(f=>{const n=payNumNorm(f);if(n.length<2)return;if(!parN.has(n))parN.set(n,[]);parN.get(n).push(f);});
   parN.forEach((L,n)=>{if(L.length<2)return;
     for(let i=0;i<L.length;i++)for(let j=i+1;j<L.length;j++){const a=L[i],b=L[j];const mF=lpNorm(payNom(a))===lpNorm(payNom(b))||(a.ID_Fournisseur&&a.ID_Fournisseur===b.ID_Fournisseur);
@@ -5739,7 +5741,8 @@ function payIndexDoublons(){
 const payDblTxt=o=>`${payNom(o)} ${o.Title} · ${payEur(+o.Montant_TTC||0)} · ${fmtD(dk(o,'Date_Facture'))} · ${payEtat(o)==='payee'?'payée':payEtat(o)==='partielle'?'payée en partie':'non payée'}`;
 function payDblTag(f){
   const x=PAYDBL.get(f&&f.ID);if(!x)return '';
-  return (x.num.length?` <span class="pay-tag d" data-tip="${esc('Même n° que : '+x.num.map(payDblTxt).join(' ; '))}">doublon ?</span>`:'')+(x.mt.length?` <span class="pay-tag v" data-tip="${esc('Même fournisseur et même montant, à quelques jours : '+x.mt.map(payDblTxt).join(' ; '))}">à vérifier</span>`:'');
+  const ed=payPeutEditer(),clic=ed?` data-paydbl="${f.ID}" style="cursor:pointer"`:'',fin=ed?' — clique pour confirmer après vérification':'';
+  return (x.num.length?` <span class="pay-tag d"${clic} data-tip="${esc('Même n° que : '+x.num.map(payDblTxt).join(' ; ')+fin)}">doublon ?</span>`:'')+(x.mt.length?` <span class="pay-tag v"${clic} data-tip="${esc('Même fournisseur et même montant, à quelques jours : '+x.mt.map(payDblTxt).join(' ; ')+fin)}">à vérifier</span>`:'');
 }
 const payDe=f=>PAYX.get(+f.ID)||[];
 const payPaye=f=>r2(payDe(f).reduce((s,p)=>s+(+p.Montant||0),0));
@@ -6394,6 +6397,7 @@ document.addEventListener('click',e=>{
   if(t.closest('#payCreerListes')){payCreerListes();return;}
   if(t.closest('#btnPayCot')){payCotisation();return;}
   if(t.closest('#btnPayLiens')){payReparerLiens();return;}
+  const dd=t.closest('[data-paydbl]');if(dd){e.preventDefault();e.stopPropagation();payDblConfirmer(+dd.dataset.paydbl);return;}
   const lp=t.closest('[data-paylier]');if(lp){e.preventDefault();payLierPdf(+lp.dataset.paylier);return;}
   if(t.closest('[data-payliens="go"]')){payReparerGo();return;}
   const ou=t.closest('[data-payouv]');if(ou&&!t.closest('a,button')){const id=+ou.dataset.payouv;if(PAYV.ouv.has(id))PAYV.ouv.delete(id);else PAYV.ouv.add(id);renderPaiements();return;}
@@ -6446,6 +6450,17 @@ function payPdfPour(f,idx){
   // même n° écrit de deux façons (« FEV26008379 » et « FEV-26008379 ») : on garde celui écrit comme la facture
   if(C.length>1){const brut=String(f.Title||'').trim().toUpperCase().replace(/\s+/g,'');const r=C.filter(x=>{const b=x.n.replace(/\.pdf$/i,'');const m=b.match(/^(.+?)\s*-\s+(.+)$/)||b.match(/^(.+?)\s+-\s*(.+)$/);return (m?m[2]:b).trim().toUpperCase().replace(/\s+/g,'')===brut;});if(r.length===1)C=r;}
   return {bon:C.length===1?C[0].path:null,C};
+}
+// « Ce n'est pas un doublon » : enregistré sur la facture et sur celles qui lui ressemblent
+async function payDblConfirmer(fid){
+  const f=payFacById(fid);const x=f&&PAYDBL.get(f.ID);if(!x)return;const L=[f,...new Set([...x.num,...x.mt])];
+  if(!await showConfirm('Doublon vérifié ?',`<div>Tu as ouvert les factures (📄) et ce sont bien des factures <b>différentes</b> :</div><div style="margin:8px 0;font-size:12.5px">${L.map(o=>`<div style="padding:3px 0;border-bottom:1px solid #eee">${lienPdf(o)?`<a href="${pdfAbs(lienPdf(o))}" target="_blank" rel="noopener">📄</a> `:''}<b>${esc(payNom(o))} ${esc(o.Title)}</b> · ${payEur(+o.Montant_TTC||0)} · ${fmtD(dk(o,'Date_Facture'))}</div>`).join('')}</div><div class="muted" style="font-size:12px">Les étiquettes disparaissent pour ces factures. Une nouvelle facture qui leur ressemblerait sera à nouveau signalée.</div>`,'✓ Ce n’est pas un doublon'))return;
+  const v=_trunc(`Oui — ${payUser()}, ${fmtD(todayKey())}`);busyOn('Enregistrement…');
+  try{const err=await payPool(L.filter(o=>!payDblOk(o)),async o=>{
+      if(MISSING.Factures_Frs&&MISSING.Factures_Frs.has('Doublon_Verifie')){const c=_trunc([o.Commentaire,'[pas un doublon]'].filter(Boolean).join(' '));await spPatch('Factures_Frs',o.ID,{Commentaire:c},o);o.Commentaire=c;}
+      else{await spPatch('Factures_Frs',o.ID,{Doublon_Verifie:v},o);o.Doublon_Verifie=v;}},3,'Vérification');
+    if(err.length)throw err[0];toast('✓ Marqué : pas un doublon','ok');}
+  catch(e){toast('🔴 '+e.message,'ko');}finally{busyOff();renderPaiements();}
 }
 async function payLierPdf(fid){
   const f=payFacById(fid);if(!f)return;busyOn('Lecture du dossier Factures Fournisseurs…');
