@@ -6414,7 +6414,9 @@ function payPdfPour(f,idx){
   if(C.length>1||num.length<5)C=C.filter(frsOk);
   if(!C.length&&num.length>=5)C=idx.filter(x=>(x.num.includes(num)||(x.num.length>=5&&num.includes(x.num)))&&(frsOk(x)||(!x.frs&&num.length>=7)));
   const dg=num.replace(/\D/g,'');if(!C.length&&dg.length>=5)C=idx.filter(x=>x.num.replace(/\D/g,'')===dg&&frsOk(x));
-  if(C.length>1){const r=C.filter(x=>!/\/_A_TRAITER\//i.test(x.path));if(r.length===1)C=r;}
+  if(C.length>1){const r=C.filter(x=>!/\/_A_TRAITER\//i.test(x.path));if(r.length)C=r;}
+  // même n° écrit de deux façons (« FEV26008379 » et « FEV-26008379 ») : on garde celui écrit comme la facture
+  if(C.length>1){const brut=String(f.Title||'').trim().toUpperCase().replace(/\s+/g,'');const r=C.filter(x=>{const b=x.n.replace(/\.pdf$/i,'');const m=b.match(/^(.+?)\s*-\s+(.+)$/)||b.match(/^(.+?)\s+-\s*(.+)$/);return (m?m[2]:b).trim().toUpperCase().replace(/\s+/g,'')===brut;});if(r.length===1)C=r;}
   return {bon:C.length===1?C[0].path:null,C};
 }
 async function payLierPdf(fid){
