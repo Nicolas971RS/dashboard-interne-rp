@@ -704,7 +704,7 @@ input.sv-in.mod{border-color:#16a34a;background:#f0fdf4}
     </section>
     <section class="section" id="sec-paiements">
       <div class="page-head"><div><h1>Paiements fournisseurs</h1><div class="sub">Monique propose (échus et échéances jusqu’au 10), Fabrice valide ligne par ligne, Monique pointe les virements. Un paiement partiel laisse un reliquat qui revient le mois suivant.</div></div>
-        <div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn" id="btnPayCot" style="display:none">＋ Cotisation</button><label class="btn" id="btnPayImp" style="display:none">📥 Importer l’échéancier Excel<input type="file" id="payImpFile" accept=".xlsx,.xlsm" hidden></label><button class="btn" onclick="reloadAll()">↻ Actualiser</button></div></div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn" id="btnPayCot" style="display:none">＋ Cotisation</button><button class="btn" id="btnPayLiens" style="display:none" data-tip="Recalcule le lien PDF de chaque facture importée d’après le dossier Factures Fournisseurs">🔗 Réparer les liens PDF</button><label class="btn" id="btnPayImp" style="display:none">📥 Importer l’échéancier Excel<input type="file" id="payImpFile" accept=".xlsx,.xlsm" hidden></label><button class="btn" onclick="reloadAll()">↻ Actualiser</button></div></div>
       <div id="payBox"></div>
     </section>
     <section class="section" id="sec-stats">
@@ -5758,6 +5758,7 @@ function renderPaiements(){
   const box=$('payBox');if(!box)return;payIndex();
   payBadge();
   const btI=$('btnPayImp');if(btI)btI.style.display=peutImporter()?'':'none';
+  const btL=$('btnPayLiens');if(btL)btL.style.display=peutImporter()?'':'none';
   const btC=$('btnPayCot');if(btC)btC.style.display=payPeutEditer()?'':'none';
   if(!DATA.pay||!DATA.prop||!DATA.lprop){box.innerHTML=payListesManquantes();return;}
   const F=payFacs();const t=todayKey();
@@ -6194,7 +6195,7 @@ function payXlsDate(c){
 async function payImportLire(file){
   busyOn('Lecture du fichier Excel…');
   try{
-    await loadScript(XLSX_CDN);
+    await loadScript(XLSX_CDN);try{await facDossierReel();}catch(e){}
     const wb=XLSX.read(await file.arrayBuffer(),{type:'array',cellFormula:true});
     const ws=wb.Sheets['ECHEANCE']||wb.Sheets[wb.SheetNames.find(n=>/ech[eé]ance/i.test(n))];
     if(!ws)throw new Error('Onglet « ECHEANCE » introuvable');
@@ -6209,7 +6210,12 @@ async function payImportLire(file){
     for(let r=hr+1;r<=R.e.r;r++){
       const g=c=>c<0?null:cell(r,c);const frs=g(K.frs),num=g(K.num);if(!(frs&&frs.v!=null&&String(frs.v).trim())&&!(num&&num.v!=null&&String(num.v).trim()))continue;
       const mc=g(K.mt);const mt=mc&&typeof mc.v==='number'?mc.v:(mc&&mc.v!=null&&mc.v!==''?parseFloat(String(mc.v).replace(/\s/g,'').replace(',','.')):NaN);
-      const pc=g(K.pdf);let pdf='';if(pc){if(pc.l&&pc.l.Target)pdf=pc.l.Target;else if(pc.f){const m=String(pc.f).match(/HYPERLINK\("([^"]+)"/i);if(m)pdf=m[1];}}
+      // Lien : 1) lien hypertexte posé sur le n° de facture (colonne E, relatif au dossier de l'Excel) ;
+      // 2) colonne PDF seulement si l'adresse contient le n° (la formule de la colonne a été recopiée sur toutes les lignes)
+      let pdf='';const nk=num&&num.l&&num.l.Target;
+      if(nk)pdf=/^https?:/i.test(nk)?nk:payDossierExcel()+'/'+decodeURIComponent(nk.replace(/^\.\//,''));
+      const pc=g(K.pdf);if(!pdf&&pc){let u=pc.l&&pc.l.Target||'';if(!u&&pc.f){const m=String(pc.f).match(/HYPERLINK\("([^"]+)"/i);if(m)u=m[1];}
+        const nn=lpNorm(num&&num.v);if(u&&nn.length>=3&&lpNorm(decodeURIComponent(u)).includes(nn))pdf=u;}
       const brut=c=>{const x=g(c);return x&&typeof x.v==='string'&&/\/\d{3}$/.test(x.v.trim());};
       if(brut(K.date)||brut(K.ech)||brut(K.pay))PAYIMP_AN.push(r+1);
       rows.push({row:r+1,frs:String(frs&&frs.v||'').trim()||'TRESOR PUBLIC',code:String((g(K.code)||{}).v||'').trim(),num:payNum(num&&num.v),date:payXlsDate(g(K.date)),mt:isFinite(mt)?r2(mt):null,ech:payXlsDate(g(K.ech)),pay:payXlsDate(g(K.pay)),rel:/reliquat/i.test(String((g(K.rel)||{}).v||'')),com:String((g(K.com)||{}).v||'').trim(),pdf});
@@ -6323,6 +6329,8 @@ async function payImportGo(){
   finally{busyOff();PAYIMP=null;renderAll();}
 }
 // Lien de l'Excel (URL complète) → chemin relatif comme les factures du portail
+// Dossier de l'Excel (« Dossier partage ») = parent du dossier des factures
+function payDossierExcel(){const d=DOSSIER_REEL||facDossier();return d.replace(/\/[^\/]+\/?$/,'');}
 function payLienImport(u){try{return /^https?:/i.test(u)?decodeURIComponent(new URL(u).pathname):(u.startsWith('/')?u:'');}catch(e){return '';}}
 function payImportCsv(){
   const I=PAYIMP;if(!I)return;const q=v=>'"'+String(v??'').replace(/"/g,'""')+'"';
@@ -6357,6 +6365,8 @@ document.addEventListener('click',e=>{
   const im=t.closest('[data-payimp]');if(im){const k=im.dataset.payimp;if(k==='fermer'){$('ovPay').classList.remove('open');PAYIMP=null;}else if(k==='go')payImportGo();else if(k==='csv')payImportCsv();return;}
   if(t.closest('#payCreerListes')){payCreerListes();return;}
   if(t.closest('#btnPayCot')){payCotisation();return;}
+  if(t.closest('#btnPayLiens')){payReparerLiens();return;}
+  if(t.closest('[data-payliens="go"]')){payReparerGo();return;}
   const ou=t.closest('[data-payouv]');if(ou&&!t.closest('a,button')){const id=+ou.dataset.payouv;if(PAYV.ouv.has(id))PAYV.ouv.delete(id);else PAYV.ouv.add(id);renderPaiements();return;}
 });
 document.addEventListener('change',e=>{
@@ -6381,6 +6391,53 @@ async function payBqChange(t){
   try{await spPatch('Propositions_Paiement',p.ID,{Banques:v},p);p.Banques=v;if(MISSING.Propositions_Paiement&&MISSING.Propositions_Paiement.has('Banques'))toast('🔴 Colonne « Banques » absente de Propositions_Paiement : le disponible n’est pas enregistré','ko');}
   catch(e){toast('🔴 '+e.message,'ko');}
   renderPaiements();
+}
+// ── Réparation des liens PDF des factures importées (Nicolas) ──
+let PAYLIENS=null;
+async function payReparerLiens(){
+  busyOn('Lecture du dossier Factures Fournisseurs…');
+  try{
+    const dos=await facDossierReel();FAC_NOMS=null;const noms=await nomsDossier();
+    if(!noms.length)throw new Error('Dossier Factures Fournisseurs vide ou illisible');
+    const idx=noms.filter(n=>/\.pdf$/i.test(n)).map(n=>{const m=n.replace(/\.pdf$/i,'');const i=m.indexOf(' - ');return {n,frs:lpNorm(i>0?m.slice(0,i):''),num:lpNorm(i>0?m.slice(i+3):m)};});
+    const frsOk=(f,x)=>{if(!x.frs)return false;const c=[payNom(f),f.Fournisseur,(payFrs(f)||{}).Title,(payFrs(f)||{}).Nom_Court].map(lpNorm).filter(Boolean);return c.some(a=>a.includes(x.frs)||x.frs.includes(a));};
+    const L=(DATA.fac||[]).filter(f=>f.Source==='Import échéancier');const out=[];
+    for(const f of L){
+      const num=lpNorm(String(f.Title||'').replace(/\s*\(\d+\)$/,''));const cur=lienPdf(f);
+      let C=num.length>=3?idx.filter(x=>x.num===num):[];
+      if(C.length>1||num.length<5)C=C.filter(x=>frsOk(f,x));
+      if(!C.length&&num.length>=5)C=idx.filter(x=>x.num.length>=5&&(x.num.includes(num)||num.includes(x.num))&&frsOk(f,x));
+      // même partie chiffrée (F67223 = FA67223), même fournisseur
+      const dg=num.replace(/\D/g,'');if(!C.length&&dg.length>=5)C=idx.filter(x=>x.num.replace(/\D/g,'')===dg&&frsOk(f,x));
+      const bon=C.length===1?dos+'/'+C[0].n:null;
+      const curOk=cur&&num.length>=3&&lpNorm(facNom(cur)).includes(num);
+      if(bon&&cur!==bon&&!curOk)out.push({f,de:cur,vers:bon});
+      else if(!bon&&cur&&!curOk)out.push({f,de:cur,vers:null});
+    }
+    PAYLIENS=out;const nC=out.filter(x=>x.vers).length,nV=out.length-nC;
+    let ov=$('ovPay');if(!ov){ov=document.createElement('div');ov.className='ov';ov.id='ovPay';ov.innerHTML='<div class="modal" id="payModal" style="width:min(980px,96vw)"></div>';document.body.appendChild(ov);}
+    $('payModal').innerHTML=`<div class="card-h"><h3>🔗 Réparation des liens PDF</h3><button class="btn ghost sm" data-payimp="fermer">✕</button></div>
+    <div style="padding:14px 18px;overflow:auto">
+      <p>${L.length} factures importées vérifiées dans « Factures Fournisseurs » (${idx.length} PDF).</p>
+      <p><b>${nC}</b> lien${nC>1?'s':''} à corriger vers le bon PDF · <b>${nV}</b> lien${nV>1?'s':''} faux retiré${nV>1?'s':''} (aucun PDF à ce n° dans le dossier : l’icône 📄 sera grisée) · ${L.length-out.length} déjà bons ou sans PDF.</p>
+      <table class="pay-t"><thead><tr><th>Fournisseur</th><th>N°</th><th>Lien actuel</th><th>Nouveau lien</th></tr></thead><tbody>${out.slice(0,300).map(x=>`<tr><td>${esc(payNom(x.f))}</td><td class="mono">${esc(x.f.Title)}</td><td class="muted">${esc(facNom(x.de)||'—')}</td><td>${x.vers?esc(facNom(x.vers)):'<span class="muted">retiré</span>'}</td></tr>`).join('')}</tbody></table>
+      ${out.length>300?`<p class="muted">… et ${out.length-300} autres.</p>`:''}
+      <div class="pay-foot"><span class="muted">Ne ferme pas la page pendant la correction.</span><button class="btn primary" data-payliens="go" ${out.length?'':'disabled'}>🔗 Corriger ${out.length} lien${out.length>1?'s':''}</button></div></div>`;
+    ov.classList.add('open');
+  }catch(e){toast('🔴 '+e.message,'ko');}finally{busyOff();}
+}
+async function payReparerGo(){
+  const L=PAYLIENS||[];if(!L.length)return;$('ovPay').classList.remove('open');busyOn('Correction des liens…');
+  let mode=FACV.lienMode;
+  const err=await payPool(L,async x=>{
+    const val=p=>p==null?null:(mode==='url'?{Url:pdfAbs(p),Description:facNom(p)}:p);
+    const go=async v=>{const r=await fetch(`${listUrl('Factures_Frs')}(${x.f.ID})`,{method:'POST',headers:{...H_JSON(),'X-HTTP-Method':'MERGE','IF-MATCH':'*'},body:JSON.stringify({Lien_PDF:v})});await _check(r,'Lien '+x.f.Title);};
+    try{await go(val(x.vers));}catch(e){if(mode!=='url'&&/Lien_PDF|URL|Url/i.test(e.message)){mode='url';FACV.lienMode='url';await go(val(x.vers));}else throw e;}
+    x.f.Lien_PDF=x.vers;
+  },4,'Liens');
+  logAction('PATCH','Factures_Frs','-','Lien_PDF','',`${L.length-err.length} liens PDF corrigés`,'Réparation des liens PDF importés','');
+  busyOff();PAYLIENS=null;
+  toast(err.length?`🔴 ${err.length} lien(s) en échec : ${err[0].message}`:`✓ ${L.length} liens corrigés`,err.length?'ko':'ok');renderPaiements();
 }
 // ── Démo : quelques factures et un reliquat ──
 function payDemoSeed(){
