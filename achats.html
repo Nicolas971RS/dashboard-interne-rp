@@ -595,7 +595,7 @@ input.sv-in.mod{border-color:#16a34a;background:#f0fdf4}
 .pay-t{width:100%;border-collapse:collapse;font-size:13px;background:#fff}.pay-t th{background:#f1f5f9;color:#334155;font-size:11px;text-transform:uppercase;letter-spacing:.03em;font-weight:700;text-align:left;padding:7px 8px;border-bottom:1px solid #e2e8f0}
 .pay-t td{padding:6px 8px;border-bottom:1px solid #eef2f7;vertical-align:middle}.pay-t .r{text-align:right;white-space:nowrap}.pay-t tr.pay-g td{background:#eef2ff;border-top:2px solid #c7d2fe;font-size:13px}
 .pay-t tr.pay-rel td{color:#b71c1c}.pay-t tr.pay-rel td b{color:#b71c1c}.pay-t tr.pay-av td{color:#0d47a1}.pay-row{cursor:pointer}.pay-row:hover td{background:#f8fafc}.pay-det td{background:#f8fafc;font-size:12.5px}
-.pay-tag{display:inline-block;font-size:10.5px;font-weight:700;padding:1px 6px;border-radius:8px;background:#ffebee;color:#c62828;text-transform:uppercase;letter-spacing:.03em}.pay-tag.c{background:#ede7f6;color:#5e35b1}.pay-tag.a{background:#e3f2fd;color:#0d47a1}.pay-tag.p{background:#fff3e0;color:#b45309}
+.pay-tag{display:inline-block;font-size:10.5px;font-weight:700;padding:1px 6px;border-radius:8px;background:#ffebee;color:#c62828;text-transform:uppercase;letter-spacing:.03em}.pay-tag.c{background:#ede7f6;color:#5e35b1}.pay-tag.a{background:#e3f2fd;color:#0d47a1}.pay-tag.p{background:#fff3e0;color:#b45309}.pay-tag.d{background:#c62828;color:#fff}.pay-tag.v{background:#fde68a;color:#78350f}
 .pay-j{font-size:11px;color:var(--text-muted);margin-left:4px}.pay-j.r{color:#c62828;font-weight:700}.pay-j.o{color:#ef6c00;font-weight:700}
 .pay-pdf{text-decoration:none;font-size:16px}.pay-pdf.off{opacity:.25}
 .pay-dec{display:flex;gap:4px;align-items:center;flex-wrap:wrap}.pay-db{border:1px solid var(--border);background:#fff;border-radius:6px;padding:3px 8px;font-size:12px;cursor:pointer;color:#475569}.pay-db.on.Payer{background:#e8f5e9;border-color:#66bb6a;color:#1b5e20;font-weight:700}.pay-db.on.Partiel{background:#fff3e0;border-color:#ffa726;color:#b45309;font-weight:700}.pay-db.on.Reporter{background:#eceff1;border-color:#90a4ae;color:#37474f;font-weight:700}.pay-db:disabled{cursor:default}
@@ -5714,7 +5714,33 @@ let PAYREP=new Set();
 function payIndex(){PAYX=new Map();(DATA.pay||[]).forEach(p=>{const k=+p.ID_Facture;if(!PAYX.has(k))PAYX.set(k,[]);PAYX.get(k).push(p);});
   // reportées ou payées en partie par Fabrice dans une proposition validée = reliquat le mois suivant
   const ok=new Set((DATA.prop||[]).filter(p=>['Validée','Clôturée'].includes(p.Statut)).map(p=>+p.ID));
-  PAYREP=new Set((DATA.lprop||[]).filter(l=>ok.has(+l.ID_Proposition)&&['Reporter','Partiel'].includes(l.Decision)).map(l=>+l.ID_Facture));}
+  PAYREP=new Set((DATA.lprop||[]).filter(l=>ok.has(+l.ID_Proposition)&&['Reporter','Partiel'].includes(l.Decision)).map(l=>+l.ID_Facture));
+  payIndexDoublons();}
+// Doublons possibles (comme la mise en forme rouge de l'Excel) :
+//  « num » = même n° (tous fournisseurs ; même fournisseur exigé pour un n° court ou une cotisation)
+//  « mt »  = même fournisseur + même montant, factures à moins de 15 jours d'écart, n° différents
+let PAYDBL=new Map();
+const payNumNorm=f=>lpNorm(String(f.Title||'').replace(/\s*\(\d+\)$/,'').replace(/\s\d{2}\/\d{2}$/,''));
+function payIndexDoublons(){
+  PAYDBL=new Map();const F=payFacs();const aj=(f,t,o)=>{const x=PAYDBL.get(f.ID)||{num:[],mt:[]};if(!x[t].includes(o))x[t].push(o);PAYDBL.set(f.ID,x);};
+  const parN=new Map();F.forEach(f=>{const n=payNumNorm(f);if(n.length<2)return;if(!parN.has(n))parN.set(n,[]);parN.get(n).push(f);});
+  parN.forEach((L,n)=>{if(L.length<2)return;
+    for(let i=0;i<L.length;i++)for(let j=i+1;j<L.length;j++){const a=L[i],b=L[j];const mF=lpNorm(payNom(a))===lpNorm(payNom(b))||(a.ID_Fournisseur&&a.ID_Fournisseur===b.ID_Fournisseur);
+      if(!mF&&(n.length<5||payEstCotis(a)||payEstCotis(b)))continue;aj(a,'num',b);aj(b,'num',a);}});
+  // même fournisseur, même partie chiffrée (46023722 = FA46023722)
+  const parD=new Map();F.forEach(f=>{if(payEstCotis(f))return;const d=payNumNorm(f).replace(/\D/g,'');if(d.length<5)return;const k=lpNorm(payNom(f))+'|'+d;if(!parD.has(k))parD.set(k,[]);parD.get(k).push(f);});
+  parD.forEach(L=>{if(L.length<2)return;for(let i=0;i<L.length;i++)for(let j=i+1;j<L.length;j++){const a=L[i],b=L[j];if(payNumNorm(a)===payNumNorm(b))continue;aj(a,'num',b);aj(b,'num',a);}});
+  const parM=new Map();F.forEach(f=>{const m=r2(+f.Montant_TTC||0);if(!m||payEstCotis(f))return;const k=lpNorm(payNom(f))+'|'+m;if(!parM.has(k))parM.set(k,[]);parM.get(k).push(f);});
+  parM.forEach(L=>{if(L.length<2)return;
+    for(let i=0;i<L.length;i++)for(let j=i+1;j<L.length;j++){const a=L[i],b=L[j];if(payNumNorm(a)===payNumNorm(b))continue;const da=dk(a,'Date_Facture'),db=dk(b,'Date_Facture');
+      const x=PAYDBL.get(a.ID);if(x&&x.num.includes(b))continue;
+      if(da&&db&&Math.abs(daysBetween(da,db))<=15){aj(a,'mt',b);aj(b,'mt',a);}}});
+}
+const payDblTxt=o=>`${payNom(o)} ${o.Title} · ${payEur(+o.Montant_TTC||0)} · ${fmtD(dk(o,'Date_Facture'))} · ${payEtat(o)==='payee'?'payée':payEtat(o)==='partielle'?'payée en partie':'non payée'}`;
+function payDblTag(f){
+  const x=PAYDBL.get(f&&f.ID);if(!x)return '';
+  return (x.num.length?` <span class="pay-tag d" data-tip="${esc('Même n° que : '+x.num.map(payDblTxt).join(' ; '))}">doublon ?</span>`:'')+(x.mt.length?` <span class="pay-tag v" data-tip="${esc('Même fournisseur et même montant, à quelques jours : '+x.mt.map(payDblTxt).join(' ; '))}">à vérifier</span>`:'');
+}
 const payDe=f=>PAYX.get(+f.ID)||[];
 const payPaye=f=>r2(payDe(f).reduce((s,p)=>s+(+p.Montant||0),0));
 const payReste=f=>r2((+f.Montant_TTC||0)-payPaye(f));
@@ -5808,7 +5834,7 @@ function payTable(rows,mode,opt={}){
       else if(mode==='lecture'&&opt.colDec){const d=r.l?{d:r.l.Decision,m:+r.l.Montant_Valide||0}:null;cDec=`<td>${d?(d.d==='Reporter'?'⏸ reporté':d.d==='Partiel'?'✂ partiel : <b>'+payEur(d.m)+'</b>':'✅ payer'):''}</td>`;}
       const chk=mode==='prep'?`<td><input type="checkbox" data-paychk="${f.ID}" ${PAYV.exclus.has(f.ID)?'':'checked'} ${opt.ed?'':'disabled'}></td>`:'';
       if(mode==='prep'&&PAYV.exclus.has(f.ID))mod='pay-mod-x';
-      return `<tr class="${rel?'pay-rel ':''}${du<0?'pay-av ':''}${mod}">${chk}<td>${payPdf(f)}</td><td class="mono">${esc(f.Title||'')}${rel?' <span class="pay-tag" data-tip="Solde d’une facture payée en partie ou reportée">reliquat</span>':''}${payEstCotis(f)?' <span class="pay-tag c">cotisation</span>':''}${du<0?' <span class="pay-tag a" data-tip="Montant négatif : déduit du total du fournisseur">avoir</span>':''}${f.Commentaire?` <span class="muted" data-tip="${esc(f.Commentaire)}">💬</span>`:''}</td>
+      return `<tr class="${rel?'pay-rel ':''}${du<0?'pay-av ':''}${mod}">${chk}<td>${payPdf(f)}</td><td class="mono">${esc(f.Title||'')}${rel?' <span class="pay-tag" data-tip="Solde d’une facture payée en partie ou reportée">reliquat</span>':''}${payEstCotis(f)?' <span class="pay-tag c">cotisation</span>':''}${payDblTag(f)}${du<0?' <span class="pay-tag a" data-tip="Montant négatif : déduit du total du fournisseur">avoir</span>':''}${f.Commentaire?` <span class="muted" data-tip="${esc(f.Commentaire)}">💬</span>`:''}</td>
         <td>${fmtD(dk(f,'Date_Facture'))}</td><td>${payEchBadge(f)}</td><td class="r">${payEur(+f.Montant_TTC||0)}</td><td class="r muted">${payPaye(f)?payEur(payPaye(f)):''}</td><td class="r"><b class="${mod==='pay-mod-r'?'pay-barre':''}">${payEur(du)}</b>${sous}</td>${cDec}</tr>`;}).join('');
     const btn=ed?`<span class="pay-gbt"><button class="btn ghost sm" data-paygrp="Payer" data-paygn="${esc(g.nom)}">✅ tout payer</button><button class="btn ghost sm" data-paygrp="Reporter" data-paygn="${esc(g.nom)}">⏸ tout reporter</button></span>`:'';
     const totPrep=mode==='prep'?g.R.filter(r=>!PAYV.exclus.has(r.f.ID)).reduce((s,r)=>s+payReste(r.f),0):null;
@@ -5834,7 +5860,7 @@ function payEcartHtml(dispo,montant,lbl){
   return `<span>Disponible <b>${payEur(dispo)}</b></span><span>${lbl} <b class="${r<0?'pay-neg':'pay-pos'}">${payEur(r)}</b>${r<0?' <span class="pay-neg" style="font-weight:700">⚠ dépasse le disponible</span>':''}</span>`;
 }
 // Barre de filtre (affichage seulement : la sélection et les totaux restent sur toute la liste)
-const PAY_PK=[['tout','Tout'],['echu','Échues',f=>payEch(f)&&payEch(f)<todayKey()],['rel','Reliquats',f=>payReliquat(f)],['cotis','Cotisations',payEstCotis],['avoir','Avoirs',f=>payReste(f)<0||(+f.Montant_TTC||0)<0]];
+const PAY_PK=[['tout','Tout'],['echu','Échues',f=>payEch(f)&&payEch(f)<todayKey()],['rel','Reliquats',f=>payReliquat(f)],['cotis','Cotisations',payEstCotis],['avoir','Avoirs',f=>payReste(f)<0||(+f.Montant_TTC||0)<0],['dbl','Doublons ?',f=>PAYDBL.has(f.ID)]];
 function payFiltrer(rows){
   const k=PAY_PK.find(x=>x[0]===PAYV.pk)||PAY_PK[0];const q=(PAYV.pq||'').trim().toLowerCase();
   const frsL=[...new Set(rows.map(r=>payNom(r.f)))].sort((a,b)=>a.localeCompare(b,'fr'));
@@ -5951,9 +5977,9 @@ function payVueAnalyses(){
   </div>`;
 }
 // 4. Toutes les factures
-const PAY_FILTRES=[['apayer','À payer',f=>payReste(f)>0.005],['cut','À payer d’ici le 10',f=>payReste(f)>0.005&&(!payEch(f)||payEch(f)<=(PAYV.cutoff||payCutoffDefaut()))],['echu','Échues',f=>payReste(f)>0.005&&payEch(f)&&payEch(f)<todayKey()],['rel','Reliquats',f=>payReliquat(f)&&payReste(f)>0.005],['payee','Payées',f=>payEtat(f)==='payee'],['avoir','Avoirs / crédits',f=>(+f.Montant_TTC||0)<0||payReste(f)<-0.005],['cotis','Cotisations',payEstCotis],['tout','Toutes',()=>true]];
+const PAY_FILTRES=[['dbl','Doublons ?',f=>PAYDBL.has(f.ID)&&payReste(f)>0.005],['apayer','À payer',f=>payReste(f)>0.005],['cut','À payer d’ici le 10',f=>payReste(f)>0.005&&(!payEch(f)||payEch(f)<=(PAYV.cutoff||payCutoffDefaut()))],['echu','Échues',f=>payReste(f)>0.005&&payEch(f)&&payEch(f)<todayKey()],['rel','Reliquats',f=>payReliquat(f)&&payReste(f)>0.005],['payee','Payées',f=>payEtat(f)==='payee'],['avoir','Avoirs / crédits',f=>(+f.Montant_TTC||0)<0||payReste(f)<-0.005],['cotis','Cotisations',payEstCotis],['tout','Toutes',()=>true]];
 function payVueFactures(){
-  const fl=PAY_FILTRES.find(x=>x[0]===PAYV.filtre)||PAY_FILTRES[0];const q=PAYV.rech.trim().toLowerCase();
+  const fl=PAY_FILTRES.find(x=>x[0]===PAYV.filtre)||PAY_FILTRES[1];const q=PAYV.rech.trim().toLowerCase();
   const F=payFacs();let L=F.filter(fl[2]);
   const frsL=[...new Set(L.map(payNom))].sort((a,b)=>a.localeCompare(b,'fr'));
   if(PAYV.ffrs)L=L.filter(f=>payNom(f)===PAYV.ffrs);
@@ -5965,7 +5991,7 @@ function payVueFactures(){
     <input id="payRech" placeholder="🔍 N° de facture, montant…" value="${esc(PAYV.rech)}" style="width:240px;padding:7px 10px;border:1px solid var(--border);border-radius:8px"></span></div>
   <div class="card"><div class="card-b" style="padding:0"><table class="pay-t"><thead><tr><th style="width:28px"></th><th>Fournisseur</th><th>N° facture</th><th style="width:96px">Date</th><th style="width:150px">Échéance</th><th class="r" style="width:110px">Montant</th><th class="r" style="width:110px">Payé</th><th class="r" style="width:110px">Reste</th><th style="width:110px">État</th></tr></thead><tbody>
   ${L.slice(0,PAYV.lim).map(f=>{const P=payDe(f),e=payEtat(f),o=PAYV.ouv.has(f.ID);
-    return `<tr class="pay-row ${payReliquat(f)&&payReste(f)>0?'pay-rel':''}" data-payouv="${f.ID}"><td>${payPdf(f)}</td><td>${esc(payNom(f))}</td><td class="mono">${esc(f.Title||'')}</td><td>${fmtD(dk(f,'Date_Facture'))}</td><td>${e==='payee'?fmtD(payEch(f)):payEchBadge(f)}</td><td class="r">${payEur(+f.Montant_TTC||0)}</td><td class="r">${P.length?payEur(payPaye(f)):''}</td><td class="r"><b>${e==='payee'?'':payEur(payReste(f))}</b></td>
+    return `<tr class="pay-row ${payReliquat(f)&&payReste(f)>0?'pay-rel':''}" data-payouv="${f.ID}"><td>${payPdf(f)}</td><td>${esc(payNom(f))}</td><td class="mono">${esc(f.Title||'')}${payDblTag(f)}</td><td>${fmtD(dk(f,'Date_Facture'))}</td><td>${e==='payee'?fmtD(payEch(f)):payEchBadge(f)}</td><td class="r">${payEur(+f.Montant_TTC||0)}</td><td class="r">${P.length?payEur(payPaye(f)):''}</td><td class="r"><b>${e==='payee'?'':payEur(payReste(f))}</b></td>
       <td>${e==='payee'?'<span class="pay-ok">✓ payée</span>':e==='partielle'?'<span class="pay-tag">partielle</span>':'à payer'} <span class="muted">${o?'▾':'▸'}</span></td></tr>
     ${o?`<tr class="pay-det"><td></td><td colspan="8"><div>${P.length?P.sort((a,b)=>String(dk(a,'Date_Paiement')).localeCompare(String(dk(b,'Date_Paiement')))).map(x=>`<div>✓ <b>${payEur(+x.Montant||0)}</b> le ${fmtD(dk(x,'Date_Paiement'))} · ${esc(x.Mode||'')}${x.Banque?' · '+esc(x.Banque):''}${x.Commentaire?' · <span class="muted">'+esc(x.Commentaire)+'</span>':''}${ed?` <button class="btn ghost sm" data-paysup="${x.ID}" style="padding:0 4px">✕</button>`:''}</div>`).join(''):'<span class="muted">Aucun paiement enregistré.</span>'}
       ${f.Commentaire?`<div class="muted" style="margin-top:4px">💬 ${esc(f.Commentaire)}</div>`:''}
@@ -6005,6 +6031,8 @@ async function payEnvoyer(){
   const cut=PAYV.cutoff||payCutoffDefaut();const C=payCandidats(cut);const ids=new Set(C.map(f=>f.ID));
   const F=[...C,...[...PAYV.ajouts].map(payFacById).filter(f=>f&&!ids.has(f.ID)&&Math.abs(payReste(f))>0.005)].filter(f=>!PAYV.exclus.has(f.ID));
   if(!F.length)return;const tot=r2(F.reduce((s,f)=>s+payReste(f),0));
+  const D=F.filter(f=>PAYDBL.has(f.ID));
+  if(D.length&&!await showConfirm('⚠ Doublons possibles',`<b>${D.length}</b> facture${D.length>1?'s':''} de la proposition ressemble${D.length>1?'nt':''} à une autre facture :<div style="max-height:260px;overflow:auto;margin:8px 0;font-size:12.5px">${D.map(f=>{const x=PAYDBL.get(f.ID);return `<div style="padding:4px 0;border-bottom:1px solid #eee"><b>${esc(payNom(f))} ${esc(f.Title)}</b> (${payEur(payReste(f))})<br><span class="muted">${x.num.length?'même n° : ':'même montant : '}${esc([...x.num,...x.mt].map(payDblTxt).join(' ; '))}</span></div>`;}).join('')}</div>Vérifie avec 📄 et décoche la facture si c’est un doublon.`,'Envoyer quand même','danger'))return;
   if(!await showConfirm('Envoyer à Fabrice',`<b>${F.length}</b> pièces pour <b>${payEur(tot)}</b>, échéances jusqu’au ${fmtD(cut)}.<br><br>Fabrice reçoit un mail et valide ligne par ligne.`,'📤 Envoyer'))return;
   busyOn('Création de la proposition…');
   try{
@@ -6452,6 +6480,8 @@ async function payReparerLiens(){
       else if(!bon&&cur&&!curOk)out.push({f,de:cur,vers:null});
     }
     PAYLIENS=out;const nC=out.filter(x=>x.vers).length,nV=out.length-nC;
+    const G=new Map();idx.forEach(x=>{if(!x.num||x.num.length<3)return;const k=(x.frs||'?')+'|'+x.num;if(!G.has(k))G.set(k,[]);G.get(k).push(x);});
+    const DP=[...G.values()].filter(L=>L.length>1).sort((a,b)=>a[0].n.localeCompare(b[0].n,'fr'));
     let ov=$('ovPay');if(!ov){ov=document.createElement('div');ov.className='ov';ov.id='ovPay';ov.innerHTML='<div class="modal" id="payModal" style="width:min(980px,96vw)"></div>';document.body.appendChild(ov);}
     $('payModal').innerHTML=`<div class="card-h"><h3>🔗 Réparation des liens PDF</h3><button class="btn ghost sm" data-payimp="fermer">✕</button></div>
     <div style="padding:14px 18px;overflow:auto">
@@ -6459,6 +6489,8 @@ async function payReparerLiens(){
       <p><b>${nC}</b> lien${nC>1?'s':''} à corriger vers le bon PDF · <b>${nV}</b> lien${nV>1?'s':''} faux retiré${nV>1?'s':''} (aucun PDF à ce n° dans le dossier : l’icône 📄 sera grisée) · ${L.length-out.length} déjà bons ou sans PDF.</p>
       <table class="pay-t"><thead><tr><th>Fournisseur</th><th>N°</th><th>Lien actuel</th><th>Nouveau lien</th></tr></thead><tbody>${out.slice(0,300).map(x=>`<tr><td>${esc(payNom(x.f))}</td><td class="mono">${esc(x.f.Title)}</td><td class="muted">${esc(facNom(x.de)||'—')}</td><td>${x.vers?esc(facNom(x.vers)):'<span class="muted">retiré</span>'}</td></tr>`).join('')}</tbody></table>
       ${out.length>300?`<p class="muted">… et ${out.length-300} autres.</p>`:''}
+      <h4 style="margin:14px 0 6px">📑 PDF en double dans le dossier (${DP.length})</h4>
+      ${DP.length?`<p class="muted" style="font-size:12.5px">Même fournisseur et même n°, écrits de deux façons. Ouvre les deux, garde le bon et supprime l’autre dans SharePoint.</p><table class="pay-t"><thead><tr><th>Fichiers</th><th>Dossier</th></tr></thead><tbody>${DP.map(L=>`<tr><td>${L.map(x=>`<a href="${pdfAbs(x.path)}" target="_blank" rel="noopener">${esc(x.n)}</a>`).join('<br>')}</td><td class="muted">${L.map(x=>esc(x.path.split('/').slice(-2,-1)[0])).join('<br>')}</td></tr>`).join('')}</tbody></table>`:'<p class="muted">Aucun.</p>'}
       <div class="pay-foot"><span class="muted">Ne ferme pas la page pendant la correction.</span><button class="btn primary" data-payliens="go" ${out.length?'':'disabled'}>🔗 Corriger ${out.length} lien${out.length>1?'s':''}</button></div></div>`;
     ov.classList.add('open');
   }catch(e){toast('🔴 '+e.message,'ko');}finally{busyOff();}
