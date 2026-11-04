@@ -5998,7 +5998,7 @@ function payVueFactures(){
       <td>${e==='payee'?'<span class="pay-ok">✓ payée</span>':e==='partielle'?'<span class="pay-tag">partielle</span>':'à payer'} <span class="muted">${o?'▾':'▸'}</span></td></tr>
     ${o?`<tr class="pay-det"><td></td><td colspan="8"><div>${P.length?P.sort((a,b)=>String(dk(a,'Date_Paiement')).localeCompare(String(dk(b,'Date_Paiement')))).map(x=>`<div>✓ <b>${payEur(+x.Montant||0)}</b> le ${fmtD(dk(x,'Date_Paiement'))} · ${esc(x.Mode||'')}${x.Banque?' · '+esc(x.Banque):''}${x.Commentaire?' · <span class="muted">'+esc(x.Commentaire)+'</span>':''}${ed?` <button class="btn ghost sm" data-paysup="${x.ID}" style="padding:0 4px">✕</button>`:''}</div>`).join(''):'<span class="muted">Aucun paiement enregistré.</span>'}
       ${f.Commentaire?`<div class="muted" style="margin-top:4px">💬 ${esc(f.Commentaire)}</div>`:''}
-      ${ed?`<div style="margin-top:6px;display:flex;gap:6px;flex-wrap:wrap">${e!=='payee'?`<button class="btn sm primary" data-payman="${f.ID}">💸 Enregistrer un paiement</button>`:''}<button class="btn sm" data-payech="${f.ID}">📅 Changer l’échéance</button></div>`:''}</div></td></tr>`:''}`;}).join('')}
+      ${ed?`<div style="margin-top:6px;display:flex;gap:6px;flex-wrap:wrap">${e!=='payee'?`<button class="btn sm primary" data-payman="${f.ID}">💸 Enregistrer un paiement</button>`:''}<button class="btn sm" data-payech="${f.ID}">📅 Changer l’échéance</button>${!P.length?`<button class="btn sm" data-paysupf="${f.ID}" style="color:#b91c1c" data-tip="Supprime cette fiche (doublon, saisie en trop). Le PDF reste dans le dossier.">🗑 Supprimer cette fiche</button>`:''}</div>`:''}</div></td></tr>`:''}`;}).join('')}
   </tbody></table>${L.length>PAYV.lim?`<div style="padding:10px;text-align:center"><button class="btn sm" data-payplus="1">Afficher plus (${L.length-PAYV.lim} de plus)</button></div>`:''}
   ${!L.length?'<div class="muted" style="padding:14px">Aucune facture.</div>':''}</div></div>
   <div class="muted" style="font-size:12px">${L.length} pièce${L.length>1?'s':''} · reste dû ${payEur(tot)}</div>`;
@@ -6398,6 +6398,7 @@ document.addEventListener('click',e=>{
   if(t.closest('#btnPayCot')){payCotisation();return;}
   if(t.closest('#btnPayLiens')){payReparerLiens();return;}
   const dd=t.closest('[data-paydbl]');if(dd){e.preventDefault();e.stopPropagation();payDblConfirmer(+dd.dataset.paydbl);return;}
+  const sf=t.closest('[data-paysupf]');if(sf){paySupprimerFiche(+sf.dataset.paysupf);return;}
   const lp=t.closest('[data-paylier]');if(lp){e.preventDefault();payLierPdf(+lp.dataset.paylier);return;}
   if(t.closest('[data-payliens="go"]')){payReparerGo();return;}
   const ou=t.closest('[data-payouv]');if(ou&&!t.closest('a,button')){const id=+ou.dataset.payouv;if(PAYV.ouv.has(id))PAYV.ouv.delete(id);else PAYV.ouv.add(id);renderPaiements();return;}
@@ -6461,6 +6462,20 @@ async function payDblConfirmer(fid){
       else{await spPatch('Factures_Frs',o.ID,{Doublon_Verifie:v},o);o.Doublon_Verifie=v;}},3,'Vérification');
     if(err.length)throw err[0];toast('✓ Marqué : pas un doublon','ok');}
   catch(e){toast('🔴 '+e.message,'ko');}finally{busyOff();renderPaiements();}
+}
+// Suppression d'une fiche facture en trop (doublon) : la fiche seulement, jamais le PDF
+async function paySupprimerFiche(fid){
+  const f=payFacById(fid);if(!f)return;
+  if(payDe(f).length){toast('🔴 Cette facture a des paiements : supprime-les d’abord','ko');return;}
+  if((DATA.lig||[]).some(l=>+l.ID_Facture===+f.ID)){toast('🔴 Facture rattachée à un dossier d’arrivage : supprime-la depuis l’onglet Factures','ko');return;}
+  const pr=new Set((DATA.prop||[]).filter(p=>['Brouillon','À valider Fabrice','Validée'].includes(p.Statut)).map(p=>+p.ID));
+  if((DATA.lprop||[]).some(l=>+l.ID_Facture===+f.ID&&pr.has(+l.ID_Proposition))){toast('🔴 Facture dans la proposition en cours : retire d’abord l’envoi','ko');return;}
+  const x=PAYDBL.get(f.ID);const autres=x?[...x.num,...x.mt]:[];
+  if(!await showConfirm('Supprimer la fiche',`<div>Supprimer la fiche <b>${esc(payNom(f))} ${esc(f.Title)}</b> (${payEur(+f.Montant_TTC||0)}, ${fmtD(dk(f,'Date_Facture'))}) ?</div>
+    ${autres.length?`<div style="margin:8px 0;font-size:12.5px">La facture gardée sera : ${autres.map(o=>`<b>${esc(payNom(o))} ${esc(o.Title)}</b> · ${payEur(+o.Montant_TTC||0)}`).join(' ; ')}</div>`:'<div class="muted" style="font-size:12.5px;margin:8px 0">Aucune autre facture identique n’a été trouvée : vérifie que c’est bien un doublon.</div>'}
+    <div class="muted" style="font-size:12px">Le PDF n’est pas touché. La fiche part dans la corbeille SharePoint (récupérable 93 jours).</div>`,'🗑 Supprimer','danger'))return;
+  try{await spDelete('Factures_Frs',f.ID,f);DATA.fac=DATA.fac.filter(o=>o!==f);PAYV.ouv.delete(f.ID);toast('✓ Fiche supprimée','ok');}catch(e){toast('🔴 '+e.message,'ko');}
+  renderPaiements();
 }
 async function payLierPdf(fid){
   const f=payFacById(fid);if(!f)return;busyOn('Lecture du dossier Factures Fournisseurs…');
