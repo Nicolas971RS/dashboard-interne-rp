@@ -6370,13 +6370,14 @@ function openDossierBC(racine,silencieux){
   const etatLigne=(qc,ql)=>{const r=qc-ql;
     if(r===0)return'<span class="ctag g">Livré</span>';
     if(r<0)return`<span class="ctag o" title="Livré supérieur au commandé">⚠️ surplus ${-r}</span>`;
-    if(ql===0)return`<span class="ctag r">Rien livré</span>`;
-    return`<span class="ctag o">Reste ${r}</span>`;};
+    // Distinguer d'un coup d'œil : rien de livré (rouge, cadre) / livraison commencée (ambre)
+    if(ql===0)return`<span class="ctag" style="background:#fff;color:#b91c1c;border:1.5px solid #b91c1c;padding:1px 8px">⭕ Rien livré</span>`;
+    return`<span class="ctag" style="background:#d97706" title="Livraison commencée : ${ql} livré(s) sur ${qc}">◐ Reste ${r}</span>`;};
   const rowsArt=lignesTri.map(l=>{
     const qc=num(l,'Quantit_x00e9_command_x00e9_e'),ql=num(l,'Quantit_x00e9_livr_x00e9_e'),r=qc-ql;
     const hist=parseBLHistorique(f(l,'BLSign_x00e9_')||'');
     const bcId=l.BCId??(l.BC&&l.BC.Id);
-    return`<tr style="${r>0?'background:#fff7ed':''}">
+    return`<tr style="${r>0?(ql>0?'background:#fffbeb':'background:#fef2f2'):''}">
       <td class="mono" style="text-align:center">${_escD(f(l,'Title')||'—')}</td>
       <td class="mono">${_escD(f(l,'R_x00e9_f_x00e9_rence')||'—')}</td>
       <td style="font-size:12px">${_escD(f(l,'Produit_x002f_D_x00e9_signation')||'—')}</td>
