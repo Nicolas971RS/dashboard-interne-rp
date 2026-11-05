@@ -4908,7 +4908,17 @@ async function cmdMaj(id,body,msg){
     if(msg)toast(msg,'ok');renderCommandes();}
   catch(e){toast('🔴 '+e.message,'ko');}
 }
-async function cmdJoindre(id,file,quoi){
+// ARC et BPA en un geste : un seul fichier (l'ARC reçu), et une case « signé et renvoyé = BPA envoyé »
+async function cmdJoindreArcBpa(id,file){
+  const c=cmdById(id);if(!c)return;const dejaArc=!!dk(c,'Date_ARC'),dejaBpa=!!dk(c,'Date_BPA');
+  if(!await showConfirm(`📎 ARC / BPA · ${esc(c.Fournisseur||'')} ${esc(c.Title)}`,`<div style="font-size:13px;margin-bottom:8px">Fichier : <b>${esc(file.name)}</b></div>
+    <label style="display:block;margin:6px 0"><input type="radio" name="arcbpa" value="ARC" ${dejaArc&&!dejaBpa?'':'checked'}> <b>ARC reçu</b> — le BPA sera envoyé plus tard</label>
+    <label style="display:block;margin:6px 0"><input type="radio" name="arcbpa" value="BPA" ${dejaArc&&!dejaBpa?'checked':''}> <b>ARC reçu, signé et renvoyé</b> au fournisseur (= BPA envoyé)</label>
+    <div class="muted" style="font-size:12px;margin-top:8px">Dépose le PDF <b>reçu par courriel</b>, pas une impression scannée : c’est lui qui permet le contrôle automatique des prix et des quantités.</div>`,'📎 Enregistrer'))return;
+  const v=(document.querySelector('input[name="arcbpa"]:checked')||{}).value||'ARC';
+  await cmdJoindre(id,file,'ARC',v==='BPA');
+}
+async function cmdJoindre(id,file,quoi,aussiBpa){
   const c=cmdById(id);if(!c)return;
   try{
     const buf=await file.arrayBuffer();const ext=(file.name.match(/\.[^.]+$/)||['.pdf'])[0];
@@ -4920,12 +4930,15 @@ async function cmdJoindre(id,file,quoi){
     delete CMDV.att[id];
     const body=quoi==='BL signé'?(dk(c,'Date_Reception')?{}:{Date_Reception:toSP(todayKey())}):quoi==='ARC'?(dk(c,'Date_ARC')?{}:{Date_ARC:toSP(todayKey())}):(dk(c,'Date_BPA')?{Mode_BPA:'BPA signé'}:{Date_BPA:toSP(todayKey()),Mode_BPA:'BPA signé'});
     if(quoi==='BPA'&&!dk(c,'Date_ARC'))body.Date_ARC=toSP(todayKey());
+    if(aussiBpa){if(!dk(c,'Date_BPA'))body.Date_BPA=toSP(todayKey());body.Mode_BPA='BPA signé';}
     // contrôle automatique si le PDF contient du texte (l'ARC signé = BPA est contrôlé aussi)
     let r=null;
     if(/\.pdf$/i.test(ext)){try{r=await cmdControleArc(c,buf);}catch(e){console.warn('[ARC]',e);toast(`⚠ ${quoi} joint, mais lecture impossible : ${e.message}`,'wa');}}
+    const lbl=aussiBpa?'ARC + BPA':quoi;
     if(r&&r.texte){Object.assign(body,cmdArcMaj(c,r));CMDV.arc[id]=r;arcEnregistrerLignes(c,r);}
-    await cmdMaj(id,body,r&&r.texte?null:`✓ ${quoi} joint à la commande ${c.Title}${r&&!r.texte?' (scan : pas de contrôle automatique)':''}`);
-    if(r&&r.texte)cmdArcAfficher(c,r,`${quoi} joint à la commande ${c.Title}`);
+    await cmdMaj(id,body,r&&r.texte?null:`✓ ${lbl} enregistré pour la commande ${c.Title}`);
+    if(r&&!r.texte&&quoi==='ARC')await showConfirm('⚠ Document scanné',`Le fichier est une image (impression scannée) : le portail ne peut pas contrôler les prix et les quantités.<br><br>Pour garder le contrôle, dépose aussi l’<b>ARC reçu par courriel</b> (le PDF d’origine) avec le même bouton.`,'OK');
+    if(r&&r.texte)cmdArcAfficher(c,r,`${lbl} enregistré pour la commande ${c.Title}`);
   }catch(e){toast('🔴 '+e.message,'ko');}
 }
 // Champs mis à jour par le contrôle : date d'ARC lue, dispo annoncée (si vide), ligne [ARC] du commentaire
@@ -5076,8 +5089,8 @@ function cmdDetailHtml(c,e){
     ${ed?`<div class="cmd-btns">
       ${cmdEstImport(c)?`${!dk(c,'Date_ARC')?`<button class="btn sm" data-cmdq="arc">✓ ARC reçu aujourd’hui</button>`:''}
       ${dk(c,'Date_ARC')&&!dk(c,'Date_BPA')?`<button class="btn sm primary" data-cmdq="bpa">✅ BPA envoyé par courriel</button>`:''}
-      <label class="btn sm">📎 Joindre l’ARC<input type="file" data-cmdj="ARC" accept=".pdf,image/*" hidden></label>
-      <label class="btn sm">📎 Joindre le BPA signé<input type="file" data-cmdj="BPA" accept=".pdf,image/*" hidden></label>`:`<label class="btn sm ${dk(c,'Date_Reception')?'':'primary'}" title="Commande locale : le BL signé à la livraison remplace l’ARC. La commande passe en livrée.">📎 Joindre le BL signé<input type="file" data-cmdj="BL signé" accept=".pdf,image/*" hidden></label>`}
+      <label class="btn sm ${dk(c,'Date_BPA')?'':'primary'}" title="Dépose l’ARC reçu par courriel (le PDF d’origine, pas l’impression) : le portail contrôle prix et quantités, et enregistre aussi le BPA si tu l’as signé et renvoyé">📎 Joindre l’ARC / BPA<input type="file" data-cmdj="ARCBPA" accept=".pdf,image/*" hidden></label>
+      <label class="btn ghost sm" title="Seulement si le fournisseur envoie son propre formulaire de BPA, distinct de l’ARC">📎 Autre pièce (BPA fournisseur)<input type="file" data-cmdj="BPA" accept=".pdf,image/*" hidden></label>`:`<label class="btn sm ${dk(c,'Date_Reception')?'':'primary'}" title="Commande locale : le BL signé à la livraison remplace l’ARC. La commande passe en livrée.">📎 Joindre le BL signé<input type="file" data-cmdj="BL signé" accept=".pdf,image/*" hidden></label>`}
       <button class="btn sm" data-cmdq="ctrl" title="Compare le document joint (PDF avec texte) au BC : quantités, prix, total">🔍 Contrôler ${cmdEstImport(c)?'l’ARC':'le BL'}</button><input type="file" id="cmdCtlFile" accept=".pdf" hidden>
       ${c.Lien_BC?`<button class="btn sm" data-cmdq="relire" title="Relit le PDF du BC (après modification dans Image)">🔁 Relire le BC</button>`:''}
       <button class="btn sm" data-cmdq="solde" title="Commande déjà reçue ou terminée, sorte du suivi">${/^Sold/i.test(c.Statut||'')?'↺ Remettre en suivi':'✔ Solder (déjà reçue)'}</button>
@@ -5145,6 +5158,7 @@ document.addEventListener('change',e=>{
     cmdMaj(CMDV.ouvert,body,msg);return;}
   if(e.target.id==='cmdCtlFile'&&CMDV.ouvert&&e.target.files[0]){cmdJoindre(CMDV.ouvert,e.target.files[0],'ARC');e.target.value='';return;}
   const j=e.target.dataset&&e.target.dataset.cmdj;
+  if(j==='ARCBPA'&&CMDV.ouvert&&e.target.files[0]){const f=e.target.files[0];e.target.value='';cmdJoindreArcBpa(CMDV.ouvert,f);return;}
   if(j&&CMDV.ouvert&&e.target.files[0]){cmdJoindre(CMDV.ouvert,e.target.files[0],j);return;}
   const fr=e.target.dataset&&e.target.dataset.cmdfrs;
   if(fr){const x=matchFrs(e.target.value);if(!x){toast('Fournisseur inconnu : choisis-le dans la liste','wa');return;}cmdMaj(+fr,{ID_Fournisseur:x.ID,Fournisseur:x.Title},'✓ Fournisseur enregistré');}
