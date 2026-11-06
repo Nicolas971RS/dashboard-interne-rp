@@ -6894,12 +6894,15 @@ function raVuePreparer(){
   return h;
 }
 function raDetailFrs(g){
-  const ed=raPeutPreparer();const F=RAV.filtre;
+  const ed=raPeutPreparer();
+  // Rien à commander (ou recherche en cours) : on montre directement les articles suivis plutôt qu'un tableau vide
+  const nAcmd=g.R.filter(r=>raQte(r)>0||(r.suivi&&['rupture','sousmini'].includes(r.etat))).length;
+  const auto=RAV.filtre==='acmd'&&(!nAcmd||RAV.q.trim());const F=auto?'suivis':RAV.filtre;
   const R=g.R.filter(r=>F==='tous'?true:F==='suivis'?r.suivi||raQte(r)>0:raQte(r)>0||(r.suivi&&['rupture','sousmini'].includes(r.etat)))
     .sort((a,b)=>(raQte(b)>0)-(raQte(a)>0)||['rupture','sousmini','acmd'].indexOf(a.etat)-['rupture','sousmini','acmd'].indexOf(b.etat)||a.a.code.localeCompare(b.a.code));
   const lim=F==='tous'?400:R.length;
   return `<div class="ra-dt"><div class="filters" style="margin:0 0 8px">${[['acmd','À commander'],['suivis','Articles suivis'],['tous','Tout le fournisseur']].map(([k,l])=>`<button class="chip ${F===k?'on':''}" data-rafiltre="${k}">${l}</button>`).join('')}
-    <span class="muted" style="font-size:12px;align-self:center">Délai ${raDelai(g.f,g.typ)} j + cycle ${raFreq(g.f,g.typ)} j · ${R.length} article${R.length>1?'s':''}</span></div>
+    <span class="muted" style="font-size:12px;align-self:center">Délai ${raDelai(g.f,g.typ)} j + cycle ${raFreq(g.f,g.typ)} j · ${R.length} article${R.length>1?'s':''}${auto?(nAcmd?' · recherche : tous les articles suivis qui correspondent':' · rien à commander : articles suivis affichés'):''}</span></div>
     ${R.length?`<div class="ra-scroll"><table class="ra-t">${raEnteteArt(ed,'prep')}<tbody>${R.slice(0,lim).map(r=>raLigneArt(r,ed,'prep')).join('')}</tbody></table></div>${R.length>lim?`<div class="muted" style="margin-top:6px">… ${R.length-lim} autres : utilise la recherche.</div>`:''}`:'<div class="muted">Rien à commander chez ce fournisseur. Choisis « Articles suivis » pour tout voir.</div>'}</div>`;
 }
 function raEnteteArt(ed,mode){
