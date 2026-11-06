@@ -636,6 +636,8 @@ input.sv-in.mod{border-color:#16a34a;background:#f0fdf4}
 .ra-in.frs,.ra-in.cli{width:150px;text-align:left;font-family:var(--font-body)}
 .ra-in.sm{width:64px}.ra-in.mod{border-color:#f59e0b;background:#fffbeb}select.ra-in{width:auto;text-align:left;font-family:var(--font-body)}
 .ra-ok{color:#2e7d32;font-weight:700}
+.ra-kpi{cursor:pointer;transition:box-shadow .15s,transform .15s}.ra-kpi:hover{box-shadow:0 4px 14px rgba(15,23,42,.12);transform:translateY(-1px)}.ra-kpi.on{outline:2px solid var(--c);outline-offset:-2px;background:#f8fbff}
+.ra-kbar{display:flex;gap:10px;align-items:center;flex-wrap:wrap;padding:8px 12px;background:#eef2ff;border-radius:8px;margin-bottom:8px;font-size:13px}.ra-kcard .ra-kbar{border-radius:10px 10px 0 0;margin:0}
 .ra-qw{display:inline-flex;align-items:center;gap:4px}.ra-x{width:24px;height:24px;border:1px solid #fecaca;background:#fff;color:#b91c1c;border-radius:6px;cursor:pointer;font-size:12px;line-height:1;padding:0}.ra-x:hover{background:#fee2e2}.ra-x.re{border-color:#cbd5e1;color:#475569}.ra-x.re:hover{background:#f1f5f9}.ra-x.vide{border:0;cursor:default}
 .ra-t tr.ra-part td{background:#fffaf0;border-bottom:1px dashed #f5d9a8;padding-top:3px;padding-bottom:3px}.ra-pa{padding:2px 8px;font-size:11.5px}.ra-due{color:#c62828;font-weight:700}
 .ra-gh{margin:14px 0 6px;padding:6px 10px;background:#eef2ff;border-radius:6px;font-size:13px}
@@ -6737,7 +6739,7 @@ function raCalc(a,o,P){
 }
 // RA-PURE-FIN
 
-const RA_LISTE=[['Stock_Mini','Number'],['Date_Mini_Valide','DateTime'],['Mini_Valide_Par','Text'],['Type_Commande','Text'],['Fournisseur_Defaut','Text'],['Exclu','Text'],['Maj_Par','Text']];
+const RA_LISTE=[['Stock_Mini','Number'],['Date_Mini_Valide','DateTime'],['Mini_Valide_Par','Text'],['Type_Commande','Text'],['Fournisseur_Defaut','Text'],['Exclu','Text'],['Maj_Par','Text'],['Colisage','Number']];
 const RA_COLS={Fournisseurs:[['Delai_Reappro_J','Number'],['Frequence_Cmd_J','Number'],['Code_Transitaire','Text']],Demandes_Achat:[['Origine','Text'],['Fichier_Export','Note']],Lignes_Demande_Achat:[['Qte_Proposee','Number'],['Fournisseur_Initial','Text']]};
 SCHEMA.Articles_Reappro=['ID','Title',...RA_LISTE.map(x=>x[0]),'Modified'];ESSENTIAL.Articles_Reappro=['ID','Title'];
 Object.entries(RA_COLS).forEach(([l,c])=>c.forEach(([n])=>{if(!SCHEMA[l].includes(n))SCHEMA[l].push(n);}));
@@ -6746,7 +6748,7 @@ const RA_TYPES=['Tubes','Assemblage','Spéciale'];
 const RA_ETATS={rupture:['Rupture','#c62828','#ffebee'],sousmini:['Sous le mini','#e65100','#fff3e0'],acmd:['À commander','#1565c0','#e8f2fd'],ok:['OK','#2e7d32','#e8f5e9'],surstock:['Surstock','#6a1b9a','#f3e5f5'],irregulier:['Irrégulier','#546e7a','#eef1f6'],ancien:['Plus vendu depuis 6 mois','#795548','#efebe9'],dormant:['Dormant','#795548','#efebe9'],inactif:['Sans vente','#90a4ae','#f4f6f9'],exclu:['Exclu','#90a4ae','#f4f6f9'],na:['Absent de l’export','#90a4ae','#f4f6f9']};
 let RA_ERR='';
 const RAV={vue:null,exp:null,expP:null,expErr:'',fic:null,ficErr:'',sel:new Set(),ouv:null,filtre:'acmd',type:'',q:'',prep:new Map(),com:'',revue:null,dec:new Map(),ajouts:[],miniEd:new Map(),
-  artEd:new Map(),artF:'suivis',artQ:'',artFrs:'',artLim:300,artNonVal:true,artEntete:false,split:new Set(),transit:new Map(),artIdx:new Map(),cache:null};
+  artEd:new Map(),artF:'suivis',artQ:'',artFrs:'',artLim:300,artNonVal:true,artEntete:false,split:new Set(),transit:new Map(),artIdx:new Map(),cache:null,adj:new Map(),adjAdd:new Map(),colEd:new Map()};
 const raUser=()=>sessionStorage.getItem('user_name')||'';
 const raPeutPreparer=()=>!lectureSeule();
 const raPeutValider=()=>estValideur();
@@ -6839,11 +6841,12 @@ function raLignes(saufId){
   const ck=ex.path+'|'+(saufId||0)+'|'+(DATA.lda||[]).length+'|'+(DATA.artr||[]).length;
   if(RAV.cache&&RAV.cache.k===ck)return RAV.cache.rows;
   const P=raParams(),mc=+String(ex.date||todayKey()).slice(5,7)-1,EC=raEnCours(saufId);
-  const rows=ex.arts.map(a=>{
+  const rows=ex.arts.map(a0=>{let a=a0;
     const ar=RAV.artIdx.get(a.code.toUpperCase())||null;
     const frsCode=(ar&&String(ar.Fournisseur_Defaut||'').trim().toUpperCase())||a.frs;
     const f=raFrsDe(frsCode),typ=raTypeAchat(f,a),ec=EC.get(a.code.toUpperCase())||null;
     const mini=ar&&ar.Stock_Mini!=null&&ar.Stock_Mini!==''&&isFinite(+ar.Stock_Mini)?+ar.Stock_Mini:null;
+    a={...a,colImage:a.col,col:ar&&+ar.Colisage>0?+ar.Colisage:a.col};   // colisage mémorisé dans le portail prioritaire
     const c=raCalc(a,{mc,mini,exclu:ar&&ar.Exclu==='Oui',delai:raDelai(f,typ),freq:raFreq(f,typ),enCours:ec?ec.stock:0},P);
     return {a,ar,frsCode,f,typ,ec,mc,type:(ar&&ar.Type_Commande)||raTypeAuto(a.lib),typeAuto:!(ar&&ar.Type_Commande),...c};
   });
@@ -6895,7 +6898,7 @@ function renderReappro(){
   if(RAV.fic===null&&!RAV.ficP)raDernierExport();
   const chip=(k,l,n)=>`<button class="chip ${RAV.vue===k?'on':''}" data-ravue="${k}">${l}${n?` <b>(${n})</b>`:''}</button>`;
   let h=raStructureHtml()+`<div class="filters">${chip('preparer','🧮 Préparer')}${chip('valider','✅ À valider',aval.length+renv.length)}${chip('passer','📤 À passer dans Image',apasser.length)}${chip('articles','📋 Articles & minimums')}</div>`;
-  if(RAV.vue!=='valider'&&RAV.vue!=='passer'&&!RAV.exp&&!RAV.expP&&!RAV.ficP&&RAV.fic&&RAV.fic.length&&!RAV.expErr)setTimeout(()=>raOuvrirExport(RAV.fic[0].path,RAV.fic[0].nom,RAV.fic[0].date),0);
+  if(RAV.vue!=='valider'&&!RAV.exp&&!RAV.expP&&!RAV.ficP&&RAV.fic&&RAV.fic.length&&!RAV.expErr)setTimeout(()=>raOuvrirExport(RAV.fic[0].path,RAV.fic[0].nom,RAV.fic[0].date),0);
   if(RAV.vue==='valider')h+=raVueValider(aval,renv);
   else if(RAV.vue==='passer')h+=raVuePasser(apasser);
   else if(RAV.vue==='articles')h+=raBarreExport()+(RAV.exp?raVueArticles():'');
@@ -6928,15 +6931,18 @@ function raGroupes(rows){
 function raVuePreparer(){
   const rows=raLignes(),G=raGroupes(rows);
   const tot=G.reduce((s,g)=>({acmd:s.acmd+g.acmd,val:s.val+g.val,rupt:s.rupt+g.rupt,smini:s.smini+g.smini,du:s.du+(g.du&&g.acmd>0?1:0)}),{acmd:0,val:0,rupt:0,smini:0,du:0});
-  const kpi=(l,v,s,c,tip)=>`<div class="kpi" style="--c:${c}" data-tip="${esc(tip)}"><div class="lab">${l}</div><div class="val" style="font-size:22px">${v}</div><div class="hint">${s}</div></div>`;
+  const kpi=(k,l,v,s,c,tip)=>`<div class="kpi ra-kpi ${RAV.kpi===k?'on':''}" data-rakpi="${k}" style="--c:${c}" data-tip="${esc(tip+' — clique pour '+(RAV.kpi===k?'fermer la liste':'voir le détail'))}"><div class="lab">${l}</div><div class="val" style="font-size:22px">${v}</div><div class="hint">${s}</div></div>`;
   const ed=raPeutPreparer();
-  let h=`<div class="kpis">${kpi('À commander',fmtN(tot.acmd,0)+' lignes',raEur(tot.val)+' estimés','#1565c0','Quantités proposées (ou ajustées) × PU achat de l’export')}${kpi('Ruptures',fmtN(tot.rupt,0),'disponible ≤ 0','#c62828','Articles suivis dont stock + en commande − réservé ≤ 0')}${kpi('Sous le mini',fmtN(tot.smini,0),'disponible < stock mini','#e65100','Articles suivis sous leur stock minimum')}${kpi('Fournisseurs à revoir',fmtN(tot.du,0),'cycle échu et articles à commander','#5b5bd6','Dernière réappro + intervalle de commande dépassé (ou jamais faite)')}</div>
+  let h=`<div class="kpis">${kpi('acmd','À commander',fmtN(tot.acmd,0)+' lignes',raEur(tot.val)+' estimés','#1565c0','Quantités proposées (ou ajustées) × PU achat de l’export')}${kpi('rupture','Ruptures',fmtN(tot.rupt,0),'disponible ≤ 0','#c62828','Articles suivis dont stock + en commande − réservé ≤ 0')}${kpi('sousmini','Sous le mini',fmtN(tot.smini,0),'disponible < stock mini','#e65100','Articles suivis sous leur stock minimum')}${kpi('du','Fournisseurs à revoir',fmtN(tot.du,0),'cycle échu et articles à commander','#5b5bd6','Dernière réappro + intervalle de commande dépassé (ou jamais faite)')}</div>
   <div class="ra-tools"><input class="search" id="raQ" placeholder="🔍 réf., désignation, réf. fournisseur…" value="${esc(RAV.q)}" style="width:260px">
     <span class="muted">Type :</span>${['',...RA_TYPES].map(t=>`<button class="chip ${RAV.type===t?'on':''}" data-ratype="${t}">${t||'Tous'}</button>`).join('')}
     <span style="flex:1"></span>${ed?`<button class="btn sm" id="raSelDus" title="Coche les fournisseurs dont le cycle est échu et qui ont des articles à commander">☑ Fournisseurs à revoir</button><button class="btn sm" id="raSelTous" title="Coche tous les fournisseurs qui ont au moins un article à commander">☑ Tous</button><button class="btn sm ghost" id="raSelAucun">☐ Aucun</button>`:''}</div>`;
   if(!G.length)return h+`<div class="card"><div class="card-b muted">Aucun article suivi${RAV.q||RAV.type?' pour ce filtre':''}.</div></div>`;
+  h+=raListeKpi(G,ed);
+  const GV=RAV.kpi==='du'?G.filter(g=>g.du&&g.acmd>0):G;
+  if(RAV.kpi==='du')h+=`<div class="ra-kbar"><b>Fournisseurs à revoir</b> : cycle échu (ou jamais revu) et au moins un article à commander — ${GV.length} fournisseur${GV.length>1?'s':''}<span style="flex:1"></span><button class="btn sm ghost" data-rakpi="du">✕ Tous les fournisseurs</button></div>`;
   h+=`<div class="card"><div class="ra-scroll"><table class="ra-t ra-frs"><thead><tr>${ed?'<th style="width:30px"></th>':''}<th>Fournisseur</th><th>Achat</th><th class="r" data-tip="Délai d’approvisionnement + intervalle entre deux commandes (jours)">Délai + cycle</th><th>Dernière réappro</th><th>Prochaine</th><th class="r">Suivis</th><th class="r">À commander</th><th class="r">Valeur</th><th class="r">Ruptures</th><th></th></tr></thead><tbody>
-  ${G.map(g=>{const o=RAV.ouv===g.code;const L=raDelai(g.f,g.typ),R=raFreq(g.f,g.typ);
+  ${GV.map(g=>{const o=RAV.ouv===g.code;const L=raDelai(g.f,g.typ),R=raFreq(g.f,g.typ);
     return `<tr class="ra-fr ${o?'on':''}" data-raouv="${esc(g.code)}">${ed?`<td><input type="checkbox" data-rasel="${esc(g.code)}" ${RAV.sel.has(g.code)?'checked':''} ${g.revue?'disabled title="Revue déjà en cours chez Fabrice"':''}></td>`:''}
       <td><b>${esc(raFrsNom(g.f,g.code))}</b> <span class="muted mono">${esc(g.code)}</span>${g.f?'':' <span class="ra-e" style="color:#b45309;background:#fff7ed" data-tip="Code absent de la liste Fournisseurs (colonne Code_Image) : délais par défaut.">fiche ?</span>'}${g.revue?' <span class="ra-e" style="color:#5b5bd6;background:#eeeefc">revue en cours</span>':''}</td>
       <td>${esc(g.typ)}</td><td class="r">${L} + ${R} j</td><td>${g.der?fmtD(g.der):'<span class="muted">jamais</span>'}</td>
@@ -6947,6 +6953,17 @@ function raVuePreparer(){
   </tbody></table></div></div>`;
   if(ed)h+=raPiedPreparer(rows);
   return h;
+}
+// Liste transversale (tous fournisseurs) ouverte en cliquant sur un indicateur
+const RA_KPI={acmd:['À commander',r=>raQte(r)>0],rupture:['Ruptures',r=>r.suivi&&r.etat==='rupture'],sousmini:['Sous le mini',r=>r.suivi&&r.etat==='sousmini']};
+function raListeKpi(G,ed){
+  const K=RA_KPI[RAV.kpi];if(!K)return '';
+  const R=G.flatMap(g=>g.R).filter(K[1]).sort((a,b)=>String(a.frsCode).localeCompare(String(b.frsCode))||a.a.code.localeCompare(b.a.code));
+  const frs=[...new Set(R.map(r=>r.frsCode))],nonCoches=frs.filter(c=>!RAV.sel.has(c)&&!raEnRevue(raFrsDe(c)));
+  const v=R.reduce((s,r)=>s+raQte(r)*r.a.pu,0);
+  return `<div class="card ra-kcard"><div class="ra-kbar"><b>${K[0]}</b> · ${R.length} article${R.length>1?'s':''} chez ${frs.length} fournisseur${frs.length>1?'s':''}${v?' · '+raEur(v):''}
+    <span style="flex:1"></span>${ed&&nonCoches.length?`<button class="btn sm" data-rakpisel="${esc(frs.join(','))}" title="Seuls les fournisseurs cochés partent chez Fabrice">☑ Cocher ces ${frs.length} fournisseurs</button>`:''}<button class="btn sm ghost" data-rakpi="${RAV.kpi}">✕ Fermer</button></div>
+    ${R.length?`<div class="ra-scroll"><table class="ra-t">${raEnteteArt(ed,'prep')}<tbody>${R.slice(0,400).map(r=>raLigneArt(r,ed,'prep')).join('')}</tbody></table></div>${R.length>400?`<div class="muted" style="padding:6px 10px">… ${R.length-400} autres : affine avec la recherche.</div>`:''}`:'<div class="muted" style="padding:10px">Aucun article.</div>'}</div>`;
 }
 function raDetailFrs(g){
   const ed=raPeutPreparer();
@@ -7219,22 +7236,74 @@ function raGroupesPasser(d){
 function raVuePasser(D){
   if(!D.length)return `<div class="card"><div class="card-b muted">Aucune commande de réapprovisionnement validée en attente de saisie dans Image.</div></div>`;
   const ed=raPeutPreparer();
-  return `<div class="muted" style="margin:0 0 10px;font-size:12.5px">Saisis chaque commande dans Image (liste imprimée ou fichier Excel), puis range le PDF du BC dans « Dossier partage › Bon de commande » : le portail relie automatiquement les lignes au BC. Le format du fichier d’import Image est provisoire tant que Stratégie ne l’a pas confirmé.</div>`+
-  D.map(d=>{const G=raGroupesPasser(d);
+  const dl=ed&&RAV.exp?`<datalist id="dlRaArtP">${RAV.exp.arts.filter(a=>!a.pseudo).map(a=>`<option value="${esc(a.code)}">${esc(a.lib)}</option>`).join('')}</datalist>`:'';
+  return dl+`<div class="muted" style="margin:0 0 10px;font-size:12.5px">Saisis chaque commande dans Image (liste imprimée ou fichier Excel), puis range le PDF du BC dans « Dossier partage › Bon de commande » : le portail relie automatiquement les lignes au BC. Avant la saisie, tu peux ajuster une quantité (colisage, minimum de commande…) : l’ajustement est noté sur la demande, Fabrice le voit. Le format du fichier d’import Image est provisoire tant que Stratégie ne l’a pas confirmé.</div>`+
+  D.map(d=>{const G=raGroupesPasser(d);const nAdj=raNbAjust(d);
+    const hist=String(d.Commentaire||'').split('\n').filter(x=>/^\[Ajustement/.test(x));
     return `<div class="card"><div class="card-b"><div class="ra-rh"><div><h3 style="margin:0">📤 ${esc(d.Title)} ${raEstTest(d)?'<span class="ra-e" style="color:#b45309;background:#fff7ed">TEST</span> ':''}<span class="st ${daEtat(d).cls}">${esc(daEtat(d).lbl)}</span></h3>
-      <div class="muted" style="font-size:12.5px">Validée par <b>${esc(d.Valide_Par||'?')}</b> le ${fmtD(dk(d,'Date_Validation'))} · ${esc(d.Transport||'')} · ${G.length} fournisseur${G.length>1?'s':''}</div></div>
+      <div class="muted" style="font-size:12.5px">Validée par <b>${esc(d.Valide_Par||'?')}</b> le ${fmtD(dk(d,'Date_Validation'))} · ${esc(d.Transport||'')} · ${G.length} fournisseur${G.length>1?'s':''}</div>
+      ${hist.map(x=>`<div class="pay-com">✏️ ${esc(x)}</div>`).join('')}</div>
       <div style="display:flex;gap:6px">${raEstTest(d)&&peutImporter()?`<button class="btn sm ghost" style="color:#b91c1c" data-rasuptest="${d.ID}">🗑 Supprimer ce test</button>`:''}<button class="btn sm" data-raimp="${d.ID}">🖨 Imprimer</button>${ed?`<button class="btn sm" data-raxlsall="${d.ID}">⬇ Excel (tous)</button>`:''}</div></div>
       ${G.map(g=>{const k=d.ID+'|'+g.k;const split=RAV.split.has(k);const fait=g.L.filter(l=>l.N_Commande).length;const bcs=[...new Set(g.L.map(l=>l.N_Commande).filter(Boolean))];
         const tr=RAV.transit.has(k)?RAV.transit.get(k):((g.f&&g.f.Code_Transitaire)||'');
         const types=[...new Set(g.L.map(l=>raTypeArticle(l.Title,l.Designation)))];
+        const ajouts=(RAV.adjAdd.get(d.ID)||[]).map((x,i)=>({...x,i})).filter(x=>String(x.gk)===String(g.k));
         return `<div class="ra-gh" style="display:flex;gap:10px;align-items:center;flex-wrap:wrap"><b>${esc(g.nom)}</b> ${g.f&&g.f.Code_Image?`<span class="mono muted">${esc(g.f.Code_Image)}</span>`:''} · ${esc(raTypeAchat(g.f,null))} · ${g.L.length} ligne${g.L.length>1?'s':''}
           ${fait===g.L.length?`<span class="st st-ok">BC ${esc(bcs.join(', '))}</span>`:fait?`<span class="st st-valid">${fait}/${g.L.length} sur BC ${esc(bcs.join(', '))}</span>`:'<span class="st st-transit">à saisir dans Image</span>'}
           <span style="flex:1"></span>${ed?`<label class="muted" style="font-size:12px">Transitaire <input class="ra-in sm" data-ratransit="${esc(k)}" value="${esc(tr)}" placeholder="T130" style="width:70px"></label>
           ${types.length>1?`<label class="muted" style="font-size:12px" title="Un BC pour les tubes, un BC pour le reste"><input type="checkbox" data-rasplit="${esc(k)}" ${split?'checked':''}> séparer par type</label>`:''}
           ${split?types.map(t=>`<button class="btn sm" data-raxls="${esc(k)}" data-ratyp="${esc(t)}">⬇ ${esc(t)}</button>`).join(''):`<button class="btn sm" data-raxls="${esc(k)}">⬇ Excel</button>`}`:''}</div>
-          <table class="ra-t"><thead><tr><th>Réf.</th><th>Désignation</th><th>Type</th><th class="r">Qté</th><th>Client</th><th>BC Image</th></tr></thead><tbody>
-          ${g.L.map(l=>`<tr><td class="mono"><b>${esc(l.Title)}</b></td><td>${esc(daDes(l))}${l.Fournisseur_Initial?` <span class="ra-sub">(au lieu de ${esc(l.Fournisseur_Initial)})</span>`:''}</td><td>${esc(raTypeArticle(l.Title,l.Designation))}</td><td class="r"><b>${raN0(+l.Quantite)}</b></td><td>${esc(l.Client&&l.Client!=='Stock'?l.Client:'')}</td><td>${l.N_Commande?`<span class="st st-ok">${esc(l.N_Commande)}</span>`:'—'}</td></tr>`).join('')}</tbody></table>`;}).join('')}
+          <table class="ra-t"><thead><tr><th>Réf.</th><th>Désignation</th><th>Type</th><th class="r" data-tip="Colisage d’achat : celui d’Image, ou celui mémorisé dans le portail">Colis</th><th class="r">Qté</th><th>Client</th><th>BC Image</th></tr></thead><tbody>
+          ${g.L.map(l=>raLignePasser(d,l,ed)).join('')}
+          ${ajouts.map(x=>{const a=raArtExport(x.code);return `<tr class="ra-q"><td class="mono"><b>${esc(x.code)}</b> <span class="ra-e" style="color:#1565c0;background:#e8f2fd">ajout</span></td><td>${esc(a?a.lib:'')}</td><td>${esc(raTypeArticle(x.code,a?a.lib:''))}</td><td class="r">${raN0(raColis(x.code))}</td><td class="r"><b>${raN0(raNum(x.q))}</b></td><td></td><td><button class="ra-x" data-raaddx="${d.ID}|${x.i}" title="Retirer cet ajout">✕</button></td></tr>`;}).join('')}
+          ${ed&&fait<g.L.length?`<tr class="ra-addrow"><td colspan="7"><span class="ra-sub">＋ Ajouter chez ${esc(g.nom)} :</span> <input class="ra-in mono" data-raaddcode list="dlRaArtP" placeholder="réf." style="width:110px;text-align:left"> <input class="ra-in sm" data-raaddq placeholder="qté" inputmode="decimal"> <button class="btn sm" data-raadd="${d.ID}" data-ragk="${esc(g.k)}">Ajouter</button></td></tr>`:''}
+          </tbody></table>`;}).join('')}
+      ${ed&&nAdj?`<div class="ra-pied"><span><b>${nAdj}</b> ajustement${nAdj>1?'s':''} non enregistré${nAdj>1?'s':''}</span><span style="flex:1"></span><button class="btn ghost" data-raadjannul="${d.ID}">Annuler</button><button class="btn primary" data-raadjsave="${d.ID}">💾 Enregistrer les ajustements</button></div>`:''}
     </div></div>`;}).join('');
+}
+// ── Ajustements de Patricia après validation (colisage, minimum de commande, disponibilité…) ──
+function raArtExport(code){
+  if(!RAV.exp)return null;if(!RAV.expIdx||RAV.expIdx.p!==RAV.exp.path){RAV.expIdx={p:RAV.exp.path,m:new Map(RAV.exp.arts.map(a=>[a.code.toUpperCase(),a]))};}
+  return RAV.expIdx.m.get(String(code).toUpperCase())||null;
+}
+// Colisage : saisi (en attente) > mémorisé dans le portail (Articles_Reappro.Colisage) > « Colisage achat » d'Image > 1
+function raColis(code){
+  const k=String(code).toUpperCase();if(RAV.colEd.has(k)&&raNum(RAV.colEd.get(k))>0)return raNum(RAV.colEd.get(k));
+  const ar=RAV.artIdx.get(k);if(ar&&+ar.Colisage>0)return +ar.Colisage;const a=raArtExport(code);return a?(a.colImage||a.col||1):1;
+}
+function raNbAjust(d){const L=daLignes(d.ID);return L.filter(l=>RAV.adj.has(l.ID)&&RAV.adj.get(l.ID)!==+l.Quantite).length+(RAV.adjAdd.get(d.ID)||[]).length+[...RAV.colEd.keys()].filter(k=>L.some(l=>String(l.Title).toUpperCase()===k)).length;}
+function raLignePasser(d,l,ed){
+  const lock=!!l.N_Commande,v=+l.Quantite||0,q=RAV.adj.has(l.ID)?RAV.adj.get(l.ID):v,col=raColis(l.Title),k=String(l.Title).toUpperCase();
+  const ar=RAV.artIdx.get(k),a=raArtExport(l.Title);
+  const colIn=ed&&!lock?`<input class="ra-in sm" data-racolis="${esc(l.Title)}" value="${esc(RAV.colEd.has(k)?RAV.colEd.get(k):(ar&&+ar.Colisage>0?ar.Colisage:''))}" placeholder="${raN0(a?(a.colImage||a.col):1)}" title="Colisage d’achat (mémorisé pour les prochains calculs)">`:raN0(col);
+  const hors=col>1&&q>0&&Math.abs(q/col-Math.round(q/col))>1e-9;
+  const qIn=ed&&!lock?`<div class="ra-qw"><input class="ra-in ${q!==v?'mod':''}" data-rapqa="${l.ID}" inputmode="decimal" value="${q||''}" placeholder="0">${hors?`<button class="ra-x re" data-raarr="${l.ID}" tabindex="-1" title="Arrondir au colis supérieur : ${raN0(Math.ceil(q/col)*col)}">⤒</button>`:''}<button class="ra-x" data-razqa="${l.ID}" tabindex="-1" title="Ne pas commander">✕</button></div>${q!==v?`<div class="ra-sub">validé : ${raN0(v)}</div>`:''}${hors?'<div class="ra-sub" style="color:#b45309">pas un multiple du colis</div>':''}`:`<b>${raN0(v)}</b>`;
+  return `<tr class="${q!==v?'ra-q':''}"><td class="mono"><b>${esc(l.Title)}</b></td><td>${esc(daDes(l))}${l.Fournisseur_Initial?` <span class="ra-sub">(au lieu de ${esc(l.Fournisseur_Initial)})</span>`:''}</td><td>${esc(raTypeArticle(l.Title,l.Designation))}</td><td class="r">${colIn}</td><td class="r">${qIn}</td><td>${esc(l.Client&&l.Client!=='Stock'?l.Client:'')}</td><td>${l.N_Commande?`<span class="st st-ok">${esc(l.N_Commande)}</span>`:'—'}</td></tr>`;
+}
+async function raAjusterEnregistrer(did){
+  const d=(DATA.da||[]).find(x=>x.ID===did);if(!d)return;
+  const L=daLignes(did),chg=L.filter(l=>!l.N_Commande&&RAV.adj.has(l.ID)&&RAV.adj.get(l.ID)!==+l.Quantite),add=(RAV.adjAdd.get(did)||[]).filter(x=>raNum(x.q)>0);
+  const cols=[...RAV.colEd.entries()].filter(([k])=>L.some(l=>String(l.Title).toUpperCase()===k)||add.some(x=>x.code.toUpperCase()===k));
+  if(!chg.length&&!add.length&&!cols.length){toast('Rien à enregistrer','wa');return;}
+  const det=[...chg.map(l=>`${l.Title} : ${raN0(+l.Quantite)} → ${raN0(RAV.adj.get(l.ID))}`),...add.map(x=>`+ ${x.code} × ${raN0(raNum(x.q))}`)];
+  const motifs=['Colisage','Minimum de commande fournisseur','Disponibilité fournisseur','Autre'];
+  if(!await showConfirm('Enregistrer les ajustements',`<div style="font-size:13px">${det.length?det.map(x=>esc(x)).join('<br>'):'<span class="muted">Colisages seulement</span>'}${cols.length?`<div class="muted" style="margin-top:6px">Colisage mémorisé : ${cols.map(([k,v])=>esc(k+' = '+v)).join(', ')}</div>`:''}</div>
+    ${det.length?`<div style="margin-top:10px;display:grid;grid-template-columns:auto 1fr;gap:6px 10px;align-items:center"><label>Motif</label><select id="raAdjM">${motifs.map(m=>`<option>${m}</option>`).join('')}</select><label>Précision</label><input id="raAdjT" placeholder="facultatif"></div><div class="muted" style="font-size:12px;margin-top:6px">L’ajustement est noté sur la demande (visible par Fabrice). Pas de nouvelle validation.</div>`:''}`,'💾 Enregistrer'))return;
+  const motif=(($('raAdjM')||{}).value||'Colisage'),txt=String(($('raAdjT')||{}).value||'').trim(),u=raUser();
+  busyOn('Enregistrement des ajustements…');
+  try{
+    for(const l of chg){const q=RAV.adj.get(l.ID);if(q>0){await spPatch('Lignes_Demande_Achat',l.ID,{Quantite:q},l);l.Quantite=q;}else await spDelete('Lignes_Demande_Achat',l.ID,l);}
+    const hasCli=L.some(l=>l.Client&&l.Client!=='Stock');
+    for(const x of add){const a=raArtExport(x.code);const g=raGroupesPasser(d).find(z=>String(z.k)===String(x.gk))||{};
+      const b=sansVide({Title:_trunc(x.code.toUpperCase()),ID_Demande:did,Designation:_trunc(a?a.lib:''),Quantite:raNum(x.q),ID_Fournisseur:g.f?g.f.ID:null,Fournisseur:g.f?g.f.Title:(g.nom||null),Client:hasCli?'Stock':null});
+      b.Qte_Proposee=0;await spPostSilencieux('Lignes_Demande_Achat',b);}
+    for(const [k,v] of cols){const n=raNum(v);await raArtMaj(k,{Colisage:n>0?n:null});}
+    if(det.length){const rest=daLignes(did).filter(l=>!chg.some(c=>c.ID===l.ID&&!(RAV.adj.get(l.ID)>0))).length+add.length;
+      const ligne=`[Ajustement ${u.split(' ')[0]||'Patricia'} ${fmtD(todayKey())}] ${motif}${txt?' — '+txt:''} : ${det.join(' ; ')}`;
+      await spPatch('Demandes_Achat',did,{Commentaire:ligne+(d.Commentaire?'\n'+d.Commentaire:''),...(rest?{}:{Statut:'Annulée'})},d);}
+    chg.forEach(l=>RAV.adj.delete(l.ID));RAV.adjAdd.delete(did);cols.forEach(([k])=>RAV.colEd.delete(k));
+    busyOff();await reloadAll();renderReappro();toast('✓ Ajustements enregistrés','ok');
+  }catch(e){busyOff();toast('🔴 '+e.message,'ko');await reloadAll();}
 }
 // Fichier provisoire pour « Import cmde/excel » (format à confirmer par Stratégie) : une ligne par article
 function raLignesXls(d,g,typ){
@@ -7250,6 +7319,7 @@ function raFeuille(rows){
 const raNomFichier=s=>String(s).replace(/[\\\/:*?"<>|]+/g,'-').replace(/\s+/g,' ').trim();
 async function raExcel(did,k,typ){
   const d=(DATA.da||[]).find(x=>x.ID===did);if(!d)return;
+  if(raNbAjust(d)){toast('Enregistre d’abord tes ajustements (ou annule-les) : le fichier reprend les quantités enregistrées.','wa');return;}
   try{await loadScript(XLSX_CDN);}catch(e){toast('🔴 '+e.message,'ko');return;}
   const wb=XLSX.utils.book_new();let nom;
   if(k){const g=raGroupesPasser(d).find(x=>d.ID+'|'+x.k===k);if(!g)return;const rows=raLignesXls(d,g,typ);
@@ -7261,6 +7331,7 @@ async function raExcel(did,k,typ){
 }
 function raImprimer(did){
   const d=(DATA.da||[]).find(x=>x.ID===did);if(!d)return;
+  if(raNbAjust(d)&&d.Statut==='Validée'){toast('Enregistre d’abord tes ajustements (ou annule-les).','wa');return;}
   const w=window.open('','_blank');if(!w){toast('🔴 Fenêtre bloquée : autorise les fenêtres pour ce site','ko');return;}
   const G=raGroupesPasser(d);
   const body=G.map(g=>`<h2>${esc(g.nom)} ${g.f&&g.f.Code_Image?'<span class="m">'+esc(g.f.Code_Image)+'</span>':''} <span class="m">· ${esc(raTypeAchat(g.f,null))}${g.f&&g.f.Code_Transitaire?' · transitaire '+esc(g.f.Code_Transitaire):''}</span></h2>
@@ -7291,12 +7362,12 @@ function raVueArticles(){
       <label class="muted" style="font-size:12px"><input type="checkbox" id="raEntete" ${RAV.artEntete?'checked':''}> ligne d’en-tête</label>
       <button class="btn sm primary" id="raImpMini" title="Gestion des stocks › Intégrations Excel › « Articles 2 colonnes » (après « Déblocage fichier intégration »)">⬇ Fichier Image « Articles 2 colonnes » (${imp.length})</button></div>`;
   const nEd=RAV.artEd.size;
-  h+=`<div class="card"><div class="ra-scroll"><table class="ra-t"><thead><tr><th>Réf.</th><th>Désignation</th><th>Fournisseur habituel</th><th>Type</th><th class="r">Vtes/mois</th><th class="r" data-tip="Qte seuil actuelle dans Image">Seuil Image</th><th class="r">Proposé</th><th class="r">Validé</th><th class="r" data-tip="Ne plus proposer à la commande">Exclu</th><th>État</th></tr></thead><tbody>
+  h+=`<div class="card"><div class="ra-scroll"><table class="ra-t"><thead><tr><th>Réf.</th><th>Désignation</th><th>Fournisseur habituel</th><th>Type</th><th class="r">Vtes/mois</th><th class="r" data-tip="Colisage d’achat : vide = celui d’Image (grisé)">Colis</th><th class="r" data-tip="Qte seuil actuelle dans Image">Seuil Image</th><th class="r">Proposé</th><th class="r">Validé</th><th class="r" data-tip="Ne plus proposer à la commande">Exclu</th><th>État</th></tr></thead><tbody>
   ${R.slice(0,RAV.artLim).map(r=>{const k=r.a.code.toUpperCase();const e=RAV.artEd.get(k)||{};const fd=e.frs!=null?e.frs:((r.ar&&r.ar.Fournisseur_Defaut)||'');const ty=e.type!=null?e.type:((r.ar&&r.ar.Type_Commande)||'');const ex=e.exclu!=null?e.exclu:(r.ar&&r.ar.Exclu==='Oui');
     return `<tr data-raart="${esc(r.a.code)}" class="${RAV.artEd.has(k)?'ra-q':''}"><td class="mono"><b>${esc(r.a.code)}</b></td><td data-tip="${esc(raTipVentes(r))}">${esc(r.a.lib)}</td>
       <td>${ed?`<input class="ra-in sm mono" data-raartfrs value="${esc(fd)}" placeholder="${esc(r.a.frs)}" title="Code Image du fournisseur habituel (vide = celui d’Image)" style="width:70px">`:esc(fd||r.a.frs)} <span class="muted" style="font-size:11.5px">${esc(raFrsNom(r.f,r.frsCode))}</span></td>
       <td>${ed?`<select class="ra-in sm" data-raarttype><option value="">${esc(raTypeAuto(r.a.lib))} (auto)</option>${RA_TYPES.map(t=>`<option ${ty===t?'selected':''}>${t}</option>`).join('')}</select>`:esc(r.type)}</td>
-      <td class="r">${raN0(r.moyMois)}</td><td class="r">${raN0(r.a.seuil)}</td><td class="r">${raN0(r.miniProp)}</td>
+      <td class="r">${raN0(r.moyMois)}</td><td class="r">${ed?`<input class="ra-in sm" data-raartcol inputmode="decimal" value="${esc(e.col!=null?e.col:(r.ar&&+r.ar.Colisage>0?r.ar.Colisage:''))}" placeholder="${raN0(r.a.colImage||1)}">`:raN0(r.a.col)}</td><td class="r">${raN0(r.a.seuil)}</td><td class="r">${raN0(r.miniProp)}</td>
       <td class="r">${ed?`<input class="ra-in sm" data-raartmini inputmode="decimal" value="${esc(e.mini!=null?e.mini:(r.miniValide?r.mini:''))}" placeholder="${raN0(r.miniProp)}">`:(r.miniValide?raN0(r.mini):'—')}</td>
       <td class="r">${ed?`<input type="checkbox" data-raartex ${ex?'checked':''}>`:(ex?'Oui':'')}</td><td>${raEtatBadge(r.etat)}</td></tr>`;}).join('')}
   </tbody></table></div>${R.length>RAV.artLim?`<div class="card-b"><button class="btn sm" id="raArtPlus">Afficher plus (${R.length-RAV.artLim} restants)</button></div>`:''}</div>`;
@@ -7320,6 +7391,7 @@ async function raArtEnregistrer(){
       if(e.type!==undefined)b.Type_Commande=e.type||null;
       if(e.frs!==undefined){const c=String(e.frs||'').trim().toUpperCase();if(c&&!raFrsDe(c))toast(`⚠️ ${k} : code fournisseur ${c} absent de la liste Fournisseurs`,'wa');b.Fournisseur_Defaut=c||null;}
       if(e.exclu!==undefined)b.Exclu=e.exclu?'Oui':'Non';
+      if(e.col!==undefined){const n=raNum(e.col);b.Colisage=n>0?n:null;}
       await raArtMaj(k,b);RAV.artEd.delete(k);
     }
     toast(`✓ ${n} article${n>1?'s':''} enregistré${n>1?'s':''}`,'ok');
@@ -7401,6 +7473,16 @@ document.addEventListener('click',e=>{
     S.save();renderReappro();
     if(b.dataset.rapadd!==undefined){const attr=tr.dataset.rakey!==undefined?'rakey':'ragrp',k=tr.dataset[attr];const L=[...document.querySelectorAll('#raBox tr.ra-part[data-'+attr+']')].filter(x=>x.dataset[attr]===k);const i=L.length&&L[L.length-1].querySelector('[data-rapcli]');if(i)i.focus();}
     return;}
+  if((b=c('[data-rakpi]'))){const k=b.dataset.rakpi;RAV.kpi=RAV.kpi===k?null:k;renderReappro();return;}
+  if((b=c('[data-rakpisel]'))){b.dataset.rakpisel.split(',').filter(Boolean).forEach(c=>{if(!raEnRevue(raFrsDe(c)))RAV.sel.add(c);});renderReappro();return;}
+  if((b=c('[data-razqa],[data-raarr]'))){const id=+(b.dataset.razqa||b.dataset.raarr);const l=(DATA.lda||[]).find(x=>x.ID===id);if(!l)return;
+    if(b.dataset.razqa!==undefined)RAV.adj.set(id,0);else{const q=RAV.adj.has(id)?RAV.adj.get(id):+l.Quantite||0,col=raColis(l.Title);RAV.adj.set(id,Math.ceil(q/col-1e-9)*col);}renderReappro();return;}
+  if((b=c('[data-raadd]'))){const tr=b.closest('tr');const code=String((tr.querySelector('[data-raaddcode]')||{}).value||'').trim().toUpperCase(),q=String((tr.querySelector('[data-raaddq]')||{}).value||'').trim();
+    if(!code||!(raNum(q)>0)){toast('Réf. et quantité','wa');return;}if(RAV.exp&&!raArtExport(code)){toast(`Réf. ${code} absente de l’export : vérifie le code`,'wa');return;}
+    const did=+b.dataset.raadd;const A=RAV.adjAdd.get(did)||[];A.push({code,q,gk:b.dataset.ragk});RAV.adjAdd.set(did,A);renderReappro();return;}
+  if((b=c('[data-raaddx]'))){const [did,i]=b.dataset.raaddx.split('|').map(Number);const A=RAV.adjAdd.get(did)||[];A.splice(i,1);RAV.adjAdd.set(did,A);renderReappro();return;}
+  if((b=c('[data-raadjannul]'))){const did=+b.dataset.raadjannul;daLignes(did).forEach(l=>{RAV.adj.delete(l.ID);RAV.colEd.delete(String(l.Title).toUpperCase());});RAV.adjAdd.delete(did);renderReappro();return;}
+  if((b=c('[data-raadjsave]'))){raAjusterEnregistrer(+b.dataset.raadjsave);return;}
   if(c('input,select,textarea,label'))return;
   if((b=c('[data-raouv]'))){const k=b.dataset.raouv;RAV.ouv=RAV.ouv===k?null:k;renderReappro();return;}
   if((b=c('#raEnvoyer'))){raEnvoyer();return;}
@@ -7432,6 +7514,8 @@ document.addEventListener('change',e=>{
   if(t.id==='raFic'){const f=(RAV.fic||[]).find(x=>x.path===t.value);if(f){RAV.prep.clear();raOuvrirExport(f.path,f.nom,f.date);}return;}
   if(t.dataset.rasel!==undefined){t.checked?RAV.sel.add(t.dataset.rasel):RAV.sel.delete(t.dataset.rasel);raMajPied();return;}
   if(t.id==='raArtFrs'){RAV.artFrs=t.value;RAV.artLim=300;renderReappro();return;}
+  if(t.dataset.rapqa!==undefined){const id=+t.dataset.rapqa;const v=t.value.trim();const n=v===''?0:parseNum(v);RAV.adj.set(id,n>0?n:0);renderReappro();return;}
+  if(t.dataset.racolis!==undefined){const k=t.dataset.racolis.toUpperCase();if(t.value.trim()==='')RAV.colEd.delete(k);else RAV.colEd.set(k,t.value.trim());renderReappro();return;}
   if(t.id==='raTest'){RAV.test=t.checked;raMajPied();return;}
   if(t.id==='raNonVal'){RAV.artNonVal=t.checked;renderReappro();return;}
   if(t.id==='raEntete'){RAV.artEntete=t.checked;return;}
@@ -7440,7 +7524,7 @@ document.addEventListener('change',e=>{
   if(t.dataset.ramini!==undefined){const k=t.dataset.ramini.toUpperCase();if(t.value.trim()==='')RAV.miniEd.delete(k);else RAV.miniEd.set(k,t.value.trim());return;}
   const aj=t.closest('[data-raaj]');if(aj){const x=RAV.ajouts[+aj.dataset.raaj];if(!x)return;if(t.dataset.raajq!==undefined)x.q=t.value;if(t.dataset.raajf!==undefined)x.frs=t.value;if(t.dataset.raajc!==undefined)x.cli=t.value;return;}
   const art=t.closest('[data-raart]');if(art){const k=art.dataset.raart.toUpperCase();const e0=RAV.artEd.get(k)||{};
-    if(t.dataset.raartmini!==undefined)e0.mini=t.value.trim();if(t.dataset.raarttype!==undefined)e0.type=t.value;if(t.dataset.raartfrs!==undefined)e0.frs=t.value.trim();if(t.dataset.raartex!==undefined)e0.exclu=t.checked;
+    if(t.dataset.raartmini!==undefined)e0.mini=t.value.trim();if(t.dataset.raarttype!==undefined)e0.type=t.value;if(t.dataset.raartfrs!==undefined)e0.frs=t.value.trim();if(t.dataset.raartex!==undefined)e0.exclu=t.checked;if(t.dataset.raartcol!==undefined)e0.col=t.value.trim();
     RAV.artEd.set(k,e0);art.classList.add('ra-q');const sv=$('raArtSave');if(sv){sv.disabled=false;}const p=document.querySelector('#raBox .ra-pied span');if(p)p.innerHTML=`<b>${RAV.artEd.size}</b> article${RAV.artEd.size>1?'s':''} modifié${RAV.artEd.size>1?'s':''}`;return;}
   const tr=t.closest('tr[data-rakey],tr[data-ragrp]');if(!tr)return;
   const S=raSt(tr);const st=S.st;
