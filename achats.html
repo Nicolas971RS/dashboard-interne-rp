@@ -636,6 +636,7 @@ input.sv-in.mod{border-color:#16a34a;background:#f0fdf4}
 .ra-in.frs,.ra-in.cli{width:150px;text-align:left;font-family:var(--font-body)}
 .ra-in.sm{width:64px}.ra-in.mod{border-color:#f59e0b;background:#fffbeb}select.ra-in{width:auto;text-align:left;font-family:var(--font-body)}
 .ra-ok{color:#2e7d32;font-weight:700}
+.ra-t tr.ra-oubli td{background:#fff1f2}.ra-t tr.ra-oubli td:first-child{box-shadow:inset 4px 0 #dc2626}
 .ra-kpi{cursor:pointer;transition:box-shadow .15s,transform .15s}.ra-kpi:hover{box-shadow:0 4px 14px rgba(15,23,42,.12);transform:translateY(-1px)}.ra-kpi.on{outline:2px solid var(--c);outline-offset:-2px;background:#f8fbff}
 .ra-kbar{display:flex;gap:10px;align-items:center;flex-wrap:wrap;padding:8px 12px;background:#eef2ff;border-radius:8px;margin-bottom:8px;font-size:13px}.ra-kcard .ra-kbar{border-radius:10px 10px 0 0;margin:0}
 .ra-qw{display:inline-flex;align-items:center;gap:4px}.ra-x{width:24px;height:24px;border:1px solid #fecaca;background:#fff;color:#b91c1c;border-radius:6px;cursor:pointer;font-size:12px;line-height:1;padding:0}.ra-x:hover{background:#fee2e2}.ra-x.re{border-color:#cbd5e1;color:#475569}.ra-x.re:hover{background:#f1f5f9}.ra-x.vide{border:0;cursor:default}
@@ -7174,11 +7175,33 @@ async function raAppliquer(d){
   const motif=clis.length?(rest.some(l=>!l.Client||l.Client==='Stock')?'Client + Stock':'Client'):'Stock';
   return {rest,clis,motif,res:rest.map(l=>raLigneResume({...l,pu:pu(l.Title)}))};
 }
+function raSignalerOubliees(O){
+  const keys=new Set(O.map(o=>o.key));let first=null;
+  document.querySelectorAll('#raBox tr[data-ragrp]:not(.ra-part)').forEach(tr=>{const on=keys.has(tr.dataset.ragrp);tr.classList.toggle('ra-oubli',on);if(on&&!first)first=tr;});
+  if(first){first.scrollIntoView({behavior:'smooth',block:'center'});const i=first.querySelector('input[data-raq]');if(i)setTimeout(()=>i.focus(),350);}
+}
 function raResetDecision(){RAV.dec.clear();RAV.ajouts=[];RAV.miniEd.clear();}
+// Articles laissés à 0 alors qu'ils devraient être commandés (quantité proposée, rupture ou sous le mini)
+function raOubliees(d){
+  const ctx=new Map();if(RAV.exp&&RAV.exp.path===d.Fichier_Export)raLignes(d.ID).forEach(r=>{if(!ctx.has(r.a.code.toUpperCase()))ctx.set(r.a.code.toUpperCase(),r);});
+  const O=[];
+  raGroupesRevue(d).forEach(g=>{const st=RAV.dec.get(g.key)||{};const q=st.q!=null?st.q:g.total;if(q>0)return;
+    const r=ctx.get(g.code.toUpperCase());const crit=r&&r.suivi&&['rupture','sousmini'].includes(r.etat)?r.etat:'';
+    if(g.prop>0||crit)O.push({key:g.key,code:g.code,des:(r&&r.a.lib)||g.des||'',prop:g.prop,etat:crit,dispo:r?r.dispo:null});});
+  return O;
+}
 async function raValider(id){
   const d=(DATA.da||[]).find(x=>x.ID===id);if(!d)return;
   const com=String(($('raComF')||{}).value||'').trim();
-  if(!await showConfirm('Valider la commande',`Valider <b>${esc(d.Title)}</b> ?<br>Les lignes à 0 sont retirées, la demande passe « À commander » et Patricia est prévenue par mail.`,'✓ Valider'))return;
+  const O=raOubliees(d);
+  if(O.length){
+    const lst=O.map(o=>`<tr><td style="padding:3px 8px 3px 0"><b class="mono">${esc(o.code)}</b></td><td style="padding:3px 8px">${esc(o.des)}</td><td style="padding:3px 8px;white-space:nowrap">${o.etat?raEtatBadge(o.etat):''}${o.prop>0?` proposé <b>${raN0(o.prop)}</b>`:''}${o.dispo!=null?` · dispo ${raN0(o.dispo)}`:''}</td></tr>`).join('');
+    const ok=await showConfirm('⚠️ Articles non commandés',`<div class="warn-ribbon" style="border-radius:8px;margin-bottom:10px"><b>${O.length} article${O.length>1?'s sont':' est'} à 0</b> alors qu’il${O.length>1?'s devraient':' devrait'} être commandé${O.length>1?'s':''} (quantité proposée, rupture ou stock sous le mini).</div>
+      <div style="max-height:260px;overflow:auto"><table style="border-collapse:collapse;font-size:13px">${lst}</table></div>
+      <div style="margin-top:10px">Valider <b>${esc(d.Title)}</b> <b>sans ${O.length>1?'ces articles':'cet article'}</b> ?<br><span class="muted" style="font-size:12px">« Annuler » te ramène sur ${O.length>1?'les lignes concernées':'la ligne concernée'} pour saisir une quantité (↺ remet la quantité proposée).</span></div>`,`✓ Valider sans ${O.length>1?'ces '+O.length+' articles':'cet article'}`,'danger');
+    if(!ok){raSignalerOubliees(O);return;}
+  }
+  else if(!await showConfirm('Valider la commande',`Valider <b>${esc(d.Title)}</b> ?<br>Les lignes à 0 sont retirées, la demande passe « À commander » et Patricia est prévenue par mail.`,'✓ Valider'))return;
   const u=raUser();busyOn('Validation…');
   try{
     const {rest,clis,motif,res}=await raAppliquer(d);
@@ -7535,7 +7558,7 @@ document.addEventListener('change',e=>{
   }
   if(t.dataset.raq!==undefined){   // mise à jour sur place : la saisie au clavier (Tab → ligne suivante) n'est pas interrompue
     const v=t.value.trim();st.q=v===''?0:parseNum(v);if(st.q===null||isNaN(st.q)||st.q<0){st.q=0;t.value='';}S.save();
-    const q=st.q,prop=+tr.dataset.raprop||0;t.classList.toggle('mod',q!==prop);tr.classList.toggle('ra-q',q>0);
+    const q=st.q,prop=+tr.dataset.raprop||0;t.classList.toggle('mod',q!==prop);tr.classList.toggle('ra-q',q>0);if(q>0)tr.classList.remove('ra-oubli');
     const m=tr.querySelector('[data-ramt]');if(m)m.textContent=raEur(q*(+tr.dataset.rapu||0));
     const bx=tr.querySelector('[data-raz]');if(bx){bx.textContent=q>0?'✕':'↺';bx.classList.toggle('re',!(q>0));bx.title=q>0?'Mettre à 0 (ne pas commander)':'Revenir à '+raN0(prop);bx.style.visibility=q>0||prop>0?'':'hidden';}
     raMajReste(tr);if(tr.dataset.rakey===undefined)raMajTotalRevue();return;}
