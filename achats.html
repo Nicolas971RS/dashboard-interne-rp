@@ -6703,6 +6703,9 @@ const raPeutValider=()=>estValideur();
 const raPeutArticles=()=>estValideur()||!lectureSeule();
 const raEstReappro=d=>!!d&&(d.Origine==='Réappro'||/^\[Réappro\]/.test(String(d.Commentaire||'')));
 const raDemandes=()=>(DATA.da||[]).filter(raEstReappro);
+// Envoi test (Nicolas) : marqué [TEST] dans le commentaire, aucun Notif écrit → le flux n'envoie aucun mail, à aucune étape
+const raEstTest=d=>/\[TEST\]/.test(String((d&&d.Commentaire)||''));
+const raSansMail=(d,o)=>{if(!raEstTest(d))return o;const {Notif,Resume_Notif,...r}=o;return r;};
 const raFrsDe=code=>{const c=String(code||'').trim().toUpperCase();return c?DATA.frs.find(f=>String(f.Code_Image||'').trim().toUpperCase()===c)||null:null;};
 const raFrsNom=(f,code)=>f?(f.Nom_Court||f.Title):(code||'?');
 // Type d'achat : fiche fournisseur ; à défaut « Reg fourn. » de l'export (FL = local, à confirmer)
@@ -6880,7 +6883,7 @@ function raVuePreparer(){
   let h=`<div class="kpis">${kpi('À commander',fmtN(tot.acmd,0)+' lignes',raEur(tot.val)+' estimés','#1565c0','Quantités proposées (ou ajustées) × PU achat de l’export')}${kpi('Ruptures',fmtN(tot.rupt,0),'disponible ≤ 0','#c62828','Articles suivis dont stock + en commande − réservé ≤ 0')}${kpi('Sous le mini',fmtN(tot.smini,0),'disponible < stock mini','#e65100','Articles suivis sous leur stock minimum')}${kpi('Fournisseurs à revoir',fmtN(tot.du,0),'cycle échu et articles à commander','#5b5bd6','Dernière réappro + intervalle de commande dépassé (ou jamais faite)')}</div>
   <div class="ra-tools"><input class="search" id="raQ" placeholder="🔍 réf., désignation, réf. fournisseur…" value="${esc(RAV.q)}" style="width:260px">
     <span class="muted">Type :</span>${['',...RA_TYPES].map(t=>`<button class="chip ${RAV.type===t?'on':''}" data-ratype="${t}">${t||'Tous'}</button>`).join('')}
-    <span style="flex:1"></span>${ed?`<button class="btn sm" id="raSelDus" title="Coche les fournisseurs dont le cycle est échu et qui ont des articles à commander">☑ Cocher les fournisseurs à revoir</button>`:''}</div>`;
+    <span style="flex:1"></span>${ed?`<button class="btn sm" id="raSelDus" title="Coche les fournisseurs dont le cycle est échu et qui ont des articles à commander">☑ Fournisseurs à revoir</button><button class="btn sm" id="raSelTous" title="Coche tous les fournisseurs qui ont au moins un article à commander">☑ Tous</button><button class="btn sm ghost" id="raSelAucun">☐ Aucun</button>`:''}</div>`;
   if(!G.length)return h+`<div class="card"><div class="card-b muted">Aucun article suivi${RAV.q||RAV.type?' pour ce filtre':''}.</div></div>`;
   h+=`<div class="card"><div class="ra-scroll"><table class="ra-t ra-frs"><thead><tr>${ed?'<th style="width:30px"></th>':''}<th>Fournisseur</th><th>Achat</th><th class="r" data-tip="Délai d’approvisionnement + intervalle entre deux commandes (jours)">Délai + cycle</th><th>Dernière réappro</th><th>Prochaine</th><th class="r">Suivis</th><th class="r">À commander</th><th class="r">Valeur</th><th class="r">Ruptures</th><th></th></tr></thead><tbody>
   ${G.map(g=>{const o=RAV.ouv===g.code;const L=raDelai(g.f,g.typ),R=raFreq(g.f,g.typ);
@@ -6971,7 +6974,8 @@ function raPiedPreparer(){
   const L=raSelection(),v=L.reduce((s,x)=>s+x.q*x.r.a.pu,0);
   return `<div class="ra-pied"><div><b>${RAV.sel.size}</b> fournisseur${RAV.sel.size>1?'s':''} coché${RAV.sel.size>1?'s':''} · <b>${L.length}</b> ligne${L.length>1?'s':''} · <b>${raEur(v)}</b></div>
     <input id="raCom" value="${esc(RAV.com)}" placeholder="Commentaire pour Fabrice (facultatif)" style="flex:1;min-width:220px">
-    <button class="btn primary" id="raEnvoyer" ${L.length?'':'disabled'}>📨 Envoyer à Fabrice</button></div>`;
+    ${peutImporter()?`<label class="muted" style="font-size:12px" title="Crée la revue sans écrire Notif : aucun mail (ni à Fabrice, ni à Patricia), même à la validation. Supprimable ensuite."><input type="checkbox" id="raTest" ${RAV.test?'checked':''}> envoi test (sans mail)</label>`:''}
+    <button class="btn primary" id="raEnvoyer" ${L.length?'':'disabled'}>📨 ${RAV.test?'Envoyer le test':'Envoyer à Fabrice'}</button></div>`;
 }
 const raMajPied=()=>{const p=document.querySelector('#raBox .ra-pied');if(p){const com=$('raCom')?$('raCom').value:RAV.com;RAV.com=com;p.outerHTML=raPiedPreparer();}};
 
@@ -7001,26 +7005,26 @@ async function raEnvoyer(){
   const nFrs=new Set(L.map(x=>x.f?x.f.ID:x.r.frsCode)).size;
   if(!await showConfirm('Envoyer à Fabrice',`<b>${L.length}</b> ligne${L.length>1?'s':''} chez <b>${nFrs}</b> fournisseur${nFrs>1?'s':''} (≈ ${raEur(L.reduce((s,x)=>s+x.q*x.r.a.pu,0))}).<br>Fabrice reçoit un mail et décide ligne par ligne.${grp.size>1?'<br><span class="muted">Deux demandes sont créées : une pour l’import, une pour le local.</span>':''}${sansFiche.length?`<div class="warn-ribbon" style="border-radius:6px;margin-top:8px">Codes absents de la liste Fournisseurs : ${esc(sansFiche.join(', '))}. Les lignes partent avec le code seul.</div>`:''}`,'📨 Envoyer'))return;
   const u=raUser(),t=todayKey(),pre='DA-'+t.slice(2).replace(/-/g,'');let n=(DATA.da||[]).filter(d=>String(d.Title||'').startsWith(pre)).length;
-  const sansOrig=MISSING.Demandes_Achat&&MISSING.Demandes_Achat.has('Origine');const com=String(($('raCom')||{}).value??RAV.com).trim();
+  const sansOrig=MISSING.Demandes_Achat&&MISSING.Demandes_Achat.has('Origine');const com=String(($('raCom')||{}).value??RAV.com).trim();const test=!!RAV.test&&peutImporter();
   busyOn('Création de la demande…');const crees=[];
   try{
     for(const [tr,X] of grp){
       const clis=[...new Set(X.flatMap(x=>x.dist.filter(z=>z.cli!=='Stock').map(z=>z.cli)))];
       const motif=clis.length?(X.some(x=>x.dist.some(z=>z.cli==='Stock'))?'Client + Stock':'Client'):'Stock';
       const d=await spPost('Demandes_Achat',sansVide({Title:`${pre}-${++n}`,Zone:'Guadeloupe',Transport:tr,Motif:motif,Client:clis.length?_trunc(clis.join(' ; ')):null,Demandeur:_trunc(u),Statut:'À valider',
-        Date_Demande:toSP(t),Commentaire:(sansOrig?'[Réappro] ':'')+com||null,Origine:'Réappro',Fichier_Export:RAV.exp.path}));
+        Date_Demande:toSP(t),Commentaire:(sansOrig?'[Réappro] ':'')+(test?'[TEST] ':'')+com||null,Origine:'Réappro',Fichier_Export:RAV.exp.path}));
       const res=[];let i=0;
       for(const x of X){busyMsg(`${d.Title} : article ${++i}/${X.length}…`);
         for(const [j,z] of x.dist.entries()){   // une ligne pour le stock, une par client
           const b=sansVide({Title:_trunc(x.r.a.code),ID_Demande:d.ID,Designation:_trunc(x.r.a.lib),Quantite:z.q,ID_Fournisseur:x.f?x.f.ID:null,Fournisseur:x.f?x.f.Title:x.r.frsCode,
             Fournisseur_Initial:x.chg?(x.r.f?x.r.f.Title:x.r.frsCode):null,Client:clis.length?_trunc(z.cli):null});
           b.Qte_Proposee=j===0?x.r.qte:0;await spPostSilencieux('Lignes_Demande_Achat',b);res.push(raLigneResume({...b,pu:x.r.a.pu}));}}
-      try{await spPatch('Demandes_Achat',d.ID,{Notif:'À valider',Resume_Notif:raResumeHtml(d,res,`<b>${esc(u)}</b> a préparé une commande de réapprovisionnement : <b>à valider</b>.`,com?'Commentaire : '+esc(com):'')});}catch(e){console.warn('[Réappro notif]',e);}
+      if(!test)try{await spPatch('Demandes_Achat',d.ID,{Notif:'À valider',Resume_Notif:raResumeHtml(d,res,`<b>${esc(u)}</b> a préparé une commande de réapprovisionnement : <b>à valider</b>.`,com?'Commentaire : '+esc(com):'')});}catch(e){console.warn('[Réappro notif]',e);}
       crees.push(d.Title);
     }
     L.forEach(x=>RAV.prep.delete(x.r.a.key));RAV.sel.clear();RAV.com='';RAV.ouv=null;
     busyOff();await reloadAll();RAV.vue='valider';renderReappro();
-    toast(`✓ ${crees.join(' et ')} envoyée${crees.length>1?'s':''} à Fabrice`,'ok');
+    toast(test?`✓ Test ${crees.join(' et ')} créé, sans mail : ouvre « À valider » pour voir l’écran de Fabrice`:`✓ ${crees.join(' et ')} envoyée${crees.length>1?'s':''} à Fabrice`,'ok');RAV.test=false;
   }catch(e){busyOff();toast('🔴 '+e.message+(crees.length?` (déjà créée : ${crees.join(', ')})`:''),'ko');await reloadAll();}
 }
 
@@ -7046,11 +7050,11 @@ function raVueRevue(d){
   const tot=GR.reduce((s,g)=>s+val(g),0);const L=GR;
   const statut=d.Statut==='Refusée'?`<div class="warn-ribbon" style="border-radius:8px;margin-bottom:10px">↩ Renvoyée par ${esc(d.Valide_Par||'Fabrice')} le ${fmtD(dk(d,'Date_Validation'))} : ${esc(String(d.Commentaire||'').split('\n')[0])}</div>`:'';
   let h=`<div class="card"><div class="card-b">${statut}
-    <div class="ra-rh"><div><h3 style="margin:0">🧮 ${esc(d.Title)} <span class="st ${d.Statut==='Refusée'?'st-renv':'st-valid'}">${d.Statut==='Refusée'?'Renvoyée à Patricia':'À valider (Fabrice)'}</span></h3>
+    <div class="ra-rh"><div><h3 style="margin:0">🧮 ${esc(d.Title)} ${raEstTest(d)?'<span class="ra-e" style="color:#b45309;background:#fff7ed">TEST — sans mail</span> ':''}<span class="st ${d.Statut==='Refusée'?'st-renv':'st-valid'}">${d.Statut==='Refusée'?'Renvoyée à Patricia':'À valider (Fabrice)'}</span></h3>
       <div class="muted" style="font-size:12.5px">Préparée par <b>${esc(d.Demandeur||'?')}</b> le ${fmtD(dk(d,'Date_Demande'))} · ${esc(d.Transport||'')} · ${L.length} article${L.length>1?'s':''} · ≈ <b data-ratot>${raEur(tot)}</b>
       ${path?` · export ${RAV.expP===path?'<i>en lecture…</i>':RAV.exp&&RAV.exp.path===path?'du '+fmtD(RAV.exp.date):`<span style="color:#c62828">illisible${RAV.expErr?' ('+esc(RAV.expErr.slice(0,80))+')':''}</span>`}`:' · <span style="color:#c62828">sans export</span>'}</div>
       ${d.Commentaire&&d.Statut!=='Refusée'?`<div class="pay-com">💬 ${esc(String(d.Commentaire).replace(/^\[Réappro\]\s*/,''))}</div>`:''}</div>
-      <button class="btn sm" id="raImpRevue" data-raimp="${d.ID}">🖨 Imprimer</button></div>`;
+      <div style="display:flex;gap:6px">${raEstTest(d)&&peutImporter()?`<button class="btn sm ghost" style="color:#b91c1c" data-rasuptest="${d.ID}">🗑 Supprimer ce test</button>`:''}<button class="btn sm" id="raImpRevue" data-raimp="${d.ID}">🖨 Imprimer</button></div></div>`;
   h+=[...G.entries()].map(([f,X])=>{const fr=matchFrs(f);const v=X.reduce((s,x)=>s+val(x),0);
     return `<div class="ra-gh"><b>${esc(f)}</b> ${fr&&fr.Code_Image?`<span class="muted mono">${esc(fr.Code_Image)}</span>`:''} · ${X.length} article${X.length>1?'s':''} · ${raEur(v)}</div>
     <div class="ra-scroll"><table class="ra-t">${raEnteteArt(ed,'revue')}<tbody>${X.map(g=>raLigneArt(ctx.get(g.code.toUpperCase())||vide(g.code),ed,'revue',g)).join('')}</tbody></table></div>`;}).join('');
@@ -7115,7 +7119,7 @@ async function raValider(id){
     else{
       const b={Statut:'Validée',Valide_Par:_trunc(u),Date_Validation:toSP(todayKey()),Motif:motif,Client:clis.length?_trunc(clis.join(' ; ')):null};
       if(com)b.Commentaire=`[${u.split(' ')[0]||'Fabrice'}] ${com}`+(d.Commentaire?'\n'+d.Commentaire:'');
-      await spPatch('Demandes_Achat',id,{...b,Notif:'À envoyer',Resume_Notif:raResumeHtml(d,res,`<b>${esc(u)}</b> a validé la commande de réapprovisionnement : <b>elle est à passer dans Image</b>.`,com?'Commentaire : '+esc(com):'')},d);
+      await spPatch('Demandes_Achat',id,raSansMail(d,{...b,Notif:'À envoyer',Resume_Notif:raResumeHtml(d,res,`<b>${esc(u)}</b> a validé la commande de réapprovisionnement : <b>elle est à passer dans Image</b>.`,com?'Commentaire : '+esc(com):'')}),d);
     }
     raResetDecision();busyOff();await reloadAll();RAV.vue=rest.length?'passer':'valider';renderReappro();toast(`✓ ${d.Title} validée`,'ok');
   }catch(e){busyOff();toast('🔴 '+e.message,'ko');await reloadAll();}
@@ -7127,7 +7131,7 @@ async function raRenvoyer(id){
   const m=(($('raMotifR')||{}).value||'').trim()||'à revoir';const u=raUser();
   try{
     const b={Statut:'Refusée',Valide_Par:_trunc(u),Date_Validation:toSP(todayKey()),Commentaire:`[Renvoi ${u.split(' ')[0]||'Fabrice'}] ${m}`+(d.Commentaire?'\n'+d.Commentaire:'')};
-    await spPatch('Demandes_Achat',id,{...b,Notif:'Refusée',Resume_Notif:raResumeHtml(d,daLignes(id).map(l=>raLigneResume(l)),`La commande de réapprovisionnement a été <b>renvoyée</b> par ${esc(u)}.`,'Motif : <b>'+esc(m)+'</b>')},d);
+    await spPatch('Demandes_Achat',id,raSansMail(d,{...b,Notif:'Refusée',Resume_Notif:raResumeHtml(d,daLignes(id).map(l=>raLigneResume(l)),`La commande de réapprovisionnement a été <b>renvoyée</b> par ${esc(u)}.`,'Motif : <b>'+esc(m)+'</b>')}),d);
     raResetDecision();await reloadAll();renderReappro();toast(`${d.Title} renvoyée à Patricia`,'ok');
   }catch(e){toast('🔴 '+e.message,'ko');}
 }
@@ -7138,10 +7142,17 @@ async function raRenvoyerFabrice(id){
   try{
     const {rest,clis,motif,res}=await raAppliquer(d);
     if(!rest.length)throw new Error('Plus aucune ligne : utilise « Abandonner ».');
-    await spPatch('Demandes_Achat',id,{Statut:'À valider',Valide_Par:null,Date_Validation:null,Motif:motif,Client:clis.length?_trunc(clis.join(' ; ')):null,Notif:'À valider',
-      Resume_Notif:raResumeHtml(d,res,`<b>${esc(u)}</b> a corrigé la commande de réapprovisionnement : <b>à valider</b>.`,'')},d);
+    await spPatch('Demandes_Achat',id,raSansMail(d,{Statut:'À valider',Valide_Par:null,Date_Validation:null,Motif:motif,Client:clis.length?_trunc(clis.join(' ; ')):null,Notif:'À valider',
+      Resume_Notif:raResumeHtml(d,res,`<b>${esc(u)}</b> a corrigé la commande de réapprovisionnement : <b>à valider</b>.`,'')}),d);
     raResetDecision();busyOff();await reloadAll();renderReappro();toast(`✓ ${d.Title} renvoyée à Fabrice`,'ok');
   }catch(e){busyOff();toast('🔴 '+e.message,'ko');await reloadAll();}
+}
+async function raSupprimerTest(id){
+  const d=(DATA.da||[]).find(x=>x.ID===id);if(!d||!raEstTest(d))return;
+  if(!await showConfirm('Supprimer le test',`Supprimer définitivement <b>${esc(d.Title)}</b> et ses lignes ?<br><span class="muted">Les stocks mini validés pendant le test sont conservés.</span>`,'🗑 Supprimer','danger'))return;
+  busyOn('Suppression du test…');
+  try{for(const l of daLignes(id))await spDelete('Lignes_Demande_Achat',l.ID,l);await spDelete('Demandes_Achat',id,d);raResetDecision();busyOff();await reloadAll();renderReappro();toast('✓ Test supprimé','ok');}
+  catch(e){busyOff();toast('🔴 '+e.message,'ko');await reloadAll();}
 }
 async function raAbandonner(id){
   const d=(DATA.da||[]).find(x=>x.ID===id);if(!d)return;
@@ -7160,9 +7171,9 @@ function raVuePasser(D){
   const ed=raPeutPreparer();
   return `<div class="muted" style="margin:0 0 10px;font-size:12.5px">Saisis chaque commande dans Image (liste imprimée ou fichier Excel), puis range le PDF du BC dans « Dossier partage › Bon de commande » : le portail relie automatiquement les lignes au BC. Le format du fichier d’import Image est provisoire tant que Stratégie ne l’a pas confirmé.</div>`+
   D.map(d=>{const G=raGroupesPasser(d);
-    return `<div class="card"><div class="card-b"><div class="ra-rh"><div><h3 style="margin:0">📤 ${esc(d.Title)} <span class="st ${daEtat(d).cls}">${esc(daEtat(d).lbl)}</span></h3>
+    return `<div class="card"><div class="card-b"><div class="ra-rh"><div><h3 style="margin:0">📤 ${esc(d.Title)} ${raEstTest(d)?'<span class="ra-e" style="color:#b45309;background:#fff7ed">TEST</span> ':''}<span class="st ${daEtat(d).cls}">${esc(daEtat(d).lbl)}</span></h3>
       <div class="muted" style="font-size:12.5px">Validée par <b>${esc(d.Valide_Par||'?')}</b> le ${fmtD(dk(d,'Date_Validation'))} · ${esc(d.Transport||'')} · ${G.length} fournisseur${G.length>1?'s':''}</div></div>
-      <div style="display:flex;gap:6px"><button class="btn sm" data-raimp="${d.ID}">🖨 Imprimer</button>${ed?`<button class="btn sm" data-raxlsall="${d.ID}">⬇ Excel (tous)</button>`:''}</div></div>
+      <div style="display:flex;gap:6px">${raEstTest(d)&&peutImporter()?`<button class="btn sm ghost" style="color:#b91c1c" data-rasuptest="${d.ID}">🗑 Supprimer ce test</button>`:''}<button class="btn sm" data-raimp="${d.ID}">🖨 Imprimer</button>${ed?`<button class="btn sm" data-raxlsall="${d.ID}">⬇ Excel (tous)</button>`:''}</div></div>
       ${G.map(g=>{const k=d.ID+'|'+g.k;const split=RAV.split.has(k);const fait=g.L.filter(l=>l.N_Commande).length;const bcs=[...new Set(g.L.map(l=>l.N_Commande).filter(Boolean))];
         const tr=RAV.transit.has(k)?RAV.transit.get(k):((g.f&&g.f.Code_Transitaire)||'');
         const types=[...new Set(g.L.map(l=>raTypeArticle(l.Title,l.Designation)))];
@@ -7344,6 +7355,9 @@ document.addEventListener('click',e=>{
   if((b=c('[data-raouv]'))){const k=b.dataset.raouv;RAV.ouv=RAV.ouv===k?null:k;renderReappro();return;}
   if((b=c('#raEnvoyer'))){raEnvoyer();return;}
   if((b=c('#raSelDus'))){raGroupes(raLignes()).filter(g=>g.du&&g.acmd>0&&!g.revue).forEach(g=>RAV.sel.add(g.code));renderReappro();return;}
+  if((b=c('#raSelTous'))){raGroupes(raLignes()).filter(g=>!g.revue).forEach(g=>RAV.sel.add(g.code));renderReappro();return;}
+  if((b=c('#raSelAucun'))){RAV.sel.clear();renderReappro();return;}
+  if((b=c('[data-rasuptest]'))){raSupprimerTest(+b.dataset.rasuptest);return;}
   if((b=c('#raRelire'))){RAV.fic=null;RAV.exp=null;RAV.expErr='';RAV.expErrP='';renderReappro();return;}
   if((b=c('#raValider'))){raValider(+b.dataset.raid);return;}
   if((b=c('#raRenvoyer'))){raRenvoyer(+b.dataset.raid);return;}
@@ -7368,6 +7382,7 @@ document.addEventListener('change',e=>{
   if(t.id==='raFic'){const f=(RAV.fic||[]).find(x=>x.path===t.value);if(f){RAV.prep.clear();raOuvrirExport(f.path,f.nom,f.date);}return;}
   if(t.dataset.rasel!==undefined){t.checked?RAV.sel.add(t.dataset.rasel):RAV.sel.delete(t.dataset.rasel);raMajPied();return;}
   if(t.id==='raArtFrs'){RAV.artFrs=t.value;RAV.artLim=300;renderReappro();return;}
+  if(t.id==='raTest'){RAV.test=t.checked;raMajPied();return;}
   if(t.id==='raNonVal'){RAV.artNonVal=t.checked;renderReappro();return;}
   if(t.id==='raEntete'){RAV.artEntete=t.checked;return;}
   if(t.dataset.rasplit!==undefined){t.checked?RAV.split.add(t.dataset.rasplit):RAV.split.delete(t.dataset.rasplit);renderReappro();return;}
