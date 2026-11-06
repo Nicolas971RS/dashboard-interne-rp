@@ -636,6 +636,7 @@ input.sv-in.mod{border-color:#16a34a;background:#f0fdf4}
 .ra-in.frs,.ra-in.cli{width:150px;text-align:left;font-family:var(--font-body)}
 .ra-in.sm{width:64px}.ra-in.mod{border-color:#f59e0b;background:#fffbeb}select.ra-in{width:auto;text-align:left;font-family:var(--font-body)}
 .ra-ok{color:#2e7d32;font-weight:700}
+.ra-sbh{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin:10px 0 4px;padding:5px 10px;border-left:4px solid #94a3b8;background:#f8fafc;font-size:12.5px;font-weight:600}
 .ra-t tr.ra-oubli td{background:#fff1f2}.ra-t tr.ra-oubli td:first-child{box-shadow:inset 4px 0 #dc2626}
 .ra-kpi{cursor:pointer;transition:box-shadow .15s,transform .15s}.ra-kpi:hover{box-shadow:0 4px 14px rgba(15,23,42,.12);transform:translateY(-1px)}.ra-kpi.on{outline:2px solid var(--c);outline-offset:-2px;background:#f8fbff}
 .ra-kbar{display:flex;gap:10px;align-items:center;flex-wrap:wrap;padding:8px 12px;background:#eef2ff;border-radius:8px;margin-bottom:8px;font-size:13px}.ra-kcard .ra-kbar{border-radius:10px 10px 0 0;margin:0}
@@ -6749,7 +6750,7 @@ const RA_TYPES=['Tubes','Assemblage','Spéciale'];
 const RA_ETATS={rupture:['Rupture','#c62828','#ffebee'],sousmini:['Sous le mini','#e65100','#fff3e0'],acmd:['À commander','#1565c0','#e8f2fd'],ok:['OK','#2e7d32','#e8f5e9'],surstock:['Surstock','#6a1b9a','#f3e5f5'],irregulier:['Irrégulier','#546e7a','#eef1f6'],ancien:['Plus vendu depuis 6 mois','#795548','#efebe9'],dormant:['Dormant','#795548','#efebe9'],inactif:['Sans vente','#90a4ae','#f4f6f9'],exclu:['Exclu','#90a4ae','#f4f6f9'],na:['Absent de l’export','#90a4ae','#f4f6f9']};
 let RA_ERR='';
 const RAV={vue:null,exp:null,expP:null,expErr:'',fic:null,ficErr:'',sel:new Set(),ouv:null,filtre:'acmd',type:'',q:'',prep:new Map(),com:'',revue:null,dec:new Map(),ajouts:[],miniEd:new Map(),
-  artEd:new Map(),artF:'suivis',artQ:'',artFrs:'',artLim:300,artNonVal:true,artEntete:false,split:new Set(),transit:new Map(),artIdx:new Map(),cache:null,adj:new Map(),adjAdd:new Map(),colEd:new Map()};
+  artEd:new Map(),artF:'suivis',artQ:'',artFrs:'',artLim:300,artNonVal:true,artEntete:false,nosplit:new Set(),transit:new Map(),artIdx:new Map(),cache:null,adj:new Map(),adjAdd:new Map(),colEd:new Map()};
 const raUser=()=>sessionStorage.getItem('user_name')||'';
 const raPeutPreparer=()=>!lectureSeule();
 const raPeutValider=()=>estValideur();
@@ -7267,22 +7268,35 @@ function raVuePasser(D){
       <div class="muted" style="font-size:12.5px">Validée par <b>${esc(d.Valide_Par||'?')}</b> le ${fmtD(dk(d,'Date_Validation'))} · ${esc(d.Transport||'')} · ${G.length} fournisseur${G.length>1?'s':''}</div>
       ${hist.map(x=>`<div class="pay-com">✏️ ${esc(x)}</div>`).join('')}</div>
       <div style="display:flex;gap:6px">${raEstTest(d)&&peutImporter()?`<button class="btn sm ghost" style="color:#b91c1c" data-rasuptest="${d.ID}">🗑 Supprimer ce test</button>`:''}<button class="btn sm" data-raimp="${d.ID}">🖨 Imprimer</button>${ed?`<button class="btn sm" data-raxlsall="${d.ID}">⬇ Excel (tous)</button>`:''}</div></div>
-      ${G.map(g=>{const k=d.ID+'|'+g.k;const split=RAV.split.has(k);const fait=g.L.filter(l=>l.N_Commande).length;const bcs=[...new Set(g.L.map(l=>l.N_Commande).filter(Boolean))];
+      ${G.map(g=>{const k=d.ID+'|'+g.k;const B=raBlocs(d,g);const split=B.length>1;const both=raADeuxCats(g);
         const tr=RAV.transit.has(k)?RAV.transit.get(k):((g.f&&g.f.Code_Transitaire)||'');
-        const types=[...new Set(g.L.map(l=>raTypeArticle(l.Title,l.Designation)))];
         const ajouts=(RAV.adjAdd.get(d.ID)||[]).map((x,i)=>({...x,i})).filter(x=>String(x.gk)===String(g.k));
         return `<div class="ra-gh" style="display:flex;gap:10px;align-items:center;flex-wrap:wrap"><b>${esc(g.nom)}</b> ${g.f&&g.f.Code_Image?`<span class="mono muted">${esc(g.f.Code_Image)}</span>`:''} · ${esc(raTypeAchat(g.f,null))} · ${g.L.length} ligne${g.L.length>1?'s':''}
-          ${fait===g.L.length?`<span class="st st-ok">BC ${esc(bcs.join(', '))}</span>`:fait?`<span class="st st-valid">${fait}/${g.L.length} sur BC ${esc(bcs.join(', '))}</span>`:'<span class="st st-transit">à saisir dans Image</span>'}
+          ${split?`<span class="st st-valid">${B.length} commandes : Tubes / Autres articles</span>`:raStatutBC(g.L)}
           <span style="flex:1"></span>${ed?`<label class="muted" style="font-size:12px">Transitaire <input class="ra-in sm" data-ratransit="${esc(k)}" value="${esc(tr)}" placeholder="T130" style="width:70px"></label>
-          ${types.length>1?`<label class="muted" style="font-size:12px" title="Un BC pour les tubes, un BC pour le reste"><input type="checkbox" data-rasplit="${esc(k)}" ${split?'checked':''}> séparer par type</label>`:''}
-          ${split?types.map(t=>`<button class="btn sm" data-raxls="${esc(k)}" data-ratyp="${esc(t)}">⬇ ${esc(t)}</button>`).join(''):`<button class="btn sm" data-raxls="${esc(k)}">⬇ Excel</button>`}`:''}</div>
+          ${both?`<label class="muted" style="font-size:12px" title="Coché : une commande pour les tubes, une pour les autres articles (le transitaire fait ses assemblages). Décoche pour tout passer en une seule commande."><input type="checkbox" data-rasplit="${esc(k)}" ${split?'checked':''}> séparer tubes / autres</label>`:''}
+          ${split?'':`<button class="btn sm" data-raxls="${esc(k)}">⬇ Excel</button>`}`:''}</div>
+          ${B.map((bl,bi)=>{const aj=ajouts.filter(x=>!split||raCat(x.code,(raArtExport(x.code)||{}).lib)===bl.cat);const dernier=bi===B.length-1;
+            return `${split?`<div class="ra-sbh">${bl.cat==='Tubes'?'🟦 Commande TUBES':'🟩 Commande AUTRES ARTICLES'} · ${bl.L.length} ligne${bl.L.length>1?'s':''} ${raStatutBC(bl.L)}<span style="flex:1"></span>${ed?`<button class="btn sm" data-raxls="${esc(k)}" data-ratyp="${bl.cat}">⬇ Excel ${bl.cat==='Tubes'?'tubes':'autres'}</button>`:''}</div>`:''}
           <table class="ra-t"><thead><tr><th>Réf.</th><th>Désignation</th><th>Type</th><th class="r" data-tip="Colisage d’achat : celui d’Image, ou celui mémorisé dans le portail">Colis</th><th class="r">Qté</th><th>Client</th><th>BC Image</th></tr></thead><tbody>
-          ${g.L.map(l=>raLignePasser(d,l,ed)).join('')}
-          ${ajouts.map(x=>{const a=raArtExport(x.code);return `<tr class="ra-q"><td class="mono"><b>${esc(x.code)}</b> <span class="ra-e" style="color:#1565c0;background:#e8f2fd">ajout</span></td><td>${esc(a?a.lib:'')}</td><td>${esc(raTypeArticle(x.code,a?a.lib:''))}</td><td class="r">${raN0(raColis(x.code))}</td><td class="r"><b>${raN0(raNum(x.q))}</b></td><td></td><td><button class="ra-x" data-raaddx="${d.ID}|${x.i}" title="Retirer cet ajout">✕</button></td></tr>`;}).join('')}
-          ${ed&&fait<g.L.length?`<tr class="ra-addrow"><td colspan="7"><span class="ra-sub">＋ Ajouter chez ${esc(g.nom)} :</span> <input class="ra-in mono" data-raaddcode list="dlRaArtP" placeholder="réf." style="width:110px;text-align:left"> <input class="ra-in sm" data-raaddq placeholder="qté" inputmode="decimal"> <button class="btn sm" data-raadd="${d.ID}" data-ragk="${esc(g.k)}">Ajouter</button></td></tr>`:''}
-          </tbody></table>`;}).join('')}
+          ${bl.L.map(l=>raLignePasser(d,l,ed)).join('')}
+          ${aj.map(x=>{const a=raArtExport(x.code);return `<tr class="ra-q"><td class="mono"><b>${esc(x.code)}</b> <span class="ra-e" style="color:#1565c0;background:#e8f2fd">ajout</span></td><td>${esc(a?a.lib:'')}</td><td>${esc(raTypeArticle(x.code,a?a.lib:''))}</td><td class="r">${raN0(raColis(x.code))}</td><td class="r"><b>${raN0(raNum(x.q))}</b></td><td></td><td><button class="ra-x" data-raaddx="${d.ID}|${x.i}" title="Retirer cet ajout">✕</button></td></tr>`;}).join('')}
+          ${ed&&dernier&&g.L.some(l=>!l.N_Commande)?`<tr class="ra-addrow"><td colspan="7"><span class="ra-sub">＋ Ajouter chez ${esc(g.nom)} :</span> <input class="ra-in mono" data-raaddcode list="dlRaArtP" placeholder="réf." style="width:110px;text-align:left"> <input class="ra-in sm" data-raaddq placeholder="qté" inputmode="decimal"> <button class="btn sm" data-raadd="${d.ID}" data-ragk="${esc(g.k)}">Ajouter</button>${split?' <span class="ra-sub">(rangé automatiquement dans Tubes ou Autres)</span>':''}</td></tr>`:''}
+          </tbody></table>`;}).join('')}`;}).join('')}
       ${ed&&nAdj?`<div class="ra-pied"><span><b>${nAdj}</b> ajustement${nAdj>1?'s':''} non enregistré${nAdj>1?'s':''}</span><span style="flex:1"></span><button class="btn ghost" data-raadjannul="${d.ID}">Annuler</button><button class="btn primary" data-raadjsave="${d.ID}">💾 Enregistrer les ajustements</button></div>`:''}
     </div></div>`;}).join('');
+}
+// ── Séparation Tubes / Autres articles : règle par défaut chez chaque fournisseur, Patricia peut regrouper ──
+const raCat=(code,lib)=>raTypeArticle(code,lib)==='Tubes'?'Tubes':'Autres';
+const raADeuxCats=g=>new Set(g.L.map(l=>raCat(l.Title,l.Designation))).size>1;
+const raSepare=(d,g)=>raADeuxCats(g)&&!RAV.nosplit.has(d.ID+'|'+g.k);
+function raBlocs(d,g){
+  if(!raSepare(d,g))return [{cat:null,L:g.L}];
+  return ['Tubes','Autres'].map(c=>({cat:c,L:g.L.filter(l=>raCat(l.Title,l.Designation)===c)})).filter(b=>b.L.length);
+}
+function raStatutBC(L){
+  const fait=L.filter(l=>l.N_Commande).length,bcs=[...new Set(L.map(l=>l.N_Commande).filter(Boolean))];
+  return fait&&fait===L.length?`<span class="st st-ok">BC ${esc(bcs.join(', '))}</span>`:fait?`<span class="st st-valid">${fait}/${L.length} sur BC ${esc(bcs.join(', '))}</span>`:'<span class="st st-transit">à saisir dans Image</span>';
 }
 // ── Ajustements de Patricia après validation (colisage, minimum de commande, disponibilité…) ──
 function raArtExport(code){
@@ -7331,7 +7345,7 @@ async function raAjusterEnregistrer(did){
 // Fichier provisoire pour « Import cmde/excel » (format à confirmer par Stratégie) : une ligne par article
 function raLignesXls(d,g,typ){
   const k=d.ID+'|'+g.k;const tr=RAV.transit.has(k)?RAV.transit.get(k):((g.f&&g.f.Code_Transitaire)||'');
-  return g.L.filter(l=>!typ||raTypeArticle(l.Title,l.Designation)===typ).map(l=>[String((g.f&&g.f.Code_Image)||''),raTypeAchat(g.f,null),String(tr||''),String(l.Title),+l.Quantite||0,daDes(l),l.Client&&l.Client!=='Stock'?l.Client:'']);
+  return g.L.filter(l=>!typ||raCat(l.Title,l.Designation)===typ).map(l=>[String((g.f&&g.f.Code_Image)||''),raTypeAchat(g.f,null),String(tr||''),String(l.Title),+l.Quantite||0,daDes(l),l.Client&&l.Client!=='Stock'?l.Client:'']);
 }
 const RA_XLS_ENTETE=['Code fournisseur','Type commande','Code transitaire','Code article','Quantité','Désignation','Client'];
 function raFeuille(rows){
@@ -7346,9 +7360,8 @@ async function raExcel(did,k,typ){
   try{await loadScript(XLSX_CDN);}catch(e){toast('🔴 '+e.message,'ko');return;}
   const wb=XLSX.utils.book_new();let nom;
   if(k){const g=raGroupesPasser(d).find(x=>d.ID+'|'+x.k===k);if(!g)return;const rows=raLignesXls(d,g,typ);
-    XLSX.utils.book_append_sheet(wb,raFeuille(rows),'Commande');nom=`Commande ${(g.f&&g.f.Code_Image)||''} ${(g.f&&(g.f.Nom_Court||g.f.Title))||g.nom}${typ?' '+typ:''} ${d.Title}.xlsx`;}
-  else{raGroupesPasser(d).forEach(g=>{const sp=RAV.split.has(d.ID+'|'+g.k);const ts=sp?[...new Set(g.L.map(l=>raTypeArticle(l.Title,l.Designation)))]:[null];
-      ts.forEach(t=>XLSX.utils.book_append_sheet(wb,raFeuille(raLignesXls(d,g,t)),raNomFichier(`${(g.f&&g.f.Code_Image)||''} ${(g.f&&(g.f.Nom_Court||g.f.Title))||g.nom}${t?' '+t:''}`).slice(0,31)));});
+    XLSX.utils.book_append_sheet(wb,raFeuille(rows),'Commande');nom=`Commande ${(g.f&&g.f.Code_Image)||''} ${(g.f&&(g.f.Nom_Court||g.f.Title))||g.nom}${typ?' '+(typ==='Tubes'?'TUBES':'AUTRES'):''} ${d.Title}.xlsx`;}
+  else{raGroupesPasser(d).forEach(g=>{raBlocs(d,g).forEach(bl=>XLSX.utils.book_append_sheet(wb,raFeuille(raLignesXls(d,g,bl.cat)),raNomFichier(`${(g.f&&g.f.Code_Image)||''} ${(g.f&&(g.f.Nom_Court||g.f.Title))||g.nom}`).slice(0,24)+(bl.cat?' '+(bl.cat==='Tubes'?'TUBES':'AUTRES'):'')));});
     nom=`Reappro ${d.Title}.xlsx`;}
   XLSX.writeFile(wb,raNomFichier(nom));
 }
@@ -7357,8 +7370,8 @@ function raImprimer(did){
   if(raNbAjust(d)&&d.Statut==='Validée'){toast('Enregistre d’abord tes ajustements (ou annule-les).','wa');return;}
   const w=window.open('','_blank');if(!w){toast('🔴 Fenêtre bloquée : autorise les fenêtres pour ce site','ko');return;}
   const G=raGroupesPasser(d);
-  const body=G.map(g=>`<h2>${esc(g.nom)} ${g.f&&g.f.Code_Image?'<span class="m">'+esc(g.f.Code_Image)+'</span>':''} <span class="m">· ${esc(raTypeAchat(g.f,null))}${g.f&&g.f.Code_Transitaire?' · transitaire '+esc(g.f.Code_Transitaire):''}</span></h2>
-    <table><thead><tr><th>Réf.</th><th>Désignation</th><th>Type</th><th class="r">Qté</th><th>Client</th><th>Saisi</th></tr></thead><tbody>${g.L.map(l=>`<tr><td><b>${esc(l.Title)}</b></td><td>${esc(daDes(l))}</td><td>${esc(raTypeArticle(l.Title,l.Designation))}</td><td class="r"><b>${raN0(+l.Quantite)}</b></td><td>${esc(l.Client&&l.Client!=='Stock'?l.Client:'')}</td><td class="c">${l.N_Commande?esc(l.N_Commande):'☐'}</td></tr>`).join('')}</tbody></table>`).join('');
+  const body=G.flatMap(g=>raBlocs(d,g).map(bl=>({g,bl}))).map(({g,bl})=>`<h2>${esc(g.nom)} ${g.f&&g.f.Code_Image?'<span class="m">'+esc(g.f.Code_Image)+'</span>':''}${bl.cat?` — <span style="background:${bl.cat==='Tubes'?'#dbeafe':'#dcfce7'};padding:1px 6px;border-radius:4px">Commande ${bl.cat==='Tubes'?'TUBES':'AUTRES ARTICLES'}</span>`:''} <span class="m">· ${esc(raTypeAchat(g.f,null))}${g.f&&g.f.Code_Transitaire?' · transitaire '+esc(g.f.Code_Transitaire):''}</span></h2>
+    <table><thead><tr><th>Réf.</th><th>Désignation</th><th>Type</th><th class="r">Qté</th><th>Client</th><th>Saisi</th></tr></thead><tbody>${bl.L.map(l=>`<tr><td><b>${esc(l.Title)}</b></td><td>${esc(daDes(l))}</td><td>${esc(raTypeArticle(l.Title,l.Designation))}</td><td class="r"><b>${raN0(+l.Quantite)}</b></td><td>${esc(l.Client&&l.Client!=='Stock'?l.Client:'')}</td><td class="c">${l.N_Commande?esc(l.N_Commande):'☐'}</td></tr>`).join('')}</tbody></table>`).join('');
   w.document.write(`<!doctype html><html lang="fr"><head><meta charset="utf-8"><title>Réappro ${esc(d.Title)}</title><style>body{font-family:Arial,sans-serif;font-size:11.5px;color:#111;margin:18px}h1{font-size:17px;margin:0}h2{font-size:13.5px;margin:16px 0 4px}.m{color:#555;font-weight:normal}.s{color:#555;margin:2px 0 8px}
   table{border-collapse:collapse;width:100%}th,td{border:1px solid #cbd5e1;padding:3px 6px}th{background:#e2e8f0;text-align:left}.r{text-align:right}.c{text-align:center}*{-webkit-print-color-adjust:exact;print-color-adjust:exact}@page{size:A4;margin:12mm}</style></head><body>
   <h1>Réapprovisionnement ${esc(d.Title)}</h1><div class="s">${esc(d.Statut==='Validée'?'Validé par '+(d.Valide_Par||'?')+' le '+fmtD(dk(d,'Date_Validation')):d.Statut)} · ${esc(d.Transport||'')} · imprimé le ${fmtD(todayKey())}</div>${body}
@@ -7542,7 +7555,7 @@ document.addEventListener('change',e=>{
   if(t.id==='raTest'){RAV.test=t.checked;raMajPied();return;}
   if(t.id==='raNonVal'){RAV.artNonVal=t.checked;renderReappro();return;}
   if(t.id==='raEntete'){RAV.artEntete=t.checked;return;}
-  if(t.dataset.rasplit!==undefined){t.checked?RAV.split.add(t.dataset.rasplit):RAV.split.delete(t.dataset.rasplit);renderReappro();return;}
+  if(t.dataset.rasplit!==undefined){t.checked?RAV.nosplit.delete(t.dataset.rasplit):RAV.nosplit.add(t.dataset.rasplit);renderReappro();return;}
   if(t.dataset.ratransit!==undefined){RAV.transit.set(t.dataset.ratransit,t.value.trim().toUpperCase());return;}
   if(t.dataset.ramini!==undefined){const k=t.dataset.ramini.toUpperCase();if(t.value.trim()==='')RAV.miniEd.delete(k);else RAV.miniEd.set(k,t.value.trim());return;}
   const aj=t.closest('[data-raaj]');if(aj){const x=RAV.ajouts[+aj.dataset.raaj];if(!x)return;if(t.dataset.raajq!==undefined)x.q=t.value;if(t.dataset.raajf!==undefined)x.frs=t.value;if(t.dataset.raajc!==undefined)x.cli=t.value;return;}
