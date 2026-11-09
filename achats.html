@@ -636,6 +636,7 @@ input.sv-in.mod{border-color:#16a34a;background:#f0fdf4}
 .ra-in.frs,.ra-in.cli{width:150px;text-align:left;font-family:var(--font-body)}
 .ra-in.sm{width:64px}.ra-in.mod{border-color:#f59e0b;background:#fffbeb}select.ra-in{width:auto;text-align:left;font-family:var(--font-body)}
 .ra-ok{color:#2e7d32;font-weight:700}
+.ra-saisi{display:inline-flex;gap:4px;align-items:center;padding-left:8px;border-left:1px solid #cbd5e1}
 .ra-sbh{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin:10px 0 4px;padding:5px 10px;border-left:4px solid #94a3b8;background:#f8fafc;font-size:12.5px;font-weight:600}
 .ra-t tr.ra-oubli td{background:#fff1f2}.ra-t tr.ra-oubli td:first-child{box-shadow:inset 4px 0 #dc2626}
 .ra-kpi{cursor:pointer;transition:box-shadow .15s,transform .15s}.ra-kpi:hover{box-shadow:0 4px 14px rgba(15,23,42,.12);transform:translateY(-1px)}.ra-kpi.on{outline:2px solid var(--c);outline-offset:-2px;background:#f8fbff}
@@ -5384,6 +5385,8 @@ async function daRapprocher(cmdId){
   for(const b of lc){
     const k=daRef(b.Ref_2),k1=daRef(b.Title);if(!k&&!k1)continue;
     if(c.Date_Reception||/sold/i.test(String(c.Statut||'')))return 0;const jc=(()=>{const t=Date.parse(c.Date_Commande||c.Created||'');return isNaN(t)?'':new Date(t+3*864e5).toISOString().slice(0,10);})();const apres=l=>{if(!jc)return true;const d=(DATA.da||[]).find(x=>x.ID===l.ID_Demande);const jd=String(d&&(d.Date_Demande||d.Created)||'').slice(0,10);return !jd||jc>=jd;};
+    const man=DATA.lda.find(l=>l.N_Commande&&!l.ID_Commande_Frs&&cmdNum(l.N_Commande)===cmdNum(c.Title)&&(daRef(l.Title)===k||(!k&&daRef(l.Title)===k1)));
+    if(man){try{await spPatch('Lignes_Demande_Achat',man.ID,{ID_Commande_Frs:c.ID},man);man.ID_Commande_Frs=c.ID;n++;}catch(e){console.warn('[rapprochement]',e);}continue;}   // ligne notée « Saisi dans Image » (Réappro)
     const cand=DATA.lda.filter(l=>daLigneOuverte(l)&&apres(l)&&(daRef(l.Title)===k||(!k&&daRef(l.Title)===k1))&&(!l.ID_Fournisseur||!c.ID_Fournisseur||l.ID_Fournisseur===c.ID_Fournisseur)).sort((x,y)=>x.ID-y.ID);
     const l=cand[0];if(!l)continue;
     const body={N_Commande:cmdNum(c.Title),ID_Commande_Frs:c.ID,Qte_Commandee:Math.min(+b.Quantite||0,+l.Quantite||0)||(+b.Quantite||0)};
@@ -5393,7 +5396,7 @@ async function daRapprocher(cmdId){
   return n;
 }
 async function daRapprocherTout(){
-  if(!DATA.cmd||!DATA.lda||!DATA.lda.some(daLigneOuverte))return 0;
+  if(!DATA.cmd||!DATA.lda||!DATA.lda.some(l=>daLigneOuverte(l)||(l.N_Commande&&!l.ID_Commande_Frs)))return 0;
   let n=0;for(const c of DATA.cmd.filter(c=>c.Annulee!=='Oui'))n+=await daRapprocher(c.ID);
   if(n&&typeof renderCommandes==='function')renderCommandes();return n;
 }
@@ -6830,7 +6833,7 @@ async function raDeposer(file){
 function raEnCours(saufId){
   const M=new Map(),D=new Map((DATA.da||[]).map(d=>[d.ID,d]));
   for(const l of DATA.lda||[]){
-    const d=D.get(l.ID_Demande);if(!d||d.ID===saufId||['Annulée','Refusée'].includes(d.Statut)||l.N_Commande)continue;
+    const d=D.get(l.ID_Demande);if(!d||d.ID===saufId||['Annulée','Refusée'].includes(d.Statut)||l.N_Commande||raEstTest(d))continue;   // un envoi test ne modifie pas le calcul
     const k=String(l.Title||'').trim().toUpperCase();if(!k)continue;
     const e=M.get(k)||{stock:0,cli:[],da:[]};const q=+l.Quantite||0;
     if(l.Client&&l.Client!=='Stock')e.cli.push({c:l.Client,q,da:d.Title});else e.stock+=q;
@@ -7275,9 +7278,9 @@ function raVuePasser(D){
           ${split?`<span class="st st-valid">${B.length} commandes : Tubes / Autres articles</span>`:raStatutBC(g.L)}
           <span style="flex:1"></span>${ed?`<label class="muted" style="font-size:12px" title="Code transitaire Image pour cette commande (liste : clé TRANSITAIRES de Parametres_Achats ; défaut du fournisseur via ⚙ dans « Préparer »)">Transitaire <input class="ra-in sm" data-ratransit="${esc(k)}" list="dlTransit" value="${esc(tr)}" placeholder="code" style="width:70px"> ${raTransitLbl(tr,g.f)}</label>
           ${both?`<label class="muted" style="font-size:12px" title="Coché : une commande pour les tubes, une pour les autres articles (le transitaire fait ses assemblages). Décoche pour tout passer en une seule commande."><input type="checkbox" data-rasplit="${esc(k)}" ${split?'checked':''}> séparer tubes / autres</label>`:''}
-          ${split?'':`<button class="btn sm" data-raxls="${esc(k)}">⬇ Excel</button>`}`:''}</div>
+          ${split?'':`<button class="btn sm" data-raxls="${esc(k)}">⬇ Excel</button>${raSaisiHtml(k,'',g.L)}`}`:''}</div>
           ${B.map((bl,bi)=>{const aj=ajouts.filter(x=>!split||raCat(x.code,(raArtExport(x.code)||{}).lib)===bl.cat);const dernier=bi===B.length-1;
-            return `${split?`<div class="ra-sbh">${bl.cat==='Tubes'?'🟦 Commande TUBES':'🟩 Commande AUTRES ARTICLES'} · ${bl.L.length} ligne${bl.L.length>1?'s':''} ${raStatutBC(bl.L)}<span style="flex:1"></span>${ed?`<button class="btn sm" data-raxls="${esc(k)}" data-ratyp="${bl.cat}">⬇ Excel ${bl.cat==='Tubes'?'tubes':'autres'}</button>`:''}</div>`:''}
+            return `${split?`<div class="ra-sbh">${bl.cat==='Tubes'?'🟦 Commande TUBES':'🟩 Commande AUTRES ARTICLES'} · ${bl.L.length} ligne${bl.L.length>1?'s':''} ${raStatutBC(bl.L)}<span style="flex:1"></span>${ed?`<button class="btn sm" data-raxls="${esc(k)}" data-ratyp="${bl.cat}">⬇ Excel ${bl.cat==='Tubes'?'tubes':'autres'}</button>${raSaisiHtml(k,bl.cat,bl.L)}`:''}</div>`:''}
           <table class="ra-t"><thead><tr><th>Réf.</th><th>Désignation</th><th>Type</th><th class="r" data-tip="Colisage d’achat : celui d’Image, ou celui mémorisé dans le portail">Colis</th><th class="r">Qté</th><th>Client</th><th>BC Image</th></tr></thead><tbody>
           ${bl.L.map(l=>raLignePasser(d,l,ed)).join('')}
           ${aj.map(x=>{const a=raArtExport(x.code);return `<tr class="ra-q"><td class="mono"><b>${esc(x.code)}</b> <span class="ra-e" style="color:#1565c0;background:#e8f2fd">ajout</span></td><td>${esc(a?a.lib:'')}</td><td>${esc(raTypeArticle(x.code,a?a.lib:''))}</td><td class="r">${raN0(raColis(x.code))}</td><td class="r"><b>${raN0(raNum(x.q))}</b></td><td></td><td><button class="ra-x" data-raaddx="${d.ID}|${x.i}" title="Retirer cet ajout">✕</button></td></tr>`;}).join('')}
@@ -7308,6 +7311,24 @@ function raBlocs(d,g){
 function raStatutBC(L){
   const fait=L.filter(l=>l.N_Commande).length,bcs=[...new Set(L.map(l=>l.N_Commande).filter(Boolean))];
   return fait&&fait===L.length?`<span class="st st-ok">BC ${esc(bcs.join(', '))}</span>`:fait?`<span class="st st-valid">${fait}/${L.length} sur BC ${esc(bcs.join(', '))}</span>`:'<span class="st st-transit">à saisir dans Image</span>';
+}
+// ── « Saisi dans Image » : Patricia note le n° du BC dès la saisie → les lignes sortent tout de suite des « demandés »
+// (pas de double comptage avec « En cde » de la prochaine Query 19) ; l'import du PDF du BC complète ensuite le lien (ID_Commande_Frs).
+function raSaisiHtml(k,cat,L){
+  if(!L.some(l=>!l.N_Commande))return '';const id=esc(k+'|'+(cat||''));
+  return `<span class="ra-saisi" title="Dès que la commande est saisie dans Image : tape le n° du BC. Les lignes passent « commandées » et ne sont plus comptées en double au prochain calcul."><input class="ra-in sm mono" data-rabcnum="${id}" placeholder="n° BC" inputmode="numeric" style="width:66px"><button class="btn sm primary" data-rabcok="${id}">✓ Saisi dans Image</button></span>`;
+}
+async function raSaisiImage(id,num){
+  const [did,gk,cat]=id.split('|');const d=(DATA.da||[]).find(x=>x.ID===+did);if(!d)return;
+  const n=cmdNum(num);if(!n){toast('Tape le n° du BC Image (4 à 6 chiffres)','wa');return;}
+  if(raNbAjust(d)){toast('Enregistre d’abord tes ajustements (ou annule-les).','wa');return;}
+  const g=raGroupesPasser(d).find(x=>String(x.k)===gk);if(!g)return;
+  const L=(cat?g.L.filter(l=>raCat(l.Title,l.Designation)===cat):g.L).filter(l=>!l.N_Commande);if(!L.length)return;
+  if(!await showConfirm('Saisi dans Image',`Noter le <b>BC ${esc(n)}</b> pour ${L.length} ligne${L.length>1?'s':''} de <b>${esc(g.nom)}</b>${cat?` (${cat==='Tubes'?'tubes':'autres articles'})`:''} ?<br><span class="muted" style="font-size:12px">Les lignes passent « commandées ». Range ensuite le PDF du BC dans « Bon de commande » comme d’habitude.</span>`,'✓ Confirmer'))return;
+  busyOn('Enregistrement du BC…');
+  try{for(const l of L){const b={N_Commande:n,Qte_Commandee:+l.Quantite||0};await spPatch('Lignes_Demande_Achat',l.ID,b,l);Object.assign(l,b);}
+    busyOff();await reloadAll();renderReappro();toast(`✓ BC ${n} noté`,'ok');}
+  catch(e){busyOff();toast('🔴 '+e.message,'ko');await reloadAll();}
 }
 // ── Ajustements de Patricia après validation (colisage, minimum de commande, disponibilité…) ──
 function raArtExport(code){
@@ -7530,6 +7551,7 @@ document.addEventListener('click',e=>{
     const did=+b.dataset.raadd;const A=RAV.adjAdd.get(did)||[];A.push({code,q,gk:b.dataset.ragk});RAV.adjAdd.set(did,A);renderReappro();return;}
   if((b=c('[data-raaddx]'))){const [did,i]=b.dataset.raaddx.split('|').map(Number);const A=RAV.adjAdd.get(did)||[];A.splice(i,1);RAV.adjAdd.set(did,A);renderReappro();return;}
   if((b=c('[data-raadjannul]'))){const did=+b.dataset.raadjannul;daLignes(did).forEach(l=>{RAV.adj.delete(l.ID);RAV.colEd.delete(String(l.Title).toUpperCase());});RAV.adjAdd.delete(did);renderReappro();return;}
+  if((b=c('[data-rabcok]'))){const i=b.parentElement.querySelector('[data-rabcnum]');raSaisiImage(b.dataset.rabcok,i?i.value:'');return;}
   if((b=c('[data-raadjsave]'))){raAjusterEnregistrer(+b.dataset.raadjsave);return;}
   if(c('input,select,textarea,label'))return;
   if((b=c('[data-raouv]'))){const k=b.dataset.raouv;RAV.ouv=RAV.ouv===k?null:k;renderReappro();return;}
