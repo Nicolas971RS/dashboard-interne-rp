@@ -7264,13 +7264,13 @@ function raVuePasser(D){
   if(!D.length)return `<div class="card"><div class="card-b muted">Aucune commande de réapprovisionnement validée en attente de saisie dans Image.</div></div>`;
   const ed=raPeutPreparer();
   const dl=ed&&RAV.exp?`<datalist id="dlRaArtP">${RAV.exp.arts.filter(a=>!a.pseudo).map(a=>`<option value="${esc(a.code)}">${esc(a.lib)}</option>`).join('')}</datalist>`:'';
-  return dl+raDlTransit()+`<div class="muted" style="margin:0 0 10px;font-size:12.5px">Saisis chaque commande dans Image (liste imprimée ou fichier Excel), puis range le PDF du BC dans « Dossier partage › Bon de commande » : le portail relie automatiquement les lignes au BC. Avant la saisie, tu peux ajuster une quantité (colisage, minimum de commande…) : l’ajustement est noté sur la demande, Fabrice le voit. Le format du fichier d’import Image est provisoire tant que Stratégie ne l’a pas confirmé.</div>`+
+  return dl+raDlTransit()+`<div class="muted" style="margin:0 0 10px;font-size:12.5px">Saisis chaque commande dans Image (liste imprimée ou fichier Excel), puis range le PDF du BC dans « Dossier partage › Bon de commande » : le portail relie automatiquement les lignes au BC. Avant la saisie, tu peux ajuster une quantité (colisage, minimum de commande…) : l’ajustement est noté sur la demande, Fabrice le voit. Fichier Image : 2 colonnes (référence, quantité) ; Image crée une commande par fournisseur, Patricia complète ensuite le transitaire et les infos de chaque commande.</div>`+
   D.map(d=>{const G=raGroupesPasser(d);const nAdj=raNbAjust(d);
     const hist=String(d.Commentaire||'').split('\n').filter(x=>/^\[Ajustement/.test(x));
     return `<div class="card"><div class="card-b"><div class="ra-rh"><div><h3 style="margin:0">📤 ${esc(d.Title)} ${raEstTest(d)?'<span class="ra-e" style="color:#b45309;background:#fff7ed">TEST</span> ':''}<span class="st ${daEtat(d).cls}">${esc(daEtat(d).lbl)}</span></h3>
       <div class="muted" style="font-size:12.5px">Validée par <b>${esc(d.Valide_Par||'?')}</b> le ${fmtD(dk(d,'Date_Validation'))} · ${esc(d.Transport||'')} · ${G.length} fournisseur${G.length>1?'s':''}</div>
       ${hist.map(x=>`<div class="pay-com">✏️ ${esc(x)}</div>`).join('')}</div>
-      <div style="display:flex;gap:6px">${raEstTest(d)&&peutImporter()?`<button class="btn sm ghost" style="color:#b91c1c" data-rasuptest="${d.ID}">🗑 Supprimer ce test</button>`:''}<button class="btn sm" data-raimp="${d.ID}">🖨 Imprimer</button>${ed?`<button class="btn sm" data-raxlsall="${d.ID}">⬇ Excel (tous)</button>`:''}</div></div>
+      <div style="display:flex;gap:6px">${raEstTest(d)&&peutImporter()?`<button class="btn sm ghost" style="color:#b91c1c" data-rasuptest="${d.ID}">🗑 Supprimer ce test</button>`:''}<button class="btn sm" data-raimp="${d.ID}" title="Fiche de saisie : une commande par bloc, cases de suivi">🖨 Fiche de saisie</button>${ed?raBoutonsTous(d):''}</div></div>
       ${G.map(g=>{const k=d.ID+'|'+g.k;const B=raBlocs(d,g);const split=B.length>1;const both=raADeuxCats(g);
         const tr=RAV.transit.has(k)?RAV.transit.get(k):((g.f&&g.f.Code_Transitaire)||'');
         const ajouts=(RAV.adjAdd.get(d.ID)||[]).map((x,i)=>({...x,i})).filter(x=>String(x.gk)===String(g.k));
@@ -7278,11 +7278,11 @@ function raVuePasser(D){
           ${split?`<span class="st st-valid">${B.length} commandes : Tubes / Autres articles</span>`:raStatutBC(g.L)}
           <span style="flex:1"></span>${ed?`<label class="muted" style="font-size:12px" title="Code transitaire Image pour cette commande (liste : clé TRANSITAIRES de Parametres_Achats ; défaut du fournisseur via ⚙ dans « Préparer »)">Transitaire <input class="ra-in sm" data-ratransit="${esc(k)}" list="dlTransit" value="${esc(tr)}" placeholder="code" style="width:70px"> ${raTransitLbl(tr,g.f)}</label>
           ${both?`<label class="muted" style="font-size:12px" title="Coché : une commande pour les tubes, une pour les autres articles (le transitaire fait ses assemblages). Décoche pour tout passer en une seule commande."><input type="checkbox" data-rasplit="${esc(k)}" ${split?'checked':''}> séparer tubes / autres</label>`:''}
-          ${split?'':`<button class="btn sm" data-raxls="${esc(k)}">⬇ Excel</button>${raSaisiHtml(k,'',g.L)}`}`:''}</div>
+          ${split?'':`<button class="btn sm" data-raxls="${esc(k)}" title="Fichier Image de ce fournisseur seulement">⬇ Fichier</button>${raSaisiHtml(k,'',g.L)}`}`:''}</div>
           ${B.map((bl,bi)=>{const aj=ajouts.filter(x=>!split||raCat(x.code,(raArtExport(x.code)||{}).lib)===bl.cat);const dernier=bi===B.length-1;
-            return `${split?`<div class="ra-sbh">${bl.cat==='Tubes'?'🟦 Commande TUBES':'🟩 Commande AUTRES ARTICLES'} · ${bl.L.length} ligne${bl.L.length>1?'s':''} ${raStatutBC(bl.L)}<span style="flex:1"></span>${ed?`<button class="btn sm" data-raxls="${esc(k)}" data-ratyp="${bl.cat}">⬇ Excel ${bl.cat==='Tubes'?'tubes':'autres'}</button>${raSaisiHtml(k,bl.cat,bl.L)}`:''}</div>`:''}
+            return `${split?`<div class="ra-sbh">${bl.cat==='Tubes'?'🟦 Commande TUBES':'🟩 Commande AUTRES ARTICLES'} · ${bl.L.length} ligne${bl.L.length>1?'s':''} ${raStatutBC(bl.L)}<span style="flex:1"></span>${ed?`<button class="btn sm" data-raxls="${esc(k)}" data-ratyp="${bl.cat}" title="Fichier Image de ce bloc seulement">⬇ Fichier</button>${raSaisiHtml(k,bl.cat,bl.L)}`:''}</div>`:''}
           <table class="ra-t"><thead><tr><th>Réf.</th><th>Désignation</th><th>Type</th><th class="r" data-tip="Colisage d’achat : celui d’Image, ou celui mémorisé dans le portail">Colis</th><th class="r">Qté</th><th>Client</th><th>BC Image</th></tr></thead><tbody>
-          ${bl.L.map(l=>raLignePasser(d,l,ed)).join('')}
+          ${bl.L.map(l=>raLignePasser(d,l,ed,g)).join('')}
           ${aj.map(x=>{const a=raArtExport(x.code);return `<tr class="ra-q"><td class="mono"><b>${esc(x.code)}</b> <span class="ra-e" style="color:#1565c0;background:#e8f2fd">ajout</span></td><td>${esc(a?a.lib:'')}</td><td>${esc(raTypeArticle(x.code,a?a.lib:''))}</td><td class="r">${raN0(raColis(x.code))}</td><td class="r"><b>${raN0(raNum(x.q))}</b></td><td></td><td><button class="ra-x" data-raaddx="${d.ID}|${x.i}" title="Retirer cet ajout">✕</button></td></tr>`;}).join('')}
           ${ed&&dernier&&g.L.some(l=>!l.N_Commande)?`<tr class="ra-addrow"><td colspan="7"><span class="ra-sub">＋ Ajouter chez ${esc(g.nom)} :</span> <input class="ra-in mono" data-raaddcode list="dlRaArtP" placeholder="réf." style="width:110px;text-align:left"> <input class="ra-in sm" data-raaddq placeholder="qté" inputmode="decimal"> <button class="btn sm" data-raadd="${d.ID}" data-ragk="${esc(g.k)}">Ajouter</button>${split?' <span class="ra-sub">(rangé automatiquement dans Tubes ou Autres)</span>':''}</td></tr>`:''}
           </tbody></table>`;}).join('')}`;}).join('')}
@@ -7330,6 +7330,13 @@ async function raSaisiImage(id,num){
     busyOff();await reloadAll();renderReappro();toast(`✓ BC ${n} noté`,'ok');}
   catch(e){busyOff();toast('🔴 '+e.message,'ko');await reloadAll();}
 }
+function raBoutonsTous(d){
+  const cats=new Set(raGroupesPasser(d).flatMap(g=>raBlocs(d,g).filter(bl=>bl.L.some(l=>!l.N_Commande)).map(bl=>raCatBloc(g,bl))));
+  if(!cats.size)return '';
+  const t='Un seul fichier pour tous les fournisseurs : Image crée une commande par fournisseur';
+  return cats.size>1?`<button class="btn sm primary" data-raxlstous="${d.ID}|Tubes" title="${t}">⬇ Fichier Image TUBES</button><button class="btn sm primary" data-raxlstous="${d.ID}|Autres" title="${t}">⬇ Fichier Image AUTRES</button>`
+    :`<button class="btn sm primary" data-raxlstous="${d.ID}|" title="${t}">⬇ Fichier Image</button>`;
+}
 // ── Ajustements de Patricia après validation (colisage, minimum de commande, disponibilité…) ──
 function raArtExport(code){
   if(!RAV.exp)return null;if(!RAV.expIdx||RAV.expIdx.p!==RAV.exp.path){RAV.expIdx={p:RAV.exp.path,m:new Map(RAV.exp.arts.map(a=>[a.code.toUpperCase(),a]))};}
@@ -7341,13 +7348,13 @@ function raColis(code){
   const ar=RAV.artIdx.get(k);if(ar&&+ar.Colisage>0)return +ar.Colisage;const a=raArtExport(code);return a?(a.colImage||a.col||1):1;
 }
 function raNbAjust(d){const L=daLignes(d.ID);return L.filter(l=>RAV.adj.has(l.ID)&&RAV.adj.get(l.ID)!==+l.Quantite).length+(RAV.adjAdd.get(d.ID)||[]).length+[...RAV.colEd.keys()].filter(k=>L.some(l=>String(l.Title).toUpperCase()===k)).length;}
-function raLignePasser(d,l,ed){
+function raLignePasser(d,l,ed,g){
   const lock=!!l.N_Commande,v=+l.Quantite||0,q=RAV.adj.has(l.ID)?RAV.adj.get(l.ID):v,col=raColis(l.Title),k=String(l.Title).toUpperCase();
   const ar=RAV.artIdx.get(k),a=raArtExport(l.Title);
   const colIn=ed&&!lock?`<input class="ra-in sm" data-racolis="${esc(l.Title)}" value="${esc(RAV.colEd.has(k)?RAV.colEd.get(k):(ar&&+ar.Colisage>0?ar.Colisage:''))}" placeholder="${raN0(a?(a.colImage||a.col):1)}" title="Colisage d’achat (mémorisé pour les prochains calculs)">`:raN0(col);
   const hors=col>1&&q>0&&Math.abs(q/col-Math.round(q/col))>1e-9;
   const qIn=ed&&!lock?`<div class="ra-qw"><input class="ra-in ${q!==v?'mod':''}" data-rapqa="${l.ID}" inputmode="decimal" value="${q||''}" placeholder="0">${hors?`<button class="ra-x re" data-raarr="${l.ID}" tabindex="-1" title="Arrondir au colis supérieur : ${raN0(Math.ceil(q/col)*col)}">⤒</button>`:''}<button class="ra-x" data-razqa="${l.ID}" tabindex="-1" title="Ne pas commander">✕</button></div>${q!==v?`<div class="ra-sub">validé : ${raN0(v)}</div>`:''}${hors?'<div class="ra-sub" style="color:#b45309">pas un multiple du colis</div>':''}`:`<b>${raN0(v)}</b>`;
-  return `<tr class="${q!==v?'ra-q':''}"><td class="mono"><b>${esc(l.Title)}</b></td><td>${esc(daDes(l))}${l.Fournisseur_Initial?` <span class="ra-sub">(au lieu de ${esc(l.Fournisseur_Initial)})</span>`:''}</td><td>${esc(raTypeArticle(l.Title,l.Designation))}</td><td class="r">${colIn}</td><td class="r">${qIn}</td><td>${esc(l.Client&&l.Client!=='Stock'?l.Client:'')}</td><td>${l.N_Commande?`<span class="st st-ok">${esc(l.N_Commande)}</span>`:'—'}</td></tr>`;
+  return `<tr class="${q!==v?'ra-q':''}"><td class="mono"><b>${esc(l.Title)}</b></td><td>${esc(daDes(l))}${l.Fournisseur_Initial?` <span class="ra-sub">(au lieu de ${esc(l.Fournisseur_Initial)})</span>`:''}${g&&raHorsFichier(l,g)?` <span class="ra-e" style="color:#b45309;background:#fff7ed" data-tip="Dans Image, cet article est rattaché à ${esc((raArtExport(l.Title)||{}).frs||'un autre fournisseur')} : le fichier l’enverrait chez lui. Il est donc exclu du fichier, à saisir à la main dans cette commande.">à saisir à la main</span>`:''}</td><td>${esc(raTypeArticle(l.Title,l.Designation))}</td><td class="r">${colIn}</td><td class="r">${qIn}</td><td>${esc(l.Client&&l.Client!=='Stock'?l.Client:'')}</td><td>${l.N_Commande?`<span class="st st-ok">${esc(l.N_Commande)}</span>`:'—'}</td></tr>`;
 }
 async function raAjusterEnregistrer(did){
   const d=(DATA.da||[]).find(x=>x.ID===did);if(!d)return;
@@ -7374,40 +7381,69 @@ async function raAjusterEnregistrer(did){
     busyOff();await reloadAll();renderReappro();toast('✓ Ajustements enregistrés','ok');
   }catch(e){busyOff();toast('🔴 '+e.message,'ko');await reloadAll();}
 }
-// Fichier provisoire pour « Import cmde/excel » (format à confirmer par Stratégie) : une ligne par article
-function raLignesXls(d,g,typ){
-  const k=d.ID+'|'+g.k;const tr=RAV.transit.has(k)?RAV.transit.get(k):((g.f&&g.f.Code_Transitaire)||'');
-  return g.L.filter(l=>!typ||raCat(l.Title,l.Designation)===typ).map(l=>[String((g.f&&g.f.Code_Image)||''),raTypeAchat(g.f,null),String(tr||''),String(l.Title),+l.Quantite||0,daDes(l),l.Client&&l.Client!=='Stock'?l.Client:'']);
+// Fichier « Import cmde/excel » d'Image (format confirmé par Stratégie le 9/11/2026) : 2 colonnes, référence article + quantité, sans en-tête.
+// Image range chaque article chez SON fournisseur Image et crée une commande par fournisseur : un article commandé chez un autre
+// fournisseur que celui d'Image est donc exclu du fichier (« à saisir à la main »), sinon il partirait chez le mauvais fournisseur.
+function raHorsFichier(l,g){
+  const a=raArtExport(l.Title),ci=g&&g.f&&g.f.Code_Image?String(g.f.Code_Image).trim().toUpperCase():'';
+  if(a&&ci)return a.frs!==ci;return !!l.Fournisseur_Initial;
 }
-const RA_XLS_ENTETE=['Code fournisseur','Type commande','Code transitaire','Code article','Quantité','Désignation','Client'];
+function raLignesXls(L,g){   // une ligne par article (stock + clients additionnés)
+  const M=new Map();L.forEach(l=>{if(raHorsFichier(l,g)||!(+l.Quantite>0))return;const k=String(l.Title);M.set(k,(M.get(k)||0)+(+l.Quantite||0));});
+  return [...M.entries()];
+}
 function raFeuille(rows){
-  const ws=XLSX.utils.aoa_to_sheet([RA_XLS_ENTETE,...rows]);
-  rows.forEach((r,i)=>{['A','B','C','D'].forEach(c=>{const cell=ws[c+(i+2)];if(cell){cell.t='s';cell.v=String(cell.v);cell.z='@';}});});
-  ws['!cols']=[{wch:16},{wch:14},{wch:16},{wch:16},{wch:10},{wch:40},{wch:22}];return ws;
+  const ws=XLSX.utils.aoa_to_sheet(rows.length?rows:[[]]);
+  rows.forEach((r,i)=>{const c=ws['A'+(i+1)];if(c){c.t='s';c.v=String(c.v);c.z='@';}});
+  ws['!cols']=[{wch:16},{wch:10}];return ws;
 }
 const raNomFichier=s=>String(s).replace(/[\\\/:*?"<>|]+/g,'-').replace(/\s+/g,' ').trim();
+// Catégorie d'un bloc pour les fichiers « tous fournisseurs » : Tubes / Autres ; un fournisseur regroupé par Patricia va dans « Autres »
+const raCatBloc=(g,bl)=>bl.cat||(raADeuxCats(g)?'Autres':raCat(g.L[0].Title,g.L[0].Designation));
+async function raEcrireXls(rows,nom,hors){
+  if(!rows.length){toast(hors?`Aucune ligne pour le fichier : ${hors} article${hors>1?'s':''} à saisir à la main.`:'Aucune ligne à importer.','wa');return;}
+  try{await loadScript(XLSX_CDN);}catch(e){toast('🔴 '+e.message,'ko');return;}
+  const wb=XLSX.utils.book_new();XLSX.utils.book_append_sheet(wb,raFeuille(rows),'Import');XLSX.writeFile(wb,raNomFichier(nom));
+  toast(`✓ ${rows.length} article${rows.length>1?'s':''} · Image : « Import cmde/excel », 0 ligne d’entête à ignorer${hors?` · ⚠️ ${hors} article${hors>1?'s':''} à saisir à la main (voir la fiche imprimée)`:''}`,hors?'wa':'ok');
+}
 async function raExcel(did,k,typ){
   const d=(DATA.da||[]).find(x=>x.ID===did);if(!d)return;
   if(raNbAjust(d)){toast('Enregistre d’abord tes ajustements (ou annule-les) : le fichier reprend les quantités enregistrées.','wa');return;}
-  try{await loadScript(XLSX_CDN);}catch(e){toast('🔴 '+e.message,'ko');return;}
-  const wb=XLSX.utils.book_new();let nom;
-  if(k){const g=raGroupesPasser(d).find(x=>d.ID+'|'+x.k===k);if(!g)return;const rows=raLignesXls(d,g,typ);
-    XLSX.utils.book_append_sheet(wb,raFeuille(rows),'Commande');nom=`Commande ${(g.f&&g.f.Code_Image)||''} ${(g.f&&(g.f.Nom_Court||g.f.Title))||g.nom}${typ?' '+(typ==='Tubes'?'TUBES':'AUTRES'):''} ${d.Title}.xlsx`;}
-  else{raGroupesPasser(d).forEach(g=>{raBlocs(d,g).forEach(bl=>XLSX.utils.book_append_sheet(wb,raFeuille(raLignesXls(d,g,bl.cat)),raNomFichier(`${(g.f&&g.f.Code_Image)||''} ${(g.f&&(g.f.Nom_Court||g.f.Title))||g.nom}`).slice(0,24)+(bl.cat?' '+(bl.cat==='Tubes'?'TUBES':'AUTRES'):'')));});
-    nom=`Reappro ${d.Title}.xlsx`;}
-  XLSX.writeFile(wb,raNomFichier(nom));
+  const g=raGroupesPasser(d).find(x=>d.ID+'|'+x.k===k);if(!g)return;
+  const L=typ?g.L.filter(l=>raCat(l.Title,l.Designation)===typ):g.L;
+  await raEcrireXls(raLignesXls(L,g),`Image ${(g.f&&g.f.Code_Image)||''} ${(g.f&&(g.f.Nom_Court||g.f.Title))||g.nom}${typ?' '+(typ==='Tubes'?'TUBES':'AUTRES'):''} ${d.Title}.xlsx`,L.filter(l=>raHorsFichier(l,g)).length);
+}
+// Un seul fichier par catégorie pour tous les fournisseurs : Image crée lui-même une commande par fournisseur
+async function raExcelTous(did,cat){
+  const d=(DATA.da||[]).find(x=>x.ID===did);if(!d)return;
+  if(raNbAjust(d)){toast('Enregistre d’abord tes ajustements (ou annule-les).','wa');return;}
+  const M=new Map();let hors=0;
+  raGroupesPasser(d).forEach(g=>raBlocs(d,g).forEach(bl=>{if(cat&&raCatBloc(g,bl)!==cat)return;const L=bl.L.filter(l=>!l.N_Commande);hors+=L.filter(l=>raHorsFichier(l,g)).length;raLignesXls(L,g).forEach(([c,q])=>M.set(c,(M.get(c)||0)+q));}));
+  await raEcrireXls([...M.entries()],`Image ${cat?(cat==='Tubes'?'TUBES':'AUTRES')+' ':''}tous fournisseurs ${d.Title}.xlsx`,hors);
 }
 function raImprimer(did){
   const d=(DATA.da||[]).find(x=>x.ID===did);if(!d)return;
   if(raNbAjust(d)&&d.Statut==='Validée'){toast('Enregistre d’abord tes ajustements (ou annule-les).','wa');return;}
   const w=window.open('','_blank');if(!w){toast('🔴 Fenêtre bloquée : autorise les fenêtres pour ce site','ko');return;}
-  const G=raGroupesPasser(d);
-  const body=G.flatMap(g=>raBlocs(d,g).map(bl=>({g,bl}))).map(({g,bl})=>`<h2>${esc(g.nom)} ${g.f&&g.f.Code_Image?'<span class="m">'+esc(g.f.Code_Image)+'</span>':''}${bl.cat?` — <span style="background:${bl.cat==='Tubes'?'#dbeafe':'#dcfce7'};padding:1px 6px;border-radius:4px">Commande ${bl.cat==='Tubes'?'TUBES':'AUTRES ARTICLES'}</span>`:''} <span class="m">· ${esc(raTypeAchat(g.f,null))}${(()=>{const k=d.ID+'|'+g.k;const c=String(RAV.transit.has(k)?RAV.transit.get(k):((g.f&&g.f.Code_Transitaire)||'')).toUpperCase();const t=raTransitaires().find(x=>x.code===c);return c?' · transitaire '+esc(c)+(t&&t.nom?' ('+esc(t.nom)+')':''):'';})()}</span></h2>
-    <table><thead><tr><th>Réf.</th><th>Désignation</th><th>Type</th><th class="r">Qté</th><th>Client</th><th>Saisi</th></tr></thead><tbody>${bl.L.map(l=>`<tr><td><b>${esc(l.Title)}</b></td><td>${esc(daDes(l))}</td><td>${esc(raTypeArticle(l.Title,l.Designation))}</td><td class="r"><b>${raN0(+l.Quantite)}</b></td><td>${esc(l.Client&&l.Client!=='Stock'?l.Client:'')}</td><td class="c">${l.N_Commande?esc(l.N_Commande):'☐'}</td></tr>`).join('')}</tbody></table>`).join('');
-  w.document.write(`<!doctype html><html lang="fr"><head><meta charset="utf-8"><title>Réappro ${esc(d.Title)}</title><style>body{font-family:Arial,sans-serif;font-size:11.5px;color:#111;margin:18px}h1{font-size:17px;margin:0}h2{font-size:13.5px;margin:16px 0 4px}.m{color:#555;font-weight:normal}.s{color:#555;margin:2px 0 8px}
-  table{border-collapse:collapse;width:100%}th,td{border:1px solid #cbd5e1;padding:3px 6px}th{background:#e2e8f0;text-align:left}.r{text-align:right}.c{text-align:center}*{-webkit-print-color-adjust:exact;print-color-adjust:exact}@page{size:A4;margin:12mm}</style></head><body>
-  <h1>Réapprovisionnement ${esc(d.Title)}</h1><div class="s">${esc(d.Statut==='Validée'?'Validé par '+(d.Valide_Par||'?')+' le '+fmtD(dk(d,'Date_Validation')):d.Statut)} · ${esc(d.Transport||'')} · imprimé le ${fmtD(todayKey())}</div>${body}
-  <script>window.onload=()=>setTimeout(()=>window.print(),250)<\/script></body></html>`);
+  const B=raGroupesPasser(d).flatMap(g=>raBlocs(d,g).map(bl=>({g,bl,cat:raCatBloc(g,bl)})));
+  const cases=['Fichier importé dans Image','Transitaire et infos saisis','Articles « à la main » saisis','PDF du BC rangé','« Saisi dans Image » cliqué'];
+  const trans=g=>{const k=d.ID+'|'+g.k;const c=String(RAV.transit.has(k)?RAV.transit.get(k):((g.f&&g.f.Code_Transitaire)||'')).toUpperCase();const t=raTransitaires().find(x=>x.code===c);return c?esc(c)+(t&&t.nom?' — '+esc(t.nom):''):'<span class="vide">________</span>';};
+  const body=B.map(({g,bl,cat})=>{const hors=bl.L.filter(l=>raHorsFichier(l,g));const bcs=[...new Set(bl.L.map(l=>l.N_Commande).filter(Boolean))];
+    return `<section class="bloc"><div class="bh"><div><b class="frs">${esc(g.nom)}</b> <span class="m">${esc((g.f&&g.f.Code_Image)||'')}</span> <span class="cat ${cat==='Tubes'?'t':'a'}">Commande ${cat==='Tubes'?'TUBES':'AUTRES ARTICLES'}</span></div>
+      <div class="m">${esc(raTypeAchat(g.f,null))} · transitaire : <b>${trans(g)}</b> · ${bl.L.length} ligne${bl.L.length>1?'s':''}</div></div>
+      <div class="suivi">${cases.filter(c=>(c!=='Articles « à la main » saisis'||hors.length)&&(c!=='Fichier importé dans Image'||hors.length<bl.L.length)).map(c=>`<span><span class="cb">☐</span> ${c}</span>`).join('')}<span>BC n° <b>${bcs.length?esc(bcs.join(', ')):'<span class="vide">__________</span>'}</b></span></div>
+      <table><thead><tr><th>Réf.</th><th>Désignation</th><th class="r">Qté</th><th>Client</th><th>Fichier</th><th class="c">Vérifié</th></tr></thead><tbody>
+      ${bl.L.map(l=>`<tr class="${raHorsFichier(l,g)?'main':''}"><td><b>${esc(l.Title)}</b></td><td>${esc(daDes(l))}</td><td class="r"><b>${raN0(+l.Quantite)}</b></td><td>${esc(l.Client&&l.Client!=='Stock'?l.Client:'')}</td><td>${raHorsFichier(l,g)?'<b>⚠ à saisir à la main</b>':'✓'}</td><td class="c cb">${l.N_Commande?esc(l.N_Commande):'☐'}</td></tr>`).join('')}</tbody></table></section>`;}).join('');
+  const nT=B.filter(x=>x.cat==='Tubes').length,nA=B.length-nT;
+  w.document.write(`<!doctype html><html lang="fr"><head><meta charset="utf-8"><title>Réappro ${esc(d.Title)}</title><style>body{font-family:Arial,sans-serif;font-size:11.5px;color:#111;margin:18px}h1{font-size:17px;margin:0}.m{color:#555;font-weight:normal}.s{color:#555;margin:2px 0 10px}
+  .bloc{border:1.5px solid #94a3b8;border-radius:6px;padding:8px 10px;margin:0 0 12px;break-inside:avoid}.bh{display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-bottom:6px}.frs{font-size:14px}
+  .cat{font-weight:bold;padding:1px 7px;border-radius:4px;margin-left:6px}.cat.t{background:#dbeafe}.cat.a{background:#dcfce7}
+  .suivi{display:flex;flex-wrap:wrap;gap:6px 16px;padding:6px 8px;margin-bottom:6px;background:#f8fafc;border:1px dashed #94a3b8;border-radius:4px}.cb{font-size:15px}.vide{color:#999;font-weight:normal}
+  table{border-collapse:collapse;width:100%}th,td{border:1px solid #cbd5e1;padding:3px 6px}th{background:#e2e8f0;text-align:left}.r{text-align:right}.c{text-align:center}tr.main td{background:#fff7ed}
+  .rappel{border:1px solid #cbd5e1;border-radius:6px;padding:6px 10px;margin-bottom:12px;background:#f8fafc}*{-webkit-print-color-adjust:exact;print-color-adjust:exact}@page{size:A4;margin:11mm}</style></head><body>
+  <h1>Réapprovisionnement ${esc(d.Title)} — fiche de saisie Image</h1><div class="s">${esc(d.Statut==='Validée'?'Validé par '+(d.Valide_Par||'?')+' le '+fmtD(dk(d,'Date_Validation')):d.Statut)} · ${esc(d.Transport||'')} · ${B.length} commande${B.length>1?'s':''} (${nT} tubes, ${nA} autres) · imprimé le ${fmtD(todayKey())}</div>
+  <div class="rappel"><b>Dans Image :</b> Commandes fournisseur › « Import cmde/excel » › 0 ligne d’entête à ignorer › fichier ${nT?'« TUBES » puis « AUTRES »':'du portail'} : Image crée une commande par fournisseur. Pour chaque commande ci-dessous : compléter transitaire et infos, saisir les articles « à la main », noter le n° de BC, puis cocher.</div>
+  ${body}<script>window.onload=()=>setTimeout(()=>window.print(),250)<\/script></body></html>`);
   w.document.close();
 }
 
@@ -7566,7 +7602,7 @@ document.addEventListener('click',e=>{
   if((b=c('#raRenvoyerF'))){raRenvoyerFabrice(+b.dataset.raid);return;}
   if((b=c('#raAbandon'))){raAbandonner(+b.dataset.raid);return;}
   if((b=c('[data-raimp]'))){raImprimer(+b.dataset.raimp);return;}
-  if((b=c('[data-raxlsall]'))){raExcel(+b.dataset.raxlsall,null);return;}
+  if((b=c('[data-raxlstous]'))){const [i,cat]=b.dataset.raxlstous.split('|');raExcelTous(+i,cat||null);return;}
   if((b=c('[data-raxls]'))){const k=b.dataset.raxls;raExcel(+k.split('|')[0],k,b.dataset.ratyp||null);return;}
   if((b=c('#raAjOk'))){const code=String(($('raAjCode')||{}).value||'').trim().toUpperCase(),q=String(($('raAjQ')||{}).value||'').trim();if(!code||!(parseNum(q)>0)){toast('Réf. et quantité','wa');return;}
     const r=raLignes(RAV.revue).find(x=>x.a.code.toUpperCase()===code);RAV.ajouts.push({code,q,frs:r&&r.f?r.f.Title:'',cli:''});renderReappro();return;}
