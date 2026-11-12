@@ -1895,10 +1895,20 @@ function rxBandeau(G,rs,lecture){
   {const U=[...new Map(S.filter(g=>g.rx.fait).map(g=>[g.rx.sess.ID,g.rx])).values()],t=U.reduce((a,x)=>a+x.nVerTot,0),v=U.reduce((a,x)=>a+x.nVer,0);
    if(t&&!RX.verKo)h+=`<div class="rx-ban ${v>=t?'ok':'info'}" style="padding:6px 12px">☑ <b>Vérification au bureau : ${v} / ${t} ligne${t>1?'s':''}</b>${v>=t?' · tout est vérifié':' · les lignes cochées restent cochées si tu quittes et reviens'}</div>`;
    else if(t&&RX.verKo&&!lecture)h+=`<div class="rx-ban warn" style="padding:6px 12px">☑ Cases « Vérifié » : crée la colonne <b>Verifie</b> (une seule ligne de texte) dans Lignes_Scan.</div>`;}
+  {const AD=rxAutresDossiers();if(AD.length)h+=`<div class="rx-ban ko">⚠ <b>Conteneur en double :</b> ${AD.map(d=>`le dossier <b>${esc(rxNomDossier(d))}</b> a aussi envoyé ${d.S.length} fiche${d.S.length>1?'s':''} pour ce conteneur (${d.S.filter(x=>x.Statut===RX_FAIT).length} contrôlée${d.S.filter(x=>x.Statut===RX_FAIT).length>1?'s':''})`).join(' ; ')}. Les magasiniers voient donc chaque fournisseur en double dans le portail Scan. Garde un seul dossier : ouvre l’autre et annule son envoi (ou supprime-le s’il est en trop).</div>`;}
   if(rs.nSans&&!lecture)h+=`<div class="rx-ban warn">${rs.nSans} groupe${rs.nSans>1?'s':''} sans fiche de contrôle (lignes ajoutées après l’envoi). <span class="rx-act"><button class="btn sm" data-act="rxEnvoyer">📲 Envoyer ${rs.nSans>1?'les fiches manquantes':'la fiche manquante'}</button></span></div>`;
   if(RX.err==='colonnes')h+=`<div class="rx-ban warn">Colonnes de réception absentes dans Lignes_Scan : quantités abîmées / observations non lues.</div>`;
   return h;
 }
+// Fiches du MÊME conteneur envoyées depuis un AUTRE dossier (dossier en double) : le portail Scan les regroupe par conteneur → fournisseurs en double chez les magasiniers
+const rxContNorm=s=>String(s||'').toUpperCase().replace(/[^A-Z0-9]/g,'');
+function rxAutresDossiers(){
+  if(!W)return [];const c=rxContNorm(W.a.Conteneur||W.a.Title);if(c.length<6)return [];
+  const S=RX.sess.filter(x=>n0(x.ID_Arrivage)!==W.id&&rxContNorm(x.Conteneur)===c);
+  const M=new Map();S.forEach(x=>{const id=n0(x.ID_Arrivage);if(!M.has(id))M.set(id,{id,a:(DATA.arr||[]).find(a=>a.ID===id),S:[]});M.get(id).S.push(x);});
+  return [...M.values()];
+}
+const rxNomDossier=d=>d.a?(d.a.N_Dossier||d.a.Title||'n°'+d.id):'n°'+d.id+' (supprimé ?)';
 const nomCourtTxt=n=>{const f=DATA.frs.find(x=>x.Title===n);return f?nomCourt(f):String(n||'');};
 async function rxEnvoyer(){
   if(!W)return;
@@ -1907,6 +1917,7 @@ async function rxEnvoyer(){
   const tous=artsGroupes();tous.forEach(g=>g.rx=rxGroupe(g));
   const F=new Map();tous.filter(g=>!g.rx.sess).forEach(g=>{if(!F.has(g.fkey))F.set(g.fkey,[]);F.get(g.fkey).push(g);});
   if(!F.size){toast('Toutes les fiches sont déjà envoyées.','ok');return;}
+  {const AD=rxAutresDossiers();if(AD.length&&!await showConfirm('⚠ Conteneur déjà envoyé',`Le dossier <b>${esc(AD.map(rxNomDossier).join(', '))}</b> a déjà envoyé <b>${AD.reduce((s,d)=>s+d.S.length,0)}</b> fiche(s) au magasin pour ce même conteneur.<br><br>Si tu continues, les magasiniers verront <b>chaque fournisseur en double</b>. Vérifie d’abord que ce dossier n’est pas un doublon.`,'Envoyer quand même','danger'))return;}
   const cont=String(W.a.Conteneur||W.a.Title||'').trim();
   const L=[...F.values()];const nArt=L.flat().reduce((s,g)=>s+g.bcs.reduce((x,b)=>x+b.arts.filter(a=>artQteEnvoi(a)>0).length,0),0);
   const nExclus=L.flat().reduce((s,g)=>s+g.bcs.reduce((x,b)=>x+b.arts.filter(a=>artQteEnvoi(a)<=0).length,0),0);
