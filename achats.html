@@ -1650,7 +1650,8 @@ async function rxGratuitRetirer(id){
   await rxCharger().catch(()=>{});renderArts();
 }
 function rxGroupe(g){
-  const sess=RX.sess.find(x=>x.Title===g.fkey)||RX.sess.find(x=>x.Title===g.key)||null;
+  const best=t=>RX.sess.filter(x=>x.Title===t).sort((a,b)=>rxScore(b)-rxScore(a))[0];
+  const sess=best(g.fkey)||best(g.key)||null;
   const parFrs=!!sess&&sess.Title===g.fkey;
   const lit=(DATA.lit||[]).filter(l=>l.ID_Arrivage===W.id&&String(l.N_Commande||'')===String(g.l.N_Commande||'')).sort((a,b)=>b.ID-a.ID)[0]||null;
   if(!sess)return {sess:null,lit,extra:[]};
@@ -1895,6 +1896,7 @@ function rxBandeau(G,rs,lecture){
   {const U=[...new Map(S.filter(g=>g.rx.fait).map(g=>[g.rx.sess.ID,g.rx])).values()],t=U.reduce((a,x)=>a+x.nVerTot,0),v=U.reduce((a,x)=>a+x.nVer,0);
    if(t&&!RX.verKo)h+=`<div class="rx-ban ${v>=t?'ok':'info'}" style="padding:6px 12px">☑ <b>Vérification au bureau : ${v} / ${t} ligne${t>1?'s':''}</b>${v>=t?' · tout est vérifié':' · les lignes cochées restent cochées si tu quittes et reviens'}</div>`;
    else if(t&&RX.verKo&&!lecture)h+=`<div class="rx-ban warn" style="padding:6px 12px">☑ Cases « Vérifié » : crée la colonne <b>Verifie</b> (une seule ligne de texte) dans Lignes_Scan.</div>`;}
+  {const DD=rxDoublons();if(DD.length)h+=`<div class="rx-ban ko">⚠ <b>${DD.reduce((s,d)=>s+d.trop.length,0)} fiche${DD.reduce((s,d)=>s+d.trop.length,0)>1?'s':''} en double</b> dans ce dossier (envoi lancé deux fois) : les magasiniers voient ces fournisseurs deux fois. ${!lecture?'<span class="rx-act"><button class="btn sm danger" data-act="rxDedoublonner">🧹 Supprimer les doublons</button></span>':''}</div>`;}
   {const AD=rxAutresDossiers();if(AD.length)h+=`<div class="rx-ban ko">⚠ <b>Conteneur en double :</b> ${AD.map(d=>`le dossier <b>${esc(rxNomDossier(d))}</b> a aussi envoyé ${d.S.length} fiche${d.S.length>1?'s':''} pour ce conteneur (${d.S.filter(x=>x.Statut===RX_FAIT).length} contrôlée${d.S.filter(x=>x.Statut===RX_FAIT).length>1?'s':''})`).join(' ; ')}. Les magasiniers voient donc chaque fournisseur en double dans le portail Scan. Garde un seul dossier : ouvre l’autre et annule son envoi (ou supprime-le s’il est en trop).</div>`;}
   if(rs.nSans&&!lecture)h+=`<div class="rx-ban warn">${rs.nSans} groupe${rs.nSans>1?'s':''} sans fiche de contrôle (lignes ajoutées après l’envoi). <span class="rx-act"><button class="btn sm" data-act="rxEnvoyer">📲 Envoyer ${rs.nSans>1?'les fiches manquantes':'la fiche manquante'}</button></span></div>`;
   if(RX.err==='colonnes')h+=`<div class="rx-ban warn">Colonnes de réception absentes dans Lignes_Scan : quantités abîmées / observations non lues.</div>`;
@@ -1911,7 +1913,7 @@ function rxAutresDossiers(){
 const rxNomDossier=d=>d.a?(d.a.N_Dossier||d.a.Title||'n°'+d.id):'n°'+d.id+' (supprimé ?)';
 const nomCourtTxt=n=>{const f=DATA.frs.find(x=>x.Title===n);return f?nomCourt(f):String(n||'');};
 async function rxEnvoyer(){
-  if(!W)return;
+  if(!W)return;if(RX.envoi){toast('⏳ Envoi déjà en cours, patiente…','wa');return;}
   if(W.dirty){toast('Enregistre d’abord le dossier.','ko');return;}
   if(RX.err==='colonnes'||RX.err==='acces'){toast('🔴 Portail Scan pas prêt : '+(RX.err==='colonnes'?'colonnes ID_Arrivage / Conteneur / Fournisseur à créer dans Sessions_Scan':RX.errMsg),'ko');return;}
   const tous=artsGroupes();tous.forEach(g=>g.rx=rxGroupe(g));
@@ -1928,13 +1930,13 @@ async function rxEnvoyer(){
     ${nExclus?`<div class="muted" style="font-size:12.5px;margin-top:8px">✏️ ${nExclus} article${nExclus>1?'s':''} exclu${nExclus>1?'s':''} (reliquat, quantité 0 dans ce conteneur)${W.rxAuto&&W.rxAuto.size?`, dont ajustement automatique d’après la valeur SIFA pour : <b>${esc(L.flat().filter(g=>W.rxAuto.has(g.key)).map(g=>nomCourtTxt(g.l.Fournisseur)+' '+g.l.N_Commande).join(', '))}</b>`:''}.</div>`:''}
     ${partiels.length?`<div class="fac-note" style="margin-top:10px">💡 Envoi partiel probable sans ajustement : ${esc(partiels.map(g=>nomCourtTxt(g.l.Fournisseur)+' '+g.l.N_Commande).join(', '))}. Les magasiniers verront tous les articles du BC comme attendus. Annule, ouvre la ligne et clique « Ne garder que… ».</div>`:''}
     <div class="muted" style="font-size:12px;margin-top:8px">Aristide, Saïd ou Francky prennent chacun une fiche dans « BL en attente » du portail Scan.</div>`,'📲 Envoyer');
-  if(!ok)return;
-  let nS=0,nL=0;
+  if(!ok||RX.envoi)return;
+  let nS=0,nL=0;RX.envoi=true;busyOn(`Envoi au magasin… 0 / ${L.length} fiche${L.length>1?'s':''}`);
   try{
     for(const gs of L){
       const frs=[...new Set(gs.flatMap(g=>String(g.l.Fournisseur||'').split(' / ')).filter(Boolean))].join(' / ');
       const sess=await spPost('Sessions_Scan',{Title:gs[0].fkey,Numero_BL:_trunc(`${cont} · ${nomCourtTxt(frs.split(' / ')[0])}`),Client:_trunc(frs),Type_Operation:RX_TYPE,Statut:'BL Émis',Date_Emission:new Date().toISOString(),ID_Arrivage:W.id,Conteneur:_trunc(cont),Fournisseur:_trunc(frs)});
-      nS++;let i=0;
+      nS++;let i=0;busyMsg(`Envoi au magasin… ${nS} / ${L.length} fiche${L.length>1?'s':''} (${nomCourtTxt(frs.split(' / ')[0])})`);
       for(const g of gs)for(const b of g.bcs)for(const a of b.arts){
         const q=artQteEnvoi(a);if(!(q>0))continue;   // reliquat : pas dans ce conteneur
         await spPostSilencieux('Lignes_Scan',{Title:`RX-${sess.ID}-${++i}`,Session_ScanId:sess.ID,Reference_Article:_trunc(a.Title||a.Ref_2||''),Designation:_trunc(a.Designation||''),Quantite_Attendue:q,Quantite_Scannee:0,Quantite_Abimee:0,Fournisseur:_trunc(frs),N_Commande:b.n,ID_Ligne_Cmd:a.ID});nL++;
@@ -1942,7 +1944,26 @@ async function rxEnvoyer(){
     }
     toast(`✓ ${nS} fiche${nS>1?'s':''} envoyée${nS>1?'s':''} au magasin (${nL} articles)`,'ok');
   }catch(e){toast(`🔴 Envoi interrompu après ${nS} fiche(s) : ${e.message}`,'ko');}
-  await rxCharger().catch(()=>{});renderArts();renderAll();
+  busyMsg('Mise à jour…');await rxCharger().catch(()=>{});RX.envoi=false;busyOff();renderArts();renderAll();
+}
+// Fiches en double DANS ce dossier (même Title : envoi lancé deux fois) — on garde la plus avancée
+const rxScore=x=>(x.Statut===RX_FAIT?3e6:x.Statut==='En cours de scan'?2e6:0)+(RX.lig.some(l=>n0(l.Session_ScanId)===x.ID&&(n0(l.Quantite_Scannee)||n0(l.Quantite_Abimee)))?1e6:0)-x.ID;
+const rxTouchee=x=>x.Statut!=='BL Émis'||RX.lig.some(l=>n0(l.Session_ScanId)===x.ID&&(n0(l.Quantite_Scannee)||n0(l.Quantite_Abimee)));
+function rxDoublons(){
+  if(!W)return [];const M=new Map();RX.sess.filter(x=>n0(x.ID_Arrivage)===W.id).forEach(x=>{if(!M.has(x.Title))M.set(x.Title,[]);M.get(x.Title).push(x);});
+  return [...M.values()].filter(L=>L.length>1).map(L=>{const S=[...L].sort((a,b)=>rxScore(b)-rxScore(a));return {garde:S[0],trop:S.slice(1)};});
+}
+async function rxDedoublonner(){
+  const D=rxDoublons();if(!D.length){toast('Aucune fiche en double.','ok');return;}
+  const sup=D.flatMap(d=>d.trop.filter(x=>!rxTouchee(x))),bloq=D.flatMap(d=>d.trop.filter(rxTouchee));
+  const nom=x=>esc(nomCourtTxt(String(x.Fournisseur||'').split(' / ')[0]));
+  if(!await showConfirm('🧹 Fiches en double',`<b>${sup.length}</b> fiche${sup.length>1?'s':''} en trop, jamais commencée${sup.length>1?'s':''}, ser${sup.length>1?'ont':'a'} supprimée${sup.length>1?'s':''} du portail Scan :<div class="muted" style="font-size:12.5px;margin:6px 0">${sup.map(nom).join(', ')||'—'}</div>Pour chaque fournisseur, on garde la fiche la plus avancée (contrôlée, puis en cours, puis la plus ancienne).
+    ${bloq.length?`<div class="fac-note" style="margin-top:8px">⚠ ${bloq.length} doublon${bloq.length>1?'s':''} déjà commencé${bloq.length>1?'s':''} des deux côtés, non supprimé${bloq.length>1?'s':''} : ${bloq.map(x=>nom(x)+' ('+esc(x.Magasinier||x.Statut)+')').join(', ')}. Demande au magasinier lequel il garde.</div>`:''}`,'Supprimer','danger'))return;
+  busyOn('Suppression des doublons…');let n=0;
+  try{for(const x of sup){busyMsg(`Suppression des doublons… ${++n} / ${sup.length}`);for(const l of RX.lig.filter(l=>n0(l.Session_ScanId)===x.ID))await spDelete('Lignes_Scan',l.ID);await spDelete('Sessions_Scan',x.ID,x);}
+    toast(`✓ ${sup.length} fiche${sup.length>1?'s':''} en double supprimée${sup.length>1?'s':''}`,'ok');}
+  catch(e){toast(`🔴 Arrêt après ${n-1} suppression(s) : ${e.message}`,'ko');}
+  busyMsg('Mise à jour…');await rxCharger().catch(()=>{});busyOff();renderArts();renderAll();
 }
 async function rxAnnuler(){
   const G=artsGroupes();const S=RX.sess.filter(x=>G.some(g=>g.key===x.Title||g.fkey===x.Title));
@@ -2574,8 +2595,8 @@ document.addEventListener('click',async e=>{
   const vo=e.target.closest('[data-rxverok]');if(vo){e.stopPropagation();const g=artsGroupes().find(x=>x.key===vo.dataset.rxverok);if(g){g.rx=rxGroupe(g);const L=rxConformesNonVer(g.rx);if(L.length)rxVerMaj(L,true);}return;}
   if(e.target.matches&&e.target.matches('input[data-rxver]')){e.stopPropagation();const l=RX.lig.find(x=>x.ID===+e.target.dataset.rxver);if(l)rxVerMaj([l],e.target.checked);return;}
   const rg=e.target.closest('[data-rxreg]');if(rg){e.stopPropagation();rxRegOuvrir(+rg.dataset.rxreg);return;}
-  const rxa=e.target.closest('[data-act="rxEnvoyer"],[data-act="rxMaj"],[data-act="rxAnnuler"],[data-act="rxReporter"],[data-act="rxPrint"],[data-act="rxBureau"]');
-  if(rxa){({rxEnvoyer,rxMaj,rxAnnuler,rxReporter,rxPrint,rxBureau:rxValiderBureau})[rxa.dataset.act]();return;}
+  const rxa=e.target.closest('[data-act="rxEnvoyer"],[data-act="rxMaj"],[data-act="rxAnnuler"],[data-act="rxReporter"],[data-act="rxPrint"],[data-act="rxBureau"],[data-act="rxDedoublonner"]');
+  if(rxa){({rxEnvoyer,rxMaj,rxAnnuler,rxReporter,rxPrint,rxBureau:rxValiderBureau,rxDedoublonner})[rxa.dataset.act]();return;}
   const atg=e.target.closest('[data-arttg]');if(atg){const k=atg.dataset.arttg;ARTS_OUV.has(k)?ARTS_OUV.delete(k):ARTS_OUV.add(k);renderArts();return;}
   if(e.target.closest('[data-act="arcDossier"]')){arcControlerDossier();return;}
   const aa=e.target.closest('[data-act="artsToggle"],[data-act="artsPrint"]');if(aa){aa.dataset.act==='artsPrint'?artsPrint():artsToggle();return;}
