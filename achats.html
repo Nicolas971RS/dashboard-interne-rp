@@ -4591,7 +4591,7 @@ function cmdAnalyse(pages){
         const cx=i.x+i.w/2;
         if(i.x<cols.desX-6){ref.push(i.s);continue;}
         const estNum=RX_NUM_FR.test(i.s.replace(/%$/,''));
-        if(estNum&&cols.qte!=null&&cx>cols.qte-35){const fin=i.x+i.w;let k=null;for(let j=0;j<cols.xs.length;j++){const nx=cols.xs[j+1];if(nx==null||fin<=nx[1]+4){k=cols.xs[j][0];break;}}if(k==='uni')k='qte';if(k){num[k]=cmdNombre(i.s.replace(/%$/,''));continue;}}
+        if(estNum&&cols.qte!=null&&cx>cols.qte-35){const fin=i.x+i.w;let k=null;for(let j=0;j<cols.xs.length;j++){const nx=cols.xs[j+1];if(nx==null||fin<=nx[1]+4){k=cols.xs[j][0];break;}}if(k==='uni')k='qte';if(k){const v=cmdNombre(i.s.replace(/%$/,''));if(k==='qte'&&num.qte!=null){if(num.colis==null)num.colis=v;continue;}num[k]=v;continue;}}   // 2e nombre dans la zone Qté/Unité = colis (ne remplace jamais la quantité)
         if(!estNum&&cols.uni!=null&&Math.abs(cx-cols.uni)<18){uni=i.s;continue;}
         des.push(i.s);
       }
@@ -4606,6 +4606,9 @@ function cmdAnalyse(pages){
     }
   }
   r.lignes.forEach(l=>{
+    // garde-fou : si quantité × prix ≠ montant mais colis × prix = montant, la quantité et le colis ont été inversés
+    const ok=q=>l.mtt!=null&&l.prix!=null&&Math.abs(q*l.prix*(1-(l.rem||0)/100)-l.mtt)<=0.05;
+    if(l.colis!=null&&!ok(l.qte)&&ok(l.colis)){const q=l.colis;l.colis=l.qte;l.qte=q;}
     if(l.mtt==null&&l.prix!=null)l.mtt=Math.round(l.qte*l.prix*(1-(l.rem||0)/100)*100)/100;
     else if(l.mtt!=null&&l.prix!=null&&Math.abs(l.qte*l.prix*(1-(l.rem||0)/100)-l.mtt)>0.05)r.alertes.push(`Ligne ${l.ref||l.des} : quantité × prix ≠ montant, à vérifier`);
   });
@@ -5043,6 +5046,11 @@ function cmdHorsSuivi(q){
   return `<div style="margin-top:8px;color:var(--text-primary)">Commande <b>${esc(n)}</b>${frs?' ('+esc(frs)+')':''} : pas de BC importé, mais elle figure dans ${A.map(a=>`<a href="#" data-open="${a.ID}">🚢 ${esc(a.Title)}</a> · ${esc(statutAuto(a))}`).join(', ')}.<div class="muted" style="font-size:12px">Elle est donc arrivée avec ce conteneur. Pour voir ses articles ici, dépose son PDF (coche « plus de 60 j » s’il est ancien).</div></div>`;
 }
 // ── Rendu ──
+// BC dont une ligne a quantité × prix ≠ montant : quantité mal lue (colis pris pour la quantité, lecteur antérieur au 12/11/2026)
+function cmdQteKo(){
+  return (DATA.cmd||[]).filter(c=>c.Lien_BC&&cmdLignes(c.ID).some(l=>{const q=+l.Quantite,p=+l.Prix_Unitaire,m=+l.Montant_HT;
+    return l.Prix_Unitaire!=null&&l.Montant_HT!=null&&q>0&&p>0&&!l.Qte_Livree_Avant&&Math.abs(q*p*(1-(+l.Remise||0)/100)-m)>Math.max(0.05,m*0.001);}));
+}
 function renderCommandes(){
   const box=$('cmdBox');if(!box)return;
   if(!DATA.cmd){box.innerHTML=`<div class="warn-ribbon" style="border-radius:8px">⚠️ Listes <b>Commandes_Frs</b> / <b>Lignes_Commande_Frs</b> non disponibles sur BondeCommande : ${esc(CMD_ERR.slice(0,200))}</div>`;return;}
@@ -5066,8 +5074,10 @@ function renderCommandes(){
       {l:'Alertes',v:k.al,h:'relance ou BPA en retard',c:'var(--red)'}].map(x=>`<div class="kpi" style="--c:${x.c}"><div class="lab">${x.l}</div><div class="val">${x.v}</div><div class="hint">${x.h}</div></div>`).join('')}</div>
     ${(()=>{const lim=addDays(t,-CMDV.joursSolde);const vieux=ouv.filter(x=>['cmd','arc','bpa','dispo'].includes(x.e.k)&&(dk(x.c,'Date_Commande')||t)<lim);
       const prixKo=(DATA.cmd||[]).filter(c=>c.Lien_BC&&cmdLignes(c.ID).some(l=>l.Prix_Unitaire==null&&l.Remise!=null&&l.Montant_HT!=null));
+      const qteKo=cmdQteKo();
       return (vieux.length&&peutModifierCmd()?`<div class="warn-ribbon" style="border-radius:8px;margin-bottom:10px;display:flex;gap:10px;align-items:center;flex-wrap:wrap">🧹 <b>${vieux.length}</b> commande(s) encore « en cours » passée(s) il y a plus de <input type="number" id="cmdJSolde" value="${CMDV.joursSolde}" min="1" style="width:56px"> jours, sans dossier d’arrivage : probablement déjà reçues. <button class="btn sm" id="cmdSolderVieux">✔ Les solder (${vieux.length})</button><span class="muted" style="font-size:12px">Vérifie d’abord la liste avec le filtre « ARC attendu ».</span></div>`:'')
-       +(prixKo.length&&peutModifierCmd()?`<div class="warn-ribbon" style="border-radius:8px;margin-bottom:10px">🔁 <b>${prixKo.length}</b> BC importé(s) avec une version précédente du lecteur : prix rangés dans la colonne remise. <button class="btn sm" id="cmdRelirePrix">Relire ces BC</button></div>`:'');})()}
+       +(prixKo.length&&peutModifierCmd()?`<div class="warn-ribbon" style="border-radius:8px;margin-bottom:10px">🔁 <b>${prixKo.length}</b> BC importé(s) avec une version précédente du lecteur : prix rangés dans la colonne remise. <button class="btn sm" id="cmdRelirePrix">Relire ces BC</button></div>`:'')
+       +(qteKo.length&&peutModifierCmd()?`<div class="warn-ribbon" style="border-radius:8px;margin-bottom:10px">🔁 <b>${qteKo.length}</b> BC où quantité × prix ≠ montant (colis lu à la place de la quantité par l’ancien lecteur) : ${qteKo.slice(0,12).map(c=>`<b>${esc(c.Title)}</b>`).join(', ')}${qteKo.length>12?'…':''}. <button class="btn sm" id="cmdRelireQte">Relire ces BC (${qteKo.length})</button></div>`:'');})()}
     ${pxImageHtml()}
     ${(()=>{const n=(DATA.lda||[]).filter(daLigneOuverte).length;return n?`<div class="rx-ban warn" style="margin-bottom:12px">📝 <b>${n} article${n>1?'s':''} à commander</b> dans les demandes. <span class="rx-act"><button class="btn sm" data-gotab="demandes">Voir les demandes</button></span></div>`:'';})()}
     <div class="card" id="cardBcImp" style="margin-bottom:14px"><div class="card-h"><h3>📂 Nouveaux BC dans « Bon de commande » ${aImp.length?`<span class="tag">${aImp.length}</span>`:''}</h3>
@@ -5159,6 +5169,7 @@ document.addEventListener('click',async e=>{
   if(e.target.matches&&e.target.matches('input[data-cmdsel]')){CMDV.sel=CMDV.sel||new Set();const p=e.target.dataset.cmdsel;e.target.checked?CMDV.sel.add(p):CMDV.sel.delete(p);renderCommandes();return;}
   if(e.target.closest('#cmdSelNone')){CMDV.sel=new Set();renderCommandes();return;}
   if(e.target.closest('#cmdImpSel')){const L=cmdAImporter().filter(f=>CMDV.sel&&CMDV.sel.has(f.path));CMDV.sel=new Set();cmdImporterListe(L);return;}
+  if(e.target.closest('#cmdRelireQte')){cmdImporterListe(cmdQteKo().map(c=>({path:c.Lien_BC,nom:facNom(c.Lien_BC)})));return;}
   if(e.target.closest('#cmdRelirePrix')){cmdImporterListe((DATA.cmd||[]).filter(c=>c.Lien_BC&&cmdLignes(c.ID).some(l=>l.Prix_Unitaire==null&&l.Remise!=null&&l.Montant_HT!=null)).map(c=>({path:c.Lien_BC,nom:facNom(c.Lien_BC)})));return;}
   if(e.target.closest('#cmdSolderVieux')){cmdSolderVieux();return;}
   const lg=e.target.closest('[data-cmdleg]');if(lg){try{localStorage.setItem('cmd_legende',lg.dataset.cmdleg);}catch(_){}renderCommandes();return;}
