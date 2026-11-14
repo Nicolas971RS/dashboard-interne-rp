@@ -619,6 +619,11 @@ input.sv-in.mod{border-color:#16a34a;background:#f0fdf4}
 .pay-kpi{cursor:pointer}.pay-kpi:hover{box-shadow:var(--shadow-md,0 4px 12px rgba(0,0,0,.12));transform:translateY(-1px)}.pay-flt{margin:4px 0 8px}
 .pay-aut{margin-top:12px}.pay-aut summary{cursor:pointer;font-weight:600;color:var(--navy);padding:4px 0}
 /* ═══ RÉAPPROVISIONNEMENT ═══ */
+.stk{border-radius:8px;line-height:1.6;padding:8px 12px;margin:-4px 0 10px;font-size:13px;border:1px solid var(--border-light);background:#f8fafc}
+.stk-v{background:#e8f5e9;border-color:#b7dfba}.stk-o{background:#fff3e0;border-color:#f3c58f;color:#8a3200}.stk-k{background:#ffebee;border-color:#f1b0b0;color:#8e1b1b}
+.stk-r{border:1px solid var(--border-light);border-radius:8px;padding:10px 12px;margin:0 0 12px;font-size:13px;background:#fff}
+.stk-d{margin-top:6px}.stk-d summary{cursor:pointer}.stk-l{max-height:260px;overflow:auto;border:1px solid var(--border-light);border-radius:6px;padding:6px 8px;font-size:12.5px;line-height:1.7}
+.stk-w{margin-top:8px;color:#8a3200}.stk .btn{margin-left:8px}
 .ra-bar{display:flex;gap:10px;align-items:center;flex-wrap:wrap;background:#f8fafc;border:1px solid var(--border-light);border-radius:8px;padding:8px 12px;margin-bottom:12px;font-size:13px}
 .ra-tools{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:10px}
 .ra-scroll{overflow-x:auto}
@@ -6821,6 +6826,7 @@ async function raCharger(){
   if(DEMO)raDemoSeed();
   try{DATA.artr=await spGetAll('Articles_Reappro');RA_ERR='';}catch(e){DATA.artr=null;RA_ERR=e.message;console.warn('[Articles_Reappro]',e);}
   RAV.artIdx=new Map((DATA.artr||[]).map(r=>[String(r.Title||'').trim().toUpperCase(),r]));RAV.cache=null;
+  if(STK.col===null)stkSonder().then(stkMajBloc).catch(()=>{});
 }
 async function raDossier(){
   if(RAV.dos)return RAV.dos;const p=paramStr('REAPPRO_DOSSIER','');
@@ -6832,7 +6838,7 @@ async function raListerFichiers(){
   const r=await spTry('dossier',D,'/Files','$select=Name,TimeLastModified&$top=500',{});await _check(r,'Lecture du dossier Reappro');
   return ((await r.json()).value||[]).filter(x=>/\.(slk|sylk|csv|txt|xlsx?|xlsm)$/i.test(x.Name))
     .sort((a,b)=>String(b.TimeLastModified||'').localeCompare(String(a.TimeLastModified||''))||b.Name.localeCompare(a.Name))
-    .map(x=>({path:D+'/'+x.Name,nom:x.Name,date:dkeyLocal(x.TimeLastModified)||todayKey()}));
+    .map(x=>({path:D+'/'+x.Name,nom:x.Name,date:dkeyLocal(x.TimeLastModified)||todayKey(),ts:x.TimeLastModified||null}));
 }
 async function raLireBuffer(buf,nom){
   if(/\.(xlsx?|xlsm)$/i.test(nom)){
@@ -6844,10 +6850,10 @@ async function raLireBuffer(buf,nom){
   const t=raDecoder(buf);return raGrille(/^ID;/.test(t)?raSylk(t):raCsv(t));
 }
 async function raOuvrirExport(path,nom,date){
-  RAV.expErr='';RAV.expErrP='';RAV.expP=path;RAV.cache=null;renderReappro();
+  RAV.expErr='';RAV.expErrP='';RAV.expP=path;RAV.cache=null;if(!STK.run){STK.err='';STK.warn=null;}renderReappro();
   try{
     const r=await spTry('fichier',path,'/$value','',{});await _check(r,'Lecture de l’export « '+facNom(path)+' »');
-    const arts=await raLireBuffer(await r.arrayBuffer(),nom||facNom(path));RAV.exp={path,nom:nom||facNom(path),date:date||todayKey(),arts};
+    const arts=await raLireBuffer(await r.arrayBuffer(),nom||facNom(path));RAV.exp={path,nom:nom||facNom(path),date:date||todayKey(),arts,ts:((RAV.fic||[]).find(f=>f.path===path)||{}).ts||null};
   }catch(e){RAV.exp=null;RAV.expErr=String(e.message||e);RAV.expErrP=path;}
   RAV.expP=null;RAV.cache=null;renderReappro();
 }
@@ -6865,8 +6871,9 @@ async function raDeposer(file){
     const D=await raDossier();const ext=(file.name.match(/\.[^.]+$/)||['.slk'])[0];const h=new Date();
     const nom=`Query19_${todayKey()}_${String(h.getHours()).padStart(2,'0')}h${String(h.getMinutes()).padStart(2,'0')}${ext}`;
     const p=await spFileAdd(D,nom,buf);
-    RAV.exp={path:p,nom,date:todayKey(),arts};RAV.fic=null;RAV.cache=null;RAV.prep.clear();
+    RAV.exp={path:p,nom,date:todayKey(),arts,ts:h.toISOString()};RAV.fic=null;RAV.cache=null;RAV.prep.clear();STK.res=null;STK.err='';STK.warn=null;
     toast(`✓ Export déposé et lu : ${arts.length} articles`,'ok');
+    setTimeout(()=>stkAppliquer(),50);   // le stock du Dashboard suit chaque dépôt
   }catch(e){toast('🔴 '+e.message,'ko');}
   finally{busyOff();renderReappro();}
 }
@@ -6960,7 +6967,7 @@ function raBarreExport(){
   const etat=RAV.ficP?'<span class="muted">⏳ Recherche des exports…</span>':RAV.expP?'<span class="muted">⏳ Lecture de l’export…</span>':RAV.expErr?`<span style="color:var(--red)">🔴 ${esc(RAV.expErr)}</span>`
     :ex?`<span><b>${fmtN(ex.arts.length,0)}</b> articles · export du <b>${fmtD(ex.date)}</b>${vieux?` <span class="ra-e" style="color:#c62828;background:#ffebee" data-tip="Le stock et les commandes ont pu changer depuis : relance la Query n°19 dans Image et dépose le nouveau fichier.">⚠ plus de ${param('REAPPRO_EXPORT_VIEUX_J')} jours</span>`:''}</span>`
     :RAV.ficErr?`<span style="color:var(--red)">${esc(RAV.ficErr)}</span>`:'<span class="muted">Aucun export dans « Dossier partage › Reappro ». Lance la Query n°19 dans Image (Exporter), puis dépose le fichier ici.</span>';
-  return `<div class="ra-bar"><b>📄 Export Image (Query n°19)</b>${sel}${etat}<span style="flex:1"></span>${raPeutPreparer()?`<label class="btn sm">⬆️ Déposer un export<input type="file" id="raUp" accept=".slk,.sylk,.csv,.txt,.xls,.xlsx" hidden></label>`:''}<button class="btn sm" id="raRelire" title="Relire la liste des exports">↻</button></div>`;
+  return `<div class="ra-bar"><b>📄 Export Image (Query n°19)</b>${sel}${etat}<span style="flex:1"></span>${raPeutPreparer()?`<label class="btn sm">⬆️ Déposer un export<input type="file" id="raUp" accept=".slk,.sylk,.csv,.txt,.xls,.xlsx" hidden></label>`:''}<button class="btn sm" id="raRelire" title="Relire la liste des exports">↻</button></div><div id="stkBloc">${stkHtml()}</div>`;
 }
 
 // ── Vue Préparer (Patricia) ──
@@ -7656,6 +7663,9 @@ document.addEventListener('click',e=>{
   if((b=c('#raValProp'))){raValiderPropositions();return;}
   if((b=c('#raImpMini'))){raFichierMinis();return;}
   if((b=c('#raCreer'))){raCreerStructure();return;}
+  if((b=c('#stkGo'))){stkAppliquer();return;}
+  if((b=c('#stkForce'))){showConfirm('Appliquer quand même','Le stock du Dashboard sera remplacé par celui de cet export, même s’il paraît incomplet ou plus ancien.','Appliquer','danger').then(ok=>{if(ok)stkAppliquer(true);});return;}
+  if((b=c('#stkCreer'))){stkCreerColonne();return;}
 });
 document.addEventListener('change',e=>{
   const t=e.target;if(!t.closest||!t.closest('#raBox'))return;
@@ -7716,6 +7726,140 @@ document.addEventListener('dragover',e=>{if(CUR_TAB==='reappro'&&raPeutPreparer(
 document.addEventListener('drop',e=>{if(CUR_TAB!=='reappro'||!raPeutPreparer()||!e.target.closest||!e.target.closest('#sec-reappro'))return;e.preventDefault();const f=e.dataTransfer&&e.dataTransfer.files&&e.dataTransfer.files[0];if(f)raDeposer(f);});
 
 // ── Démonstration : export fictif (articles inventés, données aléatoires reproductibles) ──
+// ═══ STOCK DU DASHBOARD ═══
+// L'export Image (Query n°19) déposé dans Réappro met à jour Cathalogue_Produits.Stock_Image, lu par le Dashboard et le portail Scan.
+// Image n'est jamais écrit. Seules les lignes dont le stock a changé sont écrites. La date du stock appliqué est gardée
+// dans Parametres_Achats (clé STOCK_IMAGE_DATE = « date ISO | utilisateur | fichier | nb d'articles »), écrite seulement si tout a réussi.
+Object.assign(PARAM_DEFAUTS,{STOCK_MIN_ARTICLES:1000,STOCK_SEUIL_COMPLET_PC:80,STOCK_VIEUX_H:24});
+const STK_CLE='STOCK_IMAGE_DATE',STK_LISTE='Cathalogue_Produits';
+const STK={col:null,txt:false,run:false,msg:'',pc:0,res:null,err:'',warn:null};
+// STK-PURE-DEBUT
+function stkLireCle(v){const p=String(v||'').split('|');const t=Date.parse(p[0]);return isFinite(t)?{ts:t,par:p[1]||'',fic:p[2]||'',nb:+p[3]||0}:null;}
+// Rapprochement export ↔ catalogue sur la référence (majuscules, sans espaces autour). Pseudo-articles et articles non gérés en stock : ignorés.
+function stkPlan(arts,cat){
+  const img=new Map(),dbl=new Set();
+  for(const a of arts){
+    if(a.pseudo||a.horsStock)continue;const k=String(a.code).trim().toUpperCase();const s=Math.round(a.stock*1000)/1000;
+    if(img.has(k)){dbl.add(k);img.get(k).stock=Math.round((img.get(k).stock+s)*1000)/1000;}else img.set(k,{code:a.code,lib:a.lib,stock:s});
+  }
+  const vus=new Set(),maj=[],vides=[];let same=0;
+  for(const p of cat){
+    const k=String(p.Title||'').trim().toUpperCase();if(!k)continue;const a=img.get(k);const v=p.Stock_Image;const cur=v===undefined||v===null||v===''?null:Number(v);
+    if(a){vus.add(k);if(cur===null||cur!==a.stock)maj.push({id:p.ID,ref:String(p.Title).trim(),lib:a.lib,av:cur,ap:a.stock});else same++;}
+    else if(cur!==null)vides.push({id:p.ID,ref:String(p.Title).trim(),lib:String(p.field_1||''),av:cur,ap:null});
+  }
+  const absents=[...img.entries()].filter(([k])=>!vus.has(k)).map(([,a])=>a).sort((x,y)=>y.stock-x.stock);
+  return {nImg:img.size,nCat:cat.length,maj,vides,same,absents,dbl:[...dbl],neg:[...img.values()].filter(a=>a.stock<0).sort((x,y)=>x.stock-y.stock)};
+}
+// STK-PURE-FIN
+const stkInfo=()=>stkLireCle(DATA.par[STK_CLE]);
+const stkQuand=ts=>{const d=new Date(ts);const z=n=>String(n).padStart(2,'0');return `${z(d.getDate())}/${z(d.getMonth()+1)} à ${d.getHours()}h${z(d.getMinutes())}`;};
+function stkTsExport(ex){
+  if(ex&&ex.ts&&isFinite(Date.parse(ex.ts)))return Date.parse(ex.ts);
+  const m=String(ex&&ex.nom||'').match(/(\d{4})-(\d{2})-(\d{2})_(\d{2})h(\d{2})/);if(m)return new Date(+m[1],+m[2]-1,+m[3],+m[4],+m[5]).getTime();
+  return ex&&ex.date?new Date(ex.date+'T00:00:00').getTime():Date.now();
+}
+async function stkSonder(){
+  if(DEMO){STK.col=QS.get('stock')!=='sanscol';return;}
+  try{
+    const r=await fetch(`${C.spRoot}/${C.site}/_api/web/lists/getbytitle('${STK_LISTE}')/fields?$select=InternalName,TypeAsString&$filter=InternalName eq 'Stock_Image'`,{headers:H_AUTH()});
+    if(!r.ok){STK.col=null;return;}const v=((await r.json()).value||[])[0];STK.col=!!v;STK.txt=!!v&&/Text|Note/.test(v.TypeAsString||'');
+  }catch(e){STK.col=null;}
+}
+async function stkCatalogue(){
+  let all=[],last=0;
+  for(let p=0;p<60;p++){const b=await spFetch(STK_LISTE,`$select=ID,Title,field_1,Stock_Image&$filter=ID gt ${last}&$orderby=ID asc&$top=2000`);all=all.concat(b);if(b.length<2000)break;last=b[b.length-1].ID;}
+  return all;
+}
+async function stkEcrire(id,v){
+  const body=JSON.stringify({Stock_Image:v===null?null:STK.txt?String(v):v});
+  for(let essai=0;;essai++){
+    const r=await fetch(`${listUrl(STK_LISTE)}(${id})`,{method:'POST',headers:{...H_JSON(),'X-HTTP-Method':'MERGE','IF-MATCH':'*'},body});
+    if((r.status===429||r.status===503)&&essai<6){const ra=+r.headers.get('Retry-After');await sleep(ra>0?Math.min(ra,60)*1000:2000*(essai+1));continue;}
+    if(r.status===403)throw new Error('DROITS');
+    if(r.status===404)return false;
+    await _check(r,'Écriture du stock (article n°'+id+')');return true;
+  }
+}
+async function stkEcrireDate(val){
+  const P=await spGetAll('Parametres_Achats');const it=P.find(x=>String(x.Title||'').trim()===STK_CLE);
+  if(it)await spPatch('Parametres_Achats',it.ID,{Valeur:val},it);
+  else await spPost('Parametres_Achats',{Title:STK_CLE,Valeur:val,Description:'Stock Image appliqué au Dashboard : date | par | fichier | nb articles. Écrit par le Portail Achats, ne pas modifier.'});
+  DATA.par[STK_CLE]=val;
+}
+function stkMajBloc(){const el=$('stkBloc');if(el)el.innerHTML=stkHtml();}
+async function stkAppliquer(force){
+  const ex=RAV.exp;if(!ex||!raPeutPreparer())return;
+  if(STK.run){STK.encore=true;return;}   // un dépôt pendant une mise à jour : relancée à la fin
+  STK.run=true;STK.err='';STK.warn=null;STK.res=null;STK.pc=0;STK.msg='Lecture du catalogue du Dashboard…';stkMajBloc();
+  let fait=0,total=0;
+  try{
+    if(STK.col===null)await stkSonder();
+    if(STK.col===false)return;
+    const [cat,par]=await Promise.all([stkCatalogue(),spGetAll('Parametres_Achats').catch(()=>null)]);
+    if(par){const it=par.find(x=>String(x.Title||'').trim()===STK_CLE);if(it)DATA.par[STK_CLE]=it.Valeur;}
+    const P=stkPlan(ex.arts,cat),info=stkInfo(),ts=stkTsExport(ex);
+    const min=info&&info.nb?Math.ceil(info.nb*param('STOCK_SEUIL_COMPLET_PC')/100):(DEMO?1:param('STOCK_MIN_ARTICLES'));
+    if(!cat.length){STK.err='Le catalogue du Dashboard (Cathalogue_Produits) est vide ou illisible : rien n’a été modifié.';return;}
+    if(P.nImg<min&&!force){STK.warn={type:'incomplet',n:P.nImg,min,ref:info&&info.nb||0};return;}
+    if(info&&ts<info.ts-60000&&!force){STK.warn={type:'ancien',ts,ref:info.ts};return;}
+    const T=[...P.maj,...P.vides];total=T.length;let i=0,stop=false;
+    STK.msg=total?`Écriture du stock : 0 / ${fmtN(total,0)} articles…`:'Aucun stock n’a changé.';stkMajBloc();
+    const un=async()=>{while(i<T.length&&!stop){const t=T[i++];try{await stkEcrire(t.id,t.ap);}catch(e){stop=true;throw e;}
+      fait++;if(fait%10===0||fait===total){STK.pc=Math.round(fait*100/total);STK.msg=`Écriture du stock : ${fmtN(fait,0)} / ${fmtN(total,0)} articles…`;const b=$('stkBar'),m=$('stkMsg');if(b&&m){b.style.width=STK.pc+'%';m.textContent=STK.msg;}else stkMajBloc();}}};
+    const fin=await Promise.allSettled(Array.from({length:4},un));const ko=fin.find(x=>x.status==='rejected');if(ko)throw ko.reason;
+    const val=[new Date(ts).toISOString(),raUser()||'?',ex.nom,P.nImg].join('|');
+    await stkEcrireDate(val);
+    logAction('PATCH',STK_LISTE,0,'Stock_Image','',`${P.maj.length} mis à jour, ${P.vides.length} vidés, ${P.same} inchangés`,`Stock du Dashboard depuis ${ex.nom} (${P.nImg} articles Image)`);
+    STK.res={...P,ts,nom:ex.nom};
+    toast(total?`✓ Stock du Dashboard mis à jour : ${fmtN(total,0)} article${total>1?'s':''} modifié${total>1?'s':''}`:'✓ Stock du Dashboard déjà à jour (aucun changement)','ok');
+  }catch(e){
+    const reste=total?` ${fmtN(fait,0)} article${fait>1?'s':''} sur ${fmtN(total,0)} ${fait>1?'ont':'a'} été écrit${fait>1?'s':''} avant l’arrêt ; en relançant, seuls les articles restants seront écrits. La date du stock affichée dans le Dashboard n’a pas été changée.`:'';
+    STK.err=(e.message==='DROITS'?'Ton compte n’a pas le droit de modifier le catalogue du Dashboard (liste Cathalogue_Produits). Préviens Nicolas.':String(e.message||e))+reste;
+  }finally{STK.run=false;stkMajBloc();if(STK.encore){STK.encore=false;setTimeout(()=>stkAppliquer(),0);}}
+}
+window.addEventListener('beforeunload',e=>{if(STK.run){e.preventDefault();e.returnValue='';}});
+async function stkCreerColonne(){
+  if(!await showConfirm('Créer la colonne Stock_Image',`Crée la colonne <b>Stock_Image</b> (Nombre) dans la liste <b>Cathalogue_Produits</b> du site BondeCommande.`,'🛠 Créer'))return;
+  try{
+    busyOn('Création…');
+    if(!DEMO){const r=await fetch(`${C.spRoot}/${C.site}/_api/web/lists/getbytitle('${STK_LISTE}')/fields/CreateFieldAsXml`,{method:'POST',headers:{...H_JSON(),'Accept':'application/json;odata=verbose','Content-Type':'application/json;odata=verbose'},
+      body:JSON.stringify({parameters:{__metadata:{type:'SP.XmlSchemaFieldCreationInformation'},SchemaXml:'<Field Type="Number" DisplayName="Stock_Image" Name="Stock_Image" StaticName="Stock_Image"/>',Options:24}})});await _check(r,'Colonne Stock_Image');}
+    STK.col=true;STK.txt=false;toast('✓ Colonne créée','ok');
+  }catch(e){toast('🔴 '+e.message,'ko');}
+  finally{busyOff();stkMajBloc();}
+}
+function stkListe(titre,L,fn,aide){
+  if(!L.length)return '';const max=300;
+  return `<details class="stk-d"><summary>${titre} <b>(${fmtN(L.length,0)})</b></summary>${aide?`<p class="muted" style="margin:4px 0 6px">${aide}</p>`:''}<div class="stk-l">${L.slice(0,max).map(fn).join('')}${L.length>max?`<div class="muted">… et ${fmtN(L.length-max,0)} autres</div>`:''}</div></details>`;
+}
+function stkResumeHtml(R){
+  const n=v=>v===null?'—':raN0(v),l=x=>`<div><span class="mono">${esc(x.ref||x.code)}</span> ${esc(String(x.lib||'').slice(0,60))}`;
+  const nb=R.maj.length+R.vides.length;
+  return `<div class="stk-r"><div><b>${nb?`✓ ${fmtN(R.maj.length,0)} stock${R.maj.length>1?'s':''} mis à jour${R.vides.length?`, ${fmtN(R.vides.length,0)} effacé${R.vides.length>1?'s':''}`:''}`:'✓ Aucun stock n’a changé'}</b> dans le Dashboard à partir de <span class="mono">${esc(R.nom)}</span> · ${fmtN(R.same,0)} inchangés · ${fmtN(R.nImg,0)} articles gérés en stock dans Image.</div>
+    ${stkListe('Stocks modifiés',R.maj,x=>l(x)+` : <span class="muted">${n(x.av)}</span> → <b>${n(x.ap)}</b></div>`)}
+    ${stkListe('Articles du Dashboard absents de l’export Image : stock effacé',R.vides,x=>l(x)+` : <span class="muted">${n(x.av)}</span> → —</div>`,'Références du catalogue que l’export ne contient pas (ou non gérées en stock dans Image). Le Dashboard affiche « — » au lieu d’un ancien chiffre.')}
+    ${stkListe('Articles d’Image absents du catalogue du Dashboard',R.absents,x=>l(x)+` : stock ${n(x.stock)}</div>`,'Ces articles existent dans Image mais pas dans le catalogue du Dashboard : les vendeurs ne les trouvent pas. Le portail ne crée aucun article ; à ajouter au catalogue si besoin.')}
+    ${stkListe('Stocks négatifs dans Image',R.neg,x=>l(x)+` : <b style="color:#c62828">${n(x.stock)}</b></div>`,'Repris tels quels. Un stock négatif signale en général une réception non saisie ou une erreur de saisie dans Image.')}
+    ${R.dbl.length?`<div class="stk-w">⚠ Référence${R.dbl.length>1?'s':''} en double dans Image (stocks additionnés) : <span class="mono">${esc(R.dbl.join(', '))}</span></div>`:''}</div>`;
+}
+function stkHtml(){
+  const ex=RAV.exp,info=stkInfo(),peut=raPeutPreparer();
+  if(STK.col===false)return `<div class="stk stk-o">⚠️ <b>Stock du Dashboard :</b> la colonne <b>Stock_Image</b> manque dans la liste Cathalogue_Produits : le stock ne peut pas être mis à jour. ${peutImporter()?'<button class="btn sm" id="stkCreer">🛠 Créer la colonne</button>':'Préviens Nicolas.'}</div>`;
+  if(STK.run)return `<div class="stk"><b>📦 Stock du Dashboard</b> <span id="stkMsg">${esc(STK.msg)}</span><div class="imp-bar" style="margin-top:6px"><i id="stkBar" style="width:${STK.pc}%"></i></div><div class="muted" style="margin-top:4px">Ne ferme pas cette page avant la fin. Tu peux continuer à travailler dans l’onglet.</div></div>`;
+  const etat=info?`stock d’Image du <b>${stkQuand(info.ts)}</b>${info.par?` <span class="muted">(déposé par ${esc(info.par)})</span>`:''}`:'<b>jamais mis à jour depuis le portail</b>';
+  const vieux=info&&(Date.now()-info.ts)>param('STOCK_VIEUX_H')*36e5;
+  const plusRecent=ex&&(!info||stkTsExport(ex)>info.ts+60000);
+  let h='';
+  if(STK.err)h+=`<div class="stk stk-k">🔴 <b>Stock du Dashboard non mis à jour.</b> ${esc(STK.err)} ${peut&&ex?'<button class="btn sm" id="stkGo">↻ Réessayer</button>':''}</div>`;
+  if(STK.warn&&STK.warn.type==='incomplet')h+=`<div class="stk stk-k">🔴 <b>Stock du Dashboard non mis à jour : l’export semble incomplet.</b> Il contient ${fmtN(STK.warn.n,0)} articles gérés en stock${STK.warn.ref?`, contre ${fmtN(STK.warn.ref,0)} la dernière fois`:` (minimum attendu : ${fmtN(STK.warn.min,0)})`}. Relance la Query n°19 dans Image sans filtre et dépose le nouveau fichier. ${peutImporter()?'<button class="btn sm" id="stkForce">Appliquer quand même</button>':''}</div>`;
+  if(STK.warn&&STK.warn.type==='ancien')h+=`<div class="stk stk-o">⚠️ <b>Stock du Dashboard non modifié :</b> cet export (${stkQuand(STK.warn.ts)}) est plus ancien que le stock déjà affiché dans le Dashboard (${stkQuand(STK.warn.ref)}). ${peutImporter()?'<button class="btn sm" id="stkForce">Appliquer quand même</button>':''}</div>`;
+  h+=`<div class="stk ${!info||vieux?'stk-o':'stk-v'}"><b>📦 Stock du Dashboard :</b> ${etat}${vieux?` · ⚠ plus de ${param('STOCK_VIEUX_H')} h : dépose un nouvel export`:''}
+    ${peut&&ex&&plusRecent&&!STK.warn&&!STK.err?` · <span class="muted">l’export affiché ci-dessus est plus récent.</span> <button class="btn sm primary" id="stkGo">📦 Mettre à jour le stock du Dashboard</button>`:''}</div>`;
+  if(STK.res)h+=stkResumeHtml(STK.res);
+  return h;
+}
+
 function raDemoSeed(){
   const S=window.__FAKE_SP__;if(!S||S.__raSeed)return;S.__raSeed=true;
   let s=7;const rnd=()=>{s=(s*16807)%2147483647;return (s-1)/2147483646;};
@@ -7735,6 +7879,7 @@ function raDemoSeed(){
     const cde=profil===1&&rnd()<0.5?Math.round(base*2):0;
     lignes.push(['0'+(fi+1)+'0'+(i%3+1),fc,code,lib,Math.round((3+rnd()*120)*100)/100,stock,0,cde,0,...mois,'',/TUBE|PVC PRESSION/.test(lib)?(rnd()<0.5?10:1):1,fi===2&&i===7?'*':'','REF-'+(1000+n)]);
   }));
+  S.Cathalogue_Produits=lignes.slice(3).filter((l,i)=>i%13!==5).map((l,i)=>({ID:i+1,Title:l[2],field_1:l[3],Stock_Image:i%3===0?l[5]:i%3===1?null:l[5]+2})).concat([{ID:900,Title:'ANCIEN-001',field_1:'ARTICLE SORTI D IMAGE',Stock_Image:12},{ID:901,Title:'ANCIEN-002',field_1:'ARTICLE JAMAIS STOCKE',Stock_Image:null}]);
   let txt='ID;PHL Query\r\nP;PGeneral\r\nC;Y1;X1;K"Query n°19"\r\nC;X2;K"Gestion des articles"\r\nC;Y3;X1;K"Critères de sélections"\r\n';
   txt+=H.map((h,x)=>`C;${x?'':'Y17;'}X${x+1};K"${h}"`).join('\r\n')+'\r\n';
   lignes.forEach((l,y)=>{txt+=l.map((v,x)=>`C;${x?'':'Y'+(18+y)+';'}X${x+1};K${typeof v==='number'?v.toFixed(2):'"'+v+'"'}`).join('\r\n')+'\r\n';});
