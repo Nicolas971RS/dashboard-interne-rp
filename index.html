@@ -468,6 +468,7 @@
     <div class="topbar-spacer"></div>
     <span class="topbar-date" id="currentDate"></span>
     <div class="topbar-user">
+      <span id="stock-image-date" style="display:none;font-size:12px;font-weight:600;padding:3px 9px;border-radius:12px;margin-right:10px;white-space:nowrap"></span>
       <span id="last-load-time" style="font-size:12px;color:rgba(255,255,255,.45);margin-right:10px">À l'instant</span>
       <button id="btn-grand-format" class="topbar-logout" onclick="toggleGrandFormat()" title="Agrandir le texte et les boutons">🔎 Grand format</button>
       <div class="topbar-avatar" id="userInitials">NL</div>
@@ -1983,6 +1984,7 @@ async function loadAll(){
 
     DATA={suivi,lignes,dbc,devis,clients:clientMap,chantiers:chantiers||[],catalogue:catalogue||[],sessionsScan:sessionsScan||[],lignesScan:lignesScan||[],annonces:annonces||[]};
     DATA.achats=await _achatsP;
+    try{majBadgeStockImage();}catch(e){console.warn('[Stock Image] badge',e);}
 
     // Synchronise automatiquement "Livré" (Lignes_BC) depuis le scan réel
     // (Lignes_Scan) — aucune recopie manuelle : dès que le magasinier scanne,
@@ -2049,6 +2051,7 @@ function getDBCVendeur(item){
 // ═══ A8 — TIMER ACTUALISATION ═══
 let _lastLoad=Date.now();
 function updateTimer(){
+  try{majBadgeStockImage();}catch(e){}
   const el=document.getElementById('last-load-time');
   if(!el)return;
   const mins=Math.floor((Date.now()-_lastLoad)/60000);
@@ -3611,6 +3614,30 @@ const getBCFrs=i=>String(f(i,'N_BC_Fournisseur')||'').trim();
 // N_BC_Fournisseur (BC, plusieurs n° séparés par « - ») ↔ Lignes_Arrivage.N_Commande.
 // Lecture seule : rien n'est écrit dans Suivi_BC.
 const ACH_DELAI_DEFAUT=15; // jours port → entrepôt si le dossier n'a pas de date prévue (comme le portail)
+// ═══ DATE DU STOCK IMAGE ═══
+// Stock_Image (catalogue) est mis à jour par le Portail Achats à chaque dépôt de l'export Image (Query n°19).
+// Le portail note la date dans Parametres_Achats, clé STOCK_IMAGE_DATE = « date ISO | utilisateur | fichier | nb d'articles ».
+function lireStockImageDate(par){
+  const p=(par||[]).find(x=>String(x.Title||'').trim()==='STOCK_IMAGE_DATE');if(!p)return null;
+  const v=String(p.Valeur||'').split('|');const t=Date.parse(v[0]);
+  return isFinite(t)?{ts:t,par:v[1]||'',nb:parseInt(v[3])||0}:null;
+}
+function majBadgeStockImage(){
+  const el=document.getElementById('stock-image-date');if(!el)return;
+  if(typeof DATA==='undefined'||!DATA||!DATA.achats){el.style.display='none';return;}   // paramètres illisibles : on n'affirme rien
+  const s=DATA.achats.stock;const z=n=>String(n).padStart(2,'0');
+  let txt,bg,fg,tip;
+  if(!s){txt='📦 Stock Image : date inconnue';bg='#c62828';fg='#fff';tip='Le stock affiché n’a pas encore été mis à jour depuis le Portail Achats (onglet Réappro) : ne pas s’y fier.';}
+  else{
+    const d=new Date(s.ts),h=(Date.now()-s.ts)/36e5;
+    txt=`📦 Stock Image du ${z(d.getDate())}/${z(d.getMonth()+1)} à ${d.getHours()}h${z(d.getMinutes())}`;
+    tip=`Stock repris de l’export Image déposé dans le Portail Achats${s.par?' par '+s.par:''}${s.nb?' ('+s.nb+' articles)':''}. Les mouvements saisis dans Image depuis ne sont pas visibles ici.`;
+    if(h>48){bg='#c62828';fg='#fff';tip='⚠ Stock vieux de plus de 48 h. '+tip;}
+    else if(h>24){bg='#ef6c00';fg='#fff';tip='⚠ Stock vieux de plus de 24 h. '+tip;}
+    else{bg='rgba(255,255,255,.12)';fg='rgba(255,255,255,.85)';}
+  }
+  el.textContent=txt;el.title=tip;el.style.background=bg;el.style.color=fg;el.style.display='';
+}
 async function fetchAchatsArrivages(){
   // Lecture paginée par ID ; une colonne absente est retirée et la lecture relancée.
   const lire=async(list,cols)=>{
@@ -3643,7 +3670,7 @@ async function fetchAchatsArrivages(){
   ]);
   const p=par.find(x=>x.Title==='DELAI_PORT_ENTREPOT_J');
   const delai=p&&!isNaN(parseInt(p.Valeur))?parseInt(p.Valeur):ACH_DELAI_DEFAUT;
-  return {arr,lig:lig.filter(l=>l.Type_Ligne!=='Frais'&&l.N_Commande),cmd:(cmd||[]).filter(c=>c.Annulee!=='Oui'),da:da&&da.filter(d=>d.ID_BC_Client),lda:lda||[],lcmd:lcmd||[],delai,ts:Date.now()};
+  return {arr,lig:lig.filter(l=>l.Type_Ligne!=='Frais'&&l.N_Commande),cmd:(cmd||[]).filter(c=>c.Annulee!=='Oui'),da:da&&da.filter(d=>d.ID_BC_Client),lda:lda||[],lcmd:lcmd||[],delai,stock:lireStockImageDate(par),ts:Date.now()};
 }
 // ═══ DEMANDES DE COMMANDE FOURNISSEUR (vendeur → Fabrice → achats) ═══
 // Le vendeur demande depuis le panneau d'un BC : la demande part « À valider » dans la liste
