@@ -624,6 +624,7 @@ input.sv-in.mod{border-color:#16a34a;background:#f0fdf4}
 .stk-r{border:1px solid var(--border-light);border-radius:8px;padding:10px 12px;margin:0 0 12px;font-size:13px;background:#fff}
 .stk-d{margin-top:6px}.stk-d summary{cursor:pointer}.stk-l{max-height:260px;overflow:auto;border:1px solid var(--border-light);border-radius:6px;padding:6px 8px;font-size:12.5px;line-height:1.7}
 .ra-nc{color:#ad1457;font-weight:700}
+.ra-ralw{position:relative;display:inline-block}.ra-rals{position:absolute;right:0;top:100%;white-space:nowrap;line-height:1.1}.ra-t td.ra-ralc{padding-top:15px;padding-bottom:15px}
 @media (min-width:1101px){.kpis.ra-k5{grid-template-columns:repeat(5,1fr)}}
 .stk-w{margin-top:8px;color:#8a3200}.stk .btn{margin-left:8px}
 .ra-bar{display:flex;gap:10px;align-items:center;flex-wrap:wrap;background:#f8fafc;border:1px solid var(--border-light);border-radius:8px;padding:8px 12px;margin-bottom:12px;font-size:13px}
@@ -6787,10 +6788,14 @@ function raCalc(a,o,P){
   const suivi=!exclu&&(reg||mini>0);
   const dispo=a.stock+a.cde-a.res+(o.enCours||0);
   const cible=Math.max(mini,Math.ceil(v.moyJour*(o.delai+o.freq)-1e-9));
-  const qte=suivi&&dispo<cible?colis(cible-dispo):0;
+  const qte0=suivi&&dispo<cible?colis(cible-dispo):0;
+  // Reste à livrer clients (o.ral : pas encore couvert par une demande client) = quantité déjà promise, retirée du disponible.
+  // Article non suivi : on propose seulement ce qui manque pour livrer (o.ralNc).
+  const rc=a.pseudo?0:Math.max(0,o.ral||0);
+  const qte=suivi?(dispo-rc<cible?colis(cible-dispo+rc):0):(rc>0?colis(Math.max(0,o.ralNc||0)):0);
   const couv=v.moyMois>0?dispo/v.moyMois:null;
   const etat=exclu?'exclu':!suivi?(v.brut>0&&!v.recents&&v.actifs>=P.moisMin?'ancien':v.brut>0?'irregulier':(a.stock>0?'dormant':'inactif')):dispo<=0?'rupture':(mini>0&&dispo<mini)?'sousmini':(couv!=null&&couv>P.surstock&&dispo>cible)?'surstock':qte>0?'acmd':'ok';
-  return {...v,reg,miniProp,mini,miniValide:o.mini!=null,suivi,exclu,dispo,cible,qte,couv,etat};
+  return {...v,reg,miniProp,mini,miniValide:o.mini!=null,suivi,exclu,dispo,cible,qte,qteCli:Math.max(0,qte-qte0),couv,etat};
 }
 // RA-PURE-FIN
 
@@ -6905,16 +6910,17 @@ function raLignes(saufId){
     const f=raFrsDe(frsCode),typ=raTypeAchat(f,a),ec=EC.get(a.code.toUpperCase())||null;
     const mini=ar&&ar.Stock_Mini!=null&&ar.Stock_Mini!==''&&isFinite(+ar.Stock_Mini)?+ar.Stock_Mini:null;
     a={...a,colImage:a.col,col:ar&&+ar.Colisage>0?+ar.Colisage:a.col};   // colisage mémorisé dans le portail prioritaire
-    const c=raCalc(a,{mc,mini,exclu:ar&&ar.Exclu==='Oui',delai:raDelai(f,typ),freq:raFreq(f,typ),enCours:ec?ec.stock:0},P);
-    const ral=(RAL.idx&&RAL.idx.get(a.code.toUpperCase()))||null;
-    return {a,ar,frsCode,f,typ,ec,mc,type:(ar&&ar.Type_Commande)||raTypeAuto(a.lib),typeAuto:!(ar&&ar.Type_Commande),...c,ral,ralNc:ral?ralManque(a,ec,ral.q):0};
+    const ral=(RAL.idx&&RAL.idx.get(a.code.toUpperCase()))||null,ralNc=ral?ralManque(a,ec,ral.q):0;
+    const ralCalc=ral&&param('REAPPRO_RAL_CALCUL')?Math.max(0,ral.q-(ec?ec.cli.reduce((s,x)=>s+x.q,0):0)):0;
+    const c=raCalc(a,{mc,mini,exclu:ar&&ar.Exclu==='Oui',delai:raDelai(f,typ),freq:raFreq(f,typ),enCours:ec?ec.stock:0,ral:ralCalc,ralNc},P);
+    return {a,ar,frsCode,f,typ,ec,mc,type:(ar&&ar.Type_Commande)||raTypeAuto(a.lib),typeAuto:!(ar&&ar.Type_Commande),...c,ral,ralNc};
   });
   RAV.cache={k:ck,rows};return rows;
 }
 const raQte=r=>{const p=RAV.prep.get(r.a.key);return p&&p.q!=null?p.q:r.qte;};
 function raTipVentes(r){
   const m=r.a.mois.map((v,i)=>`${RA_MOIS[i]} ${fmtN(v,0)}${i===r.mc?' (en cours)':''}`).join(' · ');
-  return `Ventes : ${m}. Moyenne sur les 11 mois complets : ${raN0(r.moyMois)}/mois${r.ecrete>0?` (pic écrêté de ${fmtN(r.ecrete,0)})`:''}. Disponible = stock ${raN0(r.a.stock)} + en commande ${raN0(r.a.cde)} − réservé ${raN0(r.a.res)}${r.ec&&r.ec.stock?` + demandes en cours ${raN0(r.ec.stock)}`:''}. Cible = max(mini ${raN0(r.mini)} ; ventes sur délai + cycle).`;
+  return `Ventes : ${m}. Moyenne sur les 11 mois complets : ${raN0(r.moyMois)}/mois${r.ecrete>0?` (pic écrêté de ${fmtN(r.ecrete,0)})`:''}. Disponible = stock ${raN0(r.a.stock)} + en commande ${raN0(r.a.cde)} − réservé ${raN0(r.a.res)}${r.ec&&r.ec.stock?` + demandes en cours ${raN0(r.ec.stock)}`:''}.${r.qteCli>0?` Proposé : dont ${raN0(r.qteCli)} pour le reste à livrer aux clients.`:''} Cible = max(mini ${raN0(r.mini)} ; ventes sur délai + cycle).`;
 }
 const raEtatBadge=k=>{const e=RA_ETATS[k]||RA_ETATS.ok;return `<span class="ra-e" style="color:${e[1]};background:${e[2]}">${e[0]}</span>`;};
 // Dernière réappro validée chez un fournisseur (statut calculé, pas de colonne)
@@ -7024,7 +7030,7 @@ function raListeKpi(G,ed){
   const v=R.reduce((s,r)=>s+raQte(r)*r.a.pu,0);
   return `<div class="card ra-kcard"><div class="ra-kbar"><b>${K[0]}</b> · ${R.length} article${R.length>1?'s':''} chez ${frs.length} fournisseur${frs.length>1?'s':''}${v?' · '+raEur(v):''}
     <span style="flex:1"></span>${ed&&nonCoches.length?`<button class="btn sm" data-rakpisel="${esc(frs.join(','))}" title="Seuls les fournisseurs cochés partent chez Fabrice">☑ Cocher ces ${frs.length} fournisseurs</button>`:''}<button class="btn sm ghost" data-rakpi="${RAV.kpi}">✕ Fermer</button></div>
-    ${RAV.kpi==='ralnc'?`<div class="muted" style="padding:6px 12px">Quantités déjà vendues (BC clients du Dashboard) que le stock et les commandes en cours ne couvrent pas. Saisis une quantité pour l’ajouter à la préparation ; la colonne « RAL clients » donne le détail au survol.${(i=>i.length?` <span class="ra-nc" data-tip="${esc(i.slice(0,25).map(x=>`${x.ref} : ${raN0(x.q)} (${x.det.map(d=>d.bc).join(', ')})`).join(' · '))}">⚠ ${i.length} référence${i.length>1?'s':''} en reste à livrer absente${i.length>1?'s':''} de l’export Image</span>`:'')(ralInconnues())}</div>`:''}
+    ${RAV.kpi==='ralnc'?`<div class="muted" style="padding:6px 12px">Quantités déjà vendues (BC clients du Dashboard) que le stock et les commandes en cours ne couvrent pas. La quantité proposée en tient compte (👤) ; la colonne « RAL clients » donne le détail au survol.${(i=>i.length?` <span class="ra-nc" data-tip="${esc(i.slice(0,25).map(x=>`${x.ref} : ${raN0(x.q)} (${x.det.map(d=>d.bc).join(', ')})`).join(' · '))}">⚠ ${i.length} référence${i.length>1?'s':''} en reste à livrer absente${i.length>1?'s':''} de l’export Image</span>`:'')(ralInconnues())}</div>`:''}
     ${R.length?`<div class="ra-scroll"><table class="ra-t">${raEnteteArt(ed,'prep')}<tbody>${R.slice(0,400).map(r=>raLigneArt(r,ed,'prep')).join('')}</tbody></table></div>${R.length>400?`<div class="muted" style="padding:6px 10px">… ${R.length-400} autres : affine avec la recherche.</div>`:''}`:'<div class="muted" style="padding:10px">Aucun article.</div>'}</div>`;
 }
 function raDetailFrs(g){
@@ -7040,7 +7046,7 @@ function raDetailFrs(g){
     ${R.length?`<div class="ra-scroll"><table class="ra-t">${raEnteteArt(ed,'prep')}<tbody>${R.slice(0,lim).map(r=>raLigneArt(r,ed,'prep')).join('')}</tbody></table></div>${R.length>lim?`<div class="muted" style="margin-top:6px">… ${R.length-lim} autres : utilise la recherche.</div>`:''}`:'<div class="muted">Rien à commander chez ce fournisseur. Choisis « Articles suivis » pour tout voir.</div>'}</div>`;
 }
 function raEnteteArt(ed,mode){
-  return `<thead><tr><th>Réf.</th><th>Désignation</th><th>Type</th><th class="r">Stock</th><th class="r" data-tip="En commande dans Image (BC passés, pas encore reçus)">En cde</th><th class="r" data-tip="Reste à livrer aux clients d’après les BC du Dashboard (détail au survol). « manque » : le stock et les commandes en cours ne couvrent pas. Sans effet sur la quantité proposée.">RAL clients</th><th class="r" data-tip="Stock + en commande − réservé + demandes de stock en cours">Dispo</th><th class="r" data-tip="Moyenne mensuelle des 11 mois complets, pic écrêté">Vtes/mois</th><th class="r" data-tip="Stock mini validé (✓) ou proposé (1,5 mois de ventes)">Mini</th><th class="r" data-tip="Disponible ÷ ventes mensuelles">Couv.</th><th class="r">Proposé</th>${mode==='prep'?'<th class="r">Qté</th>':'<th class="r">Patricia</th><th class="r">Décision</th>'}<th>Fournisseur</th><th>Client</th><th class="r">Montant</th>${mode==='prep'&&ed?'<th></th>':''}</tr></thead>`;
+  return `<thead><tr><th>Réf.</th><th>Désignation</th><th>Type</th><th class="r">Stock</th><th class="r" data-tip="En commande dans Image (BC passés, pas encore reçus)">En cde</th><th class="r" data-tip="Reste à livrer aux clients d’après les BC du Dashboard (détail au survol). « manque » : le stock et les commandes en cours ne couvrent pas. Ajouté à la quantité proposée (👤).">RAL clients</th><th class="r" data-tip="Stock + en commande − réservé + demandes de stock en cours">Dispo</th><th class="r" data-tip="Moyenne mensuelle des 11 mois complets, pic écrêté">Vtes/mois</th><th class="r" data-tip="Stock mini validé (✓) ou proposé (1,5 mois de ventes)">Mini</th><th class="r" data-tip="Disponible ÷ ventes mensuelles">Couv.</th><th class="r">Proposé</th>${mode==='prep'?'<th class="r">Qté</th>':'<th class="r">Patricia</th><th class="r">Décision</th>'}<th>Fournisseur</th><th>Client</th><th class="r">Montant</th>${mode==='prep'&&ed?'<th></th>':''}</tr></thead>`;
 }
 // Répartition client / stock : parts = [{cli,q}] ; le reste du total va au stock (même modèle que l'onglet Demandes : une ligne par destination)
 const raNum=v=>{const x=parseNum(String(v??'').trim());return x>0?x:0;};
@@ -7087,7 +7093,7 @@ function raLigneArt(r,ed,mode,g){
   return `<tr ${id} data-rapu="${a.pu||0}" data-raprop="${E.prop||0}" class="${q>0?'ra-q':''}"><td class="mono"><b>${esc(a.code)}</b>${a.autre?`<div class="ra-sub">${esc(a.autre)}</div>`:''}</td>
     <td data-tip="${esc(raTipVentes(r))}">${esc(a.lib||(g&&g.des)||'')} ${raEtatBadge(r.etat)}${cli}</td><td><span class="ra-ty ${r.typeAuto?'auto':''}" title="${r.typeAuto?'Classement automatique (libellé)':'Classement validé'}">${esc(r.type)}</span></td>
     <td class="r">${raN0(a.stock)}</td><td class="r">${raN0(a.cde)}</td>${ralCellule(r)}<td class="r"><b style="color:${r.dispo<=0&&r.suivi?'#c62828':'inherit'}">${raN0(r.dispo)}</b>${enc}</td>
-    <td class="r">${raN0(r.moyMois)}</td><td class="r">${mini}</td><td class="r">${r.couv==null?'—':fmtN(Math.max(0,r.couv),1)}</td><td class="r">${raN0(E.prop)}${a.col>1?`<div class="ra-sub">colis ${raN0(a.col)}</div>`:''}</td>
+    <td class="r">${raN0(r.moyMois)}</td><td class="r">${mini}</td><td class="r">${r.couv==null?'—':fmtN(Math.max(0,r.couv),1)}</td><td class="r"${mode==='prep'&&r.qteCli>0?` data-tip="Dont ${raN0(r.qteCli)} pour le reste à livrer aux clients (colonne RAL clients). Le reste est le réapprovisionnement habituel du stock."`:''}>${raN0(E.prop)}${mode==='prep'&&r.qteCli>0?' <span class="ra-nc" style="font-size:11px">👤</span>':''}${a.col>1?`<div class="ra-sub">colis ${raN0(a.col)}</div>`:''}</td>
     ${mode==='prep'?'':`<td class="r">${raN0(g.total)}</td>`}
     <td class="r">${qIn}</td>
     <td>${ed?`<input class="ra-in frs" data-rafrs list="dlFrs" value="${esc(E.frs)}" title="Changer de fournisseur pour cette commande seulement">`:esc(E.frs)}${mode!=='prep'&&g.frsInit?`<div class="ra-sub">au lieu de ${esc(g.frsInit)}</div>`:''}</td>
@@ -7738,7 +7744,7 @@ document.addEventListener('drop',e=>{if(CUR_TAB!=='reappro'||!raPeutPreparer()||
 // Les BC clients ne sont pas saisis dans Image : le reste à livrer est une demande ferme que la Query n°19 ne contient pas.
 // Même règle que l'onglet « Livraisons Partielles » du Dashboard : commandé − livré > 0, BC non soldé, lignes miroirs des BC à suffixe ignorées.
 // Affiché et signalé (« manque »), sans effet sur la quantité proposée. Les lignes plus anciennes que REAPPRO_RAL_MAX_J ne sont pas comptées.
-Object.assign(PARAM_DEFAUTS,{REAPPRO_RAL_MAX_J:180});
+Object.assign(PARAM_DEFAUTS,{REAPPRO_RAL_MAX_J:180,REAPPRO_RAL_CALCUL:1});
 const RAL={idx:null,err:'',ts:0,nb:0,vieux:0,sansRef:0,p:null};
 // RAL-PURE-DEBUT
 function ralIndex(lignes,bcs,auj,maxJ){
@@ -7801,7 +7807,8 @@ const ralTip=r=>{const e=r.ral;if(!e)return '';const max=param('REAPPRO_RAL_MAX_
 function ralCellule(r){
   const e=r.ral,res=r.a.res?`<div class="ra-sub" title="Quantité réservée dans Image">rés. ${raN0(r.a.res)}</div>`:'';
   if(!e)return `<td class="r">${res}</td>`;
-  return `<td class="r" data-tip="${esc(ralTip(r))}">${e.q?`<b>${raN0(e.q)}</b>`:''}${r.ralNc?`<div class="ra-sub ra-nc">manque ${raN0(r.ralNc)}</div>`:''}${e.vieux?`<div class="ra-sub">${e.q?'+ ':''}${raN0(e.vieux)} ancien</div>`:''}${res}</td>`;
+  const sous=[r.ralNc?`<span class="ra-nc">manque ${raN0(r.ralNc)}</span>`:'',e.vieux?`${e.q?'+ ':''}${raN0(e.vieux)} ancien`:''].filter(Boolean).join(' · ');
+  return `<td class="r ${sous?'ra-ralc':''}" data-tip="${esc(ralTip(r))}"><div class="ra-ralw"><b>${e.q?raN0(e.q):'&nbsp;'}</b>${sous?`<div class="ra-sub ra-rals">${sous}</div>`:''}</div>${res}</td>`;
 }
 // Références en reste à livrer que l'export Image ne contient pas (saisie libre ou article créé depuis)
 function ralInconnues(){
