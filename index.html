@@ -3714,29 +3714,65 @@ function bliContexte(){
   return {suivi,dbc,auj:`${t.getFullYear()}-${z(t.getMonth()+1)}-${z(t.getDate())}`};
 }
 // ── Fichiers (bibliothèque du site Commercial) ──
-const bliDossier=()=>{const p=(DATA.achats&&DATA.achats.blDossier)||'';return String(p||BLI_DOSSIER_DEF).trim().replace(/\/+$/,'');};
-const bliWeb=p=>{const m=String(p).match(/^(.*?)\/(?:Shared Documents|Documents partages|Documents partagés|Documents)(?:\/|$)/i);return m?m[1]:'/sites/RseauxPlus';};
+// Même dossier « Dossier partage » que le Portail Achats : clé BL_ATTENTE_DOSSIER, sinon dossier parent de FACTURES_DOSSIER
+// (Parametres_Achats), sinon chemin par défaut. Le site (web) est demandé à SharePoint ; si le chemin n'existe pas,
+// le dossier est cherché dans les bibliothèques du site, comme le fait le Portail Achats.
+function bliChemin(v){
+  v=String(v||'').trim();
+  if(/^https?:/i.test(v)){try{const u=new URL(v);const id=u.searchParams.get('id')||u.searchParams.get('RootFolder');v=id?id:decodeURIComponent(u.pathname).replace(/\/Forms\/[^\/]+\.aspx$/i,'');}catch(e){}}
+  return v.replace(/\/+$/,'');
+}
+function bliDossierVoulu(){
+  const A=DATA.achats||{};
+  if(A.blDossier)return bliChemin(A.blDossier);
+  if(A.facDossier)return bliChemin(A.facDossier).replace(/\/[^\/]+$/,'')+'/BL En attente Image';
+  return BLI_DOSSIER_DEF;
+}
 const bliQ=s=>encodeURIComponent("'"+String(s).replace(/'/g,"''")+"'");
+const bliH=()=>({'Authorization':`Bearer ${getToken()}`,'Accept':'application/json;odata=nometadata'});
+const BLI_WEB={};
+async function bliWeb(p){
+  const m=String(p).match(/^(.*?)\/(?:Shared Documents|Documents partages|Documents partagés|Documents)(?:\/|$)/i),cle=m?m[1]:String(p).replace(/\/[^\/]+$/,'');
+  if(BLI_WEB[cle]!==undefined)return BLI_WEB[cle];let w=m?m[1]:'';
+  try{const r=await fetch(`${C.spRoot}/_api/SP.Web.GetWebUrlFromPageUrl`,{method:'POST',headers:{...bliH(),'Content-Type':'application/json;odata=nometadata'},body:JSON.stringify({pageFullUrl:C.spRoot+encodeURI(p)})});
+    if(r.ok){const j=await r.json();const u=j.value||j.GetWebUrlFromPageUrl;if(u)w=decodeURIComponent(new URL(u).pathname).replace(/\/$/,'');}}catch(e){console.warn('[BL en attente] site',e);}
+  return BLI_WEB[cle]=w;
+}
 async function bliApi(p,suite,opt){
-  const base=`${C.spRoot}${bliWeb(p)}/_api/web/`,H={'Authorization':`Bearer ${getToken()}`,'Accept':'application/json;odata=nometadata'};
-  const essais=[`GetFolderByServerRelativePath(decodedurl=${bliQ(p)})${suite}`,`GetFolderByServerRelativeUrl(${bliQ(p)})${suite}`];
-  let r;for(const e of essais){r=await fetch(base+e,{...(opt||{}),headers:H});if(r.ok||![400,404].includes(r.status))return r;}
+  const base=`${C.spRoot}${await bliWeb(p)}/_api/web/`;
+  const essais=[`GetFolderByServerRelativeUrl(${bliQ(p)})${suite}`,`GetFolderByServerRelativePath(decodedurl=${bliQ(p)})${suite}`];
+  let r;for(const e of essais){r=await fetch(base+e,{...(opt||{}),headers:bliH()});if(r.ok||![400,404,500].includes(r.status))return r;}
   return r;
+}
+async function bliExiste(p){try{const r=await bliApi(p,'?$select=Exists');if(!r.ok)return false;const j=await r.json();return j.Exists!==false;}catch(e){return false;}}
+let BLI_DOS=null;
+async function bliDossier(){
+  if(BLI_DOS)return BLI_DOS;
+  const p=bliDossierVoulu();
+  if(await bliExiste(p))return BLI_DOS=p;
+  // chemin introuvable : même sous-chemin dans chaque bibliothèque du site
+  const web=await bliWeb(p);
+  try{
+    const r=await fetch(`${C.spRoot}${web}/_api/web/lists?$select=Title,Hidden,RootFolder/ServerRelativeUrl&$expand=RootFolder&$filter=BaseTemplate eq 101`,{headers:bliH()});
+    if(r.ok){const libs=((await r.json()).value||[]).filter(l=>!l.Hidden&&l.RootFolder);
+      const reste=p.startsWith(web+'/')?p.slice(web.length).replace(/^\/[^\/]+/,''):'/Dossier partage/BL En attente Image';
+      for(const l of libs){const c=l.RootFolder.ServerRelativeUrl.replace(/\/$/,'')+reste;if(await bliExiste(c))return BLI_DOS=c;}}
+  }catch(e){console.warn('[BL en attente] bibliothèques',e);}
+  throw new Error(`Dossier « BL En attente Image » introuvable dans SharePoint (cherché : ${p}). Vérifie qu’il est bien dans « Dossier partage », à côté de « Reappro », ou renseigne la clé BL_ATTENTE_DOSSIER dans Parametres_Achats (colle l’adresse du dossier).`);
 }
 async function bliCharger(){
   if(BLI.charge)return;BLI.charge=true;BLI.err='';BLI.warn=[];
   try{
-    const D=bliDossier();
+    const D=await bliDossier();
     const r=await bliApi(D,'/Files?$select=Name,ServerRelativeUrl,TimeLastModified&$top=500');
-    if(r.status===404){BLI.err=`Dossier introuvable : ${D}. Crée-le, ou renseigne la clé BL_ATTENTE_DOSSIER dans Parametres_Achats.`;BLI.bls=null;return;}
-    if(!r.ok)throw new Error('Lecture du dossier : HTTP '+r.status);
+    if(!r.ok)throw new Error(`Lecture du dossier ${D} : HTTP ${r.status}`);
     const F=((await r.json()).value||[]).filter(x=>/\.(csv|txt)$/i.test(x.Name)).map(x=>({nom:x.Name,url:x.ServerRelativeUrl,t:Date.parse(x.TimeLastModified)})).sort((a,b)=>b.t-a.t);
     if(!F.length){BLI.bls=null;BLI.fic=[];return;}
     // dernier dépôt = fichiers déposés dans les 15 minutes du plus récent (pages 1, 2… d'un même export)
     const lot=F.filter(x=>F[0].t-x.t<=15*60e3);BLI.fic=lot;BLI.ts=F[0].t;
     const vus=new Map();
     for(const x of lot){
-      const rf=await fetch(`${C.spRoot}${bliWeb(x.url)}/_api/web/GetFileByServerRelativePath(decodedurl=${bliQ(x.url)})/$value`,{headers:{'Authorization':`Bearer ${getToken()}`}});
+      const rf=await fetch(`${C.spRoot}${await bliWeb(x.url)}/_api/web/GetFileByServerRelativeUrl(${bliQ(x.url)})/$value`,{headers:{'Authorization':`Bearer ${getToken()}`}});
       if(!rf.ok)throw new Error(`Lecture de ${x.nom} : HTTP ${rf.status}`);
       const L=bliLireCsv(bliDecoder(await rf.arrayBuffer()));
       if(L.err){BLI.warn.push(`${x.nom} : ${L.err}`);continue;}
@@ -3755,17 +3791,18 @@ async function bliDeposer(files){
   let n=0,pleins=0;const lus=[];
   for(const fl of files){const L=bliLireCsv(bliDecoder(await fl.arrayBuffer()));if(L.err){toast('🔴 '+fl.name+' : '+L.err,'err');return;}n+=L.bls.length;if(L.bls.length===BLI_PAGE)pleins++;lus.push(fl);}
   if(pleins===files.length&&!confirm(`${files.length>1?'Chaque fichier contient':'Le fichier contient'} exactement ${BLI_PAGE} BL : Image a sans doute une page de plus.\n\nDéposer quand même ?`))return;
-  BLI.busy=true;bliRender();
+  BLI.busy=true;BLI.depErr='';bliRender();
   try{
-    const D=bliDossier(),z=x=>String(x).padStart(2,'0'),h=new Date();
+    const D=await bliDossier(),z=x=>String(x).padStart(2,'0'),h=new Date();
     const pre=`BLattente_${h.getFullYear()}-${z(h.getMonth()+1)}-${z(h.getDate())}_${z(h.getHours())}h${z(h.getMinutes())}`;
     for(let i=0;i<lus.length;i++){
       const nom=`${pre}_p${i+1}.csv`;
       const r=await bliApi(D,`/Files/add(url=${bliQ(nom)},overwrite=true)`,{method:'POST',body:await lus[i].arrayBuffer()});
-      if(!r.ok)throw new Error(r.status===404?`Dossier introuvable : ${D}`:r.status===403?'Pas le droit d’écrire dans le dossier « BL En attente Image »':`Dépôt de ${nom} : HTTP ${r.status}`);
+      if(!r.ok){const t=await r.text().catch(()=>'');console.warn('[BL en attente] dépôt',r.status,t);
+        throw new Error(`Dépôt refusé par SharePoint (HTTP ${r.status}) dans ${D}${r.status===403?' : droits insuffisants sur ce dossier':''}. ${t.replace(/<[^>]+>/g,' ').replace(/\s+/g,' ').slice(0,160)}`);}
     }
     toast(`✓ ${n} BL déposés (${lus.length} fichier${lus.length>1?'s':''})`,'ok');
-  }catch(e){toast('🔴 '+e.message,'err');}
+  }catch(e){toast('🔴 '+e.message,'err');BLI.depErr=e.message;}
   finally{BLI.busy=false;await bliCharger();}
 }
 function bliDbcDepuisBL(bl){
@@ -3785,7 +3822,8 @@ function bliRender(){
   const z=n=>String(n).padStart(2,'0'),dt=t=>{const d=new Date(t);return `${z(d.getDate())}/${z(d.getMonth()+1)} à ${d.getHours()}h${z(d.getMinutes())}`;};
   const btn=`<label class="bli-dep ${BLI.busy?'dis':''}">${BLI.busy?'⏳ Dépôt…':'⬆ Déposer l’export Image'}<input type="file" accept=".csv,.txt" multiple style="display:none" ${BLI.busy?'disabled':''} onchange="bliDeposer(this.files);this.value=''"></label>`;
   if(BLI.err){el.innerHTML=`<div class="bli"><div class="bli-hd"><b>📋 BL en attente de facturation (Image)</b>${btn}</div><div class="bli-msg k">🔴 ${bliEsc(BLI.err)}</div></div>`;if(badge)badge.style.display='none';return;}
-  if(!BLI.bls){el.innerHTML=`<div class="bli"><div class="bli-hd"><b>📋 BL en attente de facturation (Image)</b>${BLI.charge?'<span class="bli-mut">Chargement…</span>':'<span class="bli-mut">Aucun export déposé.</span>'}${btn}</div></div>`;if(badge)badge.style.display='none';return;}
+  const depErr=BLI.depErr?`<div class="bli-msg k" style="margin-bottom:12px">🔴 ${bliEsc(BLI.depErr)}</div>`:'';
+  if(!BLI.bls){el.innerHTML=`<div class="bli"><div class="bli-hd"><b>📋 BL en attente de facturation (Image)</b>${BLI.charge?'<span class="bli-mut">Chargement…</span>':'<span class="bli-mut">Aucun export déposé.</span>'}${btn}</div>${depErr}</div>`;if(badge)badge.style.display='none';return;}
   const L=bliClasser(BLI.bls,bliContexte());BLI.L=L;
   const h=(Date.now()-BLI.ts)/36e5,vieux=h>48?'k':h>24?'o':'';
   const reels=L.filter(b=>b.cat!=='vide'),tot=reels.reduce((s,b)=>s+b.ca,0);
@@ -3813,7 +3851,7 @@ function bliRender(){
       <b>${BLI.ouvert?'▼':'▶'} 📋 BL en attente de facturation (Image)</b>
       <span class="bli-tot">${reels.length} BL · ${bliEur(tot)}</span>
       <span class="bli-date ${vieux}" title="Date du dernier dépôt de l’export Image (${bliEsc(BLI.fic.map(x=>x.nom).join(', '))})">export du ${dt(BLI.ts)}${vieux?' · à redéposer':''}</span>
-      <span style="flex:1"></span>${btn}</div>
+      <span style="flex:1"></span>${btn}</div>${depErr}
     ${BLI.ouvert?`${BLI.warn.map(w=>`<div class="bli-msg o">⚠️ ${bliEsc(w)}</div>`).join('')}
     <div class="bli-ks5">${kp}</div>
     <div class="bli-bar"><span class="bli-mut">Ancienneté :</span> ${tr}<span style="flex:1"></span>
@@ -3905,7 +3943,7 @@ async function fetchAchatsArrivages(){
   ]);
   const p=par.find(x=>x.Title==='DELAI_PORT_ENTREPOT_J');
   const delai=p&&!isNaN(parseInt(p.Valeur))?parseInt(p.Valeur):ACH_DELAI_DEFAUT;
-  return {arr,lig:lig.filter(l=>l.Type_Ligne!=='Frais'&&l.N_Commande),cmd:(cmd||[]).filter(c=>c.Annulee!=='Oui'),da:da&&da.filter(d=>d.ID_BC_Client),lda:lda||[],lcmd:lcmd||[],delai,stock:lireStockImageDate(par),blDossier:((par||[]).find(x=>String(x.Title||'').trim()==='BL_ATTENTE_DOSSIER')||{}).Valeur||'',ts:Date.now()};
+  return {arr,lig:lig.filter(l=>l.Type_Ligne!=='Frais'&&l.N_Commande),cmd:(cmd||[]).filter(c=>c.Annulee!=='Oui'),da:da&&da.filter(d=>d.ID_BC_Client),lda:lda||[],lcmd:lcmd||[],delai,stock:lireStockImageDate(par),blDossier:((par||[]).find(x=>String(x.Title||'').trim()==='BL_ATTENTE_DOSSIER')||{}).Valeur||'',facDossier:((par||[]).find(x=>String(x.Title||'').trim()==='FACTURES_DOSSIER')||{}).Valeur||'',ts:Date.now()};
 }
 // ═══ DEMANDES DE COMMANDE FOURNISSEUR (vendeur → Fabrice → achats) ═══
 // Le vendeur demande depuis le panneau d'un BC : la demande part « À valider » dans la liste
