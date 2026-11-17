@@ -1046,7 +1046,6 @@
           <button class="btn-refresh" onclick="loadAll()">🔄 Actualiser</button>
         </div>
       </div>
-      <div id="bli-box"></div>
       <div id="dbc-rattachement" style="display:none"></div>
       <div class="kpi-row c3">
         <div class="kc r"><div class="kl">💰 Risque financier total</div><div class="kv" id="kpi-risque-total">—</div><div class="ks">HT sans BC reçu</div></div>
@@ -1056,7 +1055,7 @@
       <div style="background:var(--navy);border-radius:var(--radius);padding:14px 18px;margin-bottom:14px">
         <div style="display:flex;align-items:center;gap:12px;margin-bottom:10px">
           <span style="font-size:20px">🔍</span>
-          <input type="text" id="search-dbc" placeholder="Recherche — N° DBC, client, employé, chef chantier, N° devis, N° BL..."
+          <input type="text" id="search-dbc" placeholder="Recherche dans les demandes de BC et les BL Image — N° BL, N° devis, client, chantier, chef chantier, employé, N° DBC…"
             style="flex:1;background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.2);border-radius:var(--radius-sm);padding:9px 14px;font-size:13.5px;color:white;font-family:var(--font-body);outline:none"
             oninput="renderDBCTable()">
           <button class="btn" style="border-color:rgba(255,255,255,.3);color:rgba(255,255,255,.7);background:none;white-space:nowrap" onclick="document.getElementById('search-dbc').value='';renderDBCTable()">✕ Effacer</button>
@@ -1069,6 +1068,8 @@
         </div>
       </div>
 
+      <div id="bli-box"></div>
+      <div class="sd" style="margin-top:4px"><h2>🧾 Demandes de BC</h2><span class="site-tag rp" id="dbc-titre-filtre">Dashboard</span><div class="sd-line"></div></div>
       <div id="dbc-accordeons-vendeurs"><!-- généré dynamiquement par vendeur --></div>
 
       <!-- ══ BC REÇU ══ -->
@@ -3709,7 +3710,7 @@ function bliContexte(){
   for(const l of DATA.lignes||[]){const s=byId.get(l.BCId);if(!s)continue;const h=f(l,'BLSign_x00e9_');if(!h)continue;
     for(const x of (typeof parseBLHistorique==='function'?parseBLHistorique(h).map(p=>p.bl):[]).concat(bliTokens(h)))if(!s.bls.includes(x))s.bls.push(x);}
   const dbc=(DATA.dbc||[]).map(d=>({id:d.ID,titre:f(d,'Title')||'DBC-'+d.ID,bls:bliTokens(f(d,'N_x00b0_BL')),vendeur:getDBCVendeur(d)==='—'?'':getDBCVendeur(d),client:f(d,'NomClient')||f(d,'Title')||'',
-    statut:f(d,'Statut')||'',date:f(d,'Date_Demande')||f(d,'Date_Enl_x00e8_vement')||d.Created||''}));
+    statut:f(d,'Statut')||'',date:f(d,'Date_Demande')||f(d,'Date_Enl_x00e8_vement')||d.Created||'',employe:f(d,'Nom_Employ_x00e9_')||'',chef:f(d,'Chefdechantier')||''}));
   const z=n=>String(n).padStart(2,'0'),t=new Date();
   return {suivi,dbc,auj:`${t.getFullYear()}-${z(t.getMonth()+1)}-${z(t.getDate())}`};
 }
@@ -3744,7 +3745,8 @@ async function bliApi(p,suite,opt){
   let r;for(const e of essais){r=await fetch(base+e,{...(opt||{}),headers:bliH()});if(r.ok||![400,404,500].includes(r.status))return r;}
   return r;
 }
-async function bliExiste(p){try{const r=await bliApi(p,'?$select=Exists');if(!r.ok)return false;const j=await r.json();return j.Exists!==false;}catch(e){return false;}}
+let BLI_REFUS=false;   // SharePoint a refusé l'accès (401/403) : dossier présent mais pas autorisé pour ce compte
+async function bliExiste(p){try{const r=await bliApi(p,'?$select=Exists');if(r.status===401||r.status===403){BLI_REFUS=true;return false;}if(!r.ok)return false;const j=await r.json();return j.Exists!==false;}catch(e){return false;}}
 let BLI_DOS=null;
 async function bliDossier(){
   if(BLI_DOS)return BLI_DOS;
@@ -3754,10 +3756,12 @@ async function bliDossier(){
   const web=await bliWeb(p);
   try{
     const r=await fetch(`${C.spRoot}${web}/_api/web/lists?$select=Title,Hidden,RootFolder/ServerRelativeUrl&$expand=RootFolder&$filter=BaseTemplate eq 101`,{headers:bliH()});
+    if(r.status===401||r.status===403)BLI_REFUS=true;
     if(r.ok){const libs=((await r.json()).value||[]).filter(l=>!l.Hidden&&l.RootFolder);
       const reste=p.startsWith(web+'/')?p.slice(web.length).replace(/^\/[^\/]+/,''):'/Dossier partage/BL En attente Image';
       for(const l of libs){const c=l.RootFolder.ServerRelativeUrl.replace(/\/$/,'')+reste;if(await bliExiste(c))return BLI_DOS=c;}}
   }catch(e){console.warn('[BL en attente] bibliothèques',e);}
+  if(BLI_REFUS)throw new Error(`Ton compte n’a pas accès au dossier « BL En attente Image » (${p}). Demande à Nicolas de te donner l’accès en lecture à ce dossier dans SharePoint.`);
   throw new Error(`Dossier « BL En attente Image » introuvable dans SharePoint (cherché : ${p}). Vérifie qu’il est bien dans « Dossier partage », à côté de « Reappro », ou renseigne la clé BL_ATTENTE_DOSSIER dans Parametres_Achats (colle l’adresse du dossier).`);
 }
 async function bliCharger(){
@@ -3765,6 +3769,7 @@ async function bliCharger(){
   try{
     const D=await bliDossier();
     const r=await bliApi(D,'/Files?$select=Name,ServerRelativeUrl,TimeLastModified&$top=500');
+    if(r.status===401||r.status===403)throw new Error(`Ton compte n’a pas accès au dossier « BL En attente Image ». Demande à Nicolas de te donner l’accès en lecture.`);
     if(!r.ok)throw new Error(`Lecture du dossier ${D} : HTTP ${r.status}`);
     const F=((await r.json()).value||[]).filter(x=>/\.(csv|txt)$/i.test(x.Name)).map(x=>({nom:x.Name,url:x.ServerRelativeUrl,t:Date.parse(x.TimeLastModified)})).sort((a,b)=>b.t-a.t);
     if(!F.length){BLI.bls=null;BLI.fic=[];return;}
@@ -3815,6 +3820,19 @@ function bliDbcDepuisBL(bl){
     const dr=document.getElementById('d-client-drop');if(dr)dr.style.display='none';
   },150);
 }
+// Recherche et vendeur de la barre « Demandes BC » appliqués aussi aux BL Image
+function bliFiltreCommun(){
+  // chaque mot doit se retrouver ; ponctuation et espaces ignorés à l'intérieur d'un mot (« g.t » trouve « G.T.DOM »)
+  const q=String(document.getElementById('search-dbc')?.value||'').trim().split(/\s+/).map(m=>bliNorm(m).replace(/ /g,'')).filter(Boolean),fV=document.getElementById('filter-vendeur-dbc')?.value||'all';
+  return {q,fV,actif:q.length>0||fV!=='all'};
+}
+function bliCorrespond(b,F){
+  if(F.fV!=='all'){const v=bliNorm(b.vendeur||b.vendeurProbable),w=bliNorm(F.fV);if(!v||!(v===w||v.startsWith(w+' ')||w.startsWith(v+' ')||v.split(' ')[0]===w.split(' ')[0]))return false;}
+  if(!F.q.length)return true;
+  const champs=[b.bl,b.devis,b.client,b.chantier,b.chantierCode,b.cde,b.refCde,b.vendeur,b.vendeurProbable,b.compte,b.bc&&b.bc.titre,b.dem&&b.dem.titre,b.dem&&b.dem.employe,b.dem&&b.dem.chef,b.dem&&('DBC '+b.dem.id),BLI_CAT[b.cat].t];
+  const C=champs.map(c=>bliNorm(c).replace(/ /g,''));
+  return F.q.every(m=>C.some(c=>c.includes(m)));
+}
 function bliFiltrer(cat){BLI.filtre=BLI.filtre===cat?'all':cat;bliRender();}
 function bliRender(){
   const el=document.getElementById('bli-box');if(!el)return;
@@ -3824,16 +3842,17 @@ function bliRender(){
   if(BLI.err){el.innerHTML=`<div class="bli"><div class="bli-hd"><b>📋 BL en attente de facturation (Image)</b>${btn}</div><div class="bli-msg k">🔴 ${bliEsc(BLI.err)}</div></div>`;if(badge)badge.style.display='none';return;}
   const depErr=BLI.depErr?`<div class="bli-msg k" style="margin-bottom:12px">🔴 ${bliEsc(BLI.depErr)}</div>`:'';
   if(!BLI.bls){el.innerHTML=`<div class="bli"><div class="bli-hd"><b>📋 BL en attente de facturation (Image)</b>${BLI.charge?'<span class="bli-mut">Chargement…</span>':'<span class="bli-mut">Aucun export déposé.</span>'}${btn}</div>${depErr}</div>`;if(badge)badge.style.display='none';return;}
-  const L=bliClasser(BLI.bls,bliContexte());BLI.L=L;
+  const L0=bliClasser(BLI.bls,bliContexte());BLI.L=L0;
+  const F=bliFiltreCommun(),L=F.actif?L0.filter(b=>bliCorrespond(b,F)):L0;
   const h=(Date.now()-BLI.ts)/36e5,vieux=h>48?'k':h>24?'o':'';
   const reels=L.filter(b=>b.cat!=='vide'),tot=reels.reduce((s,b)=>s+b.ca,0);
   const parCat=k=>L.filter(b=>b.cat===k);
   const vendeurs=[...new Set(L.map(b=>b.vendeur||'').filter(Boolean))].sort();
-  if(badge){const n=reels.filter(b=>b.cat==='inc'||b.cat==='dem').length;badge.textContent=n+' BL';badge.style.display=n?'':'none';}
+  if(badge){const n=L0.filter(b=>b.ca>0&&(b.cat==='inc'||b.cat==='dem')).length;badge.textContent=n+' BL';badge.style.display=n?'':'none';}
   const tr=[['≤ 7 j',0,7],['8-30 j',8,30],['31-60 j',31,60],['> 60 j',61,1e9]].map(([t,a,z2])=>{const x=reels.filter(b=>b.age!==null&&b.age>=a&&b.age<=z2);return x.length?`<span class="bli-tr ${a>30?'k':a>7?'o':''}">${t} : <b>${x.length}</b> · ${bliEur(x.reduce((s,b)=>s+b.ca,0))}</span>`:'';}).join('');
   const kp=Object.keys(BLI_CAT).map(k=>{const x=parCat(k),c=BLI_CAT[k];if(!x.length&&k!=='inc')return '';
     return `<div class="bli-k ${BLI.filtre===k?'on':''}" style="border-left-color:${c.c}" onclick="bliFiltrer('${k}')" title="${bliEsc(c.a)} — clique pour filtrer"><div class="bli-kt">${c.ic} ${c.t}</div><div class="bli-kv">${x.length} BL</div><div class="bli-ks">${k==='vide'?'non comptés':bliEur(x.reduce((s,b)=>s+b.ca,0))}</div></div>`;}).join('');
-  let R=L.filter(b=>(BLI.filtre==='all'?b.cat!=='vide':b.cat===BLI.filtre)&&(BLI.vend==='all'||(BLI.vend==='?'?!b.vendeur:b.vendeur===BLI.vend)));
+  let R=L.filter(b=>(BLI.filtre==='all'?b.cat!=='vide':b.cat===BLI.filtre)&&(!BLI.sansV||!b.vendeur));
   const ordre={inc:0,dem:1,bc:2,bpf:3,vide:4};R.sort((a,b)=>ordre[a.cat]-ordre[b.cat]||(b.age||0)-(a.age||0)||b.ca-a.ca);
   const incoh=L.filter(b=>b.incoherent);
   const ctxS=bliContexte().suivi.filter(s=>{const i=s._i;return !s.facture&&!s.annule&&!s.solde&&s.bls.length;});
@@ -3849,18 +3868,18 @@ function bliRender(){
   el.innerHTML=`<div class="bli">
     <div class="bli-hd" onclick="if(event.target.closest('label,select,button'))return;BLI.ouvert=!BLI.ouvert;bliRender()">
       <b>${BLI.ouvert?'▼':'▶'} 📋 BL en attente de facturation (Image)</b>
-      <span class="bli-tot">${reels.length} BL · ${bliEur(tot)}</span>
+      <span class="bli-tot">${F.actif?`🔍 ${reels.length} BL sur ${L0.filter(b=>b.cat!=='vide').length} · `:`${reels.length} BL · `}${bliEur(tot)}</span>
       <span class="bli-date ${vieux}" title="Date du dernier dépôt de l’export Image (${bliEsc(BLI.fic.map(x=>x.nom).join(', '))})">export du ${dt(BLI.ts)}${vieux?' · à redéposer':''}</span>
       <span style="flex:1"></span>${btn}</div>${depErr}
     ${BLI.ouvert?`${BLI.warn.map(w=>`<div class="bli-msg o">⚠️ ${bliEsc(w)}</div>`).join('')}
     <div class="bli-ks5">${kp}</div>
     <div class="bli-bar"><span class="bli-mut">Ancienneté :</span> ${tr}<span style="flex:1"></span>
-      <select class="bli-sel" onchange="BLI.vend=this.value;bliRender()"><option value="all">Tous les vendeurs</option>${vendeurs.map(v=>`<option ${BLI.vend===v?'selected':''}>${bliEsc(v)}</option>`).join('')}<option value="?" ${BLI.vend==='?'?'selected':''}>Sans vendeur</option></select>
+      <button class="bli-b ${BLI.sansV?'on':''}" onclick="BLI.sansV=!BLI.sansV;bliRender()" title="Seulement les BL dont aucun vendeur n’est connu (ni dans Image ni dans le Dashboard)">${BLI.sansV?'☑':'☐'} Sans vendeur</button>
       ${BLI.filtre!=='all'?`<button class="bli-b" onclick="bliFiltrer('all')">✕ ${BLI_CAT[BLI.filtre].t}</button>`:''}</div>
     ${BLI.filtre!=='all'?`<div class="bli-msg">${BLI_CAT[BLI.filtre].ic} <b>À faire :</b> ${BLI_CAT[BLI.filtre].a}</div>`:''}
     ${incoh.length?`<div class="bli-msg o">⚠️ <b>${incoh.length} BL</b> non facturé${incoh.length>1?'s':''} dans Image alors que le Dashboard indique le BC « Entièrement facturé » : ${incoh.map(b=>`<span class="mono">${b.bl}</span> (${bliEsc(b.bc.titre)})`).join(', ')}.</div>`:''}
     <div class="bli-scroll"><table class="bli-t"><thead><tr><th></th><th>N° BL</th><th>Date</th><th class="r">Âge</th><th>Client · chantier</th><th>N° cde Image</th><th class="r">CA HT</th><th>Vendeur</th><th>Dashboard</th></tr></thead>
-    <tbody>${R.length?R.map(ligne).join(''):'<tr><td colspan="9" class="bli-mut" style="text-align:center;padding:14px">Aucun BL</td></tr>'}</tbody></table></div>
+    <tbody>${R.length?R.map(ligne).join(''):`<tr><td colspan="9" class="bli-mut" style="text-align:center;padding:14px">${F.actif?'Aucun BL Image ne correspond à la recherche':'Aucun BL'}</td></tr>`}</tbody></table></div>
     ${fImg.length?`<details class="bli-det"><summary>ℹ️ ${fImg.length} BC « non facturé » dans le Dashboard dont le BL n’est plus dans l’export Image (sans doute facturé dans Image : N° FC à renseigner)</summary><div>${fImg.slice(0,60).map(s=>`<span class="mono">${bliEsc(s.titre)}</span> BL ${s.bls.join(', ')} · ${bliEsc(s.client)}${s.vendeur?' · '+bliEsc(s.vendeur):''}`).join('<br>')}</div></details>`:''}`:''}
   </div>`;
 }
@@ -3878,6 +3897,7 @@ function bliRender(){
 .bli-bar{display:flex;gap:8px;align-items:center;flex-wrap:wrap;padding:10px 16px 0}
 .bli-tr{font-size:12px;padding:3px 9px;border-radius:12px;background:#eef1f6}.bli-tr.o{background:#fff3e0;color:#8a3200}.bli-tr.k{background:#ffebee;color:#8e1b1b}
 .bli-sel{padding:5px 8px;border:1px solid var(--border);border-radius:5px;font-size:12.5px}
+.bli-b.on{background:#eef3fb;border-color:#9db8e3;font-weight:700}
 .bli-b{border:1px solid var(--border);background:#fff;border-radius:5px;padding:4px 9px;font-size:12px;cursor:pointer;white-space:nowrap}.bli-b:hover{background:#f0f4fa}
 .bli-scroll{overflow:auto;max-height:520px;margin:10px 16px 14px;border:1px solid var(--border-light);border-radius:8px}
 .bli-t{width:100%;border-collapse:collapse;font-size:13px}.bli-t th{position:sticky;top:0;background:#f5f7fa;text-align:left;font-size:11px;text-transform:uppercase;letter-spacing:.03em;color:#5b6577;padding:7px 8px;border-bottom:1px solid var(--border)}
@@ -6005,6 +6025,7 @@ function dbcRowFull(i){
 }
 
 function renderDBCTable(){
+  try{bliRender();}catch(e){console.warn('[BL en attente] filtre',e);}
   try{renderDBCRattachement();}catch(e){console.warn('[DBC rattachement]',e);}
   let items=[...DATA.dbc];
   const fV=document.getElementById('filter-vendeur-dbc')?.value||'all';
