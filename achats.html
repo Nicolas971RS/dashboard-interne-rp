@@ -335,7 +335,7 @@ input,select,textarea{font-family:inherit;font-size:13.5px}
 .fac-nom{font-size:12.5px;color:var(--text-secondary);margin:4px 0 12px;word-break:break-all}
 .fac-actions{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
 .fac-actions .kbd{background:rgba(255,255,255,.2);border-color:rgba(255,255,255,.35);color:#fff}
-.pdf-a{margin-left:4px;text-decoration:none;font-size:15px;vertical-align:middle}
+.pdf-a{display:inline-flex;align-items:center;margin-left:6px;padding:2px 7px;border-radius:4px;background:#dc2626;color:#fff!important;font:800 11px/1.35 system-ui,sans-serif;letter-spacing:.4px;text-decoration:none;vertical-align:middle;flex:none;box-shadow:0 1px 2px rgba(0,0,0,.2)}.pdf-a:hover{background:#991b1b}.nopdf-b{display:inline-flex;margin-left:6px;padding:2px 7px;border-radius:4px;background:#fff7ed;border:1.5px dashed #ea580c;color:#c2410c;font:700 10.5px/1.3 system-ui,sans-serif;white-space:nowrap;vertical-align:middle;flex:none}tr.nopdf>td{background:#fff7ed!important}tr.nopdf>td:first-child{box-shadow:inset 4px 0 0 #ea580c}td.nopdf-c{background:#fff7ed}.env-pts li.rg{color:#c2410c;font-weight:600}
 .drop-hint{display:none;position:absolute;inset:0;border:3px dashed var(--teal-mid);border-radius:14px;background:rgba(224,245,247,.85);font-size:22px;font-weight:700;color:var(--teal);align-items:center;justify-content:center;z-index:5;pointer-events:none}
 #sec-factures.drag .drop-hint{display:flex}
 @media (max-width:1250px){.fac-wrap{grid-template-columns:260px minmax(0,1fr)}.fac-form{grid-column:1/-1;position:static}}
@@ -1306,10 +1306,10 @@ function lineRowMar(l){
   const f=l.ID_Fournisseur?frsById(l.ID_Fournisseur):null;
   const ok=!!f;const cls=l._st==='new'?'new':l._st==='mod'?'mod':l._st==='del'?'del':'';
   const num=(fld,req)=>`<input class="n ${req&&!(n0(l[fld])>0)?'req-empty':''}" data-l="${l._k}" data-f="${fld}" ${req?'data-req="1"':''} value="${esc(fmtN(l[fld]))}" inputmode="decimal" ${req?'placeholder="à saisir"':''}>`;
-  return `<tr class="${cls}" data-row="${l._k}">
+  return `<tr class="${cls}${sansPdf(l)?' nopdf':''}" data-row="${l._k}">
     <td><div style="display:flex;align-items:center;gap:4px"><input style="min-width:240px" data-l="${l._k}" data-f="Fournisseur" data-req="1" list="dlFrs" value="${esc(l.Fournisseur||'')}" placeholder="à saisir" class="${l.Fournisseur?'':'req-empty'}"><span class="${ok?'frs-ok':'frs-ko'}" title="${ok?'Reconnu : '+esc(f.Title)+' ('+esc(f.Code_Image||'')+')':'Fournisseur non reconnu dans la liste'}">${ok?'✓':'⚠'}</span></div></td>
     <td><input data-l="${l._k}" data-f="N_Commande" value="${esc(l.N_Commande||'')}" style="width:70px" class="mono"></td>
-    <td><input data-l="${l._k}" data-f="N_Facture" data-req="1" value="${esc(l.N_Facture||'')}" class="mono ${l.N_Facture?'':'req-empty'}" placeholder="à saisir" style="min-width:130px">${pdfLigne(l)}</td>
+    <td><div style="display:flex;align-items:center;flex-wrap:nowrap"><input data-l="${l._k}" data-f="N_Facture" data-req="1" value="${esc(l.N_Facture||'')}" class="mono ${l.N_Facture?'':'req-empty'}" placeholder="à saisir" style="min-width:130px;flex:1">${pdfLigne(l)||(sansPdf(l)?NOPDF_B:'')}</div></td>
     <td><input data-l="${l._k}" data-f="Produits" value="${esc(l.Produits||'')}" style="min-width:200px"></td>
     <td>${num('Valeur_Marchandise',true)}</td><td>${num('Fret')}</td><td>${num('Ajustement')}</td>
     <td class="r mono" data-cif="${l._k}">${fmtN(lineVMnette(l)+n0(l.Fret))}</td>
@@ -2514,6 +2514,7 @@ function refreshComputed(){
   const checks=[
     [c.nMar>0,`${c.nMar} ligne${c.nMar>1?'s':''} marchandise`,'Aucune ligne marchandise'],
     [mar.length>0&&mar.every(l=>l.N_Facture),'Toutes les factures fournisseurs ont un n°',`${mar.filter(l=>!l.N_Facture).length} ligne(s) sans n° de facture`],
+    ...(pdfConnu()?[[!mar.some(sansPdf),'Toutes les factures ont leur PDF',`${mar.filter(sansPdf).length} facture(s) sans PDF (lignes en orange)`]]:[]),
     [mar.length>0&&mar.every(l=>n0(l.Valeur_Marchandise)>0),'Toutes les valeurs sont renseignées',`${mar.filter(l=>!(n0(l.Valeur_Marchandise)>0)).length} ligne(s) sans valeur`],
     [W.lines.filter(l=>l._st!=='del').every(l=>l.ID_Fournisseur),'Tous les fournisseurs sont reconnus',`${W.lines.filter(l=>l._st!=='del'&&!l.ID_Fournisseur).length} fournisseur(s) non reconnu(s)`,'wa'],
     [c.nFrais>0&&c.frais+c.fretTrans>0,'Frais du transitaire saisis','Frais du transitaire pas encore saisis','wa'],
@@ -3652,8 +3653,12 @@ function pdfLigne(l){
   const f=(l.ID_Facture&&DATA.fac.find(x=>x.ID===l.ID_Facture))||DATA.fac.find(x=>x.Statut_Saisie===FAC_OK&&x.ID_Fournisseur&&x.ID_Fournisseur===l.ID_Fournisseur&&lpNorm(x.Title)===lpNorm(l.N_Facture));
   let p=f&&lienPdf(f),titre=f?f.Title:'';
   if(!p){const nm=pdfDansDossier(l);if(nm){p=DOSSIER_REEL.replace(/\/$/,'')+'/'+nm;titre=nm;}}
-  return p?`<a class="pdf-a" href="${pdfAbs(p)}" target="_blank" rel="noopener" title="Ouvrir la facture ${esc(titre)}">📄</a>`:'';
+  return p?`<a class="pdf-a" href="${pdfAbs(p)}" target="_blank" rel="noopener" title="Ouvrir la facture ${esc(titre)}">PDF</a>`:'';
 }
+// PDF manquant : seulement quand on sait le vérifier (factures + dossier « Factures Fournisseurs » chargés)
+const pdfConnu=()=>!!DATA.fac&&FAC_NOMS!==null;
+const sansPdf=l=>!!l.N_Facture&&l._st!=='del'&&l.Type_Ligne!=='Frais'&&pdfConnu()&&!pdfLigne(l);
+const NOPDF_B='<span class="nopdf-b" title="Aucun PDF trouvé pour cette facture (Factures ou dossier « Factures Fournisseurs »)">⚠ pas de PDF</span>';
 // Repli : PDF déjà rangé dans « Factures Fournisseurs » dont le nom contient le n° de facture
 function pdfDansDossier(l){
   if(!FAC_NOMS||!DOSSIER_REEL)return '';
@@ -3743,7 +3748,7 @@ function renderValidation(){
       const coef=W.coefs[coefKey(l)]??null;
       const vm=lineVMnette(l),fret=n0(l.Fret);const gain=coef&&reel?r2(vm*(coef-reel)):null;if(gain!==null)tg+=gain;
       const pdf=pdfLigne(l);
-      return `<tr class="${i===0?'val-g0':'val-gn'}">${i===0?`<td rowspan="${n}"><b>${esc(g.nom)}</b>${n>1?` <span class="muted" style="font-size:11px">(${n} factures)</span>`:''}${cli.length?`<div class="val-cli">${cli.map(x=>`<span title="${esc(x.tip)}">👤 ${esc(x.txt)}</span>`).join('')}</div>`:''}</td>`:''}<td class="mono">${esc(l.N_Commande||'')}</td><td class="mono">${esc(l.N_Facture||'—')}${pdf||(l.N_Facture&&FAC_NOMS?' <span class="muted" title="PDF introuvable dans Factures Fournisseurs" style="font-size:10.5px">(pas de PDF)</span>':'')}</td><td class="r mono">${fmtN(vm)}</td><td class="r mono">${fret?fmtN(fret):''}</td><td class="r mono">${fmtN(vm+fret)}</td>
+      return `<tr class="${i===0?'val-g0':'val-gn'}">${i===0?`<td rowspan="${n}"><b>${esc(g.nom)}</b>${n>1?` <span class="muted" style="font-size:11px">(${n} factures)</span>`:''}${cli.length?`<div class="val-cli">${cli.map(x=>`<span title="${esc(x.tip)}">👤 ${esc(x.txt)}</span>`).join('')}</div>`:''}</td>`:''}<td class="mono">${esc(l.N_Commande||'')}</td><td class="mono${!pdf&&sansPdf(l)?' nopdf-c':''}">${esc(l.N_Facture||'—')}${pdf||(sansPdf(l)?NOPDF_B:'')}</td><td class="r mono">${fmtN(vm)}</td><td class="r mono">${fret?fmtN(fret):''}</td><td class="r mono">${fmtN(vm+fret)}</td>
       <td class="r">${editable?`<input class="n coef-in ${coef?'':'req-empty'}" data-coef="${esc(coefKey(l))}" value="${coef?fmtN(coef,2):''}" inputmode="decimal" placeholder="—" style="width:70px">${n>1&&i===0?` <button class="btn sm" data-coefall="${esc(g.key)}" title="Mettre ce revient sur toutes les factures de ${esc(g.nom)}">⇣</button>`:''}`:`<b class="mono">${coef?fmtN(coef,coef*100%1?3:2):'—'}</b>`}
         ${der&&i===0?`<div class="muted" style="font-size:10.5px;white-space:nowrap">dernier : ${fmtN(der.coef,2)}${der.dossier?' ('+esc(der.dossier)+')':''}</div>`:''}</td>
       <td class="r mono" data-gain="${esc(coefKey(l))}" style="color:${gain<0?'var(--red)':'var(--green)'}">${gain===null?'':(gain>0?'+':'')+fmtN(gain)}</td></tr>`;}).join('');}).join('');
@@ -3760,7 +3765,7 @@ function renderValidation(){
     const manque=[];if(!a.N_Dossier)manque.push('n° dossier Image');if(!c.factOk)manque.push('n° de facture sur chaque ligne');if(!c.nFrais)manque.push('facture du transitaire');
     const GO_M={'n° dossier Image':'ndos','n° de facture sur chaque ligne':'mar','facture du transitaire':'frais'};
     const pts=manque.map(m=>({t:'Manque : '+m,go:GO_M[m]||'',bloque:true})).concat(envoiAlertes());
-    actions=`<button class="btn primary" id="btnEnvoiFab" ${pret?'':'disabled'}>📤 Envoyer à Fabrice</button><button class="btn sm" id="btnFichePdf">🖨 Imprimer le dossier (PDF)</button>${pts.length?`<div class="env-pts"><b>${pts.length} point${pts.length>1?'s':''} à régler avant l’envoi</b>${pts.some(x=>x.bloque)?' <span class="muted">(en rouge : bloque l’envoi)</span>':''}<ul>${pts.map(x=>`<li class="${x.bloque?'bl':''}">${esc(x.t)}${x.go?` <a href="#" data-goto="${x.go}">→ voir</a>`:''}</li>`).join('')}</ul></div>`:''}`;
+    actions=`<button class="btn primary" id="btnEnvoiFab" ${pret?'':'disabled'}>📤 Envoyer à Fabrice</button><button class="btn sm" id="btnFichePdf">🖨 Imprimer le dossier (PDF)</button>${pts.length?`<div class="env-pts"><b>${pts.length} point${pts.length>1?'s':''} à régler avant l’envoi</b>${pts.some(x=>x.bloque)?' <span class="muted">(en rouge : bloque l’envoi)</span>':''}<ul>${pts.map(x=>`<li class="${x.bloque?'bl':x.rg?'rg':''}">${esc(x.t)}${x.go?` <a href="#" data-goto="${x.go}">→ voir</a>`:''}</li>`).join('')}</ul></div>`:''}`;
   }else if(enAttente&&val){
     actions=`<button class="btn green" id="btnValFab">✅ Valider les coefficients</button><button class="btn danger sm" id="btnRenvoi">↩ Renvoyer à Patricia</button><button class="btn sm" id="btnFichePdf">🖨 Imprimer le dossier (PDF)</button>`;
   }else if(st==='Validé'){
@@ -3787,7 +3792,9 @@ function majGains(){
 // ── Actions ──
 // Garde-fou avant l'envoi à Fabrice : ce qui reste à faire sur le contrôle et les montants (n'empêche pas l'envoi)
 function envoiAlertes(){
-  const out=[];if(!W||!DATA.cmd)return out;
+  const out=[];if(!W)return out;
+  {const sp=W.lines.filter(sansPdf);if(sp.length)out.push({t:`${sp.length} facture${sp.length>1?'s':''} sans PDF : ${sp.map(l=>nomCourtTxt(l.Fournisseur)+' '+l.N_Facture).join(', ')}`,go:'mar',rg:true});}
+  if(!DATA.cmd)return out;
   try{
     const G=artsGroupes();if(!G.length)return out;G.forEach(g=>g.rx=rxGroupe(g));
     if(RX.err==='colonnes'||RX.err==='acces')return out;
@@ -3816,7 +3823,7 @@ async function envoyerFabrice(){
   if(W.dirty){toast('⚠️ Enregistre d’abord le dossier (Ctrl+S).','wa');return;}
   const a=W.a;const c=ctrlInfo(W.lines);
   const al=envoiAlertes();
-  const alHtml=al.length?`<div class="rx-ban warn" style="display:block;margin-bottom:10px"><b>⚠ ${al.length} point${al.length>1?'s':''} à vérifier avant d’envoyer :</b><ul style="margin:6px 0 0 18px;padding:0">${al.map(x=>`<li>${esc(x.t)}</li>`).join('')}</ul><div style="margin-top:6px;font-size:12px">Tu peux envoyer quand même : Fabrice verra le dossier tel qu’il est.</div></div>`:`<div class="rx-ban ok" style="margin-bottom:10px">✓ Contrôle terminé, vérifié et reporté ; montants conformes.</div>`;
+  const alHtml=al.length?`<div class="rx-ban warn" style="display:block;margin-bottom:10px"><b>⚠ ${al.length} point${al.length>1?'s':''} à vérifier avant d’envoyer :</b><ul style="margin:6px 0 0 18px;padding:0">${al.map(x=>`<li${x.rg?' style="color:#c2410c;font-weight:700"':''}>${esc(x.t)}</li>`).join('')}</ul>${al.some(x=>x.rg)?'<div style="margin-top:6px;font-size:12.5px;color:#c2410c"><b>Fabrice ne pourra pas ouvrir ces factures.</b> Range d’abord les PDF (onglet Factures), sauf s’ils ne sont vraiment pas encore arrivés.</div>':''}<div style="margin-top:6px;font-size:12px">Tu peux envoyer quand même : Fabrice verra le dossier tel qu’il est.</div></div>`:`<div class="rx-ban ok" style="margin-bottom:10px">✓ Contrôle terminé, vérifié et reporté ; montants conformes.</div>`;
   const ok=await showConfirm('Envoyer à Fabrice ?',`${alHtml}Dossier <b>${esc(a.N_Dossier||a.Title)}</b> — revient réel <b>${fmtCoef(c.coef)}</b>, ${groupesFrs(W.lines).length} fournisseur(s).<br><br>Fabrice reçoit un message Teams et un mail avec le lien vers ce dossier.`,al.length?'Envoyer quand même':'Envoyer');
   if(!ok)return;
   await changerStatut({Statut:'À valider Fabrice',Date_Envoi_Validation:new Date().toISOString(),Total_VM:r2(c.vm),Total_CIF:r2(c.cif),Total_Frais:r2(c.frais),Coef_Reel:c.coef},'📤 Dossier envoyé à Fabrice');
