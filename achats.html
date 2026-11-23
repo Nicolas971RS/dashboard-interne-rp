@@ -519,7 +519,7 @@ fieldset.lockfs .btn{display:none}
 .rx-ban.info{background:#eff6ff;border-color:#bfdbfe;color:#1e3a8a}.rx-ban.ok{background:#f0fdf4;border-color:#86efac;color:#166534}
 .rx-ban.ko{background:#fef2f2;border-color:#fca5a5;color:#991b1b}.rx-ban.warn{background:#fffbeb;border-color:#fcd34d;color:#92400e}
 .rx-act{margin-left:auto;display:flex;gap:6px}
-.art-l tr[data-rxc="man"] td{background:#fef2f2!important}.art-l tr[data-rxc="ab"] td{background:#fff1f2!important}
+.art-l tr[data-rxc="man"] td{background:#fef2f2!important}.art-l tr[data-rxc="rel"] td{background:#fffaf0!important}.art-l tr[data-rxc="ab"] td{background:#fff1f2!important}
 .art-l tr[data-rxc="exc"] td{background:#fffbeb!important}.art-l tr[data-rxc="ok"] td:nth-last-child(-n+4){background:#f0fdf4!important}
 .rx-obs{font-size:11.5px;color:#92400e;margin-top:2px}
 .rx-reg{font-size:11.5px;color:#1e3a8a;margin-top:2px}.bc-act{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:8px 0 4px}.val-g0 td{border-top:1px solid #cbd5e1}.val-gn td{border-top:1px dashed #e2e8f0}.val-cli{margin-top:3px;display:flex;flex-direction:column;gap:1px}.val-cli span{font-size:11.5px;color:#1565c0;font-weight:500}
@@ -1429,6 +1429,11 @@ function artEcartHtml(g){
   if(!bccNums(g.l.N_Commande).length)return '<span class="art-b mute">n° de BC à saisir</span>';
   if(g.manq.length)return `<span class="art-b warn" title="Dépose le PDF dans « Bon de commande » puis Commandes › importer">BC ${g.manq.join(', ')} à importer</span>`;
   if(!g.ec)return '<span class="art-b mute">valeur à saisir</span>';
+  const x=g.rx;
+  if(x&&x.fait&&x.dFac){const D=x.dFac,rel=x.nRel?` <span class="art-b warn" title="${esc(x.reliquats.map(r=>`${r.rp||r.ref} ${r.des} : ${fmtQ(r.q)}`).join('\n'))}">📦 ${x.nRel} reliquat${x.nRel>1?'s':''}</span>`:'';
+    const tip=`Facture (valeur SIFA) ${fmtN(g.vm,2)} € · valeur livrée ${fmtN(x.vLivre,2)} € (quantités reçues × prix du BC) · total du BC ${fmtN(g.totBC,2)} €`;
+    if(D.ok)return `<span class="art-b ok" title="${esc(tip)}">✓ conforme au livré${Math.abs(D.d)>=0.01?` (${D.d>0?'+':''}${fmtN(D.d,2)} €)`:''}</span>${rel}`;
+    return `<span class="art-b ${D.d>0?'ko':'warn'}" title="${esc(tip+(D.d>0?' — facturé plus que reçu : manquant à réclamer, ou hausse de prix / frais':' — facturé moins que reçu : écart de prix ou remise'))}">${D.d>0?'⚠':'ℹ'} ${D.d>0?'+':''}${fmtN(D.d,2)} €${D.pct!=null?` · ${D.d>0?'+':''}${fmtN(D.pct,1)} %`:''} · ${D.d<0?'facturé en moins que livré':'facturé de plus que livré'}</span>${rel}`;}
   if(g.ec.ok)return `<span class="art-b ok">✓ conforme${Math.abs(g.ec.d)>=0.01?` (${g.ec.d>0?'+':''}${fmtN(g.ec.d,2)} €)`:''}</span>${g.partiel?` <span class="art-b mute" title="${g.partiel.rel?'Ce conteneur livre le reste à livrer du BC (livraisons précédentes déduites)':'Seule une partie du BC est dans ce conteneur : le reste est en reliquat'}">${g.partiel.rel?'reste du BC':`partiel ${g.partiel.k}/${g.partiel.n}`}</span>`:''}`;
   const se=g.partiel?null:artSousEnsemble(g);
   const pc=g.partiel?` <span class="art-b mute" title="Quantités ajustées pour ce conteneur">partiel ${g.partiel.k}/${g.partiel.n}</span>`:'';
@@ -1679,13 +1684,20 @@ function rxGroupe(g){
   const extra=lines.filter(l=>!ids.has(n0(l.ID_Ligne_Cmd)));
   const fait=sess.Statut===RX_FAIT,cours=sess.Statut==='En cours de scan';
   const aVerif=[...byCmd.values()].concat(extra.filter(l=>estGratuit(l)||n0(l.Quantite_Scannee)||n0(l.Quantite_Abimee)));
-  const r={sess,lines,byCmd,extra,fait,cours,lit,nVerTot:aVerif.length,nVer:aVerif.filter(l=>rxVer(l)).length,nManq:0,nExc:0,nAb:0,nEc:0,nAcc:0,nReg:lines.filter(l=>rxRegs(l).length).length,uRecu:0,uAtt:0,ecarts:[]};
+  const r={sess,lines,byCmd,extra,fait,cours,lit,nVerTot:aVerif.length,nVer:aVerif.filter(l=>rxVer(l)).length,nManq:0,nExc:0,nAb:0,nEc:0,nAcc:0,nRel:0,reliquats:[],nReg:lines.filter(l=>rxRegs(l).length).length,uRecu:0,uAtt:0,ecarts:[]};
   g.bcs.forEach(b=>b.arts.forEach(a=>{const l=byCmd.get(a.ID);if(!l)return;   // pas envoyé au magasin : reliquat
     const att=n0(l.Quantite_Attendue),rec=n0(l.Quantite_Scannee),ab=n0(l.Quantite_Abimee);
     r.uRecu+=rec;r.uAtt+=att;const m=Math.max(0,att-rec),e=Math.max(0,rec-att);
     if((m||e||ab)&&l._lines.some(rxRegAccepte)){r.nAcc++;return;}
+    // Quantité non reçue, sans casse ni excédent : le fournisseur ne l'a pas encore expédiée → reliquat, reste attendu sur le BC.
+    // Un vrai manquant (expédié et facturé, pas reçu) ressort par la comparaison facture / valeur livrée ci-dessous.
+    if(m&&!e&&!ab){r.nRel++;r.reliquats.push({ref:a.Title||a.Ref_2||'',rp:a.Ref_2||'',des:a.Designation||'',bc:b.n,q:m,pu:artPU(a)});return;}
     if(m||e||ab){r.nEc++;r.ecarts.push({ref:a.Title||a.Ref_2||'',des:a.Designation||'',bc:b.n,att,rec,ab,pu:artPU(a),ligne:l});}
     if(m)r.nManq++;if(e)r.nExc++;if(ab)r.nAb++;}));
+  // Valeur livrée = (reçu + abîmé) × PU du BC, articles du BC seulement ; comparée à la facture (valeur SIFA) une fois le contrôle terminé
+  if(fait&&g.vm!=null){let v=0,ok=true;g.bcs.forEach(b=>b.arts.forEach(a=>{const l=byCmd.get(a.ID);if(!l)return;const q=n0(l.Quantite_Scannee)+n0(l.Quantite_Abimee);if(!q)return;const pu=artPU(a);if(pu==null){ok=false;return;}v+=q*pu;}));
+    if(ok&&g.manq&&!g.manq.length){r.vLivre=Math.round(v*100)/100;const d=Math.round((g.vm-v)*100)/100,t=artTol();r.dFac={d,pct:v?d/v*100:null,ok:Math.abs(d)<=t.eur||(v&&Math.abs(d)/v*100<=t.pct)};
+      if(!r.dFac.ok&&d>0){r.nEc++;r.nManq++;r.ecarts.push({ref:'',des:`Facturé ${fmtN(d,2)} € de plus que la valeur livrée`,bc:g.l.N_Commande||'',att:0,rec:0,ab:0,pu:null,facture:true,d});}}}
   extra.forEach(l=>{const rec=n0(l.Quantite_Scannee),ab=n0(l.Quantite_Abimee);r.uRecu+=rec;
     if(rxRegAccepte(l)){if(rec||ab||estGratuit(l))r.nAcc++;return;}
     if(estGratuit(l)){const att=n0(l.Quantite_Attendue);r.uAtt+=att;const m=Math.max(0,att-rec),e=Math.max(0,rec-att);
@@ -1706,13 +1718,13 @@ function rxLigneArt(x,a){
   const l=x.byCmd.get(a.ID);if(!l)return {recu:null,hors:true,fait:x.fait,cls:'hors'};
   const recu=n0(l.Quantite_Scannee),ab=n0(l.Quantite_Abimee),ec=recu-n0(l.Quantite_Attendue);
   const L=l._lines||[l],acc=L.some(rxRegAccepte),regs=L.flatMap(rxRegs);
-  return {recu,ab,ec,acc,regs,ver:rxVer(l),vid:L[0].ID,ph:!!l.Attachments,id:l.ID,obs:l.Observation||'',fait:x.fait,cls:x.fait?(acc?'ok':ab>0?'ab':ec<0?'man':ec>0?'exc':'ok'):(recu>0?'cours':'')};
+  return {recu,ab,ec,acc,regs,ver:rxVer(l),vid:L[0].ID,ph:!!l.Attachments,id:l.ID,obs:l.Observation||'',fait:x.fait,cls:x.fait?(acc?'ok':ab>0?'ab':ec<0?'rel':ec>0?'exc':'ok'):(recu>0?'cours':'')};
 }
 function rxCells(r){
   if(r&&r.hors)return '<td colspan="5" class="muted" style="font-size:11.5px">reliquat : pas dans ce conteneur</td>';
   if(!r||r.recu===null)return '<td class="r muted">—</td><td></td><td></td><td></td><td></td>';
   const ecart=r.ec!==0||r.ab>0,nr=(r.regs||[]).length;
-  let ecB=!r.fait?(r.recu?'<span class="art-b mute">en cours</span>':''):r.acc&&ecart?'<span class="art-b ok" title="Écart accepté sans litige">✓ accepté</span>':r.ec===0&&!r.ab?(nr?'<span class="art-b ok" title="Conforme après régularisation">✓ régularisé</span>':'<span class="art-b ok">✓</span>'):r.ec<0?`<span class="art-b ko">manque ${fmtQ(-r.ec)}</span>`:r.ec>0?`<span class="art-b warn">+${fmtQ(r.ec)}</span>`:`<span class="art-b ko">abîmé ${fmtQ(r.ab)}</span>`;
+  let ecB=!r.fait?(r.recu?'<span class="art-b mute">en cours</span>':''):r.acc&&ecart?'<span class="art-b ok" title="Écart accepté sans litige">✓ accepté</span>':r.ec===0&&!r.ab?(nr?'<span class="art-b ok" title="Conforme après régularisation">✓ régularisé</span>':'<span class="art-b ok">✓</span>'):r.ec<0?`<span class="art-b warn" title="Pas reçu dans ce conteneur : reste attendu sur le BC (reliquat). S’il a été facturé, l’écart apparaît sur la ligne du haut (facture / valeur livrée).">📦 reliquat ${fmtQ(-r.ec)}</span>`:r.ec>0?`<span class="art-b warn">+${fmtQ(r.ec)}</span>`:`<span class="art-b ko">abîmé ${fmtQ(r.ab)}</span>`;
   if(r.fait&&(ecart||nr)&&rxPeutReg())ecB+=` <button class="btn sm" data-rxreg="${r.id}" title="Régulariser : corriger l’attendu, le recompte, rattacher au BC ou accepter l’écart">✏️</button>`;
   return `<td class="r mono"><b>${fmtQ(r.recu)}</b></td><td class="r mono">${r.ab?`<b style="color:#b91c1c">${fmtQ(r.ab)}</b>`:''}</td><td style="white-space:nowrap">${ecB}</td><td>${r.ph?`<button class="btn sm" data-rxph="${r.id}" title="Voir les photos">📷</button>`:''}</td>${rxVerCell(r)}`;
 }
@@ -1893,7 +1905,7 @@ async function rxVerMaj(lines,on){
 function rxBadge(g){
   const x=g.rx;if(!x.sess)return '<span class="art-b mute">non envoyé</span>';
   const qui=x.sess.Repris_Par||x.sess.Magasinier||'';
-  let b=x.fait?(x.nEc?`<span class="art-b ko">⚠ ${x.nEc} écart${x.nEc>1?'s':''}</span>`:`<span class="art-b ok">✓ conforme${x.nReg||x.nAcc?' après régul.':''}</span>`):x.cours?`<span class="art-b warn">🔄 ${esc(qui||'en cours')}</span>`:'<span class="art-b mute">à prendre</span>';
+  let b=x.fait?(x.nEc?`<span class="art-b ko">⚠ ${x.nEc} écart${x.nEc>1?'s':''}</span>`:`<span class="art-b ok">✓ conforme${x.nReg||x.nAcc?' après régul.':''}</span>`)+(x.nRel?` <span class="art-b warn" title="Articles non reçus, toujours attendus sur le BC">📦 ${x.nRel} reliquat${x.nRel>1?'s':''}</span>`:''):x.cours?`<span class="art-b warn">🔄 ${esc(qui||'en cours')}</span>`:'<span class="art-b mute">à prendre</span>';
   if(x.fait&&qui)b+=` <span class="muted" style="font-size:11px">${esc(qui)}</span>`;
   if(x.fait&&rxPeutReg()&&(g.premierF||x.sess.Title===g.key)){const n=rxSuggestions(x.sess).length;if(n)b+=` <button class="btn sm primary" data-rxratall="${esc(g.key)}" title="Ces « non prévus » correspondent à des articles du BC mis en reliquat">🔗 Rattacher au BC (${n})</button>`;}
   if(x.fait&&x.nVerTot&&!RX.verKo){const fin=x.nVer>=x.nVerTot;b+=` <span class="art-b ${fin?'ok':'mute'}" title="Lignes vérifiées au bureau">☑ ${x.nVer}/${x.nVerTot}</span>`;
@@ -2001,8 +2013,9 @@ function rxReporter(){
   const dates=S.map(g=>dkeyLocal(g.rx.sess.Date_Scan||g.rx.sess.Modified||'')).filter(Boolean).sort();
   const nEc=S.reduce((s,g)=>s+g.rx.nEc,0);
   const qui=[...new Set(S.map(g=>g.rx.sess.Repris_Par||g.rx.sess.Magasinier).filter(Boolean))].join(', ');
-  const res=nEc?S.filter(g=>g.rx.nEc).map(g=>`${nomCourtTxt(g.l.Fournisseur)} : `+g.rx.ecarts.map(e=>[e.ref||e.des,e.horsBC?'non prévu +'+fmtQ(e.rec):e.rec<e.att?'manque '+fmtQ(e.att-e.rec):e.rec>e.att?'+'+fmtQ(e.rec-e.att):'',e.ab?'abîmé '+fmtQ(e.ab):''].filter(Boolean).join(' ')).join(', ')+(g.rx.lit?` (${g.rx.lit.Title})`:'')).join(' | '):'';
-  const txt=`[Contrôle magasin ${fmtD(dates[dates.length-1]||todayKey())}${qui?' — '+qui:''}] `+(nEc?res:'conforme, aucun écart');
+  const res=nEc?S.filter(g=>g.rx.nEc).map(g=>`${nomCourtTxt(g.l.Fournisseur)} : `+g.rx.ecarts.map(e=>[e.ref||e.des,e.facture?'':e.horsBC?'non prévu +'+fmtQ(e.rec):e.rec<e.att?'manque '+fmtQ(e.att-e.rec):e.rec>e.att?'+'+fmtQ(e.rec-e.att):'',e.ab?'abîmé '+fmtQ(e.ab):''].filter(Boolean).join(' ')).join(', ')+(g.rx.lit?` (${g.rx.lit.Title})`:'')).join(' | '):'';
+  const rel=S.filter(g=>g.rx.nRel).map(g=>`${nomCourtTxt(g.l.Fournisseur)} : `+g.rx.reliquats.map(r=>`${r.rp||r.ref} ${fmtQ(r.q)}`).join(', ')).join(' | ');
+  const txt=`[Contrôle magasin ${fmtD(dates[dates.length-1]||todayKey())}${qui?' — '+qui:''}] `+(nEc?res:'conforme, aucun écart')+(rel?` — reliquats attendus : ${rel}`:'');
   const set=(f,v)=>{const el=document.querySelector(`#fiche [data-h="${f}"]`);if(!el)return;el.value=v;el.dispatchEvent(new Event('input',{bubbles:true}));el.dispatchEvent(new Event('change',{bubbles:true}));};
   if(!W.a.Date_Depotage&&dates.length)set('Date_Depotage',dates[dates.length-1]);
   set('Controle_OK',nEc?'Non':'Oui');
@@ -2197,8 +2210,8 @@ function litNouveauTitre(){const d=todayKey().replace(/-/g,'').slice(2);const n=
 function litDepuisGroupe(key){
   const G=artsGroupes();const g=G.find(x=>x.key===key);if(!g)return null;g.rx=rxGroupe(g);const x=g.rx;
   const kinds=[x.nAb?'Casse':'',x.nManq?'Manquant':'',x.nExc?'Excédent':''].filter(Boolean);
-  const mt=x.ecarts.reduce((s,e)=>s+(e.pu!=null?(Math.max(0,e.att-e.rec)+e.ab)*e.pu:0),0);
-  const det=x.ecarts.map(e=>`• ${[e.ref,e.des].filter(Boolean).join(' — ')}${e.bc?` (BC ${e.bc})`:''} : ${e.horsBC?`non prévu, reçu ${fmtQ(e.rec)}`:`${e.gratuit?'gratuit (non facturé), ':''}attendu ${fmtQ(e.att)}, reçu ${fmtQ(e.rec)}`}${e.ab?`, abîmé ${fmtQ(e.ab)}`:''}${e.ligne&&e.ligne.Observation&&!/^Article non factur/.test(e.ligne.Observation)?` — ${e.ligne.Observation}`:''}`).join('\n');
+  const mt=x.ecarts.reduce((s,e)=>s+(e.facture?e.d:e.pu!=null?(Math.max(0,e.att-e.rec)+e.ab)*e.pu:0),0);
+  const det=x.ecarts.map(e=>e.facture?`• ${e.des} (BC ${e.bc}) : facture ${fmtN(g.vm,2)} €, valeur reçue ${fmtN(x.vLivre,2)} € — article(s) facturé(s) mais pas reçu(s), ou prix plus élevés que le BC`:`• ${[e.ref,e.des].filter(Boolean).join(' — ')}${e.bc?` (BC ${e.bc})`:''} : ${e.horsBC?`non prévu, reçu ${fmtQ(e.rec)}`:`${e.gratuit?'gratuit (non facturé), ':''}attendu ${fmtQ(e.att)}, reçu ${fmtQ(e.rec)}`}${e.ab?`, abîmé ${fmtQ(e.ab)}`:''}${e.ligne&&e.ligne.Observation&&!/^Article non factur/.test(e.ligne.Observation)?` — ${e.ligne.Observation}`:''}`).join('\n');
   return {g,l:{Title:litNouveauTitre(),ID_Arrivage:W.id,Conteneur:String(W.a.Conteneur||W.a.Title||''),ID_Fournisseur:g.idFrs,Fournisseur:g.l.Fournisseur,N_Commande:g.l.N_Commande,
     Type_Litige:kinds.join(' + ')||'Autre',Detail:det,Montant_Estime:Math.round(mt*100)/100,Statut:'Ouvert',Date_Ouverture:todayKey(),Ouvert_Par:(sessionStorage.getItem('user_name')||'')}};
 }
@@ -2315,14 +2328,15 @@ function rxPrint(){
     g.bcs.filter(b=>b.c).forEach(b=>b.arts.forEach(art=>{const l=x.byCmd.get(art.ID);if(!l)return;
       const att=n0(l.Quantite_Attendue),rec=n0(l.Quantite_Scannee),ab=n0(l.Quantite_Abimee),ec=rec-att,pu=artPU(art);
       const L=l._lines||[l],acc=L.some(rxRegAccepte),regs=L.flatMap(rxRegs);
-      const vm=acc?0:(Math.max(0,-ec)+ab)*(pu||0);if(x.fait)vManq+=vm;
-      rows.push({ver:rxVer(l),acc,regs,ec:x.fait&&!acc&&(ec||ab),bc:b.n,ref:art.Title||'',rp:art.Ref_2||'',des:art.Designation||'',u:art.Unite||'',att,rec,ab,ecart:ec,pu,vm,obs:l.Observation||'',ph:!!l.Attachments,tag:''});}));
+      const rel=ec<0&&!ab;   // non reçu sans casse = reliquat (pas une perte)
+      const vm=acc||rel?0:(Math.max(0,-ec)+ab)*(pu||0);if(x.fait)vManq+=vm;
+      rows.push({ver:rxVer(l),acc,regs,rel,ec:x.fait&&!acc&&(ec||ab),bc:b.n,ref:art.Title||'',rp:art.Ref_2||'',des:art.Designation||'',u:art.Unite||'',att,rec,ab,ecart:ec,pu,vm,obs:l.Observation||'',ph:!!l.Attachments,tag:''});}));
     (x.extra||[]).forEach(l=>{const gr=estGratuit(l),att=gr?n0(l.Quantite_Attendue):0,rec=n0(l.Quantite_Scannee),ab=n0(l.Quantite_Abimee);if(!gr&&!rec&&!ab)return;
       const accX=rxRegAccepte(l);
       rows.push({ver:rxVer(l),acc:accX,regs:rxRegs(l),ec:x.fait&&!accX&&(rec-att||ab),bc:gr?'':(l.N_Commande||''),ref:l.Reference_Article||'',rp:'',des:l.Designation||(gr?'Article gratuit':'Article non prévu'),u:'',att,rec,ab,ecart:rec-att,pu:null,vm:0,obs:/^Article non facturé/.test(l.Observation||'')?'':(l.Observation||''),ph:!!l.Attachments,tag:gr?'GRATUIT':'NON PRÉVU'});});
     rows.sort((p,q)=>(q.ec?1:0)-(p.ec?1:0));
     totManq+=vManq;if(x.fait)nEcTot+=x.nEc;
-    const ecTxt=r=>{if(!x.fait)return r.rec?'en cours':'';if(r.acc&&(r.ecart||r.ab))return 'accepté';if(r.regs&&r.regs.length&&!r.ecart&&!r.ab)return '✓ régularisé';const t=[r.ecart<0?`MANQUE ${fmtQ(-r.ecart)}`:r.ecart>0?`+${fmtQ(r.ecart)} en trop`:'',r.ab?`ABÎMÉ ${fmtQ(r.ab)}`:''].filter(Boolean);return t.length?t.join('<br>'):'✓';};
+    const ecTxt=r=>{if(!x.fait)return r.rec?'en cours':'';if(r.acc&&(r.ecart||r.ab))return 'accepté';if(r.regs&&r.regs.length&&!r.ecart&&!r.ab)return '✓ régularisé';const t=[r.ecart<0?`${r.rel?'RELIQUAT':'MANQUE'} ${fmtQ(-r.ecart)}`:r.ecart>0?`+${fmtQ(r.ecart)} en trop`:'',r.ab?`ABÎMÉ ${fmtQ(r.ab)}`:''].filter(Boolean);return t.length?t.join('<br>'):'✓';};
     return `<div class="bloc"><div class="bh"><div><b>${esc(se.Fournisseur||g.l.Fournisseur||'')}</b> · BC ${esc(g.bcs.map(b=>b.n).join(', '))}${g.l.N_Facture?' · facture '+esc(g.l.N_Facture):''}</div>
       <div class="st ${x.fait?(x.nEc?'ko':'ok'):'enc'}">${st}</div></div>
       <div class="bm">Contrôlé par : <b>${esc(qui||'—')}</b>${dt?' · le '+fmtD(dt):''}${x.lit?` · Litige <b>${esc(x.lit.Title)}</b> (${esc(x.lit.Statut||'')})`:x.fait&&x.nEc?' · Litige : ☐ à ouvrir':''}</div>
