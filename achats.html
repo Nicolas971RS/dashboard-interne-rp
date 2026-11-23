@@ -405,6 +405,7 @@ fieldset.lockfs .btn{display:none}
 .sifa-f{display:flex;justify-content:space-between;gap:10px;width:100%;text-align:left;border:1px solid var(--border,#e5e7eb);background:#fff;border-radius:8px;padding:7px 10px;margin-top:5px;cursor:pointer;font:inherit}
 .sifa-f:hover{border-color:var(--teal,#0f766e);background:#f0fdfa}
 .cmd-t tr.cmd-r{cursor:pointer}
+.cmd-t>tbody>tr.cmd-r.nonchif:not(.sel)>td{background:#fff8e1}.cmd-t>tbody>tr.cmd-r.nonchif:not(.sel)>td:first-child{box-shadow:inset 4px 0 0 #f59e0b}
 .mini-steps i{height:7px!important}
 .cmd-leg{border:1px solid #cbd5e1;border-radius:10px;background:#fff;margin:0 0 10px;overflow:hidden}.cmd-leg-h{display:flex;justify-content:space-between;align-items:center;padding:7px 12px;background:#f1f5f9;border-bottom:1px solid #cbd5e1;font-size:13px}.cmd-leg-b{padding:10px 12px}
 .leg-ex{display:flex;gap:4px;max-width:620px}.leg-s{flex:1;display:flex;flex-direction:column;gap:4px;font-size:11.5px;color:#334155;text-align:center}.leg-s i,.leg-k i{display:block;height:8px;border-radius:4px;background:var(--border)}.leg-s i.on,.leg-k i.on{background:var(--teal-mid)}.leg-s i.cur,.leg-k i.cur{background:var(--lime)}
@@ -5027,6 +5028,14 @@ async function cmdMaj(id,body,msg){
     if(msg)toast(msg,'ok');renderCommandes();}
   catch(e){toast('🔴 '+e.message,'ko');}
 }
+// BC sans prix (total vide ou à 0, ou lignes sans prix) : à compléter dès que l'ARC ou la facture donne les prix
+function cmdChiffrage(c){
+  if(!c)return null;const L=cmdLignes(c.ID).filter(l=>!estGratuit(l));
+  const sansPrix=L.filter(l=>!(n0(l.Prix_Unitaire)||n0(l.Montant_HT)));
+  if(!n0(c.Montant_HT)&&(!L.length||sansPrix.length===L.length))return {lbl:'non chiffré',tip:'Aucun prix sur ce BC : sans prix, ni le contrôle des factures ni la valeur des commandes ne fonctionnent. Réimporte une version chiffrée du BC, ou saisis les prix dès réception de l’ARC.'};
+  if(sansPrix.length)return {lbl:`${sansPrix.length} ligne${sansPrix.length>1?'s':''} sans prix`,tip:`Lignes sans prix : ${sansPrix.slice(0,8).map(l=>l.Ref_2||l.Title||l.Designation).join(', ')}${sansPrix.length>8?'…':''}`};
+  return null;
+}
 // ARC et BPA en un geste : un seul fichier (l'ARC reçu), et une case « signé et renvoyé = BPA envoyé »
 async function cmdJoindreArcBpa(id,file){
   const c=cmdById(id);if(!c)return;const dejaArc=!!dk(c,'Date_ARC'),dejaBpa=!!dk(c,'Date_BPA');
@@ -5137,7 +5146,7 @@ function renderCommandes(){
   const nAval=typeof daPeutValider==='function'&&daPeutValider()?(DATA.da||[]).filter(d=>d.Statut==='À valider').length:0;
   const cnt=$('cntCmd');if(cnt){cnt.style.display=k.al?'':'none';cnt.textContent=k.al;}
   const F=CMDV.fichiers;const aImp=cmdAImporter();
-  const filtres=[['cours','En cours',x=>x.e.ouverte],['cmd','ARC attendu',x=>x.e.k==='cmd'],['arc','BPA à envoyer',x=>x.e.k==='arc'],['route','En route',x=>['bpa','dispo','route'].includes(x.e.k)],['alertes','⚠ Alertes',x=>!!x.e.alerte],['recue','Reçues',x=>x.e.k==='recue'],['tout','Toutes',()=>true]];
+  const filtres=[['cours','En cours',x=>x.e.ouverte],['nonchif','💶 Non chiffrés',x=>!!cmdChiffrage(x.c)],['cmd','ARC attendu',x=>x.e.k==='cmd'],['arc','BPA à envoyer',x=>x.e.k==='arc'],['route','En route',x=>['bpa','dispo','route'].includes(x.e.k)],['alertes','⚠ Alertes',x=>!!x.e.alerte],['recue','Reçues',x=>x.e.k==='recue'],['tout','Toutes',()=>true]];
   const fl=filtres.find(f=>f[0]===CMDV.filtre)||filtres[0];
   const q=CMDV.q.trim().toLowerCase();
   const rows=tous.filter(fl[2]).filter(x=>!q||[x.c.Title,x.c.Fournisseur,x.c.Objet,...cmdLignes(x.c.ID).map(l=>l.Title+' '+l.Designation+' '+(l.Ref_2||''))].join(' ').toLowerCase().includes(q))
@@ -5166,8 +5175,8 @@ function renderCommandes(){
     ${cmdOuEstHtml(q)}
     ${cmdLegendeHtml()}
     <div class="card"><div class="tblwrap"><table class="ltable cmd-t"><thead><tr><th>N°</th><th>Fournisseur</th><th>Objet</th><th>Date</th><th>Étapes</th><th>Où en est-elle</th><th class="r">Articles</th><th class="r">Montant HT</th></tr></thead><tbody>
-    ${rows.length?rows.map(({c,e})=>`<tr class="cmd-r ${CMDV.ouvert===c.ID?'sel':''}" id="cmdRow${c.ID}" data-cmd="${c.ID}"><td class="mono"><b>${esc(c.Title)}</b></td><td>${esc(c.Fournisseur||'?')}${c.ID_Fournisseur?'':' <span class="frs-ko" title="Fournisseur non reconnu">⚠</span>'}</td><td class="muted">${esc(c.Objet||'')}</td><td>${fmtD(dk(c,'Date_Commande'))}</td><td>${cmdPastilles(c,e)}</td>
-      <td><span class="st ${e.cls}">${esc(e.lbl)}</span>${e.alerte?`<div style="font-size:12px;margin-top:2px;color:${e.alerte.lvl==='r'?'var(--red)':'#b45309'}">⚠ ${esc(e.alerte.txt)}</div>`:''}</td><td class="r">${c.Nb_Lignes??cmdLignes(c.ID).length}</td><td class="r">${c.Montant_HT?fmtEur(c.Montant_HT):'—'}</td></tr>
+    ${rows.length?rows.map(({c,e})=>`<tr class="cmd-r ${CMDV.ouvert===c.ID?'sel':''}${cmdChiffrage(c)?' nonchif':''}" id="cmdRow${c.ID}" data-cmd="${c.ID}"><td class="mono"><b>${esc(c.Title)}</b></td><td>${esc(c.Fournisseur||'?')}${c.ID_Fournisseur?'':' <span class="frs-ko" title="Fournisseur non reconnu">⚠</span>'}</td><td class="muted">${esc(c.Objet||'')}</td><td>${fmtD(dk(c,'Date_Commande'))}</td><td>${cmdPastilles(c,e)}</td>
+      <td><span class="st ${e.cls}">${esc(e.lbl)}</span>${e.alerte?`<div style="font-size:12px;margin-top:2px;color:${e.alerte.lvl==='r'?'var(--red)':'#b45309'}">⚠ ${esc(e.alerte.txt)}</div>`:''}</td><td class="r">${c.Nb_Lignes??cmdLignes(c.ID).length}</td><td class="r">${(ch=>ch?`<span class="art-b warn" title="${esc(ch.tip)}">💶 ${esc(ch.lbl)}</span>`:c.Montant_HT?fmtEur(c.Montant_HT):'—')(cmdChiffrage(c))}</td></tr>
       ${CMDV.ouvert===c.ID?`<tr class="cmd-d"><td colspan="8">${cmdDetailHtml(c,e)}</td></tr>`:''}`).join(''):`<tr><td colspan="8" class="muted" style="text-align:center;padding:18px">Aucune commande suivie${q?' pour cette recherche':''}.${cmdHorsSuivi(q)}</td></tr>`}
     </tbody></table></div></div>`;
   if(typeof renderDemandes==='function')renderDemandes();
