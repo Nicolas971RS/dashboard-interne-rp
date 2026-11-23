@@ -1752,6 +1752,10 @@ async function syncLivraisonDepuisScan(){
     if(!numBL)return;
     const session=findSessionByBL(numBL);
     if(!session)return;
+    // Tant que le magasin n'a pas clôturé la session, « Livré » = ce que le
+    // vendeur a déclaré dans Traiter (quantités du BL Image). Avant, le scan
+    // (encore à 0) écrasait cette saisie à chaque chargement.
+    if(!_estStatutFinal(session))return;
     const ref=(f(ligne,'R_x00e9_f_x00e9_rence')||'').trim().toLowerCase();
     const design=(f(ligne,'Produit_x002f_D_x00e9_signation')||'').trim().toLowerCase();
     const ligneScan=(DATA.lignesScan||[]).find(l=>
@@ -10932,6 +10936,22 @@ document.head.insertAdjacentHTML('beforeend','<style>.m-ligne-row>*,.m-ligne-new
   const row=e.target&&e.target.closest&&e.target.closest('.m-ligne-row,.m-ligne-new');
   if(row)mMajStockRow(row);
 }));
+// Traiter : livraison complète → Livré = Cmdé sur toutes les lignes
+function mToutLivre(){
+  document.querySelectorAll('#m-lignes-list .m-ligne-existing, #m-lignes-new .m-ligne-new').forEach(row=>{
+    const qc=row.querySelector('.m-l-qc, .m-l-qc-new'),ql=row.querySelector('.m-l-ql, .m-l-ql-new');
+    if(qc&&ql&&parseFloat(qc.value)>0){ql.value=qc.value;ql.style.border='';}
+  });
+}
+// Quantité attendue au magasin pour CE BL : Livré de la ligne moins ce qui est
+// déjà passé par d'autres BL (historique BLSigné — BC suffixés -A, -A-A…).
+function mQteAttendueBL(lid,ql,numBL){
+  if(!lid)return Math.max(0,ql);
+  const l=(DATA.lignes||[]).find(x=>x.ID===lid);
+  const bl=String(numBL||'').trim();
+  const autres=l?parseBLHistorique(f(l,'BLSign_x00e9_')||'').filter(e=>e.qte!=null&&String(e.bl)!==bl).reduce((t,e)=>t+e.qte,0):0;
+  return Math.max(0,ql-autres);
+}
 function mAddLigneRow(){
   const idx=_mLigneNewCount++;
   const container=document.getElementById('m-lignes-new');
@@ -11651,6 +11671,10 @@ async function openTraiterModal(id,numBC,client){
       </div>
       <div class="sec-body">
         <div style="font-size:11.5px;color:var(--text-muted);margin-bottom:2px">Référence, désignation, quantité — sert au suivi RAL</div>
+        <div style="font-size:11.5px;color:#1e3a8a;background:#eff6ff;border:1px solid #bfdbfe;border-radius:var(--radius-sm);padding:6px 9px;margin:4px 0 6px;display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+          <span style="flex:1;min-width:200px">🚚 <strong>Livré</strong> = quantités du <strong>BL Image</strong>. Seuls ces articles partent au magasin ; les autres restent en reste à livrer.</span>
+          <button type="button" class="btn" style="height:24px;font-size:11px" title="Met Livré = Cmdé sur toutes les lignes (livraison complète)" onclick="mToutLivre()">✅ Tout livré</button>
+        </div>
         <div style="display:grid;grid-template-columns:1fr 1.4fr 55px 55px 50px 26px;gap:6px;margin-bottom:4px">
           <div style="font-size:11.5px;font-weight:700;color:var(--text-muted);text-transform:uppercase">Réf.</div>
           <div style="font-size:11.5px;font-weight:700;color:var(--text-muted);text-transform:uppercase">Désignation</div>
@@ -11798,6 +11822,35 @@ async function openTraiterModal(id,numBC,client){
 
     const hasLigneRows=document.querySelectorAll('#m-lignes-list .m-ligne-existing, #m-lignes-new .m-ligne-new').length>0;
     if(!Object.keys(body).length&&!hasLigneRows)throw new Error('Aucune modification détectée.');
+
+    // ── Articles envoyés au magasin = ceux du BL Image (colonne « Livré ») ──
+    // Contrôles AVANT toute écriture : Livré ≤ Cmdé, et si rien n'est saisi au
+    // premier envoi d'un BL, on demande s'il s'agit d'une livraison complète.
+    const _rowsAll=[...document.querySelectorAll('#m-lignes-list .m-ligne-existing, #m-lignes-new .m-ligne-new')];
+    const _qlEl=r=>r.querySelector('.m-l-ql, .m-l-ql-new');
+    const _qcVal=r=>parseFloat(r.querySelector('.m-l-qc, .m-l-qc-new')?.value)||0;
+    {
+      let errL='';
+      _rowsAll.forEach(r=>{
+        const el=_qlEl(r),ql=parseFloat(el?.value)||0,qc=_qcVal(r);
+        if(ql<0||(qc>0&&ql>qc)){if(el)el.style.border='2px solid var(--red)';errL=errL||(r.querySelector('.m-l-ref, .m-l-ref-new')?.value.trim()||'un article');}
+        else if(el)el.style.border='';
+      });
+      if(errL){_rowsAll[0]?.closest('.sec')?.classList.add('open');throw new Error(`Livré supérieur au commandé (ou négatif) sur ${errL} — corrige la colonne Livré.`);}
+    }
+    if(blEffectif&&_rowsAll.some(r=>_qcVal(r)>0)&&!_rowsAll.some(r=>(parseFloat(_qlEl(r)?.value)||0)>0)){
+      const _sx=findSessionByBL(blEffectif)||(!String(curBL||'').trim()?sessionPrepBC(currentItem):null);
+      const _nbScan=_sx?(DATA.lignesScan||[]).filter(l=>String(lineSessionId(l))===String(_sx.ID)).length:0;
+      if(!_nbScan){
+        const nArt=_rowsAll.filter(r=>_qcVal(r)>0).length;
+        const ok=await showConfirm('🚚 Livraison complète ?',
+          `Aucune quantité n'est saisie dans la colonne <strong>Livré</strong>.<br><br>Les <strong>${nArt} article${nArt>1?'s':''}</strong> de ce BC sont-ils <strong>tous sur le BL ${_escD(blEffectif)}</strong>, en totalité ?<br><br>• <strong>Oui</strong> : tout part au magasin.<br>• <strong>Non</strong> (livraison partielle) : saisis dans Livré les quantités du BL Image — seuls ces articles partiront.`,
+          '✅ Oui, tout est livré','submit','Non, je saisis Livré');
+        if(!ok){_rowsAll[0]?.closest('.sec')?.classList.add('open');throw new Error('Saisis dans « Livré » les quantités du BL Image : seuls ces articles partiront au magasin.');}
+        mToutLivre();
+      }
+    }
+    const _modePartiel=_rowsAll.some(r=>(parseFloat(_qlEl(r)?.value)||0)>0);
     if(Object.keys(body).length)
     try{
       await spPatch('sites/RseauxPlus','Suivi_BC',id,body);
@@ -11837,6 +11890,24 @@ async function openTraiterModal(id,numBC,client){
       const r=await findOrCreateSessionForBL(blEffectif,clientNom,vendeur||f(currentItem,'Vendeurencharge'),prepCheck,prepDateLiv);
       sessionLiee=r.sess;sessionCreee=r.created;
     }
+    // Envoi au magasin : seuls les articles avec une quantité pour CE BL partent,
+    // avec cette quantité (et non plus le commandé). Un article remis à 0 et pas
+    // encore scanné est retiré de la session. Session clôturée : on n'y touche pas.
+    const _sessFinale=sessionLiee?_estStatutFinal(sessionLiee):false;
+    let _envoyes=0,_retires=0;
+    const _syncScanBL=async(lid,ref,design,ql)=>{
+      if(!design||!sessionLiee||_sessFinale)return;
+      const att=mQteAttendueBL(lid,ql,blEffectif);
+      if(att>0){await syncLigneToScan(sessionLiee,ref,design,att,0);_envoyes++;return;}
+      if(!_modePartiel)return;
+      const sid=String(sessionLiee.ID??sessionLiee.Id),r=(ref||'').trim().toLowerCase(),d=(design||'').trim().toLowerCase();
+      const ex=(DATA.lignesScan||[]).find(l=>String(lineSessionId(l))===sid&&(r?(f(l,'Reference_Article')||'').trim().toLowerCase()===r:(f(l,'Designation')||'').trim().toLowerCase()===d));
+      if(ex&&!(Number(f(ex,'Quantite_Scannee')||0)>0)){
+        await spDelete('sites/BondeCommande','Lignes_Scan',ex.ID);
+        DATA.lignesScan=(DATA.lignesScan||[]).filter(l=>l.ID!==ex.ID);
+        _retires++;
+      }
+    };
     const rowsExist=document.querySelectorAll('#m-lignes-list .m-ligne-existing');
     const _lignesPrep=[];
     for(const row of rowsExist){
@@ -11854,7 +11925,7 @@ async function openTraiterModal(id,numBC,client){
           Quantit_x00e9_livr_x00e9_e:ql
         });
         lignesTouchees++;
-        if(design&&sessionLiee)await syncLigneToScan(sessionLiee,ref,design,qc,ql);
+        await _syncScanBL(lid,ref,design,ql);
       }catch(e){console.warn('[Lignes_BC patch]',lid,e.message);}
     }
     const rowsNew=document.querySelectorAll('#m-lignes-new .m-ligne-new');
@@ -11913,7 +11984,7 @@ async function openTraiterModal(id,numBC,client){
             Chantier:currentChantier||''
           });
           lignesTouchees++;
-          if(sessionLiee)await syncLigneToScan(sessionLiee,ref,design,qc,ql);
+          await _syncScanBL(null,ref,design,ql);
         }catch(e){console.warn('[Lignes_BC post]',e.message);}
       }
     }
@@ -11958,7 +12029,7 @@ async function openTraiterModal(id,numBC,client){
       const dArr=fmtDate(body.Date_Arrivage_Attendu);
       return `${titre||numBC} — 📦 marqué en commande, sort du bloc jaune jusqu'au ${dArr}`;
     }
-    const suffixeLignes=lignesTouchees?` · ${lignesTouchees} article(s) enregistré(s)${_prepMsg?' · '+_prepMsg:(sessionLiee?' (+ synchronisé côté Livraison Magasin)':(blEffectif?' (échec de synchronisation Livraison Magasin — voir console)':''))}`
+    const suffixeLignes=lignesTouchees?` · ${lignesTouchees} article(s) enregistré(s)${_prepMsg?' · '+_prepMsg:(sessionLiee?(_sessFinale?' (session magasin clôturée : non modifiée)':` · 🚚 ${_envoyes} article${_envoyes>1?'s':''} envoyé${_envoyes>1?'s':''} au magasin${_retires?` · ${_retires} retiré${_retires>1?'s':''} (reste à livrer)`:''}`):(blEffectif?' (échec de synchronisation Livraison Magasin — voir console)':''))}`
       :(sessionCreee?' · BL ajouté à Livraison Magasin':'');
 
     // Alerte "BC entièrement livré ?" — déclenchée juste après la fermeture de la
@@ -13158,6 +13229,7 @@ async function syncLigneToScan(session,ref,design,qc,ql){
       // déjà scannée avec ce qui est tapé au bureau, ce qui a déjà causé une
       // perte de données sur un vrai BL.
       const bodyMaj={Reference_Article:ref||'',Designation:design,Quantite_Attendue:qc};
+      if(Number(f(existing,'Quantite_Attendue')||0)===Number(qc)&&(f(existing,'Reference_Article')||'')===(ref||'')&&(f(existing,'Designation')||'')===design)return;
       await spPatch('sites/BondeCommande','Lignes_Scan',existing.ID,bodyMaj);
       Object.assign(existing,bodyMaj);
     }else{
