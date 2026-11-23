@@ -624,6 +624,8 @@ input.sv-in.mod{border-color:#16a34a;background:#f0fdf4}
 .stk-r{border:1px solid var(--border-light);border-radius:8px;padding:10px 12px;margin:0 0 12px;font-size:13px;background:#fff}
 .stk-d{margin-top:6px}.stk-d summary{cursor:pointer}.stk-l{max-height:260px;overflow:auto;border:1px solid var(--border-light);border-radius:6px;padding:6px 8px;font-size:12.5px;line-height:1.7}
 .ra-nc{color:#ad1457;font-weight:700}
+.ra-cde{min-width:165px;max-width:190px}.ra-bc{display:block;margin-top:3px;font-size:11px;line-height:1.35;white-space:nowrap;text-align:right;color:#1d4f91;text-decoration:none;background:#eef4fc;border-radius:9px;padding:1px 7px;max-width:100%;box-sizing:border-box;margin-left:auto;overflow:hidden;text-overflow:ellipsis}
+.ra-bc:hover{background:#d9e7fa;text-decoration:underline}.ra-bc.al{background:#fff3e0;color:#8a3200}.ra-bc.more{background:none;color:#5b6577;padding:0 2px}
 .ra-ralw{position:relative;display:inline-block}.ra-rals{position:absolute;right:0;top:100%;white-space:nowrap;line-height:1.1}.ra-t td.ra-ralc{padding-top:15px;padding-bottom:15px}
 @media (min-width:1101px){.kpis.ra-k5{grid-template-columns:repeat(5,1fr)}}
 .stk-w{margin-top:8px;color:#8a3200}.stk .btn{margin-left:8px}
@@ -6800,8 +6802,10 @@ function raCalc(a,o,P){
   // Article non suivi : on propose seulement ce qui manque pour livrer (o.ralNc).
   const rc=a.pseudo?0:Math.max(0,o.ral||0);
   const qte=suivi?(dispo-rc<cible?colis(cible-dispo+rc):0):(rc>0?colis(Math.max(0,o.ralNc||0)):0);
-  const couv=v.moyMois>0?dispo/v.moyMois:null;
-  const etat=exclu?'exclu':!suivi?(v.brut>0&&!v.recents&&v.actifs>=P.moisMin?'ancien':v.brut>0?'irregulier':(a.stock>0?'dormant':'inactif')):dispo<=0?'rupture':(mini>0&&dispo<mini)?'sousmini':(couv!=null&&couv>P.surstock&&dispo>cible)?'surstock':qte>0?'acmd':'ok';
+  // couverture et état sur le disponible « libre » : ce qui est déjà promis aux clients n'est plus du stock à vendre
+  const libre=dispo-rc;
+  const couv=v.moyMois>0?Math.max(0,libre)/v.moyMois:null;
+  const etat=exclu?'exclu':!suivi?(v.brut>0&&!v.recents&&v.actifs>=P.moisMin?'ancien':v.brut>0?'irregulier':(a.stock>0?'dormant':'inactif')):dispo<=0?'rupture':(mini>0&&libre<mini)?'sousmini':(couv!=null&&couv>P.surstock&&libre>cible)?'surstock':qte>0?'acmd':'ok';
   return {...v,reg,miniProp,mini,miniValide:o.mini!=null,suivi,exclu,dispo,cible,qte,qteCli:Math.max(0,qte-qte0),couv,etat};
 }
 // RA-PURE-FIN
@@ -7053,7 +7057,7 @@ function raDetailFrs(g){
     ${R.length?`<div class="ra-scroll"><table class="ra-t">${raEnteteArt(ed,'prep')}<tbody>${R.slice(0,lim).map(r=>raLigneArt(r,ed,'prep')).join('')}</tbody></table></div>${R.length>lim?`<div class="muted" style="margin-top:6px">… ${R.length-lim} autres : utilise la recherche.</div>`:''}`:'<div class="muted">Rien à commander chez ce fournisseur. Choisis « Articles suivis » pour tout voir.</div>'}</div>`;
 }
 function raEnteteArt(ed,mode){
-  return `<thead><tr><th>Réf.</th><th>Désignation</th><th>Type</th><th class="r">Stock</th><th class="r" data-tip="En commande dans Image (BC passés, pas encore reçus)">En cde</th><th class="r" data-tip="Reste à livrer aux clients d’après les BC du Dashboard (détail au survol). « manque » : le stock et les commandes en cours ne couvrent pas. Ajouté à la quantité proposée (👤).">RAL clients</th><th class="r" data-tip="Stock + en commande − réservé + demandes de stock en cours">Dispo</th><th class="r" data-tip="Moyenne mensuelle des 11 mois complets, pic écrêté">Vtes/mois</th><th class="r" data-tip="Stock mini validé (✓) ou proposé (1,5 mois de ventes)">Mini</th><th class="r" data-tip="Disponible ÷ ventes mensuelles">Couv.</th><th class="r">Proposé</th>${mode==='prep'?'<th class="r">Qté</th>':'<th class="r">Patricia</th><th class="r">Décision</th>'}<th>Fournisseur</th><th>Client</th><th class="r">Montant</th>${mode==='prep'&&ed?'<th></th>':''}</tr></thead>`;
+  return `<thead><tr><th>Réf.</th><th>Désignation</th><th>Type</th><th class="r">Stock</th><th class="r" data-tip="En commande dans Image (BC passés, pas encore reçus). Dessous : les BC fournisseurs ouverts du portail qui contiennent l’article, avec leur étape ; clic pour ouvrir le BC. ⚠ : la quantité d’Image ne correspond pas au reste à recevoir des BC du portail.">En cde</th><th class="r" data-tip="Reste à livrer aux clients d’après les BC du Dashboard (détail au survol). « manque » : le stock et les commandes en cours ne couvrent pas. Ajouté à la quantité proposée (👤).">RAL clients</th><th class="r" data-tip="Stock + en commande − réservé + demandes de stock en cours">Dispo</th><th class="r" data-tip="Moyenne mensuelle des 11 mois complets, pic écrêté">Vtes/mois</th><th class="r" data-tip="Stock mini validé (✓) ou proposé (1,5 mois de ventes)">Mini</th><th class="r" data-tip="Disponible ÷ ventes mensuelles">Couv.</th><th class="r">Proposé</th>${mode==='prep'?'<th class="r">Qté</th>':'<th class="r">Patricia</th><th class="r">Décision</th>'}<th>Fournisseur</th><th>Client</th><th class="r">Montant</th>${mode==='prep'&&ed?'<th></th>':''}</tr></thead>`;
 }
 // Répartition client / stock : parts = [{cli,q}] ; le reste du total va au stock (même modèle que l'onglet Demandes : une ligne par destination)
 const raNum=v=>{const x=parseNum(String(v??'').trim());return x>0?x:0;};
@@ -7099,7 +7103,7 @@ function raLigneArt(r,ed,mode,g){
   const sub=parts.map((p,i)=>`<tr class="ra-part" ${id} data-rapi="${i}"><td colspan="${qIdx}" class="r ra-sub">↳ dont pour un client</td><td class="r">${ed?`<input class="ra-in" data-rapq inputmode="decimal" value="${esc(p.q)}" placeholder="qté">`:raN0(raNum(p.q))}</td><td></td><td>${ed?`<input class="ra-in cli" data-rapcli list="dlDaCli" value="${esc(p.cli)}" placeholder="nom du client">`:esc(p.cli)}</td><td class="r">${ed?`<button class="ra-x" data-rapx tabindex="-1" title="Retirer ce client">✕</button>`:''}</td>${mode==='prep'&&ed?'<td></td>':''}</tr>`).join('');
   return `<tr ${id} data-rapu="${a.pu||0}" data-raprop="${E.prop||0}" class="${q>0?'ra-q':''}"><td class="mono"><b>${esc(a.code)}</b>${a.autre?`<div class="ra-sub">${esc(a.autre)}</div>`:''}</td>
     <td data-tip="${esc(raTipVentes(r))}">${esc(a.lib||(g&&g.des)||'')} ${raEtatBadge(r.etat)}${cli}</td><td><span class="ra-ty ${r.typeAuto?'auto':''}" title="${r.typeAuto?'Classement automatique (libellé)':'Classement validé'}">${esc(r.type)}</span></td>
-    <td class="r">${raN0(a.stock)}</td><td class="r">${raN0(a.cde)}</td>${ralCellule(r)}<td class="r"><b style="color:${r.dispo<=0&&r.suivi?'#c62828':'inherit'}">${raN0(r.dispo)}</b>${enc}</td>
+    <td class="r">${raN0(a.stock)}</td>${raCdeCellule(r)}${ralCellule(r)}<td class="r"><b style="color:${r.dispo<=0&&r.suivi?'#c62828':'inherit'}">${raN0(r.dispo)}</b>${enc}</td>
     <td class="r">${raN0(r.moyMois)}</td><td class="r">${mini}</td><td class="r">${r.couv==null?'—':fmtN(Math.max(0,r.couv),1)}</td><td class="r"${mode==='prep'&&r.qteCli>0?` data-tip="Dont ${raN0(r.qteCli)} pour le reste à livrer aux clients (colonne RAL clients). Le reste est le réapprovisionnement habituel du stock."`:''}>${raN0(E.prop)}${mode==='prep'&&r.qteCli>0?' <span class="ra-nc" style="font-size:11px">👤</span>':''}${a.col>1?`<div class="ra-sub">colis ${raN0(a.col)}</div>`:''}</td>
     ${mode==='prep'?'':`<td class="r">${raN0(g.total)}</td>`}
     <td class="r">${qIn}</td>
@@ -7747,6 +7751,46 @@ document.addEventListener('dragover',e=>{if(CUR_TAB==='reappro'&&raPeutPreparer(
 document.addEventListener('drop',e=>{if(CUR_TAB!=='reappro'||!raPeutPreparer()||!e.target.closest||!e.target.closest('#sec-reappro'))return;e.preventDefault();const f=e.dataTransfer&&e.dataTransfer.files&&e.dataTransfer.files[0];if(f)raDeposer(f);});
 
 // ── Démonstration : export fictif (articles inventés, données aléatoires reproductibles) ──
+// ═══ BC FOURNISSEURS EN COURS PAR ARTICLE (colonne « En cde ») ═══
+// Lignes des BC du portail (Lignes_Commande_Frs) dont le BC est encore ouvert (cmdEtat().ouverte), rapprochées de l'article
+// par Ref_2 (notre référence), puis Title (référence fournisseur). Lecture seule. Clic → onglet Commandes, BC déplié.
+const RA_BC_ETAPE={cmd:['📝','Commandée'],arc:['📄','ARC reçu'],bpa:['✅','BPA envoyé'],dispo:['📦','Dispo annoncée'],route:['🚢','Expédiée'],reliquat:['⏳','Reliquat'],asolder:['✔','Livré · à solder']};
+let RA_BC=null;
+function raBcIndex(){
+  const ck=(DATA.cmd||[]).length+'|'+(DATA.lcmd||[]).length+'|'+((RX&&RX.lig)||[]).length+'|'+((DATA.arr||[]).length);
+  if(RA_BC&&RA_BC.ck===ck)return RA_BC.m;
+  const m=new Map(),nk=v=>String(v||'').trim().toUpperCase();
+  for(const c of DATA.cmd||[]){
+    let e;try{e=cmdEtat(c);}catch(x){continue;}
+    if(!e||!e.ouverte)continue;
+    for(const l of cmdLignes(c.ID)){
+      if(estGratuit(l))continue;
+      let s0;try{s0=artSuivi(l);}catch(x){s0={actif:false};}
+      const q=n0(l.Quantite),reste=s0.actif?Math.max(0,Math.round((q-s0.livre)*1000)/1000):q;
+      if(!(reste>0))continue;
+      const x={c,e,l,q,reste};
+      const vus=new Set();for(const k of [nk(l.Ref_2),nk(l.Title)])if(k&&!vus.has(k)){vus.add(k);(m.get(k)||m.set(k,[]).get(k)).push(x);}
+    }
+  }
+  for(const L of m.values())L.sort((a,b)=>String(a.c.Title).localeCompare(String(b.c.Title)));
+  RA_BC={ck,m};return m;
+}
+function raBcDe(a){const L=raBcIndex().get(String(a.code||'').trim().toUpperCase())||[];const v=new Set();return L.filter(x=>!v.has(x.l.ID)&&v.add(x.l.ID));}
+function raBcEtiquette(x){
+  const [ic,t]=RA_BC_ETAPE[x.e.k]||['📝',x.e.lbl];
+  const eta=x.e.a?dk(x.e.a,'ETA_Port'):'',dd=dk(x.c,'Date_Dispo_Prevue');
+  return `${ic} ${esc(cmdNum(x.c.Title)||x.c.Title)} · ${t}${x.e.k==='route'&&eta?' · ETA '+fmtD(eta).slice(0,5):x.e.k==='dispo'&&dd?' '+fmtD(dd).slice(0,5):''}`;
+}
+function raCdeCellule(r){
+  const a=r.a,B=raBcDe(a),qP=Math.round(B.reduce((s,x)=>s+x.reste,0)*1000)/1000;
+  if(!B.length)return `<td class="r">${raN0(a.cde)}${a.cde>0&&(DATA.cmd||[]).length?`<div class="ra-sub" title="Image compte ${raN0(a.cde)} en commande, mais aucun BC ouvert du portail ne contient cet article (BC pas importé, ou ancien BC repris avant le portail).">BC non trouvé</div>`:''}</td>`;
+  const ecart=Math.abs(qP-(+a.cde||0))>1e-6;
+  const tip=B.map(x=>`BC ${cmdNum(x.c.Title)||x.c.Title} (${x.c.Fournisseur||'?'}) : ${raN0(x.q)} commandé${x.reste!==x.q?`, ${raN0(x.reste)} restant à recevoir`:''} · ${x.e.lbl}${x.e.alerte?' · ⚠ '+x.e.alerte.txt:''}`).join('\n')
+    +(ecart?`\n⚠ Image : ${raN0(a.cde)} en commande · BC du portail : ${raN0(qP)} restant à recevoir`:'')+'\nClic : ouvrir le BC dans l’onglet Commandes';
+  const pill=x=>`<a href="#" class="ra-bc${x.e.alerte?' al':''}" data-gotab="cmd:${x.c.ID}" title="${esc(tip)}">${raBcEtiquette(x)}${x.e.alerte?' ⚠':''}</a>`;
+  return `<td class="r ra-cde">${raN0(a.cde)}${ecart?` <span class="ra-nc" style="font-size:11px" title="${esc(tip)}">⚠</span>`:''}${B.slice(0,2).map(pill).join('')}${B.length>2?`<a href="#" class="ra-bc more" data-gotab="cmd:${B[2].c.ID}" title="${esc(tip)}">+${B.length-2} autre${B.length>3?'s':''}</a>`:''}</td>`;
+}
+
 // ═══ RESTE À LIVRER CLIENTS (lecture seule de Suivi_BC et Lignes_BC, site du Dashboard) ═══
 // Les BC clients ne sont pas saisis dans Image : le reste à livrer est une demande ferme que la Query n°19 ne contient pas.
 // Même règle que l'onglet « Livraisons Partielles » du Dashboard : commandé − livré > 0, BC non soldé, lignes miroirs des BC à suffixe ignorées.
@@ -7814,7 +7858,8 @@ const ralTip=r=>{const e=r.ral;if(!e)return '';const max=param('REAPPRO_RAL_MAX_
 function ralCellule(r){
   const e=r.ral,res=r.a.res?`<div class="ra-sub" title="Quantité réservée dans Image">rés. ${raN0(r.a.res)}</div>`:'';
   if(!e)return `<td class="r">${res}</td>`;
-  const sous=[r.ralNc?`<span class="ra-nc">manque ${raN0(r.ralNc)}</span>`:'',e.vieux?`${e.q?'+ ':''}${raN0(e.vieux)} ancien`:''].filter(Boolean).join(' · ');
+  // une seule indication sous le chiffre (« manque » d'abord) ; l'ancien reste au survol, pour ne pas déborder sur la colonne voisine
+  const sous=r.ralNc?`<span class="ra-nc">manque ${raN0(r.ralNc)}</span>`:e.vieux?`${e.q?'+ ':''}${raN0(e.vieux)} ancien`:'';
   return `<td class="r ${sous?'ra-ralc':''}" data-tip="${esc(ralTip(r))}"><div class="ra-ralw"><b>${e.q?raN0(e.q):'&nbsp;'}</b>${sous?`<div class="ra-sub ra-rals">${sous}</div>`:''}</div>${res}</td>`;
 }
 // Références en reste à livrer que l'export Image ne contient pas (saisie libre ou article créé depuis)
@@ -7997,6 +8042,14 @@ function raDemoSeed(){
   }));
   S.Cathalogue_Produits=lignes.slice(3).filter((l,i)=>i%13!==5).map((l,i)=>({ID:i+1,Title:l[2],field_1:l[3],Stock_Image:i%3===0?l[5]:i%3===1?null:l[5]+2})).concat([{ID:900,Title:'ANCIEN-001',field_1:'ARTICLE SORTI D IMAGE',Stock_Image:12},{ID:901,Title:'ANCIEN-002',field_1:'ARTICLE JAMAIS STOCKE',Stock_Image:null}]);
   const jr=n=>new Date(Date.now()-n*864e5).toISOString();
+  {const frs=(S.Fournisseurs||[]).find(f=>/ISIFLO/i.test(f.Title||''))||(S.Fournisseurs||[])[0]||{ID:1,Title:'ISIFLO'};
+   const C1={ID:9701,Title:'BC 8761',Fournisseur:frs.Title,ID_Fournisseur:frs.ID,Type_Commande:'Import',Date_Commande:jr(40),Date_ARC:jr(30),Date_BPA:jr(20),Date_Dispo_Prevue:jr(-8),Statut:'Commandée'};
+   const C2={ID:9702,Title:'BC 8790',Fournisseur:frs.Title,ID_Fournisseur:frs.ID,Type_Commande:'Import',Date_Commande:jr(25),Statut:'Commandée'};
+   const L1=[{ID:97011,ID_Commande_Frs:9701,N_Commande:'8761',Title:'RF-1',Ref_2:lignes[3][2],Designation:lignes[3][3],Quantite:lignes[3][7]||40,Ordre:1},
+             {ID:97012,ID_Commande_Frs:9701,N_Commande:'8761',Title:'RF-2',Ref_2:lignes[6][2],Designation:lignes[6][3],Quantite:30,Ordre:2},
+             {ID:97021,ID_Commande_Frs:9702,N_Commande:'8790',Title:lignes[3][2],Ref_2:'',Designation:lignes[3][3],Quantite:20,Ordre:1}];
+   S.Commandes_Frs=(S.Commandes_Frs||[]).concat([C1,C2]);S.Lignes_Commande_Frs=(S.Lignes_Commande_Frs||[]).concat(L1);
+   if(Array.isArray(DATA.cmd)){DATA.cmd.push(C1,C2);DATA.lcmd=(DATA.lcmd||[]).concat(L1);}}
   S.Suivi_BC=[{ID:1,Title:'SOG26-012',Dateder_x00e9_ception:jr(20),ClientNom:'SOGEA CARAIBES'},{ID:2,Title:'CTM26-003',Dateder_x00e9_ception:jr(260),ClientNom:'CTM BTP'},{ID:3,Title:'GTD26-040',Dateder_x00e9_ception:jr(45),ClientNom:'G.T.DOM',StatutBCLivr_x00e9_etFC:true},{ID:4,Title:'SOG26-012-A',Dateder_x00e9_ception:jr(12),ClientNom:'SOGEA CARAIBES'}];
   const lb=(i,bc,ref,des,c,l)=>({ID:i,BCId:bc,R_x00e9_f_x00e9_rence:ref,Produit_x002f_D_x00e9_signation:des,Quantit_x00e9_command_x00e9_e:c,Quantit_x00e9_livr_x00e9_e:l,Chantier:'Chantier démo'});
   S.Lignes_BC=[lb(1,1,lignes[3][2],lignes[3][3],60,10),lb(2,1,lignes[8][2],lignes[8][3],40,0),lb(3,1,lignes[4][2],lignes[4][3],3,3),lb(4,2,lignes[3][2],lignes[3][3],25,0),lb(5,3,lignes[5][2],lignes[5][3],500,0),lb(6,4,lignes[3][2],lignes[3][3],60,10),lb(7,1,'HORS-IMAGE-1','ARTICLE SAISI A LA MAIN',4,0),lb(8,4,lignes[20][2],lignes[20][3],9,2)];
