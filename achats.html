@@ -1774,6 +1774,51 @@ async function rxRattacherTout(key){
   try{for(const x of choix)await rxRattacher(x.l,x.c,motif);toast(`✓ ${choix.length} article${choix.length>1?'s':''} rattaché${choix.length>1?'s':''} au BC`,'ok');}catch(e){toast('🔴 '+e.message,'ko');}
   rxIndexer();renderArts();
 }
+// ═══ ROUVRIR UN CONTRÔLE VALIDÉ PAR ERREUR ═══
+// La fiche repasse « BL Émis » (ou « En cours de scan » si des quantités sont déjà comptées) : le magasin la revoit dans le portail Scan.
+// Diagnostic affiché avant : lignes de la fiche liées au BC, lignes orphelines (ligne de BC supprimée, ex. BC réimporté), articles sans ligne.
+// Options : recréer les lignes manquantes (quantité attendue = quantité prévue pour l'envoi) ; supprimer les lignes orphelines non comptées.
+async function rxRouvrir(key){
+  const g=artsGroupes().find(x=>x.key===key);if(!g)return;g.rx=rxGroupe(g);const x=g.rx,sess=x.sess;if(!sess||!x.fait)return;
+  const toutes=RX.lig.filter(l=>n0(l.Session_ScanId)===sess.ID);
+  const grs=artsGroupes().filter(z=>z.fkey===sess.Title||z.key===sess.Title);   // une fiche peut couvrir plusieurs BC du même fournisseur
+  const arts=grs.flatMap(z=>z.bcs.flatMap(b=>b.arts.map(a=>({a,b}))));
+  const idsBC=new Set(arts.map(o=>o.a.ID)),idsCmd=new Set((DATA.lcmd||[]).map(l=>l.ID));
+  const liees=toutes.filter(l=>idsBC.has(n0(l.ID_Ligne_Cmd)));
+  const orph=toutes.filter(l=>n0(l.ID_Ligne_Cmd)&&!idsCmd.has(n0(l.ID_Ligne_Cmd)));
+  const orphLibres=orph.filter(l=>!n0(l.Quantite_Scannee)&&!n0(l.Quantite_Abimee));
+  const avecLigne=new Set(liees.map(l=>n0(l.ID_Ligne_Cmd)));
+  const manquants=arts.filter(o=>!avecLigne.has(o.a.ID)&&n0(o.a.Quantite)>0);
+  const comptees=toutes.filter(l=>n0(l.Quantite_Scannee)||n0(l.Quantite_Abimee)).length;
+  const ok=await showConfirm(`↺ Rouvrir le contrôle · ${esc(sess.Fournisseur||g.l.Fournisseur||'')}`,`<div style="font-size:13px;line-height:1.6">
+    La fiche repasse au magasin pour un nouveau comptage. Rien n’est effacé de ce qui a déjà été compté.
+    <div style="margin:8px 0;padding:8px 10px;background:#f5f7fa;border-radius:6px;font-size:12.5px">
+      Fiche actuelle : <b>${toutes.length}</b> ligne${toutes.length>1?'s':''} · <b>${liees.length}</b> liée${liees.length>1?'s':''} aux articles du BC · <b>${comptees}</b> déjà comptée${comptees>1?'s':''}<br>
+      Articles du BC sans ligne sur la fiche : <b>${manquants.length}</b> sur ${arts.length}${orph.length?`<br>Lignes orphelines (ligne de BC supprimée, BC sans doute réimporté) : <b>${orph.length}</b>${orph.length>orphLibres.length?` dont ${orph.length-orphLibres.length} comptée(s), conservée(s)`:''}`:''}</div>
+    ${manquants.length?`<label style="display:flex;gap:6px;align-items:flex-start"><input type="checkbox" id="rouvRec" ${!liees.length||manquants.length===arts.length?'checked':''} style="width:auto;margin-top:3px"> Ajouter à la fiche ${manquants.length>1?`les ${manquants.length} articles du BC qui n’y sont pas`:'l’article du BC qui n’y est pas'} (quantité attendue = quantité du BC)</label>`:''}
+    ${orphLibres.length?`<label style="display:flex;gap:6px;align-items:flex-start;margin-top:4px"><input type="checkbox" id="rouvOrph" checked style="width:auto;margin-top:3px"> Supprimer ${orphLibres.length>1?`les ${orphLibres.length} lignes orphelines non comptées`:'la ligne orpheline non comptée'}</label>`:''}
+    <div class="f" style="margin-top:8px"><label>Motif</label><input id="rouvMotif" value="Contrôle validé par erreur, articles non contrôlés"></div></div>`,'↺ Rouvrir');
+  if(!ok)return;
+  const rec=!!($('rouvRec')&&$('rouvRec').checked),sup=!!($('rouvOrph')&&$('rouvOrph').checked),motif=($('rouvMotif').value||'').trim()||'Contrôle rouvert';
+  const qui=(sessionStorage.getItem('user_name')||'Bureau').split(' ')[0];
+  busyOn('Réouverture du contrôle…');
+  try{
+    if(sup)for(const l of orphLibres){await spDelete('Lignes_Scan',l.ID,l);}
+    if(rec){let i=toutes.length;const frs=sess.Fournisseur||g.l.Fournisseur||'';
+      for(const o of manquants){busyMsg(`Ajout des articles à la fiche… ${++i-toutes.length}/${manquants.length}`);
+        await spPostSilencieux('Lignes_Scan',{Title:`RX-${sess.ID}-${i}`,Session_ScanId:sess.ID,Reference_Article:_trunc(o.a.Title||o.a.Ref_2||''),Designation:_trunc(o.a.Designation||''),Quantite_Attendue:n0(o.a.Quantite),Quantite_Scannee:0,Quantite_Abimee:0,Fournisseur:_trunc(frs),N_Commande:o.b.n,ID_Ligne_Cmd:o.a.ID});}}
+    const body={Statut:comptees?'En cours de scan':'BL Émis',Nb_Ecarts:null};
+    await spPatch('Sessions_Scan',sess.ID,body,sess);Object.assign(sess,body);
+    logAction('PATCH','Sessions_Scan',sess.ID,'Statut',RX_FAIT,body.Statut,`Contrôle rouvert par ${qui} : ${motif}${rec?` · ${manquants.length} article(s) ajouté(s)`:''}${sup?` · ${orphLibres.length} ligne(s) orpheline(s) supprimée(s)`:''}`);
+    // le résultat déjà reporté dans le dossier n'est plus valable
+    const note=`[Contrôle rouvert ${fmtD(todayKey())} — ${qui}] ${motif}`;
+    W.a.Anomalies_Depotage=(String(W.a.Anomalies_Depotage||'')?W.a.Anomalies_Depotage+'\n':'')+note;
+    if(W.a.Controle_OK)W.a.Controle_OK='';
+    ['Anomalies_Depotage','Controle_OK'].forEach(f=>{const el=document.querySelector(`#fiche [data-h="${f}"]`);if(el)el.value=W.a[f]||'';});markDirty();
+    busyOff();toast('↺ Contrôle rouvert : la fiche est de nouveau visible par le magasin. Enregistre le dossier.','ok');
+  }catch(e){busyOff();toast('🔴 '+e.message,'ko');}
+  await rxCharger().catch(()=>{});W.rxQteSig=null;rxIndexer();renderArts();
+}
 // Un seul « non prévu » rattaché depuis sa propre ligne (bouton dans l'étiquette « Probablement… »)
 async function rxRattacherUn(key,idL){
   const g=artsGroupes().find(x=>x.key===key);if(!g)return;g.rx=rxGroupe(g);const sess=g.rx.sess;if(!sess)return;
@@ -1908,6 +1953,7 @@ function rxBadge(g){
   const qui=x.sess.Repris_Par||x.sess.Magasinier||'';
   let b=x.fait?(x.nEc?`<span class="art-b ko">⚠ ${x.nEc} écart${x.nEc>1?'s':''}</span>`:`<span class="art-b ok">✓ conforme${x.nReg||x.nAcc?' après régul.':''}</span>`)+(x.nRel?` <span class="art-b warn" title="Articles non reçus, toujours attendus sur le BC">📦 ${x.nRel} reliquat${x.nRel>1?'s':''}</span>`:''):x.cours?`<span class="art-b warn">🔄 ${esc(qui||'en cours')}</span>`:'<span class="art-b mute">à prendre</span>';
   if(x.fait&&qui)b+=` <span class="muted" style="font-size:11px">${esc(qui)}</span>`;
+  if(x.fait&&rxPeutReg()&&(g.premierF||x.sess.Title===g.key))b+=` <button class="btn sm" data-rxrouv="${esc(g.key)}" title="Contrôle validé par erreur ou fiche incomplète : remettre la fiche au magasin pour un nouveau comptage">↺ Rouvrir</button>`;
   if(x.fait&&rxPeutReg()&&(g.premierF||x.sess.Title===g.key)){const n=rxSuggestions(x.sess).length;if(n)b+=` <button class="btn sm primary" data-rxratall="${esc(g.key)}" title="Ces « non prévus » correspondent à des articles du BC mis en reliquat">🔗 Rattacher au BC (${n})</button>`;}
   if(x.fait&&x.nVerTot&&!RX.verKo){const fin=x.nVer>=x.nVerTot;b+=` <span class="art-b ${fin?'ok':'mute'}" title="Lignes vérifiées au bureau">☑ ${x.nVer}/${x.nVerTot}</span>`;
     const nc=rxConformesNonVer(x).length;if(nc&&rxPeutReg())b+=` <button class="btn sm" data-rxverok="${esc(g.key)}" title="Cocher d’un coup les ${nc} lignes conformes pas encore vérifiées">☑ Conformes (${nc})</button>`;}
@@ -2630,6 +2676,7 @@ document.addEventListener('click',async e=>{
   const ln=e.target.closest('[data-litnew]');if(ln){litOuvrir({key:ln.dataset.litnew});return;}
   const ph=e.target.closest('[data-rxph]');if(ph){rxVoirPhotos(+ph.dataset.rxph);return;}
   const ra=e.target.closest('[data-rxratall]');if(ra){e.stopPropagation();rxRattacherTout(ra.dataset.rxratall);return;}
+  const ro=e.target.closest('[data-rxrouv]');if(ro){e.stopPropagation();rxRouvrir(ro.dataset.rxrouv);return;}
   const r1=e.target.closest('[data-rxrat1]');if(r1){e.stopPropagation();rxRattacherUn(r1.dataset.rxratg,+r1.dataset.rxrat1);return;}
   const vo=e.target.closest('[data-rxverok]');if(vo){e.stopPropagation();const g=artsGroupes().find(x=>x.key===vo.dataset.rxverok);if(g){g.rx=rxGroupe(g);const L=rxConformesNonVer(g.rx);if(L.length)rxVerMaj(L,true);}return;}
   if(e.target.matches&&e.target.matches('input[data-rxver]')){e.stopPropagation();const l=RX.lig.find(x=>x.ID===+e.target.dataset.rxver);if(l)rxVerMaj([l],e.target.checked);return;}
