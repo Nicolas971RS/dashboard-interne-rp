@@ -477,7 +477,7 @@
     </div>
   </div>
   <div class="tabs">
-    <button class="tab" onclick="showTab('matin',this)">📊 Vue Matin</button>
+    <button class="tab" onclick="showTab('matin',this)">📊 Vue Matin <span class="tab-badge a" id="badge-prevenir" style="display:none;background:#ea580c;color:#fff" title="Clients à prévenir">0</span></button>
     <button class="tab active" onclick="showTab('suivi',this)">📦 Suivi BC <span class="tab-badge g" id="badge-recu">0</span><span class="tab-badge r" id="badge-retard">0</span><span class="tab-badge r" id="badge-facture-eur" style="display:none"></span></button>
     <button class="tab" onclick="showTab('ral',this);renderRALTable()">🔀 Livraisons Partielles <span class="tab-badge a" id="badge-ral">0</span></button>
     <button class="tab" onclick="showTab('prepscan',this);renderPreparations()">📦 Livraison Magasin <span class="tab-badge a" id="badge-prepscan">0</span></button>
@@ -504,6 +504,9 @@
         <div class="kc r"><div class="kl">💰 Risque DBC</div><div class="kv" id="kpi-risque">—</div><div class="ks">HT sans BC reçu</div></div>
         <div class="kc a"><div class="kl">🆕 Devis à prendre en charge</div><div class="kv" id="kpi-devis-matin">—</div><div class="ks">Statut Nouvelle</div></div>
       </div>
+
+      <!-- 📞 Clients à prévenir (règles de dépendance) -->
+      <div id="matin-prevenir"></div>
 
       <!-- SECTION 1 : À traiter maintenant -->
       <div class="sd"><h2>💰 À traiter maintenant</h2><span class="site-tag rp">BL renseigné · État ≠ Entièrement facturé</span><div class="sd-line"></div><button class="btn" onclick="exportMatinTraiter()">⬇ CSV</button></div>
@@ -1988,10 +1991,11 @@ async function loadAll(){
     const clientMap={};
     clients.forEach(c=>{if(c.ID&&c.Title)clientMap[c.ID]=c.Title;});
 
-    DATA={suivi,lignes,dbc,devis,clients:clientMap,chantiers:chantiers||[],catalogue:catalogue||[],sessionsScan:sessionsScan||[],lignesScan:lignesScan||[],annonces:annonces||[]};
+    DATA={suivi,lignes,dbc,devis,clients:clientMap,chantiers:chantiers||[],catalogue:catalogue||[],sessionsScan:sessionsScan||[],lignesScan:lignesScan||[],annonces:annonces||[],regles:(DATA&&DATA.regles)||[],prevenances:(DATA&&DATA.prevenances)||[]};
     DATA.achats=await _achatsP;
     try{majBadgeStockImage();}catch(e){console.warn('[Stock Image] badge',e);}
     bliCharger();   // BL en attente de facturation (export Image) — sans bloquer le chargement
+    depCharger();   // Règles de dépendance + clients à prévenir — sans bloquer le chargement
 
     // Synchronise automatiquement "Livré" (Lignes_BC) depuis le scan réel
     // (Lignes_Scan) — aucune recopie manuelle : dès que le magasinier scanne,
@@ -5288,6 +5292,339 @@ function exportMatinDevis(){
   ], `devis_nouvelle_${new Date().toISOString().slice(0,10)}.csv`);
 }
 
+// ═══ RÈGLES DE DÉPENDANCE ENTRE ARTICLES (ex. robinet HUOT → embase YACUO) ═══
+// Deux listes sur BondeCommande :
+//  • Regles_Dependance : une règle = un article principal qui ne part pas sans
+//    son article requis. Nicolas les ajoute / désactive directement dans SharePoint.
+//  • Prevenances_Client : un article retenu (ou livré sans requis avec motif).
+//    Les « À prévenir » forment le bloc « 📞 Clients à prévenir » de la Vue Matin.
+// Contrôles : import du devis (Traiter), enregistrement Traiter (BL ou préparation),
+// « Faire préparer », « Nouveau BL ou FC à livrer », et portail Scan (scan + clôture).
+// Non bloquant : le vendeur peut toujours « Livrer quand même » avec un motif.
+const DEP_SITE='sites/BondeCommande';
+const DEP_MSG_DEFAUT='Bonjour,\n\nNous préparons votre commande {commande}. Les articles suivants ne peuvent pas être livrés sans leur embase, qui n\'est pas disponible en stock pour le moment :\n{articles}\n\nNous les gardons de côté et nous vous les livrerons avec leurs embases dès leur arrivée. Le reste de votre commande suit normalement.\n\nN\'hésitez pas à nous appeler pour toute question.\n\nCordialement,\nRéseaux Plus Guadeloupe';
+const DEP_LISTES={
+  Regles_Dependance:[['Article_Principal','Text'],['Type_Correspondance','ChoiceType'],['Article_Requis','Text'],['Ratio','Number'],['Message_Client','Note'],['Actif','Boolean']],
+  Prevenances_Client:[['Client','Text'],['ID_BC','Number'],['N_BC','Text'],['N_BL','Text'],['ID_Session','Number'],['Article_Retenu','Text'],['Designation','Text'],['Qte_Retenue','Number'],['Article_Manquant','Text'],['ID_Regle','Number'],['Message','Note'],['Source','Text'],['Vendeur','Text'],['Statut','ChoiceStatut'],['Motif','Note'],['Prevenu_Par','Text'],['Date_Prevenu','DateTime']]
+};
+// Les 4 robinets HUOT et leur embase du même diamètre (validé par Nicolas le 24/11/2026)
+const DEP_REGLES_INITIALES=[
+  ['140Y025','146001','25'],['140Y032','146004','32'],['140Y040','146005','40'],['140Y050','146006','50']
+];
+let _depListesAbsentes=false;
+
+const _depNorm=s=>String(s??'').trim().toUpperCase();
+function _depEstNicolas(){return /nicolas/i.test(sessionStorage.getItem('user_name')||'');}
+function depReglesActives(){
+  return (DATA.regles||[]).filter(r=>r.Actif!==false&&r.Actif!==0&&String(r.Actif)!=='Non'&&_depNorm(r.Article_Principal)&&_depNorm(r.Article_Requis));
+}
+function depRegleDe(ref){
+  const R=_depNorm(ref);if(!R)return null;
+  return depReglesActives().find(r=>{
+    const p=_depNorm(r.Article_Principal);
+    return /pr[ée]fixe/i.test(r.Type_Correspondance||'')?R.startsWith(p):R===p;
+  })||null;
+}
+function depRequisDe(r){return String(r.Article_Requis||'').split(/[;,]/).map(_depNorm).filter(Boolean);}
+// Désignation catalogue (index reconstruit quand le catalogue change)
+let _depCatIdx=null,_depCatSrc=null;
+function depDesignation(ref){
+  const cat=DATA.catalogue||[];
+  if(_depCatSrc!==cat){_depCatSrc=cat;_depCatIdx=new Map();cat.forEach(p=>{const k=_depNorm(f(p,'Title'));if(k&&!_depCatIdx.has(k))_depCatIdx.set(k,f(p,'field_1')||'');});}
+  return _depCatIdx.get(_depNorm(ref))||'';
+}
+function depStockRequis(req){
+  let tot=null;req.forEach(x=>{const s=stockImageRef(x);if(s!=null&&!isNaN(s))tot=(tot||0)+Math.max(0,s);});
+  return tot;
+}
+// lignes : [{ref, design, qte, …}] — tout ce qui part ensemble (même BL / même préparation).
+// Renvoie un « manque » par ligne principale non couverte par ses articles requis.
+function verifierDependances(lignes){
+  if(!depReglesActives().length)return[];
+  const dispo=new Map();
+  lignes.forEach(l=>{const R=_depNorm(l.ref);if(R)dispo.set(R,(dispo.get(R)||0)+(Number(l.qte)||0));});
+  const out=[];
+  lignes.forEach(l=>{
+    const q=Number(l.qte)||0;if(q<=0)return;
+    const r=depRegleDe(l.ref);if(!r)return;
+    const req=depRequisDe(r);
+    const ratio=Number(r.Ratio)>0?Number(r.Ratio):1;
+    let besoin=q*ratio;
+    for(const x of req){const d=dispo.get(x)||0,pris=Math.min(d,besoin);dispo.set(x,d-pris);besoin-=pris;if(besoin<=1e-9)break;}
+    if(besoin>1e-9){
+      out.push({ligne:l,regle:r,requis:req,ratio,qte:q,manque:+besoin.toFixed(3),
+        aRetenir:Math.min(q,Math.ceil(besoin/ratio-1e-9)),stock:depStockRequis(req)});
+    }
+  });
+  return out;
+}
+// Déjà tranché pour ce BC + ce BL (« Livrer quand même » avec motif) : on ne redemande pas
+function depDejaTranche(m,idBC,numBL){
+  const R=_depNorm(m.ligne.ref),B=_depNorm(numBL);
+  return (DATA.prevenances||[]).some(p=>(p.Statut&&p.Statut.Value||p.Statut)==='Livré sans requis'
+    &&_depNorm(p.Article_Retenu||p.Title)===R&&_depNorm(p.N_BL)===B&&(!idBC||!p.ID_BC||Number(p.ID_BC)===Number(idBC)));
+}
+const _depQ=n=>String(+(+n||0).toFixed(2)).replace('.',',');
+function depLigneArticle(m){
+  const des=m.ligne.design||depDesignation(m.ligne.ref);
+  const req=m.requis.map(x=>`${x}${depDesignation(x)?' '+depDesignation(x):''}`).join(' ou ');
+  return `- ${_depQ(m.qteRetenue??m.aRetenir)} × ${m.ligne.ref}${des?' '+des:''} (embase ${req})`;
+}
+function depRendreMessage(modele,ctx,lignesArticles){
+  const cmd=[ctx.numBC?`n° ${ctx.numBC}`:'',ctx.numBL?`(BL ${ctx.numBL})`:''].filter(Boolean).join(' ')||'en cours';
+  return String(modele||DEP_MSG_DEFAUT)
+    .replace(/\{client\}/g,ctx.client||'')
+    .replace(/\{commande\}/g,cmd)
+    .replace(/\{articles\}/g,lignesArticles.join('\n'));
+}
+
+// ── Chargement (sans bloquer le dashboard : listes absentes = contrôle inactif) ──
+async function depCharger(){
+  try{
+    DATA.regles=await spFetch(DEP_SITE,'Regles_Dependance','$select=ID,Title,Article_Principal,Type_Correspondance,Article_Requis,Ratio,Message_Client,Actif&$top=500');
+    _depListesAbsentes=false;
+  }catch(e){
+    DATA.regles=[];
+    _depListesAbsentes=/\b404\b|does not exist|n'existe pas/i.test(e.message);
+    if(!_depListesAbsentes)console.warn('[Regles_Dependance]',e.message);
+  }
+  try{
+    DATA.prevenances=_depListesAbsentes?[]:await spFetch(DEP_SITE,'Prevenances_Client','$select=*&$orderby=ID desc&$top=500');
+  }catch(e){DATA.prevenances=[];console.warn('[Prevenances_Client]',e.message);}
+  try{renderPrevenances();}catch(e){console.warn('[renderPrevenances]',e);}
+}
+
+// ── Création des 2 listes + 4 règles (Nicolas, une seule fois) ──
+async function depCreerListes(){
+  if(!await showConfirm('🛠 Règles de dépendance',
+    'Crée sur le site BondeCommande les listes <strong>Regles_Dependance</strong> et <strong>Prevenances_Client</strong>, avec leurs colonnes, puis les 4 règles robinet → embase :<br><br>'+
+    DEP_REGLES_INITIALES.map(([p,q,d])=>`• ${p} → ${q} (diamètre ${d})`).join('<br>'),'🛠 Créer','submit'))return;
+  const web=`${C.spRoot}/${DEP_SITE}/_api/web`;
+  const HA={'Authorization':`Bearer ${getToken()}`,'Accept':'application/json;odata=nometadata'};
+  const HV={'Authorization':`Bearer ${getToken()}`,'Accept':'application/json;odata=verbose','Content-Type':'application/json;odata=verbose'};
+  const chk=async(r,lib)=>{if(!r.ok){const t=await r.text().catch(()=>'');throw new Error(`${lib} : HTTP ${r.status} — ${t.substring(0,200)}`);}};
+  const xml={
+    Text:n=>`<Field Type="Text" DisplayName="${n}" Name="${n}" StaticName="${n}" MaxLength="255"/>`,
+    Number:n=>`<Field Type="Number" DisplayName="${n}" Name="${n}" StaticName="${n}" Decimals="2"/>`,
+    Note:n=>`<Field Type="Note" DisplayName="${n}" Name="${n}" StaticName="${n}" NumLines="8" RichText="FALSE"/>`,
+    DateTime:n=>`<Field Type="DateTime" DisplayName="${n}" Name="${n}" StaticName="${n}" Format="DateTime"/>`,
+    Boolean:n=>`<Field Type="Boolean" DisplayName="${n}" Name="${n}" StaticName="${n}"><Default>1</Default></Field>`,
+    ChoiceType:n=>`<Field Type="Choice" DisplayName="${n}" Name="${n}" StaticName="${n}" Format="Dropdown"><Default>Référence exacte</Default><CHOICES><CHOICE>Référence exacte</CHOICE><CHOICE>Préfixe</CHOICE></CHOICES></Field>`,
+    ChoiceStatut:n=>`<Field Type="Choice" DisplayName="${n}" Name="${n}" StaticName="${n}" Format="Dropdown"><Default>À prévenir</Default><CHOICES><CHOICE>À prévenir</CHOICE><CHOICE>Prévenu</CHOICE><CHOICE>Annulé</CHOICE><CHOICE>Livré sans requis</CHOICE></CHOICES></Field>`
+  };
+  try{
+    for(const [l,cols] of Object.entries(DEP_LISTES)){
+      toast('🛠 Liste '+l+'…');
+      const ex=await fetch(`${web}/lists/getbytitle('${l}')?$select=Id`,{headers:HA});
+      if(ex.status===404){
+        const r=await fetch(`${web}/lists`,{method:'POST',headers:HV,body:JSON.stringify({__metadata:{type:'SP.List'},BaseTemplate:100,Title:l,Description:'Dashboard — règles de dépendance entre articles'})});
+        await chk(r,'Création de '+l);
+      }else await chk(ex,'Lecture de '+l);
+      const fr=await fetch(`${web}/lists/getbytitle('${l}')/fields?$select=InternalName&$filter=Hidden eq false`,{headers:HA});
+      await chk(fr,'Colonnes de '+l);
+      const have=new Set(((await fr.json()).value||[]).map(x=>x.InternalName));
+      for(const [n,t] of cols){
+        if(have.has(n))continue;
+        const r=await fetch(`${web}/lists/getbytitle('${l}')/fields/CreateFieldAsXml`,{method:'POST',headers:HV,
+          body:JSON.stringify({parameters:{__metadata:{type:'SP.XmlSchemaFieldCreationInformation'},SchemaXml:xml[t](n),Options:0}})});
+        await chk(r,`Colonne ${n} (${l})`);
+      }
+    }
+    // Règles initiales — sans doublon si on relance
+    const deja=new Set((await spFetch(DEP_SITE,'Regles_Dependance','$select=Article_Principal&$top=500')).map(r=>_depNorm(r.Article_Principal)));
+    let n=0;
+    for(const [p,q,d] of DEP_REGLES_INITIALES){
+      if(deja.has(p))continue;
+      await spPost(DEP_SITE,'Regles_Dependance',{Title:`Robinet ROB PEC ${d} → embase YACUO ROBI ${d}`,Article_Principal:p,Type_Correspondance:'Référence exacte',Article_Requis:q,Ratio:1,Message_Client:DEP_MSG_DEFAUT,Actif:true});
+      n++;
+    }
+    toast(`✅ Listes prêtes · ${n} règle${n>1?'s':''} ajoutée${n>1?'s':''}`,'ok');
+    await depCharger();
+  }catch(e){toast('🔴 '+e.message,'ko');}
+}
+function depOuvrirRegles(){window.open(`${C.spRoot}/${DEP_SITE}/Lists/Regles_Dependance/AllItems.aspx`,'_blank');}
+
+// ── Fenêtre d'alerte à 3 choix (par-dessus le modal en cours) ──
+// opts.contexte : 'traiter' | 'prep' | 'emission' | 'devis'
+// Résout { choix:'ajouter'|'retenir'|'forcer'|'continuer', motif } ou null (annulé).
+function depAlerte(manques,opts={}){
+  return new Promise(resolve=>{
+    document.getElementById('dep-ov')?.remove();
+    const ctx=opts.contexte||'traiter';
+    const enStock=manques.every(m=>m.stock!=null&&m.stock>=m.manque);
+    const aucunStock=manques.every(m=>!(m.stock>0));
+    const pastille=m=>m.stock==null?'<span style="color:var(--text-muted)">—</span>'
+      :m.stock>=m.manque?`<span style="color:var(--green);font-weight:700">🟢 ${_depQ(m.stock)}</span>`
+      :m.stock>0?`<span style="color:#c2410c;font-weight:700">🟠 ${_depQ(m.stock)}</span>`:'<span style="color:#b91c1c;font-weight:700">🔴 0</span>';
+    const lignes=manques.map(m=>`<tr>
+      <td style="padding:6px;font-family:var(--font-mono);font-weight:700;white-space:nowrap">${_escD(m.ligne.ref)}</td>
+      <td style="padding:6px">${_escD(m.ligne.design||depDesignation(m.ligne.ref))}</td>
+      <td style="padding:6px;text-align:right;font-weight:700">${_depQ(m.qte)}</td>
+      <td style="padding:6px">${m.requis.map(x=>`<span style="font-family:var(--font-mono);font-weight:700">${_escD(x)}</span> ${_escD(depDesignation(x))}`).join('<br>ou ')}<div style="font-size:11px;color:#b91c1c">il en manque ${_depQ(m.manque)}</div></td>
+      <td style="padding:6px;text-align:center">${pastille(m)}</td></tr>`).join('');
+    let conseil,boutons;
+    if(ctx==='devis'){
+      conseil=enStock?'✅ Les embases sont en stock : ajoute-les au BC.'
+        :'Les embases ne sont pas (toutes) en stock. Ajoute-les quand même au BC pour les commander, ou continue sans si le client a déjà ses embases.';
+      boutons=[['continuer','Continuer sans embase','btn'],['ajouter','➕ Ajouter les embases au BC','btn navy']];
+    }else{
+      const ret=ctx==='prep'?'⏸ Préparer sans ces articles — client à prévenir':'⏸ Retenir ces articles — client à prévenir';
+      conseil=enStock
+        ?`✅ <strong>L'embase est en stock</strong> : ajoute-la${ctx==='prep'?' au BC':' sur le BL (refais le BL dans Image si besoin)'}, puis valide à nouveau.`
+        :`🔴 <strong>Embase ${aucunStock?'pas en stock':'en stock insuffisant'}</strong> : retiens ces articles. Ils restent en reste à livrer et le client apparaît dans <strong>« 📞 Clients à prévenir »</strong> (Vue Matin) avec un message prêt à envoyer.${ctx!=='prep'?' Pense à les retirer du BL dans Image.':''}`;
+      boutons=[['forcer','⚠️ Livrer quand même','btn'],['retenir',ret,enStock?'btn':'btn navy'],['ajouter',"↩ J'ajoute l'embase",enStock?'btn navy':'btn']];
+    }
+    const ov=document.createElement('div');ov.id='dep-ov';
+    ov.style.cssText='position:fixed;inset:0;background:rgba(10,20,40,.55);z-index:21000;display:flex;align-items:center;justify-content:center;padding:16px';
+    ov.innerHTML=`<div style="background:#fff;border-radius:14px;width:100%;max-width:760px;max-height:90vh;display:flex;flex-direction:column;box-shadow:0 24px 70px rgba(0,0,0,.35);border-top:6px solid #ea580c">
+      <div style="padding:14px 18px;border-bottom:1px solid var(--border)"><div style="font-weight:800;font-size:16px;color:#9a3412">🔗 ${ctx==='devis'?'Article commandé sans':'Article livré sans'} son article requis</div>
+        <div style="font-size:12.5px;color:var(--text-muted);margin-top:3px">Règle Réseaux Plus : ces articles ne partent pas sans leur embase${ctx==='devis'?'':' dans le même envoi'}.</div></div>
+      <div style="padding:12px 18px;overflow:auto;flex:1">
+        <table style="width:100%;min-width:0!important;font-size:12.5px;border-collapse:collapse;table-layout:fixed"><colgroup><col style="width:90px"><col><col style="width:50px"><col><col style="width:80px"></colgroup><thead><tr style="background:var(--grey-xlight);font-size:11px;text-transform:uppercase;color:var(--text-muted)">
+          <th style="padding:6px;text-align:left">Réf.</th><th style="padding:6px;text-align:left">Article</th><th style="padding:6px;text-align:right">Qté</th><th style="padding:6px;text-align:left">Requis manquant</th><th style="padding:6px;text-align:center">Stock</th></tr></thead><tbody>${lignes}</tbody></table>
+        <div style="margin-top:12px;font-size:13px;padding:10px 12px;border-radius:8px;background:${enStock?'var(--green-light)':'#fff7ed'};color:${enStock?'var(--green)':'#7c2d12'}">${conseil}</div>
+        <div id="dep-motif-zone" style="display:none;margin-top:12px"><label style="font-size:12.5px;font-weight:700;color:#7c2d12">Motif (obligatoire)</label>
+          <textarea id="dep-motif" rows="2" placeholder="Ex. le client a demandé les robinets seuls, accord de Fabrice" style="width:100%;box-sizing:border-box;margin-top:4px;padding:8px;border:2px solid #fdba74;border-radius:8px;font-family:var(--font-body);font-size:13px"></textarea>
+          <div style="font-size:11.5px;color:var(--text-muted);margin-top:3px">Le motif est enregistré (liste Prevenances_Client, statut « Livré sans requis »).</div></div>
+      </div>
+      <div style="padding:12px 18px;border-top:1px solid var(--border);display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end">
+        <button type="button" class="btn" data-dep="annuler" style="height:34px;margin-right:auto">Annuler</button>
+        ${boutons.map(([k,l,c])=>`<button type="button" class="${c}" data-dep="${k}" style="height:34px;font-weight:700">${l}</button>`).join('')}
+      </div></div>`;
+    document.body.appendChild(ov);
+    const fin=v=>{ov.remove();resolve(v);};
+    ov.addEventListener('click',e=>{
+      const b=e.target.closest('[data-dep]');if(!b)return;
+      const k=b.dataset.dep;
+      if(k==='annuler')return fin(null);
+      if(k==='forcer'){
+        const z=document.getElementById('dep-motif-zone'),t=document.getElementById('dep-motif');
+        if(z.style.display==='none'){z.style.display='block';b.textContent='⚠️ Confirmer : livrer quand même';t.focus();return;}
+        const motif=t.value.trim();
+        if(motif.length<4){t.style.borderColor='var(--red)';t.focus();return;}
+        return fin({choix:'forcer',motif});
+      }
+      fin({choix:k,motif:''});
+    });
+  });
+}
+
+// ── Enregistrement des articles retenus / livrés sans requis ──
+// ctx : {source, statut:'À prévenir'|'Livré sans requis', motif, client, idBC, numBC, numBL, idSession, vendeur}
+async function depEnregistrer(manques,ctx){
+  if(!manques||!manques.length||_depListesAbsentes)return 0;
+  const retenu=ctx.statut!=='Livré sans requis';
+  let n=0;
+  for(const m of manques){
+    const q=retenu?m.aRetenir:m.qte;
+    const regle=m.regle||{};
+    const msg=retenu?depRendreMessage(regle.Message_Client,ctx,[depLigneArticle({...m,qteRetenue:q})]):'';
+    const body={Title:_trunc(m.ligne.ref,255),Article_Retenu:_trunc(m.ligne.ref,255),Designation:_trunc(m.ligne.design||depDesignation(m.ligne.ref),255),
+      Qte_Retenue:q,Article_Manquant:_trunc(m.requis.join(' ; '),255),ID_Regle:regle.ID||null,
+      Client:_trunc(ctx.client||'',255),ID_BC:ctx.idBC||null,N_BC:_trunc(ctx.numBC||'',255),N_BL:_trunc(ctx.numBL||'',255),ID_Session:ctx.idSession||null,
+      Source:ctx.source||'',Vendeur:_trunc(ctx.vendeur||'',255),Statut:retenu?'À prévenir':'Livré sans requis',Motif:ctx.motif||'',Message:msg};
+    try{const r=await spPost(DEP_SITE,'Prevenances_Client',body);DATA.prevenances=[{...body,...r,ID:r.ID??r.Id,Created:new Date().toISOString()},...(DATA.prevenances||[])];n++;}
+    catch(e){toast('🔴 « Client à prévenir » non enregistré : '+e.message,'ko');}
+  }
+  try{renderPrevenances();}catch(e){}
+  if(n&&retenu)toast(`📞 ${n} article${n>1?'s':''} retenu${n>1?'s':''} — client à prévenir (Vue Matin)`);
+  return n;
+}
+
+// ── Bloc « 📞 Clients à prévenir » (Vue Matin) ──
+function _depGroupes(){
+  const g=new Map();
+  (DATA.prevenances||[]).filter(p=>(p.Statut&&p.Statut.Value||p.Statut)==='À prévenir').forEach(p=>{
+    const k=[_depNorm(p.Client),_depNorm(p.N_BC),_depNorm(p.N_BL)].join('|');
+    if(!g.has(k))g.set(k,[]);g.get(k).push(p);
+  });
+  return [...g.values()].sort((a,b)=>String(a[0].Created||'').localeCompare(String(b[0].Created||'')));
+}
+function _depGroupeDe(id){return _depGroupes().find(g=>g.some(p=>p.ID===id))||null;}
+function depMessageGroupe(g){
+  if(g.length===1&&g[0].Message)return g[0].Message;
+  const p0=g[0];
+  const regle=(DATA.regles||[]).find(r=>r.ID===p0.ID_Regle);
+  const lignes=g.map(p=>{
+    const req=String(p.Article_Manquant||'').split(/\s*;\s*/).filter(Boolean).map(x=>`${x}${depDesignation(x)?' '+depDesignation(x):''}`).join(' ou ');
+    return `- ${_depQ(p.Qte_Retenue)} × ${p.Article_Retenu||p.Title}${p.Designation?' '+p.Designation:''} (embase ${req})`;
+  });
+  return depRendreMessage(regle&&regle.Message_Client,{client:p0.Client,numBC:p0.N_BC,numBL:p0.N_BL},lignes);
+}
+// BC du groupe : par ID, sinon par N° BL (alertes créées par le portail Scan)
+function _depBC(p){
+  if(p.ID_BC)return (DATA.suivi||[]).find(x=>x.ID===Number(p.ID_BC))||null;
+  const bl=_depNorm(p.N_BL);if(!bl)return null;
+  return (DATA.suivi||[]).find(x=>_depNorm(f(x,'N_x00b0_BL'))===bl)||null;
+}
+function _depEmailClient(g){
+  const bc=_depBC(g[0]);
+  return bc?(f(bc,'Email_Client')||'').trim():'';
+}
+function renderPrevenances(){
+  const host=document.getElementById('matin-prevenir');
+  const groupes=_depGroupes();
+  const badge=document.getElementById('badge-prevenir');
+  if(badge){badge.textContent=groupes.length;badge.style.display=groupes.length?'':'none';}
+  if(!host)return;
+  if(_depListesAbsentes){
+    host.innerHTML=_depEstNicolas()?`<div style="border:1px dashed #fdba74;background:#fff7ed;border-radius:var(--radius-sm);padding:10px 12px;margin:0 0 14px;font-size:12.5px;color:#7c2d12;display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+      <span style="flex:1">🔗 Règles de dépendance (robinet → embase) : les listes SharePoint ne sont pas encore créées. Le contrôle est inactif.</span>
+      <button class="btn navy" style="height:28px" onclick="depCreerListes()">🛠 Créer les listes et les 4 règles</button></div>`:'';
+    return;
+  }
+  if(!groupes.length){host.innerHTML='';return;}
+  host.innerHTML=`<div class="sd"><h2>📞 Clients à prévenir</h2><span class="site-tag rp">Articles retenus par une règle (ex. robinet sans embase)</span><div class="sd-line"></div>${_depEstNicolas()?'<button class="btn" onclick="depOuvrirRegles()">⚙️ Règles</button>':''}</div>
+    <div style="display:flex;flex-direction:column;gap:10px;margin-bottom:18px">${groupes.map(g=>{
+      const p=g[0],id=p.ID,mail=_depEmailClient(g),_bc=_depBC(p);
+      if(!p.N_BC&&_bc)p.N_BC=f(_bc,'Title');
+      if(!p.Vendeur&&_bc)p.Vendeur=f(_bc,'Vendeurencharge');
+      const depuis=p.Created?fmtDate(p.Created):'';
+      return`<div style="border:1px solid #fdba74;border-left:5px solid #ea580c;background:#fff7ed;border-radius:var(--radius-sm);padding:10px 12px">
+        <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;font-size:13px">
+          <strong style="color:#7c2d12">${_escD(p.Client||'Client ?')}</strong>
+          ${p.N_BC?`<span class="mono">BC ${_escD(p.N_BC)}</span>`:''}${p.N_BL?`<span class="mono">· BL ${_escD(p.N_BL)}</span>`:''}
+          <span style="color:var(--text-muted);font-size:12px">· ${_escD(p.Vendeur||'vendeur ?')}${depuis?' · retenu le '+depuis:''}${p.Source?' · '+_escD(p.Source):''}</span>
+        </div>
+        <div style="font-size:12.5px;margin:6px 0">${g.map(x=>`⏸ <strong>${_depQ(x.Qte_Retenue)} × <span class="mono">${_escD(x.Article_Retenu||x.Title)}</span></strong> ${_escD(x.Designation||'')} — manque <span class="mono">${_escD(x.Article_Manquant||'')}</span>`).join('<br>')}</div>
+        <textarea id="dep-msg-${id}" rows="9" style="width:100%;box-sizing:border-box;padding:8px;border:1px solid #fdba74;border-radius:6px;font-family:var(--font-body);font-size:12.5px;background:#fff">${_escD(depMessageGroupe(g))}</textarea>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:6px">
+          <button class="btn navy" style="height:30px" onclick="depCopier(${id})">📋 Copier le message</button>
+          ${mail?`<button class="btn" style="height:30px" onclick="depMail(${id})">✉️ Ouvrir un mail</button>`:''}
+          <button class="btn" style="height:30px;background:var(--green);color:#fff;border-color:var(--green)" onclick="depPrevenu(${id})">✅ Client prévenu</button>
+          <button class="btn" style="height:30px;margin-left:auto" title="Erreur : aucun article n'a été retenu" onclick="depAnnuler(${id})">✕ Annuler</button>
+        </div></div>`;}).join('')}</div>`;
+}
+async function depCopier(id){
+  const t=document.getElementById('dep-msg-'+id);if(!t)return;
+  try{await navigator.clipboard.writeText(t.value);}catch(e){t.select();document.execCommand('copy');}
+  toast('📋 Message copié — colle-le dans WhatsApp, un SMS ou un mail');
+}
+function depMail(id){
+  const g=_depGroupeDe(id);if(!g)return;
+  const mail=_depEmailClient(g),t=document.getElementById('dep-msg-'+id);
+  const sujet=`Votre commande ${g[0].N_BC||''}${g[0].N_BL?' — BL '+g[0].N_BL:''} : articles en attente`;
+  location.href=`mailto:${encodeURIComponent(mail)}?subject=${encodeURIComponent(sujet)}&body=${encodeURIComponent(t?t.value:depMessageGroupe(g))}`;
+}
+async function _depMajGroupe(id,statut,extra){
+  const g=_depGroupeDe(id);if(!g)return;
+  const user=sessionStorage.getItem('user_name')||'';
+  try{
+    for(const p of g){
+      const body={Statut:statut,...(extra||{})};
+      if(statut==='Prévenu'){body.Prevenu_Par=_trunc(user,255);body.Date_Prevenu=new Date().toISOString();}
+      await spPatch(DEP_SITE,'Prevenances_Client',p.ID,body);Object.assign(p,body);
+    }
+    renderPrevenances();
+    toast(statut==='Prévenu'?`✅ ${g[0].Client||'Client'} prévenu`:'Alerte retirée');
+  }catch(e){toast('🔴 '+e.message,'ko');}
+}
+function depPrevenu(id){const t=document.getElementById('dep-msg-'+id);return _depMajGroupe(id,'Prévenu',t?{Message:t.value}:null);}
+async function depAnnuler(id){
+  if(!await showConfirm('Retirer cette alerte ?','À utiliser seulement si aucun article n\'a été retenu (erreur de saisie). Sinon, préviens le client puis clique « ✅ Client prévenu ».','Retirer','danger'))return;
+  return _depMajGroupe(id,'Annulé');
+}
+
 // ═══ GETTERS VUE MATIN ═══
 function getMatinTraiter(){
   return DATA.suivi.filter(i=>{
@@ -5812,6 +6149,7 @@ function renderAlertesSuiviClient(){
 
 function renderAll(){
   buildMapEmailClient();
+  try{renderPrevenances();}catch(e){console.warn('[prevenances]',e);}
   try{renderAlertesSuiviClient();}catch(e){console.warn('[suiviClient]',e);}
   renderBandeauPriorite();
   const fV=getFilterVendeur(),fC=getFilterClient();
@@ -10607,7 +10945,24 @@ function dvAfficher(r,num){
   b.querySelectorAll('.dv-ck,.dv-qte').forEach(el=>el.addEventListener('input',maj));
   document.getElementById('dv-all').addEventListener('change',e=>{b.querySelectorAll('.dv-ck').forEach(c=>c.checked=e.target.checked);maj();});
   maj();
-  document.getElementById('dv-go').onclick=()=>{
+  document.getElementById('dv-go').onclick=async()=>{
+    // Règles de dépendance : robinet sans embase dans la sélection + le BC
+    if(depReglesActives().length){
+      const sel=[];
+      r.lignes.forEach((l,i)=>{
+        if(!document.querySelector(`.dv-ck[data-i="${i}"]`).checked)return;
+        const q=parseFloat(document.querySelector(`.dv-qte[data-i="${i}"]`).value)||0;if(q<=0)return;
+        sel.push({ref:(document.querySelector(`.dv-ref[data-i="${i}"]`).value||'').trim(),design:l.desCat||l.des,qte:q});
+      });
+      const bcLignes=[...document.querySelectorAll('#m-lignes-list .m-ligne-existing, #m-lignes-new .m-ligne-new')].map(row=>({
+        ref:(row.querySelector('.m-l-ref, .m-l-ref-new')?.value||'').trim(),qte:parseFloat(row.querySelector('.m-l-qc, .m-l-qc-new')?.value)||0}));
+      const mq=verifierDependances([...sel,...bcLignes.map(x=>({...x,horsDevis:true}))]).filter(m=>!m.ligne.horsDevis);
+      if(mq.length){
+        const rep=await depAlerte(mq,{contexte:'devis'});
+        if(!rep)return;
+        if(rep.choix==='ajouter')mq.forEach(m=>mAddLigneRowPrefilled(m.requis[0],depDesignation(m.requis[0]),m.manque,{ql:0,titre:`Embase ajoutée (règle ${m.ligne.ref})`}));
+      }
+    }
     let n=0;
     r.lignes.forEach((l,i)=>{
       if(!document.querySelector(`.dv-ck[data-i="${i}"]`).checked)return;
@@ -11850,6 +12205,31 @@ async function openTraiterModal(id,numBC,client){
         mToutLivre();
       }
     }
+    // ── Règles de dépendance (ex. robinet sans embase) : contrôlé AVANT toute écriture ──
+    // BL saisi → articles de la colonne Livré ; préparation sans BL → reste à livrer.
+    const _depPrev=[];let _depRetPrep=null;
+    {
+      const _avecBL=blEffectif&&_rowsAll.some(r=>(parseFloat(_qlEl(r)?.value)||0)>0);
+      const _depMode=_avecBL?'bl':(!blEffectif&&document.getElementById('m-prep')?.checked?'prep':null);
+      if(_depMode&&depReglesActives().length){
+        const _lig=_rowsAll.map(r=>{const qc=_qcVal(r),ql=parseFloat(_qlEl(r)?.value)||0;
+          return{row:r,ref:(r.querySelector('.m-l-ref, .m-l-ref-new')?.value||'').trim(),design:(r.querySelector('.m-l-design, .m-l-design-new')?.value||'').trim(),qte:_depMode==='bl'?ql:Math.max(0,qc-ql)};});
+        const _sxBL=_depMode==='bl'?findSessionByBL(blEffectif):null;
+        const _mq=(_sxBL&&_estStatutFinal(_sxBL))?[]:verifierDependances(_lig).filter(m=>!depDejaTranche(m,id,_depMode==='bl'?blEffectif:''));
+        if(_mq.length){
+          const rep=await depAlerte(_mq,{contexte:_depMode==='bl'?'traiter':'prep'});
+          if(!rep||rep.choix==='ajouter'){
+            _rowsAll[0]?.closest('.sec')?.classList.add('open');
+            throw new Error(rep?'Ajoute l\'embase dans les articles (et sur le BL Image), puis Valider.':'Enregistrement annulé.');
+          }
+          if(rep.choix==='retenir'){
+            if(_depMode==='bl')_mq.forEach(m=>{const el=_qlEl(m.ligne.row);if(el){el.value=Math.max(0,(parseFloat(el.value)||0)-m.aRetenir);el.style.border='2px solid #ea580c';}try{mMajStockRow(m.ligne.row);}catch(e){}});
+            else{_depRetPrep=new Map();_mq.forEach(m=>{const k=_depNorm(m.ligne.ref);_depRetPrep.set(k,(_depRetPrep.get(k)||0)+m.aRetenir);});}
+          }
+          _depPrev.push({manques:_mq,statut:rep.choix==='retenir'?'À prévenir':'Livré sans requis',motif:rep.motif||'',source:_depMode==='bl'?'Traiter':'Préparation (Traiter)'});
+        }
+      }
+    }
     const _modePartiel=_rowsAll.some(r=>(parseFloat(_qlEl(r)?.value)||0)>0);
     if(Object.keys(body).length)
     try{
@@ -11992,6 +12372,10 @@ async function openTraiterModal(id,numBC,client){
     // Préparation à l'avance SANS N° BL : session provisoire PREP-BC-<N° BC>
     let _prepMsg='';
     if(!blEffectif&&prepCheck){
+      if(_depRetPrep)for(let k=_lignesPrep.length-1;k>=0;k--){
+        const x=_lignesPrep[k],key=_depNorm(x.ref),n=_depRetPrep.get(key)||0;if(!n)continue;
+        const ret=Math.min(n,x.ral);x.ral-=ret;_depRetPrep.set(key,n-ret);if(x.ral<=0)_lignesPrep.splice(k,1);
+      }
       try{
         const _bcPrep=DATA.suivi.find(i=>i.ID===id)||currentItem;
         const _ex=sessionPrepBC(_bcPrep);
@@ -12015,6 +12399,14 @@ async function openTraiterModal(id,numBC,client){
         console.warn('[Traiter] PJ BC',e);
         toast('🔴 Le BC n\'a pas pu être joint : '+e.message+' — réessaie depuis Traiter.','ko');
       }
+    }
+
+    // Articles retenus par une règle → bloc « Clients à prévenir » (ou trace du « livrer quand même »)
+    for(const p of _depPrev){
+      try{await depEnregistrer(p.manques,{source:p.source,statut:p.statut,motif:p.motif,
+        client:DATA.clients?.[clientId||currentItem.ClientId]||client||'',idBC:id,numBC:titre||numBC,numBL:blEffectif||'',
+        idSession:sessionLiee?(sessionLiee.ID??sessionLiee.Id):null,vendeur:vendeur||f(currentItem,'Vendeurencharge')||''});}
+      catch(e){console.warn('[depEnregistrer]',e);}
     }
 
     // Libellés lisibles des champs modifiés — affichés dans la confirmation
@@ -13861,6 +14253,24 @@ async function emettreBL(){
     if(errQte)throw new Error('Quantité obligatoire pour chaque article saisi.');
   }
 
+  // Règles de dépendance (robinet sans embase…) — avant l'envoi au flux
+  let _depMq=[],_depRep=null;
+  if(!isInv&&lignes.length&&depReglesActives().length){
+    _depMq=verifierDependances(lignes);
+    if(_depMq.length){
+      _depRep=await depAlerte(_depMq,{contexte:'emission'});
+      if(!_depRep)throw new Error('Émission annulée.');
+      if(_depRep.choix==='ajouter')throw new Error('Ajoute l\'embase dans les articles (et sur le BL Image), puis Valider.');
+      if(_depRep.choix==='retenir'){
+        // Retire les quantités retenues de ce qui part au magasin (et du BC suffixé)
+        const ret=new Map();_depMq.forEach(m=>{const k=_depNorm(m.ligne.ref);ret.set(k,(ret.get(k)||0)+m.aRetenir);});
+        const retirer=arr=>{if(!arr)return;const r2=new Map(ret);for(let k=arr.length-1;k>=0;k--){const x=arr[k],key=_depNorm(x.ref),n=r2.get(key)||0;if(!n)continue;const q=Math.min(n,x.qte);x.qte-=q;r2.set(key,n-q);if(x.qte<=0)arr.splice(k,1);}};
+        retirer(lignes);if(selBC)retirer(selBC.lignes);
+        if(selBC&&!selBC.lignes.length)throw new Error('Tous les articles cochés sont retenus : rien à livrer sur ce BL.');
+      }
+    }
+  }
+
   const titre=isInv?`${numero} - Inventaire`:`${numero} - ${client}`;
   const payload={
     Titre:titre,
@@ -13892,6 +14302,11 @@ async function emettreBL(){
   if(selBC){
     try{_split=await emLancerSplit(selBC,numero);}
     catch(e){toast('🔴 BC suffixé non créé : '+e.message+' — utilise « Livrer le reste » dans Livraisons Partielles','ko');}
+  }
+  if(_depRep&&_depMq.length){
+    const _bcE=selBC?(DATA.suivi||[]).find(x=>x.ID===selBC.rootId):null;
+    await depEnregistrer(_depMq,{source:'Nouveau BL',statut:_depRep.choix==='retenir'?'À prévenir':'Livré sans requis',motif:_depRep.motif,
+      client,idBC:_bcE?_bcE.ID:null,numBC:_bcE?f(_bcE,'Title'):'',numBL:numero,vendeur});
   }
   if(_split)return `${numero} — ${client} — BL créé · ${_split} en cours de création (${selBC.lignes.length} article${selBC.lignes.length>1?'s':''})`;
 
@@ -14255,8 +14670,23 @@ async function faireBCPreparer(bcId){
   const bc=(DATA.suivi||[]).find(x=>x.ID===bcId);
   if(!bc){toast('🔴 BC introuvable — actualise','ko');return;}
   if(sessionPrepBC(bc)){toast('Une préparation existe déjà pour ce BC');return;}
-  const ral=lignesRALduBC(bc);
+  let ral=lignesRALduBC(bc);
   if(!ral.length){toast('Aucun article restant à livrer sur ce BC','ko');return;}
+  // Règles de dépendance (robinet sans embase…)
+  let _depMq=[],_depRep=null;
+  if(depReglesActives().length){
+    _depMq=verifierDependances(ral.map(x=>({x,ref:f(x.l,'R_x00e9_f_x00e9_rence')||'',design:f(x.l,'Produit_x002f_D_x00e9_signation')||'',qte:x.ral})));
+    if(_depMq.length){
+      _depRep=await depAlerte(_depMq,{contexte:'prep'});
+      if(!_depRep)return;
+      if(_depRep.choix==='ajouter'){toast('Ajoute l\'embase au BC (Traiter → Articles), puis relance « Faire préparer ».');return;}
+      if(_depRep.choix==='retenir'){
+        _depMq.forEach(m=>{m.ligne.x.ral-=m.aRetenir;});
+        ral=ral.filter(x=>x.ral>0);
+        if(!ral.length){await depEnregistrer(_depMq,{source:'Faire préparer',statut:'À prévenir',client:getClient(bc)||'',idBC:bc.ID,numBC:f(bc,'Title'),vendeur:f(bc,'Vendeurencharge')||''});toast('Rien d\'autre à préparer : client à prévenir (Vue Matin)');return;}
+      }
+    }
+  }
   const ref=refPrepBC(bc);
   const client=getClient(bc)||'';
   const ok=await showConfirm('📦 Faire préparer sans BL',
@@ -14266,7 +14696,9 @@ async function faireBCPreparer(bcId){
     '📦 Envoyer au magasin','submit');
   if(!ok)return;
   try{
-    const {n}=await creerSessionPrepBC(bc,ral.map(x=>({ref:f(x.l,'R_x00e9_f_x00e9_rence')||'',design:f(x.l,'Produit_x002f_D_x00e9_signation')||'',ral:x.ral})),'');
+    const {n,sess:_sessP}=await creerSessionPrepBC(bc,ral.map(x=>({ref:f(x.l,'R_x00e9_f_x00e9_rence')||'',design:f(x.l,'Produit_x002f_D_x00e9_signation')||'',ral:x.ral})),'');
+    if(_depRep&&_depMq.length)await depEnregistrer(_depMq,{source:'Faire préparer',statut:_depRep.choix==='retenir'?'À prévenir':'Livré sans requis',motif:_depRep.motif,
+      client:getClient(bc)||'',idBC:bc.ID,numBC:f(bc,'Title'),numBL:ref,idSession:_sessP?_sessP.ID:null,vendeur:f(bc,'Vendeurencharge')||''});
     toast(`📦 ${ref} envoyé au magasin — ${n} article${n>1?'s':''} à préparer`,'ok');
     try{renderPreparations();updateBadges();}catch(e){}
     openBCPanel(bcId);
