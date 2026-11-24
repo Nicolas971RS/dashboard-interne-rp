@@ -1953,7 +1953,8 @@ function rxBadge(g){
   const qui=x.sess.Repris_Par||x.sess.Magasinier||'';
   let b=x.fait?(x.nEc?`<span class="art-b ko">⚠ ${x.nEc} écart${x.nEc>1?'s':''}</span>`:`<span class="art-b ok">✓ conforme${x.nReg||x.nAcc?' après régul.':''}</span>`)+(x.nRel?` <span class="art-b warn" title="Articles non reçus, toujours attendus sur le BC">📦 ${x.nRel} reliquat${x.nRel>1?'s':''}</span>`:''):x.cours?`<span class="art-b warn">🔄 ${esc(qui||'en cours')}</span>`:'<span class="art-b mute">à prendre</span>';
   if(x.fait&&qui)b+=` <span class="muted" style="font-size:11px">${esc(qui)}</span>`;
-  if(x.fait&&rxPeutReg()&&(g.premierF||x.sess.Title===g.key))b+=` <button class="btn sm" data-rxrouv="${esc(g.key)}" title="Contrôle validé par erreur ou fiche incomplète : remettre la fiche au magasin pour un nouveau comptage">↺ Rouvrir</button>`;
+  // affiché sur chaque BC de la fiche (une fiche peut couvrir plusieurs BC du même fournisseur)
+  if(x.fait&&rxPeutReg()&&x.sess)b+=` <button class="btn sm" data-rxrouv="${esc(g.key)}" title="Contrôle validé par erreur ou fiche incomplète : remettre la fiche au magasin pour un nouveau comptage">↺ Rouvrir</button>`;
   if(x.fait&&rxPeutReg()&&(g.premierF||x.sess.Title===g.key)){const n=rxSuggestions(x.sess).length;if(n)b+=` <button class="btn sm primary" data-rxratall="${esc(g.key)}" title="Ces « non prévus » correspondent à des articles du BC mis en reliquat">🔗 Rattacher au BC (${n})</button>`;}
   if(x.fait&&x.nVerTot&&!RX.verKo){const fin=x.nVer>=x.nVerTot;b+=` <span class="art-b ${fin?'ok':'mute'}" title="Lignes vérifiées au bureau">☑ ${x.nVer}/${x.nVerTot}</span>`;
     const nc=rxConformesNonVer(x).length;if(nc&&rxPeutReg())b+=` <button class="btn sm" data-rxverok="${esc(g.key)}" title="Cocher d’un coup les ${nc} lignes conformes pas encore vérifiées">☑ Conformes (${nc})</button>`;}
