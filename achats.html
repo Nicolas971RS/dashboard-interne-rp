@@ -1464,16 +1464,16 @@ function artEcartHtml(g){
   if(g.manq.length)return `<span class="art-b warn" title="Dépose le PDF dans « Bon de commande » puis Commandes › importer">BC ${g.manq.join(', ')} à importer</span>`;
   if(!g.ec)return '<span class="art-b mute">valeur à saisir</span>';
   const x=g.rx;
-  if(x&&x.fait&&x.dFac){const D=x.dFac,rel=x.nRel?` <span class="art-b warn" title="${esc(x.reliquats.map(r=>`${r.rp||r.ref} ${r.des} : ${fmtQ(r.q)}`).join('\n'))}">📦 ${x.nRel} reliquat${x.nRel>1?'s':''}</span>`:'';
+  if(x&&x.fait&&x.dFac){const D=x.dFac,rel=x.nRel?` <span class="art-b warn" title="${esc(x.reliquats.map(r=>`${r.rp||r.ref} ${r.des} : ${fmtQ(r.q)}`).join('\n'))}">⏳ ${x.nRel} reliquat${x.nRel>1?'s':''}</span>`:'';
     const tip=`Facture (valeur SIFA) ${fmtN(g.vm,2)} € · valeur livrée ${fmtN(x.vLivre,2)} € (quantités reçues × prix du BC) · total du BC ${fmtN(g.totBC,2)} €`;
-    if(D.ok)return `<span class="art-b ok" title="${esc(tip)}">✓ conforme au livré${Math.abs(D.d)>=0.01?` (${D.d>0?'+':''}${fmtN(D.d,2)} €)`:''}</span>${rel}`;
-    return `<span class="art-b ${D.d>0?'ko':'warn'}" title="${esc(tip+(D.d>0?' — facturé plus que reçu : manquant à réclamer, ou hausse de prix / frais':' — facturé moins que reçu : écart de prix ou remise'))}">${D.d>0?'⚠':'ℹ'} ${D.d>0?'+':''}${fmtN(D.d,2)} €${D.pct!=null?` · ${D.d>0?'+':''}${fmtN(D.pct,1)} %`:''} · ${D.d<0?'facturé en moins que livré':'facturé de plus que livré'}</span>${rel}`;}
-  if(g.ec.ok)return `<span class="art-b ok">✓ conforme${Math.abs(g.ec.d)>=0.01?` (${g.ec.d>0?'+':''}${fmtN(g.ec.d,2)} €)`:''}</span>${g.partiel?` <span class="art-b mute" title="${g.partiel.rel?'Ce conteneur livre le reste à livrer du BC (livraisons précédentes déduites)':'Seule une partie du BC est dans ce conteneur : le reste est en reliquat'}">${g.partiel.rel?'reste du BC':`partiel ${g.partiel.k}/${g.partiel.n}`}</span>`:''}`;
+    if(D.ok)return `<span class="art-b ok" title="${esc(tip)}">✓ facture = livré${Math.abs(D.d)>=0.01?` (${D.d>0?'+':''}${fmtN(D.d,2)} €)`:''}</span>${rel}`;
+    return `<span class="art-b ${D.d>0?'ko':'warn'}" title="${esc(tip+(D.d>0?' — facturé plus que reçu : manquant à réclamer, ou hausse de prix / frais':' — facturé moins que reçu : écart de prix ou remise'))}">${D.d>0?'⚠':'ℹ'} ${D.d>0?'+':''}${fmtN(D.d,2)} €${D.pct!=null?` · ${D.d>0?'+':''}${fmtN(D.pct,1)} %`:''} · ${D.d<0?'facturé de moins que le livré':'facturé de plus que le livré'}</span>${rel}`;}
+  if(g.ec.ok)return `<span class="art-b ok" title="Facture (valeur SIFA) = valeur attendue dans ce conteneur, à la tolérance près">✓ facture = attendu${Math.abs(g.ec.d)>=0.01?` (${g.ec.d>0?'+':''}${fmtN(g.ec.d,2)} €)`:''}</span>${g.partiel?` <span class="art-b mute" title="${g.partiel.rel?'Ce conteneur livre le reste à livrer du BC (livraisons précédentes déduites)':'Seule une partie du BC est dans ce conteneur : le reste est en reliquat'}">${g.partiel.rel?'solde du BC':`${g.partiel.k}/${g.partiel.n} articles dans ce conteneur`}</span>`:''}`;
   const se=g.partiel?null:artSousEnsemble(g);
-  const pc=g.partiel?` <span class="art-b mute" title="Quantités ajustées pour ce conteneur">partiel ${g.partiel.k}/${g.partiel.n}</span>`:'';
+  const pc=g.partiel?` <span class="art-b mute" title="Quantités ajustées pour ce conteneur">${g.partiel.k}/${g.partiel.n} articles dans ce conteneur</span>`:'';
   if(se)return `<span class="art-b warn" title="La valeur SIFA correspond exactement à ${se.k} article(s) du BC : les autres sont sans doute des reliquats, pas encore expédiés">📦 envoi partiel : ${se.k}/${se.n} articles</span>`;
-  const sens=g.ec.d>0?'facturé plus que commandé : hausse de prix, fret ou frais facturés ?':'facturé moins que commandé : reliquat, remise, échantillons ?';
-  return `<span class="art-b ko" title="${esc(sens)}">⚠ ${g.ec.d>0?'+':''}${fmtN(g.ec.d,2)} €${g.ec.pct!=null?` · ${g.ec.pct>0?'+':''}${fmtN(g.ec.pct,1)} %`:''} · ${g.ec.d<0?'facturé en moins':'facturé en plus'}</span>`+pc;
+  const sens=g.ec.d>0?'facturé plus que l’attendu dans ce conteneur : hausse de prix, fret ou frais facturés ?':'facturé moins que l’attendu dans ce conteneur : reliquat à exclure (mettre 0 dans « Attendu dans ce conteneur »), remise, échantillons ?';
+  return `<span class="art-b ko" title="${esc(sens)}">⚠ ${g.ec.d>0?'+':''}${fmtN(g.ec.d,2)} €${g.ec.pct!=null?` · ${g.ec.pct>0?'+':''}${fmtN(g.ec.pct,1)} %`:''} · ${g.ec.d<0?'facturé de moins que l’attendu':'facturé de plus que l’attendu'}</span>`+pc;
 }
 // ═══ ARC LIGNE PAR LIGNE : prix / quantité confirmés, gardés sur Lignes_Commande_Frs (Prix_ARC, Qte_ARC, Ecart_ARC) ═══
 // Ecart_ARC : « ok », « prix », « qte », « prix,qte », « mtt » ou « absent ». Sans ces colonnes, repli sur la ligne [ARC] du commentaire.
@@ -1593,7 +1593,7 @@ function renderArts(){
     ${tile('BC du conteneur',`${nBC-nMan}<small> / ${nBC}</small>`,nMan?`<b>${nMan}</b> à importer dans Commandes`:'tous dans le portail ✓',nMan?'warn':'ok')}
     ${tile('Articles attendus',fmtN(nArt,0),`${fmtN(nQ,0)} unités au total`)}
     ${tile('Contrôle des montants',nKo?`${nKo}<small> écart${nKo>1?'s':''}</small>`:ctr.length?'✓':'—',`${nOk}/${G.length} conforme${nOk>1?'s':''} · tolérance ${fmtN(t.pct,0)} % ou ${fmtN(t.eur,0)} €`,nKo?'ko':ctr.length===G.length?'ok':'')}
-    ${tile('Commandé ↔ déclaré',ctr.length?`${totVM-totBC>0?'+':''}${fmtN(totVM-totBC,2)} €`:'—',ctr.length?`${Math.abs(totVM-totBC)>=0.01?`<b>facturé ${fmtEur(Math.abs(totVM-totBC))} ${totVM<totBC?'de moins':'de plus'} que le BC</b><br>`:''}BC ${fmtEur(totBC)} · SIFA ${fmtEur(totVM)} (${ctr.length} contrôlé${ctr.length>1?'s':''})`:'aucun BC contrôlable',ctr.length&&Math.abs(totVM-totBC)>Math.max(t.eur,Math.abs(totBC)*t.pct/100)?'ko':ctr.length?'ok':'')}
+    ${tile('Attendu ↔ facturé',ctr.length?`${totVM-totBC>0?'+':''}${fmtN(totVM-totBC,2)} €`:'—',ctr.length?`${Math.abs(totVM-totBC)>=0.01?`<b>facturé ${fmtEur(Math.abs(totVM-totBC))} ${totVM<totBC?'de moins':'de plus'} que l’attendu dans ce conteneur</b><br>`:''}attendu ${fmtEur(totBC)} · SIFA ${fmtEur(totVM)} (${ctr.length} contrôlé${ctr.length>1?'s':''})`:'aucun BC contrôlable',ctr.length&&Math.abs(totVM-totBC)>Math.max(t.eur,Math.abs(totBC)*t.pct/100)?'ko':ctr.length?'ok':'')}
     ${tMag}
   </div>`;
   if(RXON)h+=rxBandeau(G,rs,lecture);
@@ -1614,7 +1614,7 @@ function renderArts(){
         const qe=artQteEnvoi(a),qb=n0(a.Quantite);
         const env=!rxc&&se?(se.ids.has(a.ID)?'sug-in':'sug-out'):(!rxc&&g.partiel?(qe<=0?'out':qe<qb?'part':'in'):'');
         const livTot=(()=>{const s0=artSuivi(a,W&&W.id);return s0.actif&&s0.reste<=0;})();   // rien à recevoir : déjà livré avant, ce n'est pas un reliquat
-        const envTag=livTot&&(env==='out'||env==='sug-out'||(rxc&&r&&r.hors))?`<span class="env-t in" title="Les ${fmtQ(qb)} ont déjà été livrés (avant ce conteneur) : il ne reste rien à recevoir sur cette ligne.">✓ déjà livré</span>`:{'sug-in':'<span class="env-t in">📦 dans l’envoi SIFA</span>','sug-out':'<span class="env-t out">reliquat probable</span>','out':'<span class="env-t out">reliquat : pas dans ce conteneur</span>','part':`<span class="env-t part">partiel : ${fmtQ(qe)} / ${fmtQ(qb)}</span>`,'in':'<span class="env-t in">📦 dans ce conteneur</span>'}[env]||'';
+        const envTag=livTot&&(env==='out'||env==='sug-out'||(rxc&&r&&r.hors))?`<span class="env-t in" title="Les ${fmtQ(qb)} ont déjà été livrés (avant ce conteneur) : il ne reste rien à recevoir sur cette ligne.">✓ déjà livré</span>`:{'sug-in':'<span class="env-t in">📦 dans l’envoi SIFA</span>','sug-out':'<span class="env-t out" title="La valeur SIFA correspond au BC sans cet article : il n’a sans doute pas été expédié">⏳ reliquat probable (d’après la valeur SIFA)</span>','out':'<span class="env-t out">⏳ reliquat : pas dans ce conteneur</span>','part':`<span class="env-t part">partiel : ${fmtQ(qe)} / ${fmtQ(qb)}</span>`,'in':'<span class="env-t in">📦 dans ce conteneur</span>'}[env]||'';
         return `<tr${i===0?' class="first"':''}${r&&r.cls?` data-rxc="${r.cls}"`:''}${r&&r.ver?' data-ver="1"':''}${ar&&ar.etat!=='ok'?' data-arc="ko"':''}${env?` data-env="${env}"`:''}><td class="mono">${i===0?esc(b.n):''}</td><td class="mono"><b>${esc(a.Ref_2||'')}</b></td><td class="mono muted">${esc(a.Title||'')}</td><td>${esc(a.Designation||'')}${(pxNote(a)||{}).ajout?` <span class="art-b warn" title="Ajouté à la main par ${esc((pxNote(a)||{}).par||'')}">ajouté à la main</span>${!lecture&&!(RX.parCmd&&RX.parCmd.has(a.ID))?` <button class="btn sm" data-artdel="${a.ID}" title="Retirer cet article ajouté à la main">✕</button>`:''}`:''}${envTag}${r&&r.obs?`<div class="rx-obs">💬 ${esc(r.obs)}</div>`:''}${r&&r.regs?rxRegHtml(r.regs):''}</td><td class="r mono"><b>${fmtQ(n0(a.Quantite))}</b>${(()=>{const su=artSuivi(a,W.id);return su.actif&&(su.livre||su.route)?`<div class="sv-mini" title="Déjà livré : ${fmtQ(su.livre)}${su.route?' · en route dans un autre dossier : '+fmtQ(su.route):''}">reste ${fmtQ(su.reste)}</div>`:'';})()}</td><td class="muted">${esc(a.Unite||'')}</td>${pxCellHtml(a,ar,lecture)}${arcCellHtml(ar)}<td class="r mono">${fmtN(artMontant(a),2)}</td>${rxc?rxCells(r):(!lecture?`<td class="r"><input class="rxq ${artQteEnvoi(a)!==n0(a.Quantite)?'mod':''}" data-rxq="${a.ID}" inputmode="decimal" value="${fmtQ(artQteEnvoi(a))}"></td>`:'')}</tr>`;}).join('')).join('')+
       (x.extra||[]).map(l=>{const gr=estGratuit(l),att=gr?n0(l.Quantite_Attendue):0,rec=n0(l.Quantite_Scannee),ab=n0(l.Quantite_Abimee);
         const cls=gr?(x.fait?(ab?'ab':rec<att?'man':rec>att?'exc':'ok'):(rec?'cours':'gr')):'exc';
@@ -1757,10 +1757,10 @@ function rxLigneArt(x,a){
   return {recu,ab,ec,acc,regs,ver:rxVer(l),vid:L[0].ID,ph:!!l.Attachments,id:l.ID,obs:l.Observation||'',fait:x.fait,cls:x.fait?(acc?'ok':ab>0?'ab':ec<0?'rel':ec>0?'exc':'ok'):(recu>0?'cours':'')};
 }
 function rxCells(r){
-  if(r&&r.hors)return `<td colspan="5" class="muted" style="font-size:11.5px">${r.dejaLivre?'déjà livré avant ce conteneur':'reliquat : pas dans ce conteneur'}</td>`;
+  if(r&&r.hors)return `<td colspan="5" class="muted" style="font-size:11.5px">${r.dejaLivre?'✓ déjà livré avant ce conteneur':'⏳ reliquat : pas dans ce conteneur'}</td>`;
   if(!r||r.recu===null)return '<td class="r muted">—</td><td></td><td></td><td></td><td></td>';
   const ecart=r.ec!==0||r.ab>0,nr=(r.regs||[]).length;
-  let ecB=!r.fait?(r.recu?'<span class="art-b mute">en cours</span>':''):r.acc&&ecart?'<span class="art-b ok" title="Écart accepté sans litige">✓ accepté</span>':r.ec===0&&!r.ab?(nr?'<span class="art-b ok" title="Conforme après régularisation">✓ régularisé</span>':'<span class="art-b ok">✓</span>'):r.ec<0?`<span class="art-b warn" title="Pas reçu dans ce conteneur : reste attendu sur le BC (reliquat). S’il a été facturé, l’écart apparaît sur la ligne du haut (facture / valeur livrée).">📦 reliquat ${fmtQ(-r.ec)}</span>`:r.ec>0?`<span class="art-b warn">+${fmtQ(r.ec)}</span>`:`<span class="art-b ko">abîmé ${fmtQ(r.ab)}</span>`;
+  let ecB=!r.fait?(r.recu?'<span class="art-b mute">en cours</span>':''):r.acc&&ecart?'<span class="art-b ok" title="Écart accepté sans litige">✓ accepté</span>':r.ec===0&&!r.ab?(nr?'<span class="art-b ok" title="Conforme après régularisation">✓ régularisé</span>':'<span class="art-b ok">✓</span>'):r.ec<0?`<span class="art-b warn" title="Pas reçu dans ce conteneur : reste attendu sur le BC (reliquat). S’il a été facturé, l’écart apparaît sur la ligne du haut (facture / valeur livrée).">⏳ reliquat ${fmtQ(-r.ec)}</span>`:r.ec>0?`<span class="art-b warn">+${fmtQ(r.ec)}</span>`:`<span class="art-b ko">abîmé ${fmtQ(r.ab)}</span>`;
   if(r.fait&&(ecart||nr)&&rxPeutReg())ecB+=` <button class="btn sm" data-rxreg="${r.id}" title="Régulariser : corriger l’attendu, le recompte, rattacher au BC ou accepter l’écart">✏️</button>`;
   return `<td class="r mono"><b>${fmtQ(r.recu)}</b></td><td class="r mono">${r.ab?`<b style="color:#b91c1c">${fmtQ(r.ab)}</b>`:''}</td><td style="white-space:nowrap">${ecB}</td><td>${r.ph?`<button class="btn sm" data-rxph="${r.id}" title="Voir les photos">📷</button>`:''}</td>${rxVerCell(r)}`;
 }
@@ -1987,13 +1987,13 @@ async function rxVerMaj(lines,on){
 function rxBadge(g){
   const x=g.rx;if(!x.sess)return '<span class="art-b mute">non envoyé</span>';
   const qui=x.sess.Repris_Par||x.sess.Magasinier||'';
-  let b=x.fait?(x.nEc?`<span class="art-b ko">⚠ ${x.nEc} écart${x.nEc>1?'s':''}</span>`:`<span class="art-b ok">✓ conforme${x.nReg||x.nAcc?' après régul.':''}</span>`)+(x.nRel?` <span class="art-b warn" title="Articles non reçus, toujours attendus sur le BC">📦 ${x.nRel} reliquat${x.nRel>1?'s':''}</span>`:''):x.cours?`<span class="art-b warn">🔄 ${esc(qui||'en cours')}</span>`:'<span class="art-b mute">à prendre</span>';
-  if(x.fait&&qui)b+=` <span class="muted" style="font-size:11px">${esc(qui)}</span>`;
+  let b=x.fait?(x.nEc?`<span class="art-b ko">⚠ ${x.nEc} écart${x.nEc>1?'s':''}</span>`:`<span class="art-b ok" title="Le comptage du magasin correspond à ce qui était attendu">✓ comptage OK${x.nReg||x.nAcc?' après régul.':''}</span>`)+(x.nRel?` <span class="art-b warn" title="Articles non reçus, toujours attendus sur le BC">⏳ ${x.nRel} reliquat${x.nRel>1?'s':''}</span>`:''):x.cours?`<span class="art-b warn">🔄 ${esc(qui||'en cours')}</span>`:'<span class="art-b mute">à prendre</span>';
+  if(x.fait&&qui)b+=` <span class="muted" style="font-size:11px">compté par ${esc(qui)}</span>`;
   // affiché sur chaque BC de la fiche (une fiche peut couvrir plusieurs BC du même fournisseur)
   if(x.fait&&rxPeutReg()&&x.sess)b+=` <button class="btn sm" data-rxrouv="${esc(g.key)}" title="Contrôle validé par erreur ou fiche incomplète : remettre la fiche au magasin pour un nouveau comptage">↺ Rouvrir</button>`;
   if(x.fait&&rxPeutReg()&&(g.premierF||x.sess.Title===g.key)){const n=rxSuggestions(x.sess).length;if(n)b+=` <button class="btn sm primary" data-rxratall="${esc(g.key)}" title="Ces « non prévus » correspondent à des articles du BC mis en reliquat">🔗 Rattacher au BC (${n})</button>`;}
-  if(x.fait&&x.nVerTot&&!RX.verKo){const fin=x.nVer>=x.nVerTot;b+=` <span class="art-b ${fin?'ok':'mute'}" title="Lignes vérifiées au bureau">☑ ${x.nVer}/${x.nVerTot}</span>`;
-    const nc=rxConformesNonVer(x).length;if(nc&&rxPeutReg())b+=` <button class="btn sm" data-rxverok="${esc(g.key)}" title="Cocher d’un coup les ${nc} lignes conformes pas encore vérifiées">☑ Conformes (${nc})</button>`;}
+  if(x.fait&&x.nVerTot&&!RX.verKo){const fin=x.nVer>=x.nVerTot;b+=` <span class="art-b ${fin?'ok':'mute'}" title="Lignes vérifiées au bureau">☑ ${x.nVer}/${x.nVerTot} vérifiées</span>`;
+    const nc=rxConformesNonVer(x).length;if(nc&&rxPeutReg())b+=` <button class="btn sm" data-rxverok="${esc(g.key)}" title="Cocher d’un coup les ${nc} lignes conformes pas encore vérifiées">☑ Cocher les ${nc} ligne${nc>1?'s':''} sans écart</button>`;}
   if(!x.fait&&!(W.lecture)&&(g.premierF||x.sess.Title===g.key))b+=` <button class="btn sm" data-grnew="${esc(g.key)}" title="Ajouter un article gratuit (non facturé) attendu dans ce conteneur">🎁 ＋</button>`;
   if(x.lit)b+=` <a href="#" role="button" class="art-b ${litOuvert(x.lit)?'warn':'mute'} lit-b" data-litid="${x.lit.ID}" title="Ouvrir le suivi du litige">${esc(x.lit.Title)} · ${esc(x.lit.Statut||'')}</a>`;
   else if(x.fait&&x.nEc&&!(W.lecture))b+=` <button class="btn sm danger" data-litnew="${esc(g.key)}">Ouvrir un litige</button>`;
@@ -4936,11 +4936,11 @@ function cmdEtat(c){
   if(dk(c,'Date_Reception'))return {k:'recue',lbl:`Reçue le ${fmtD(dk(c,'Date_Reception'))}`,cls:'st-ok',ouverte:false};
   const SV=cmdSuivi(c);
   if(a&&(dk(a,'Date_Entrepot')||estHisto(a))){
-    if(SV.actif&&SV.nReste>0&&!/^Sold/i.test(c.Statut||''))return {k:'reliquat',lbl:`Reliquat : ${SV.nReste} article${SV.nReste>1?'s':''} à recevoir`,cls:'st-prep',ouverte:true,a};
+    if(SV.actif&&SV.nReste>0&&!/^Sold/i.test(c.Statut||''))return {k:'reliquat',lbl:`⏳ Reliquat : ${SV.nReste} article${SV.nReste>1?'s':''} à recevoir`,cls:'st-prep',ouverte:true,a};
     if(SV.actif&&SV.nReste===0&&!/^Sold/i.test(c.Statut||''))return {k:'asolder',lbl:'Tout livré · à solder',cls:'st-valid',ouverte:true,a};
     return {k:'recue',lbl:dk(a,'Date_Entrepot')?`Reçue le ${fmtD(dk(a,'Date_Entrepot'))} (${a.Title})`:`Reçue (${a.Title})`,cls:'st-ok',ouverte:false,a};}
   if(a){const eta=dk(a,'ETA_Port');return {k:'route',lbl:`Expédiée · ${a.Title}${eta?' · ETA '+fmtD(eta):''}${SV.actif&&SV.nReste>0?' · reliquat à suivre':''}`,cls:'st-transit',ouverte:true,a};}
-  if(SV.actif&&SV.livre>0&&!/^Sold/i.test(c.Statut||''))return SV.nReste>0?{k:'reliquat',lbl:`Reliquat : ${SV.nReste} article${SV.nReste>1?'s':''} à recevoir`,cls:'st-prep',ouverte:true}:{k:'asolder',lbl:'Tout livré · à solder',cls:'st-valid',ouverte:true};
+  if(SV.actif&&SV.livre>0&&!/^Sold/i.test(c.Statut||''))return SV.nReste>0?{k:'reliquat',lbl:`⏳ Reliquat : ${SV.nReste} article${SV.nReste>1?'s':''} à recevoir`,cls:'st-prep',ouverte:true}:{k:'asolder',lbl:'Tout livré · à solder',cls:'st-valid',ouverte:true};
   if(/^Sold/i.test(c.Statut||''))return {k:'recue',lbl:'Soldée',cls:'st-ok',ouverte:false};
   if(dk(c,'Date_Dispo_Prevue')){const dd=dk(c,'Date_Dispo_Prevue');const ret=dd<t;return {k:'dispo',lbl:`Dispo annoncée le ${fmtD(dd)}`,cls:'st-prep',ouverte:true,alerte:ret?{lvl:'a',txt:`Dispo annoncée dépassée de ${daysBetween(dd,t)} j, pas encore dans un extrait`}:null};}
   if(dk(c,'Date_BPA'))return {k:'bpa',lbl:imp?'BPA envoyé · dispo à confirmer':'BPA envoyé · livraison attendue',cls:'st-prep',ouverte:true};
@@ -5238,20 +5238,21 @@ function renderCommandes(){
   const t=todayKey();
   const tous=DATA.cmd.map(c=>({c,e:cmdEtat(c)}));
   const ouv=tous.filter(x=>x.e.ouverte);
-  const k={arc:ouv.filter(x=>x.e.k==='cmd').length,bpa:ouv.filter(x=>x.e.k==='arc').length,route:ouv.filter(x=>['bpa','dispo','route'].includes(x.e.k)).length,al:ouv.filter(x=>x.e.alerte).length};
+  const k={arc:ouv.filter(x=>x.e.k==='cmd').length,bpa:ouv.filter(x=>x.e.k==='arc').length,fourn:ouv.filter(x=>['bpa','dispo'].includes(x.e.k)).length,route:ouv.filter(x=>x.e.k==='route').length,al:ouv.filter(x=>x.e.alerte).length};
   const nAval=typeof daPeutValider==='function'&&daPeutValider()?(DATA.da||[]).filter(d=>d.Statut==='À valider').length:0;
   const cnt=$('cntCmd');if(cnt){cnt.style.display=k.al?'':'none';cnt.textContent=k.al;}
   const F=CMDV.fichiers;const aImp=cmdAImporter();
-  const filtres=[['cours','En cours',x=>x.e.ouverte],['nonchif','💶 Non chiffrés',x=>!!cmdChiffrage(x.c)],['cmd','ARC attendu',x=>x.e.k==='cmd'],['arc','BPA à envoyer',x=>x.e.k==='arc'],['route','En route',x=>['bpa','dispo','route'].includes(x.e.k)],['alertes','⚠ Alertes',x=>!!x.e.alerte],['recue','Reçues',x=>x.e.k==='recue'],['tout','Toutes',()=>true]];
+  const filtres=[['cours','En cours',x=>x.e.ouverte],['nonchif','💶 Non chiffrés',x=>!!cmdChiffrage(x.c)],['cmd','ARC attendu',x=>x.e.k==='cmd'],['arc','BPA à envoyer',x=>x.e.k==='arc'],['fourn','Chez le fournisseur',x=>['bpa','dispo'].includes(x.e.k)],['route','Expédiées',x=>x.e.k==='route'],['alertes','⚠ Alertes',x=>!!x.e.alerte],['recue','Reçues',x=>x.e.k==='recue'],['tout','Toutes',()=>true]];
   const fl=filtres.find(f=>f[0]===CMDV.filtre)||filtres[0];
   const q=CMDV.q.trim().toLowerCase();
   const rows=tous.filter(fl[2]).filter(x=>!q||[x.c.Title,x.c.Fournisseur,x.c.Objet,...cmdLignes(x.c.ID).map(l=>l.Title+' '+l.Designation+' '+(l.Ref_2||''))].join(' ').toLowerCase().includes(q))
     .sort((a,b)=>(!!b.e.alerte-!!a.e.alerte)||String(dk(b.c,'Date_Commande')).localeCompare(String(dk(a.c,'Date_Commande')))||b.c.ID-a.c.ID);
   box.innerHTML=`
-    <div class="kpis">${[
+    <div class="kpis ra-k5">${[
       {l:'ARC attendus',v:k.arc,h:'commandes sans accusé',c:'var(--amber)'},
       {l:'BPA à envoyer',v:k.bpa,h:'ARC reçu, bon pour accord à donner',c:'var(--violet)'},
-      {l:'En route',v:k.route,h:'BPA envoyé, chez le transitaire ou en mer',c:'var(--blue)'},
+      {l:'Chez le fournisseur',v:k.fourn,h:'BPA envoyé, en préparation ou dispo annoncée',c:'var(--blue)'},
+      {l:'Expédiées',v:k.route,h:'dans un conteneur (extrait SIFA reçu)',c:'var(--teal,#00897b)'},
       {l:'Alertes',v:k.al,h:'relance ou BPA en retard',c:'var(--red)'}].map(x=>`<div class="kpi" style="--c:${x.c}"><div class="lab">${x.l}</div><div class="val">${x.v}</div><div class="hint">${x.h}</div></div>`).join('')}</div>
     ${(()=>{const lim=addDays(t,-CMDV.joursSolde);const vieux=ouv.filter(x=>['cmd','arc','bpa','dispo'].includes(x.e.k)&&(dk(x.c,'Date_Commande')||t)<lim);
       const prixKo=(DATA.cmd||[]).filter(c=>c.Lien_BC&&cmdLignes(c.ID).some(l=>l.Prix_Unitaire==null&&l.Remise!=null&&l.Montant_HT!=null));
@@ -5307,7 +5308,7 @@ function artLigneEtat(l,c,e){
   const x=artLigneCont(l,c);if(!x)return e;
   const reste=artSuivi(l,x.a.ID).reste,nom=x.a.Conteneur||x.a.Title;
   if(x.q==null){if(reste>0)return e;x.q=0;}   // quantité par défaut = reste à livrer ; rien à livrer → pas dans ce conteneur
-  if(x.q<=0)return reste>0?{...e,k:'reliquat',lbl:`Reliquat · pas dans ${nom}`,cls:'st-prep',horsCont:true}:{...e,k:'recue',lbl:'Déjà livré',cls:'st-ok',ouverte:false,horsCont:true};
+  if(x.q<=0)return reste>0?{...e,k:'reliquat',lbl:`⏳ Reliquat · pas dans ${nom}`,cls:'st-prep',horsCont:true}:{...e,k:'recue',lbl:'Déjà livré',cls:'st-ok',ouverte:false,horsCont:true};
   if(x.q<reste)return {...e,lbl:`Expédiée · ${fmtQ(x.q)} dans ${nom} · ${fmtQ(reste-x.q)} en reliquat`};
   return e;
 }
@@ -6981,7 +6982,7 @@ SCHEMA.Articles_Reappro=['ID','Title',...RA_LISTE.map(x=>x[0]),'Modified'];ESSEN
 Object.entries(RA_COLS).forEach(([l,c])=>c.forEach(([n])=>{if(!SCHEMA[l].includes(n))SCHEMA[l].push(n);}));
 Object.assign(PARAM_DEFAUTS,{REAPPRO_COUV_MINI_MOIS:1.5,REAPPRO_VTES_MIN_12M:6,REAPPRO_MOIS_ACTIFS_MIN:3,REAPPRO_FREQ_IMPORT_J:30,REAPPRO_FREQ_LOCAL_J:7,REAPPRO_SURSTOCK_MOIS:6,REAPPRO_PLAFOND_PIC:2,REAPPRO_MOIS_RECENTS:6,REAPPRO_EXPORT_VIEUX_J:2});
 const RA_TYPES=['Tubes','Assemblage','Spéciale'];
-const RA_ETATS={rupture:['Rupture','#c62828','#ffebee'],sousmini:['Sous le mini','#e65100','#fff3e0'],acmd:['À commander','#1565c0','#e8f2fd'],ok:['OK','#2e7d32','#e8f5e9'],surstock:['Surstock','#6a1b9a','#f3e5f5'],irregulier:['Irrégulier','#546e7a','#eef1f6'],ancien:['Plus vendu depuis 6 mois','#795548','#efebe9'],dormant:['Dormant','#795548','#efebe9'],inactif:['Sans vente','#90a4ae','#f4f6f9'],exclu:['Exclu','#90a4ae','#f4f6f9'],na:['Absent de l’export','#90a4ae','#f4f6f9']};
+const RA_ETATS={rupture:['Rupture','#c62828','#ffebee'],sousmini:['Sous le mini','#e65100','#fff3e0'],acmd:['À commander','#1565c0','#e8f2fd'],ok:['OK','#2e7d32','#e8f5e9'],surstock:['Surstock','#6a1b9a','#f3e5f5'],irregulier:['Irrégulier','#546e7a','#eef1f6'],ancien:['Plus vendu depuis 6 mois','#795548','#efebe9'],dormant:['Dormant (stock sans vente)','#795548','#efebe9'],inactif:['Sans stock ni vente','#90a4ae','#f4f6f9'],exclu:['Exclu','#90a4ae','#f4f6f9'],na:['Absent de l’export','#90a4ae','#f4f6f9']};
 let RA_ERR='';
 const RAV={vue:null,exp:null,expP:null,expErr:'',fic:null,ficErr:'',sel:new Set(),ouv:null,filtre:'acmd',type:'',q:'',prep:new Map(),com:'',revue:null,dec:new Map(),ajouts:[],miniEd:new Map(),
   artEd:new Map(),artF:'suivis',artQ:'',artFrs:'',artLim:300,artNonVal:true,artEntete:false,nosplit:new Set(),transit:new Map(),artIdx:new Map(),cache:null,adj:new Map(),adjAdd:new Map(),colEd:new Map()};
@@ -7207,7 +7208,7 @@ function raListeKpi(G,ed){
   return `<div class="card ra-kcard"><div class="ra-kbar"><b>${K[0]}</b> · ${R.length} article${R.length>1?'s':''} chez ${frs.length} fournisseur${frs.length>1?'s':''}${v?' · '+raEur(v):''}
     <span style="flex:1"></span>${ed&&nonCoches.length?`<button class="btn sm" data-rakpisel="${esc(frs.join(','))}" title="Seuls les fournisseurs cochés partent chez Fabrice">☑ Cocher ces ${frs.length} fournisseurs</button>`:''}<button class="btn sm ghost" data-rakpi="${RAV.kpi}">✕ Fermer</button></div>
     ${RAV.kpi==='ralnc'?`<div class="muted" style="padding:6px 12px">Quantités déjà vendues (BC clients du Dashboard) que le stock et les commandes en cours ne couvrent pas. La quantité proposée en tient compte (👤) ; la colonne « RAL clients » donne le détail au survol.${(i=>i.length?` <span class="ra-nc" data-tip="${esc(i.slice(0,25).map(x=>`${x.ref} : ${raN0(x.q)} (${x.det.map(d=>d.bc).join(', ')})`).join(' · '))}">⚠ ${i.length} référence${i.length>1?'s':''} en reste à livrer absente${i.length>1?'s':''} de l’export Image</span>`:'')(ralInconnues())}</div>`:''}
-    ${R.length?`<div class="ra-scroll"><table class="ra-t">${raEnteteArt(ed,'prep')}<tbody>${R.slice(0,400).map(r=>raLigneArt(r,ed,'prep')).join('')}</tbody></table></div>${R.length>400?`<div class="muted" style="padding:6px 10px">… ${R.length-400} autres : affine avec la recherche.</div>`:''}`:'<div class="muted" style="padding:10px">Aucun article.</div>'}</div>`;
+    ${R.length?`<div class="ra-scroll"><table class="ra-t">${raEnteteArt(ed,'prep')}<tbody>${R.slice(0,400).map(r=>raLigneArt(r,ed,'prep')).join('')}</tbody></table></div>${R.some(r=>r.qteCli>0)?'<div class="muted" style="font-size:11.5px;padding:4px 12px">👤 = la quantité proposée inclut du reste à livrer à des clients (détail au survol de la quantité).</div>':''}${R.length>400?`<div class="muted" style="padding:6px 10px">… ${R.length-400} autres : affine avec la recherche.</div>`:''}`:'<div class="muted" style="padding:10px">Aucun article.</div>'}</div>`;
 }
 function raDetailFrs(g){
   const ed=raPeutPreparer();
@@ -7219,10 +7220,10 @@ function raDetailFrs(g){
   const lim=F==='tous'?400:R.length;
   return `<div class="ra-dt"><div class="filters" style="margin:0 0 8px">${[['acmd','À commander'],['suivis','Articles suivis'],['tous','Tout le fournisseur']].map(([k,l])=>`<button class="chip ${F===k?'on':''}" data-rafiltre="${k}">${l}</button>`).join('')}
     <span class="muted" style="font-size:12px;align-self:center">Délai ${raDelai(g.f,g.typ)} j + cycle ${raFreq(g.f,g.typ)} j · ${R.length} article${R.length>1?'s':''}${auto?(nAcmd?' · recherche : tous les articles suivis qui correspondent':' · rien à commander : articles suivis affichés'):''}</span></div>
-    ${R.length?`<div class="ra-scroll"><table class="ra-t">${raEnteteArt(ed,'prep')}<tbody>${R.slice(0,lim).map(r=>raLigneArt(r,ed,'prep')).join('')}</tbody></table></div>${R.length>lim?`<div class="muted" style="margin-top:6px">… ${R.length-lim} autres : utilise la recherche.</div>`:''}`:'<div class="muted">Rien à commander chez ce fournisseur. Choisis « Articles suivis » pour tout voir.</div>'}</div>`;
+    ${R.length?`<div class="ra-scroll"><table class="ra-t">${raEnteteArt(ed,'prep')}<tbody>${R.slice(0,lim).map(r=>raLigneArt(r,ed,'prep')).join('')}</tbody></table></div>${R.some(r=>r.qteCli>0)?'<div class="muted" style="font-size:11.5px;padding:4px 12px">👤 = la quantité proposée inclut du reste à livrer à des clients (détail au survol de la quantité).</div>':''}${R.length>lim?`<div class="muted" style="margin-top:6px">… ${R.length-lim} autres : utilise la recherche.</div>`:''}`:'<div class="muted">Rien à commander chez ce fournisseur. Choisis « Articles suivis » pour tout voir.</div>'}</div>`;
 }
 function raEnteteArt(ed,mode){
-  return `<thead><tr><th>Réf.</th><th>Désignation</th><th>Type</th><th class="r">Stock</th><th class="r" data-tip="En commande dans Image (BC passés, pas encore reçus). Dessous : les BC fournisseurs ouverts du portail qui contiennent l’article, avec leur étape ; clic pour ouvrir le BC. ⚠ : la quantité d’Image ne correspond pas au reste à recevoir des BC du portail.">En cde</th><th class="r" data-tip="Reste à livrer aux clients d’après les BC du Dashboard (détail au survol). « manque » : le stock et les commandes en cours ne couvrent pas. Ajouté à la quantité proposée (👤).">RAL clients</th><th class="r" data-tip="Stock + en commande − réservé + demandes de stock en cours">Dispo</th><th class="r" data-tip="Moyenne mensuelle des 11 mois complets, pic écrêté">Vtes/mois</th><th class="r" data-tip="Stock mini validé (✓) ou proposé (1,5 mois de ventes)">Mini</th><th class="r" data-tip="Disponible ÷ ventes mensuelles">Couv.</th><th class="r">Proposé</th>${mode==='prep'?'<th class="r">Qté</th>':'<th class="r">Patricia</th><th class="r">Décision</th>'}<th>Fournisseur</th><th>Client</th><th class="r">Montant</th>${mode==='prep'&&ed?'<th></th>':''}</tr></thead>`;
+  return `<thead><tr><th>Réf.</th><th>Désignation</th><th>Type</th><th class="r">Stock</th><th class="r" data-tip="En commande dans Image (BC passés, pas encore reçus). Dessous : les BC fournisseurs ouverts du portail qui contiennent l’article, avec leur étape ; clic pour ouvrir le BC. ⚠ : la quantité d’Image ne correspond pas au reste à recevoir des BC du portail.">En cde</th><th class="r" data-tip="Reste à livrer aux clients d’après les BC du Dashboard (détail au survol). « manque » : le stock et les commandes en cours ne couvrent pas. Ajouté à la quantité proposée (👤).">Reste à livrer<br>clients</th><th class="r" data-tip="Stock + en commande − réservé + demandes de stock en cours. Ce qui est déjà promis aux clients (colonne précédente) n’est pas retiré ici, mais l’est pour la couverture, l’état et la quantité proposée.">Dispo</th><th class="r" data-tip="Moyenne mensuelle des 11 mois complets, pic écrêté">Vtes/mois</th><th class="r" data-tip="Stock mini validé (✓) ou proposé (1,5 mois de ventes)">Mini</th><th class="r" data-tip="Nombre de mois de ventes couverts : (disponible − reste à livrer clients) ÷ ventes mensuelles">Couv.<br>(mois)</th><th class="r">Proposé</th>${mode==='prep'?'<th class="r">Qté</th>':'<th class="r">Patricia</th><th class="r">Décision</th>'}<th>Fournisseur</th><th>Client</th><th class="r">Montant</th>${mode==='prep'&&ed?'<th></th>':''}</tr></thead>`;
 }
 // Répartition client / stock : parts = [{cli,q}] ; le reste du total va au stock (même modèle que l'onglet Demandes : une ligne par destination)
 const raNum=v=>{const x=parseNum(String(v??'').trim());return x>0?x:0;};
