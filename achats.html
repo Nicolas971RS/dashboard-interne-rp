@@ -6235,9 +6235,9 @@ function payVuePayer(p){
       return `<tbody><tr class="pay-g pay-gtg ${o?'open':''}" data-paygtg="${esc(g.nom)}" title="${auto?'':o?'Replier':'Voir le détail'}">${ed?`<td>${gNP.length?`<input type="checkbox" data-payselgrp="${esc(g.nom)}" ${gSel?'checked':''} title="Cocher les factures à payer de ce fournisseur">`:''}</td>`:''}<td class="pay-chev">${auto?'':o?'▾':'▸'}</td><td colspan="2"><b class="pay-gn">${esc(g.nom)}</b> <span class="muted">${g.R.length} facture${g.R.length>1?'s':''}</span></td><td class="r muted">${payEur(gD)}</td><td class="r"><b>${payEur(gT)}</b></td><td>${etat}</td></tr>${g.R.map(({f,l})=>{const v=vv(l);const P=payPaieProp(p,l);const rs=payResteLigne(p,l);
       return `<tr class="${payReliquat(f)&&!P.length?'pay-rel':''}${PAYV.psel.has(l.ID)?' pay-sel':''}"${o?'':' style="display:none"'}>${ed?`<td>${rs>0.005?`<input type="checkbox" data-paysel="${l.ID}" data-payg="${esc(g.nom)}" ${PAYV.psel.has(l.ID)?'checked':''}>`:''}</td>`:''}<td>${payPdf(f)}</td><td class="mono">${esc(l.Title)}${l.Reliquat==='Oui'?' <span class="pay-tag">reliquat</span>':''}${l.Decision==='Partiel'?' <span class="pay-tag p">partiel</span>':''}</td><td>${payEchBadge(f)}</td><td class="r muted">${payEur(+l.Montant_Du||0)}</td><td class="r"><b>${payEur(v)}</b></td>
       <td>${P.map(x=>`<span class="pay-ok" data-tip="${esc((x.Mode||'')+(x.Banque?' · '+x.Banque:''))}">✓ ${payEur(+x.Montant||0)} le ${fmtD(dk(x,'Date_Paiement'))}</span>${x.Banque?` <span class="pay-bqtag">${payBqLogo(x.Banque,13)}${esc(x.Banque)}</span>`:''}${ed?` <button class="btn ghost sm" data-paysup="${x.ID}" data-tip="Annuler ce paiement" style="padding:0 4px">✕</button>`:''}`).join('<br>')}
-        ${ed&&rs>0.005?`${P.length?'<br>':''}<button class="btn sm primary" data-paypay="${l.ID}">💸 Payé</button> <button class="btn ghost sm" data-payautre="${l.ID}" data-tip="Payer un autre montant">✏️</button>`:''}</td></tr>`;}).join('')}</tbody>`;}).join('')}</table>
+        ${ed&&rs>0.005?`${P.length?'<br>':''}<button class="btn sm primary" data-paypay="${l.ID}">💸 Payé</button> <button class="btn ghost sm" data-payautre="${l.ID}" data-tip="Payer un autre montant">✏️</button> <button class="btn ghost sm" data-payrep="${l.ID}" data-tip="Ne pas payer ce mois-ci : reporter au mois prochain (motif obligatoire)">⏸</button>`:''}</td></tr>`;}).join('')}</tbody>`;}).join('')}</table>
     ${ed&&reste.length?`<div class="pay-foot pay-stick"><div class="pay-sum"><span>Sélection <b>${selL.length}</b> ligne${selL.length>1?'s':''} · <b>${payEur(selT)}</b></span><span class="muted" style="font-size:12.5px">le ${fmtD(dP)} · ${esc(PAYV.modeP||'Virement')}${PAYV.banque?' · '+payBqLogo(PAYV.banque,14)+'<b>'+esc(PAYV.banque)+'</b>':' · <span class="pay-bqmiss">⚠ banque non choisie</span>'}</span>${selL.length?'<a href="#" data-payselraz="1" style="font-size:12.5px">✕ vider</a>':''}</div><button class="btn primary" data-payact="selpayer" ${selL.length?'':'disabled'}>💸 Marquer payé la sélection</button></div>`:''}
-    ${R.length?`<details class="pay-aut"><summary>⏸ Reportées par Fabrice (${R.length}) — reviendront dans la prochaine proposition</summary><table class="pay-t">${R.map(l=>{const f=payFacById(l.ID_Facture)||{};return `<tr><td style="width:28px">${f.ID?payPdf(f):''}</td><td>${esc(l.Fournisseur||'')}</td><td class="mono">${esc(l.Title)}</td><td class="r">${payEur(+l.Montant_Du||0)}</td></tr>`;}).join('')}</table></details>`:''}
+    ${R.length?`<details class="pay-aut" ${R.some(payRepMot)?'open':''}><summary>⏸ Reportées (${R.length}) — reviendront dans la prochaine proposition</summary><table class="pay-t">${R.map(l=>{const f=payFacById(l.ID_Facture)||{};const m=payRepMot(l);return `<tr><td style="width:28px">${f.ID?payPdf(f):''}</td><td>${esc(l.Fournisseur||'')}</td><td class="mono">${esc(l.Title)}</td><td class="r">${payEur(+l.Montant_Du||0)}</td><td style="font-size:12px">${m?`<span class="muted">${esc(m.qui)} le ${esc(m.date)} :</span> ${esc(m.motif)}`:'<span class="muted">par Fabrice à la validation</span>'}</td><td style="width:40px">${ed&&m&&p.Statut==='Validée'?`<button class="btn ghost sm" data-payunrep="${l.ID}" data-tip="Annuler le report : remettre à payer">↺</button>`:''}</td></tr>`;}).join('')}</table></details>`:''}
     </div></div>`;
 }
 function payBqSuivi(p){
@@ -6431,6 +6431,31 @@ async function payPayerSelection(){
     if(err.length)toast(`🔴 ${err.length} paiement(s) en échec : ${err[0].message}`,'ko');else toast(`✓ ${L.length} paiements enregistrés${o.banque?' ('+o.banque+')':''}`,'ok');
     await payClotureAuto(p);}
   catch(e){toast('🔴 '+e.message,'ko');}finally{busyOff();renderPaiements();}
+}
+// Report en cours de paiement (Monique) : Decision → Reporter + trace « [Reporté par X le JJ/MM/AAAA (était D) : motif] » dans Commentaire
+const PAY_REP_RX=/\[Reporté par ([^\]]*?) le (\d{2}\/\d{2}\/\d{4}) \(était ([^)]*)\) : ([^\]]*)\]/;
+const payRepMot=l=>{const m=String(l.Commentaire||'').match(PAY_REP_RX);return m?{qui:m[1],date:m[2],avant:m[3],motif:m[4]}:null;};
+async function payReporterLigne(id){
+  const p=payPropOuverte();const l=(DATA.lprop||[]).find(x=>x.ID===+id);if(!p||!l)return;
+  const f=payFacById(l.ID_Facture)||{};const P=payPaieProp(p,l);
+  const ok=await showConfirm('⏸ Reporter au mois prochain',`<div>${esc(l.Fournisseur||payNom(f))} · <b class="mono">${esc(l.Title)}</b> — reste <b>${payEur(payResteLigne(p,l))}</b></div>
+    ${P.length?`<div class="fac-note" style="margin-top:8px">Déjà ${payEur(P.reduce((s,x)=>s+(+x.Montant||0),0))} payés sur cette ligne : ils restent enregistrés, seul le reste est reporté.</div>`:''}
+    <div class="f" style="margin-top:10px"><label>Motif du report <b style="color:var(--red)">*</b></label><input id="prMot" maxlength="150" placeholder="ex. : à régler le mois prochain, accord fournisseur…"></div>
+    <div class="muted" style="font-size:12px;margin-top:8px">La facture n’est pas payée ce mois-ci. Elle revient dans la prochaine proposition, marquée « Reliquat ». Le motif reste visible dans « Reportées ».</div>`,'⏸ Reporter','danger');
+  if(!ok)return;const mot=(($('prMot')||{}).value||'').trim();
+  if(mot.length<3){toast('🔴 Motif obligatoire : rien n’a été reporté','ko');return;}
+  const com=_trunc(`${(l.Commentaire||'').replace(PAY_REP_RX,'').trim()} [Reporté par ${payUser()} le ${fmtD(todayKey())} (était ${l.Decision||'Payer'}) : ${mot.replace(/[\[\]]/g,'')}]`.trim(),255);
+  try{const b={Decision:'Reporter',Commentaire:com};await spPatch('Lignes_Proposition',l.ID,b,l);Object.assign(l,b);PAYV.psel.delete(l.ID);
+    try{logAction('Paiement reporté','Lignes_Proposition',l.ID,'Decision','','Reporter',`${l.Fournisseur||''} ${l.Title} : ${mot}`);}catch(_){}toast('⏸ Reportée au mois prochain','ok');await payClotureAuto(p);}
+  catch(e){toast('🔴 '+e.message,'ko');}
+  renderPaiements();
+}
+async function payAnnulerReport(id){
+  const p=payPropOuverte();const l=(DATA.lprop||[]).find(x=>x.ID===+id);const m=l&&payRepMot(l);if(!p||!m)return;
+  if(!await showConfirm('Annuler le report',`Remettre <b class="mono">${esc(l.Title)}</b> (${esc(l.Fournisseur||'')}) dans les paiements du mois ?`,'↺ Remettre à payer'))return;
+  try{const b={Decision:m.avant==='Partiel'?'Partiel':'Payer',Commentaire:_trunc(String(l.Commentaire||'').replace(PAY_REP_RX,'').trim(),255)};await spPatch('Lignes_Proposition',l.ID,b,l);Object.assign(l,b);toast('↺ Remise à payer','ok');}
+  catch(e){toast('🔴 '+e.message,'ko');}
+  renderPaiements();
 }
 async function payClotureAuto(p){
   const reste=payLignesProp(p).filter(l=>l.Decision!=='Reporter'&&payResteLigne(p,l)>0.005);
@@ -6715,6 +6740,8 @@ document.addEventListener('click',e=>{
     if(d==='Partiel')setTimeout(()=>{const i=document.querySelector(`[data-paym="${lid}"]`);if(i){i.focus();i.select();}},30);return;}
   const gr=t.closest('[data-paygrp]');if(gr){const p=payPropOuverte();if(!p)return;payLignesProp(p).filter(l=>{const f=payFacById(l.ID_Facture)||{Fournisseur:l.Fournisseur};return payNom(f)===gr.dataset.paygn;}).forEach(l=>PAYV.dec.set(l.ID,{d:gr.dataset.paygrp,m:+l.Montant_Du||0}));renderPaiements();return;}
   const pp=t.closest('[data-paypay]');if(pp){payPayerLigne(pp.dataset.paypay,false);return;}
+  const prp=t.closest('[data-payrep]');if(prp){payReporterLigne(prp.dataset.payrep);return;}
+  const pur=t.closest('[data-payunrep]');if(pur){payAnnulerReport(pur.dataset.payunrep);return;}
   const pa=t.closest('[data-payautre]');if(pa){payPayerLigne(pa.dataset.payautre,true);return;}
   const ps=t.closest('[data-paysup]');if(ps){e.stopPropagation();paySupprimer(ps.dataset.paysup);return;}
   const pm=t.closest('[data-payman]');if(pm){payManuel(pm.dataset.payman);return;}
