@@ -5311,10 +5311,10 @@ const DEP_LISTES={
 const DEP_REGLES_INITIALES=[
   ['140Y025','146001','25'],['140Y032','146004','32'],['140Y040','146005','40'],['140Y050','146006','50']
 ];
-let _depListesAbsentes=false;
+let _depListesAbsentes=false,_depErreur='';
 
 const _depNorm=s=>String(s??'').trim().toUpperCase();
-function _depEstNicolas(){return /nicolas/i.test(sessionStorage.getItem('user_name')||'');}
+function _depEstNicolas(){let v='';try{v=vendeurConnecte()||'';}catch(e){}return /nicolas/i.test((sessionStorage.getItem('user_name')||'')+' '+v);}
 function depReglesActives(){
   return (DATA.regles||[]).filter(r=>r.Actif!==false&&r.Actif!==0&&String(r.Actif)!=='Non'&&_depNorm(r.Article_Principal)&&_depNorm(r.Article_Requis));
 }
@@ -5382,15 +5382,16 @@ function depRendreMessage(modele,ctx,lignesArticles){
 async function depCharger(){
   try{
     DATA.regles=await spFetch(DEP_SITE,'Regles_Dependance','$select=ID,Title,Article_Principal,Type_Correspondance,Article_Requis,Ratio,Message_Client,Actif&$top=500');
-    _depListesAbsentes=false;
+    _depListesAbsentes=false;_depErreur='';
   }catch(e){
     DATA.regles=[];
     _depListesAbsentes=/\b404\b|does not exist|n'existe pas/i.test(e.message);
+    _depErreur=_depListesAbsentes?'':'Regles_Dependance : '+e.message;
     if(!_depListesAbsentes)console.warn('[Regles_Dependance]',e.message);
   }
   try{
     DATA.prevenances=_depListesAbsentes?[]:await spFetch(DEP_SITE,'Prevenances_Client','$select=*&$orderby=ID desc&$top=500');
-  }catch(e){DATA.prevenances=[];console.warn('[Prevenances_Client]',e.message);}
+  }catch(e){DATA.prevenances=[];_depErreur=_depErreur||('Prevenances_Client : '+e.message);console.warn('[Prevenances_Client]',e.message);}
   try{renderPrevenances();}catch(e){console.warn('[renderPrevenances]',e);}
 }
 
@@ -5567,14 +5568,17 @@ function renderPrevenances(){
   const badge=document.getElementById('badge-prevenir');
   if(badge){badge.textContent=groupes.length;badge.style.display=groupes.length?'':'none';}
   if(!host)return;
-  if(_depListesAbsentes){
-    host.innerHTML=_depEstNicolas()?`<div style="border:1px dashed #fdba74;background:#fff7ed;border-radius:var(--radius-sm);padding:10px 12px;margin:0 0 14px;font-size:12.5px;color:#7c2d12;display:flex;align-items:center;gap:10px;flex-wrap:wrap">
-      <span style="flex:1">🔗 Règles de dépendance (robinet → embase) : les listes SharePoint ne sont pas encore créées. Le contrôle est inactif.</span>
-      <button class="btn navy" style="height:28px" onclick="depCreerListes()">🛠 Créer les listes et les 4 règles</button></div>`:'';
-    return;
-  }
-  if(!groupes.length){host.innerHTML='';return;}
-  host.innerHTML=`<div class="sd"><h2>📞 Clients à prévenir</h2><span class="site-tag rp">Articles retenus par une règle (ex. robinet sans embase)</span><div class="sd-line"></div>${_depEstNicolas()?'<button class="btn" onclick="depOuvrirRegles()">⚙️ Règles</button>':''}</div>
+  // Diagnostic (Nicolas seulement) : listes absentes, lecture en échec ou aucune règle active → contrôle inactif
+  const _diag=_depListesAbsentes?'les listes SharePoint ne sont pas encore créées'
+    :_depErreur?'lecture impossible — '+_depErreur.substring(0,220)+' (nom de colonne ?)'
+    :!depReglesActives().length?'aucune règle active dans Regles_Dependance':'';
+  const diagHtml=_diag?`<div style="border:1px dashed #fdba74;background:#fff7ed;border-radius:var(--radius-sm);padding:10px 12px;margin:0 0 14px;font-size:12.5px;color:#7c2d12;display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+      <span style="flex:1">🔗 Règles de dépendance (robinet → embase) : ${_escD(_diag)}. Le contrôle est inactif.</span>
+      ${_depErreur?'':`<button class="btn navy" style="height:28px" onclick="depCreerListes()">🛠 ${_depListesAbsentes?'Créer les listes et les 4 règles':'Ajouter les 4 règles robinet → embase'}</button>`}
+      ${_depListesAbsentes?'':'<button class="btn" style="height:28px" onclick="depOuvrirRegles()">⚙️ Ouvrir la liste</button>'}</div>`:'';
+  if(_depListesAbsentes||_depErreur){host.innerHTML=diagHtml;return;}
+  if(!groupes.length){host.innerHTML=diagHtml;return;}
+  host.innerHTML=diagHtml+`<div class="sd"><h2>📞 Clients à prévenir</h2><span class="site-tag rp">Articles retenus par une règle (ex. robinet sans embase)</span><div class="sd-line"></div>${_depEstNicolas()?'<button class="btn" onclick="depOuvrirRegles()">⚙️ Règles</button>':''}</div>
     <div style="display:flex;flex-direction:column;gap:10px;margin-bottom:18px">${groupes.map(g=>{
       const p=g[0],id=p.ID,mail=_depEmailClient(g),_bc=_depBC(p);
       if(!p.N_BC&&_bc)p.N_BC=f(_bc,'Title');
