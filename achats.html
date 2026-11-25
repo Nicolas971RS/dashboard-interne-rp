@@ -5293,9 +5293,11 @@ function artLigneCont(l,c){
   return {a,q:null,src:'defaut'};
 }
 function artLigneEtat(l,c,e){
-  if(!e||e.k!=='route')return e;
-  const x=artLigneCont(l,c);if(!x||x.q==null)return e;
+  // « Reçue » saisi sur le BC alors que le conteneur n'est pas encore arrivé : on regarde aussi l'article
+  if(!e||(e.k!=='route'&&e.k!=='recue'))return e;
+  const x=artLigneCont(l,c);if(!x)return e;
   const reste=artSuivi(l,x.a.ID).reste,nom=x.a.Conteneur||x.a.Title;
+  if(x.q==null){if(reste>0)return e;x.q=0;}   // quantité par défaut = reste à livrer ; rien à livrer → pas dans ce conteneur
   if(x.q<=0)return reste>0?{...e,k:'reliquat',lbl:`Reliquat · pas dans ${nom}`,cls:'st-prep',horsCont:true}:{...e,k:'recue',lbl:'Déjà livré',cls:'st-ok',ouverte:false,horsCont:true};
   if(x.q<reste)return {...e,lbl:`Expédiée · ${fmtQ(x.q)} dans ${nom} · ${fmtQ(reste-x.q)} en reliquat`};
   return e;
