@@ -1813,6 +1813,7 @@ async function rxRattacherTout(key){
 // Diagnostic affiché avant : lignes de la fiche liées au BC, lignes orphelines (ligne de BC supprimée, ex. BC réimporté), articles sans ligne.
 // Options : recréer les lignes manquantes (quantité attendue = quantité prévue pour l'envoi) ; supprimer les lignes orphelines non comptées.
 async function rxRouvrir(key){
+  if(W&&STATUTS_VERROU.includes(W.a.Statut)){toast(`Dossier ${W.a.Statut.toLowerCase()} : le contrôle ne peut pas être rouvert. Fabrice doit d’abord renvoyer le dossier.`,'ko');return;}
   const g=artsGroupes().find(x=>x.key===key);if(!g)return;g.rx=rxGroupe(g);const x=g.rx,sess=x.sess;if(!sess||!x.fait)return;
   const toutes=RX.lig.filter(l=>n0(l.Session_ScanId)===sess.ID);
   const grs=artsGroupes().filter(z=>z.fkey===sess.Title||z.key===sess.Title);   // une fiche peut couvrir plusieurs BC du même fournisseur
@@ -4993,6 +4994,12 @@ function cmdAImporter(){
 // ── Import ──
 // Enregistre un BC lu dans un PDF. BC déjà connu : les lignes sont MISES À JOUR (mêmes ID), pour garder le suivi
 // (déjà livré, fiches magasin, écarts ARC). Réimpression de reliquat : les quantités imprimées sont le reste à livrer.
+// Dossiers verrouillés (en validation, validés, clôturés) qui contiennent ce n° de BC
+function cmdDossiersVerrou(num){
+  const n=String(num||'').trim().replace(/^0+(?=\d)/,'');if(!n)return [];
+  const ids=new Set((DATA.lig||[]).filter(l=>l.Type_Ligne!=='Frais'&&bccNums(l.N_Commande).map(String).includes(n)).map(l=>l.ID_Arrivage));
+  return (DATA.arr||[]).filter(a=>ids.has(a.ID)&&STATUTS_VERROU.includes(a.Statut));
+}
 async function cmdEnregistrer(r,path,existante,opt){
   opt=opt||{};
   const fr=cmdFrsDe(r);
@@ -5009,6 +5016,9 @@ async function cmdEnregistrer(r,path,existante,opt){
     return {id,fr};
   }
   id=existante.ID;
+  // BC d'un dossier en validation, validé ou clôturé : rien n'est modifié (même règle que les montants verrouillés du dossier)
+  const verr=cmdDossiersVerrou(r.num);
+  if(verr.length)throw new Error(`BC ${r.num} non modifié : il fait partie du dossier ${verr.map(a=>a.N_Dossier||a.Title).join(', ')} (${verr[0].Statut.toLowerCase()}). Pour le corriger, Fabrice doit d’abord renvoyer le dossier.`);
   const anciennes=cmdLignes(id);const norm=x=>arcNorm(x||'');
   const reliq=!!(r.reliquat||opt.reliquat);
   const prises=new Set();
@@ -5033,8 +5043,10 @@ async function cmdEnregistrer(r,path,existante,opt){
         Quantite:l.qte,Unite:l.uni,Colis:l.colis,Prix_Unitaire:l.prix,Remise:l.rem,Montant_HT:l.mtt,Ordre:k}));
     }
   }
-  // lignes absentes du nouveau PDF
+  // lignes absentes du nouveau PDF (jamais supprimées si les fiches du magasin n'ont pas pu être lues : on ne saurait pas si elles ont été contrôlées)
+  const rxOk=!RX.err&&Array.isArray(RX.sess);
   for(const o of anciennes){if(prises.has(o.ID))continue;const su=artSuivi(o);
+    if(!rxOk&&!reliq)continue;
     if(reliq){const av=Math.max(0,Math.round((n0(o.Quantite)-su.recu-su.route)*1000)/1000);   // plus rien à livrer : entièrement livrée
       if(n0(o.Qte_Livree_Avant)!==av){const b={Qte_Livree_Avant:av};await spPatch('Lignes_Commande_Frs',o.ID,clean('Lignes_Commande_Frs',b),o);Object.assign(o,b);}}
     else if(!su.actif&&!(RX.parCmd&&RX.parCmd.has(o.ID))&&!o.Ecart_ARC&&!(pxNote(o)||{}).ajout)await spDelete('Lignes_Commande_Frs',o.ID,o);   // ligne retirée du BC, sans historique
