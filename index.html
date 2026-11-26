@@ -2914,9 +2914,165 @@ async function majBlocBons(sessionId){
   }).join('');
   box.style.display='block';
   box.style.cssText+=';background:#f5f3ff;border-color:#c4b5fd;color:#3b0764';
-  box.innerHTML=`<div style="font-weight:700;margin-bottom:4px">✍️ Bons signés au magasin${items.length?' ('+items.length+')':''} · ${fam.length} livraison${fam.length>1?'s':''} sur ce BL</div>`
+  box.innerHTML=`<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:4px"><span style="font-weight:700">✍️ Bons signés au magasin${items.length?' ('+items.length+')':''} · ${fam.length} livraison${fam.length>1?'s':''} sur ce BL</span><button class="btn" style="height:26px;font-size:11px;background:#5b21b6;color:#fff;border-color:#5b21b6" onclick="openMailBonsSignes(${sessionId})">✉️ Préparer le mail</button></div>`
     +(items.length?lignes:'<div style="color:var(--text-muted)">Aucun bon signé au magasin pour ces livraisons.</div>')
     +`<div style="font-size:11px;color:var(--text-muted);margin-top:4px">Le BL signé au comptoir reste le document envoyé avec la facture. Ces bons servent en cas de litige.</div>`;
+}
+// ═══ ✉️ PRÉPARER LE MAIL DES BONS SIGNÉS (litige / demande client) ═══
+// Crée un BROUILLON dans la boîte Outlook du vendeur connecté (Microsoft Graph,
+// autorisation déléguée Mail.ReadWrite), avec les PDF en pièces jointes et un texte
+// rédigé, puis l'ouvre dans Outlook Web. Le vendeur ajoute l'adresse et envoie.
+// Le brouillon apparaît aussi dans « Brouillons » d'Outlook bureau.
+const GRAPH_MAIL_SCOPE='https://graph.microsoft.com/Mail.ReadWrite openid';
+function _graphPopup(prompt){
+  return new Promise(async(res,rej)=>{
+    const v=rndB64(),ch=await sha256b64(v);
+    const hint=sessionStorage.getItem('user_login_hint')||'';
+    const w=window.open(`https://login.microsoftonline.com/${C.tenantId}/oauth2/v2.0/authorize?`+
+      new URLSearchParams({client_id:C.clientId,response_type:'code',redirect_uri:C.redirectUri,scope:GRAPH_MAIL_SCOPE,
+        code_challenge:ch,code_challenge_method:'S256',response_mode:'query',login_hint:hint,prompt}),'graph_auth','width=520,height=640');
+    if(!w){rej(new Error('Popup bloquée — autorise les popups pour ce site'));return;}
+    let done=false;
+    const t=setInterval(async()=>{
+      try{
+        const u=w.location.href;
+        if(u&&u.startsWith(C.redirectUri)){
+          clearInterval(t);done=true;w.close();
+          const q=new URL(u).searchParams;
+          if(q.get('error')){rej(new Error(q.get('error')));return;}
+          const b=new URLSearchParams({client_id:C.clientId,grant_type:'authorization_code',code:q.get('code'),redirect_uri:C.redirectUri,code_verifier:v,scope:GRAPH_MAIL_SCOPE});
+          const r=await fetch(`https://login.microsoftonline.com/${C.tenantId}/oauth2/v2.0/token`,{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:b});
+          if(!r.ok){rej(new Error('Jeton Outlook : HTTP '+r.status));return;}
+          const d=await r.json();
+          sessionStorage.setItem('graph_mail_token',d.access_token);
+          sessionStorage.setItem('graph_mail_token_exp',String(Date.now()+d.expires_in*1000));
+          res(d.access_token);
+        }
+      }catch(e){/* cross-origin — attendre */}
+      if(w.closed&&!done){clearInterval(t);rej(new Error('Fenêtre fermée avant autorisation'));}
+    },400);
+    setTimeout(()=>{if(!done){clearInterval(t);try{w.close();}catch(e){}rej(new Error('Délai dépassé'));}},60000);
+  });
+}
+async function getGraphMailToken(){
+  const c=sessionStorage.getItem('graph_mail_token'),exp=parseInt(sessionStorage.getItem('graph_mail_token_exp')||'0');
+  if(c&&Date.now()<exp-60000)return c;
+  try{return await _graphPopup('none');}
+  catch(e){
+    // 1re fois : il faut accepter l'autorisation « lire et écrire vos e-mails »
+    if(/consent|interaction|login_required/i.test(e.message))return await _graphPopup('consent');
+    throw e;
+  }
+}
+function _abToB64(buf){
+  const bytes=new Uint8Array(buf);let bin='';
+  for(let i=0;i<bytes.length;i+=0x8000)bin+=String.fromCharCode.apply(null,bytes.subarray(i,i+0x8000));
+  return btoa(bin);
+}
+// Documents disponibles pour la chaîne de livraisons du BL
+async function _docsLivraison(sessionId){
+  const s=(DATA.sessionsScan||[]).find(x=>x.ID===sessionId);
+  const fam=familleLivraison(s);
+  const racine=_racineSession(s);
+  const docs=[];
+  for(const x of fam){
+    let pjs=[];try{pjs=await getAttachments('sites/BondeCommande','Sessions_Scan',x.ID)||[];}catch(e){}
+    pjs.filter(_estBLSigne).forEach(a=>docs.push({src:'pj',sid:x.ID,a,nom:a.FileName,lib:'BL '+f(x,'Numero_BL')+' signé au comptoir',ordre:0}));
+    pjs.filter(_estBonMag).forEach(a=>{
+      const m=String(a.FileName).match(/^Bon_livraison_([a-z]+)_.*_(\d{4})(\d{2})(\d{2})_(\d{2})(\d{2})\d{2}\.pdf$/i);
+      docs.push({src:'pj',sid:x.ID,a,nom:a.FileName,ordre:m?Number(m[2]+m[3]+m[4]+m[5]+m[6]):1,
+        lib:(_BON_LIB[m?m[1].toLowerCase():'']||'Bon signé')+' — BL '+f(x,'Numero_BL')+(m?` du ${m[4]}/${m[3]}/${m[2]} à ${m[5]}h${m[6]}`:'')});
+    });
+  }
+  // BL signé au comptoir rangé pour Docuware (Documents/BL_Signés/RXP<n°>.pdf), s'il n'est pas déjà joint
+  if(!docs.some(d=>d.ordre===0)&&racine){
+    const nom='RXP'+racine+'.pdf';
+    for(const bib of['Shared Documents','Documents partages','Documents partagés']){
+      const rel=`/sites/RseauxPlus/${bib}/BL_Signés/${nom}`;
+      try{
+        const r=await fetch(`${C.spRoot}/sites/RseauxPlus/_api/web/GetFileByServerRelativeUrl(@u)?@u='${encodeURIComponent(rel)}'`,{headers:{'Authorization':`Bearer ${getToken()}`,'Accept':'application/json;odata=nometadata'}});
+        if(r.ok){docs.push({src:'bib',rel,nom,lib:'BL '+racine+' signé au comptoir (BL_Signés)',ordre:0});break;}
+      }catch(e){}
+    }
+  }
+  return {s,fam,racine,docs:docs.sort((a,b)=>a.ordre-b.ordre)};
+}
+async function _lireDoc(d){
+  if(d.src==='pj')return await lirePieceJointe('sites/BondeCommande','Sessions_Scan',d.sid,d.a);
+  const r=await fetch(`${C.spRoot}/sites/RseauxPlus/_api/web/GetFileByServerRelativeUrl(@u)/$value?@u='${encodeURIComponent(d.rel)}'`,{headers:{'Authorization':`Bearer ${getToken()}`}});
+  if(!r.ok)throw new Error('lecture '+d.nom+' : HTTP '+r.status);
+  return await r.arrayBuffer();
+}
+var _mailDocs=null;
+async function openMailBonsSignes(sessionId){
+  openModal('✉️ Préparer le mail — bons de livraison signés','<div class="pspin">⏳ Recherche des documents signés…</div>',null);
+  let info;
+  const MSG='<div class="modal-msg" id="modal-msg"></div>';
+  try{info=await _docsLivraison(sessionId);}catch(e){document.getElementById('modal-body').innerHTML='🔴 '+_escD(e.message)+MSG;return;}
+  _mailDocs=info;
+  const e=v=>_escD(String(v==null?'':v));
+  const client=f(info.s,'Client')||'';
+  const vend=sessionStorage.getItem('user_name')||vendeurConnecte()||'';
+  document.getElementById('modal-body').innerHTML=info.docs.length?`
+    <div style="font-size:12.5px;color:var(--text-muted);margin-bottom:8px">BL <strong class="mono">${e(info.racine)}</strong> · ${e(client)} · ${info.fam.length} livraison${info.fam.length>1?'s':''}. Coche les documents à joindre :</div>
+    <div style="border:1px solid var(--border);border-radius:var(--radius-sm);padding:6px 10px;margin-bottom:10px">
+      ${info.docs.map((d,i)=>`<label style="display:flex;gap:8px;align-items:center;padding:4px 0;font-size:12.5px;cursor:pointer;text-transform:none;letter-spacing:0;color:var(--text-primary)"><input type="checkbox" class="mb-doc" data-i="${i}" checked style="width:16px;height:16px"> 📎 ${e(d.lib)}</label>`).join('')}
+    </div>
+    <div class="mf"><label>Objet</label><input id="mb-objet" value="${e('Réseaux Plus — Bons de livraison signés — BL '+info.racine+(client?' — '+client:''))}"></div>
+    <div class="mf"><label>Message (modifiable ensuite dans Outlook)</label><textarea id="mb-corps" rows="9">${e(
+`Bonjour,
+
+Suite à votre demande, veuillez trouver ci-joint les documents de livraison signés concernant le BL n° ${info.racine}${client?' ('+client+')':''}.
+
+Ce BL a fait l'objet de ${info.fam.length} livraison${info.fam.length>1?'s':''}. Chaque bon précise les quantités remises ce jour-là, le reste éventuel, ainsi que le nom, la date et l'heure de la signature du réceptionnaire.
+
+Nous restons à votre disposition pour tout complément d'information.
+
+Cordialement,
+
+${vend}
+Réseaux Plus Guadeloupe
+Tél. : 0590 38 04 95 — contact@reseauxplus.com`)}</textarea></div>
+    <div style="font-size:11.5px;color:var(--text-muted)">Le brouillon est créé dans <strong>ta</strong> boîte Outlook (dossier Brouillons) et s'ouvre : il te reste à mettre l'adresse du destinataire et à envoyer. La 1re fois, Microsoft te demande d'autoriser le dashboard à « lire et écrire tes e-mails ».</div>`
+    :`<div style="font-size:13px">Aucun document signé trouvé pour le BL <strong>${e(info.racine)}</strong> (ni BL signé au comptoir, ni bon signé au magasin).</div>`;
+  document.getElementById('modal-body').insertAdjacentHTML('beforeend',MSG);
+  const btn=document.getElementById('modal-submit');
+  if(btn){btn.style.display=info.docs.length?'':'none';btn.textContent='✉️ Créer le brouillon Outlook';}
+  _onSubmit=info.docs.length?creerBrouillonBons:null;
+}
+async function creerBrouillonBons(){
+  const info=_mailDocs;
+  const choisis=[...document.querySelectorAll('.mb-doc:checked')].map(c=>info.docs[parseInt(c.dataset.i)]);
+  if(!choisis.length)throw new Error('Coche au moins un document à joindre.');
+  const objet=document.getElementById('mb-objet').value.trim();
+  const corps=document.getElementById('mb-corps').value;
+  {
+    const token=await getGraphMailToken();
+    const attachments=[];let total=0;
+    for(const d of choisis){
+      const buf=await _lireDoc(d);total+=buf.byteLength;
+      attachments.push({'@odata.type':'#microsoft.graph.fileAttachment',name:d.nom,contentType:'application/pdf',contentBytes:_abToB64(buf)});
+    }
+    if(total>3*1024*1024)throw new Error('Pièces jointes trop lourdes ('+Math.round(total/1024)+' Ko) — décoche un document.');
+    const html='<div style="font-family:Calibri,Arial,sans-serif;font-size:11pt">'+_escD(corps).replace(/\n/g,'<br>')+'</div>';
+    const r=await fetch('https://graph.microsoft.com/v1.0/me/messages',{method:'POST',
+      headers:{'Authorization':'Bearer '+token,'Content-Type':'application/json'},
+      body:JSON.stringify({subject:objet,body:{contentType:'HTML',content:html},toRecipients:[],attachments})});
+    if(!r.ok){
+      const t=await r.text().catch(()=>'');
+      if(r.status===401||r.status===403){sessionStorage.removeItem('graph_mail_token');throw new Error('Outlook a refusé l\'accès ('+r.status+') — l\'autorisation Mail.ReadWrite est-elle ajoutée dans Azure ?');}
+      throw new Error('Création du brouillon : HTTP '+r.status+' '+t.slice(0,160));
+    }
+    const m=await r.json();
+    // Ouverture directe si le navigateur l'autorise, sinon bouton (après la fermeture de ce modal)
+    const w=m.webLink?window.open(m.webLink,'_blank'):null;
+    if(!w&&m.webLink)setTimeout(()=>{
+      openModal('✅ Brouillon Outlook créé',`<div style="font-size:13px;margin-bottom:12px">Le brouillon est dans ton dossier <strong>Brouillons</strong> avec ${attachments.length} pièce(s) jointe(s). Ajoute l'adresse du destinataire et envoie.</div>
+        <a href="${_escD(m.webLink)}" target="_blank" rel="noopener" class="btn navy" style="display:inline-flex;align-items:center;height:34px;text-decoration:none" onclick="setTimeout(closeModal,300)">📨 Ouvrir le brouillon dans Outlook</a>`,null);
+      const b=document.getElementById('modal-submit');if(b)b.style.display='none';
+    },1900);
+    return `Brouillon créé avec ${attachments.length} PJ — ajoute l'adresse du destinataire dans Outlook et envoie`;
+  }
 }
 // Place le BL signé de la livraison dans le champ « BL signé — fichier » de la demande BC
 async function dbcChargerBLSigne(numBL){
