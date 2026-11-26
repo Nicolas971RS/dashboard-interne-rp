@@ -659,6 +659,7 @@ input.sv-in.mod{border-color:#16a34a;background:#f0fdf4}
 .ra-rh{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;margin-bottom:6px}
 .ra-aj{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:12px;padding-top:10px;border-top:1px dashed var(--border)}
 .ra-pied{position:sticky;bottom:0;z-index:20;display:flex;gap:10px;align-items:center;flex-wrap:wrap;background:#fff;border:1px solid var(--border);border-top:2px solid var(--navy);border-radius:10px;padding:10px 14px;margin-top:12px;box-shadow:0 -6px 14px rgba(15,23,42,.10)}
+#envRecap tr.ok td{background:#e8f5e9}#envRecap th{background:#f1f5f9;text-align:left}
 </style>
 </head>
 <body>
@@ -3868,11 +3869,15 @@ function renderValidation(){
         ${der&&i===0?`<div class="muted" style="font-size:10.5px;white-space:nowrap">dernier : ${fmtN(der.coef,2)}${der.dossier?' ('+esc(der.dossier)+')':''}</div>`:''}</td>
       <td class="r mono" data-gain="${esc(coefKey(l))}" style="color:${gain<0?'var(--red)':'var(--green)'}">${gain===null?'':(gain>0?'+':'')+fmtN(gain)}</td></tr>`;}).join('');}).join('');
   let entete='',actions='';
-  if(st==='Renvoyé à Patricia')entete=`<div class="fac-box ko">↩ <b>Renvoyé par ${esc(a.Valide_Par||'Fabrice')}</b>${a.Commentaire_Fabrice?` : « ${esc(a.Commentaire_Fabrice)} »`:''}. Corrige puis renvoie le dossier.</div>`;
+  const AN=valAnnulations(a);
+  if(st==='Renvoyé à Patricia')entete=AN.length&&String(a.Commentaire_Fabrice||'').startsWith(VAL_ROUV)
+    ?`<div class="fac-box ko">↩ <b>Rouvert après validation</b> par ${esc(AN[0].qui)} le ${esc(AN[0].date)} : « ${esc(AN[0].motif)} ». Corrige les montants, compare-les avec Image, puis renvoie le dossier à Fabrice.</div>`
+    :`<div class="fac-box ko">↩ <b>Renvoyé par ${esc(a.Valide_Par||'Fabrice')}</b>${a.Commentaire_Fabrice?` : « ${esc(a.Commentaire_Fabrice)} »`:''}. Corrige puis renvoie le dossier.</div>`;
   if(enAttente)entete=`<div class="fac-box ok">⏳ Envoyé à Fabrice le ${fmtD(dk(a,'Date_Envoi_Validation'))}${val?' — <b>à toi de saisir les coefficients</b>.':', en attente de sa validation.'}</div>`;
   const gpL=W.lines.filter(l=>l._st!=='del'&&l.Type_Ligne!=='Frais').reduce((s,l)=>s+n0(l.Gain_Perte),0);
   const tirNote=valide&&gpL<-0.005?` <b style="color:var(--red)">💰 Perte de ${fmtN(-gpL)} € financée par la tirelire ${esc(a.Categorie||'')}.</b>`:(valide&&gpL>0.005?` 💰 Gain de ${fmtN(gpL)} € versé à la tirelire ${esc(a.Categorie||'')}.`:'');
   if(valide)entete=`<div class="fac-box ok">✅ Validé par <b>${esc(a.Valide_Par||'Fabrice')}</b> le ${fmtD(dk(a,'Date_Validation'))}${a.Commentaire_Fabrice?` — « ${esc(a.Commentaire_Fabrice)} »`:''}.${st==='Clôturé'?` Prix à jour dans Image le <b>${fmtD(dk(a,'Date_Saisie_Image'))}</b>.`:` <b style="color:var(--amber)">Coefficients à saisir dans Image${dk(a,'Date_Validation')?` (validé ${relDay(dk(a,'Date_Validation'))})`:''}.</b>`}${tirNote}</div>`;
+  if(AN.length)entete=(enAttente?`<div class="rx-ban warn" style="display:block;margin-bottom:10px">🔁 <b>${AN.length+1}e envoi, après correction</b> — revient <s>${esc(AN[0].coef||'?')}</s> → <b>${fmtCoef(c.coef)}</b>. Les coefficients déjà saisis sont ceux de l’ancienne validation : <b>revois-les</b>.</div>`:'')+entete+valHistoHtml(AN);
   const pret=!!a.N_Dossier&&c.factOk&&c.nFrais>0&&c.coef;
   const LS=lectureSeule();
   if(LS&&!enAttente){actions=st==='Validé'||st==='Clôturé'?`<button class="btn sm" id="btnFichePdf">🖨 Imprimer le dossier (PDF)</button>`:`<span class="muted" style="font-size:12px">${st==='Renvoyé à Patricia'?'Renvoyé à Patricia : en attente de ses corrections.':'Dossier en préparation chez Patricia.'}</span>`;}
@@ -3884,9 +3889,9 @@ function renderValidation(){
   }else if(enAttente&&val){
     actions=`<button class="btn green" id="btnValFab">✅ Valider les coefficients</button><button class="btn danger sm" id="btnRenvoi">↩ Renvoyer à Patricia</button><button class="btn sm" id="btnFichePdf">🖨 Imprimer le dossier (PDF)</button>`;
   }else if(st==='Validé'){
-    actions=`<button class="btn green" id="btnPrixImage">✅ Prix à jour dans Image</button><button class="btn sm" id="btnFichePdf">🖨 Imprimer le dossier (PDF)</button>`;
+    actions=`<button class="btn green" id="btnPrixImage">✅ Prix à jour dans Image</button><button class="btn sm" id="btnFichePdf">🖨 Imprimer le dossier (PDF)</button><button class="btn danger sm" id="btnRouvrirVal" title="Une erreur dans les montants ? Le dossier repasse en correction, puis repart chez Fabrice. La validation actuelle reste dans l’historique.">↩ Rouvrir pour correction</button>`;
   }else if(st==='Clôturé'){
-    actions=`<button class="btn sm" id="btnFichePdf">🖨 Imprimer le dossier (PDF)</button>`;
+    actions=`<button class="btn sm" id="btnFichePdf">🖨 Imprimer le dossier (PDF)</button><button class="btn danger sm" id="btnRouvrirVal" title="Une erreur dans les montants ? Le dossier repasse en correction, puis repart chez Fabrice. Les prix déjà saisis dans Image seront à corriger.">↩ Rouvrir pour correction</button>`;
   }
   if((editable||st==='Validé')&&!W._vu){W._vu=true;setTimeout(()=>{const c=$('cardVal');if(c)c.scrollIntoView({behavior:'smooth',block:'start'});},400);}
   box.innerHTML=`${entete}
@@ -3909,6 +3914,9 @@ function majGains(){
 function envoiAlertes(){
   const out=[];if(!W)return out;
   {const sp=W.lines.filter(sansPdf);if(sp.length)out.push({t:`${sp.length} facture${sp.length>1?'s':''} sans PDF : ${sp.map(l=>nomCourtTxt(l.Fournisseur)+' '+l.N_Facture).join(', ')}`,go:'mar',rg:true});}
+  W.lines.filter(l=>l._st!=='del'&&l.Type_Ligne==='Frais').forEach(l=>envoiDoublons(l).forEach(d=>out.push({t:`${fmtN(d.v)} € saisi ${d.cases.length} fois sur la facture ${l.N_Facture||nomCourtTxt(l.Fournisseur||'')} (${d.cases.join(' et ')}) : doublon ?`,go:'frais'})));
+  {const F=W.lines.filter(l=>l._st!=='del'&&l.Type_Ligne==='Frais'&&l.N_Facture),vu=new Map();F.forEach(l=>{const k=String(l.N_Facture).trim().toUpperCase()+'|'+String(l.Fournisseur||'').trim().toUpperCase();vu.set(k,(vu.get(k)||0)+1);});
+   [...vu.entries()].filter(([,n])=>n>1).forEach(([k,n])=>out.push({t:`Facture ${k.split('|')[0]} saisie ${n} fois dans le dossier : doublon ?`,go:'frais'}));}
   if(!DATA.cmd)return out;
   try{
     const G=artsGroupes();if(!G.length)return out;G.forEach(g=>g.rx=rxGroupe(g));
@@ -3939,7 +3947,14 @@ async function envoyerFabrice(){
   const a=W.a;const c=ctrlInfo(W.lines);
   const al=envoiAlertes();
   const alHtml=al.length?`<div class="rx-ban warn" style="display:block;margin-bottom:10px"><b>⚠ ${al.length} point${al.length>1?'s':''} à vérifier avant d’envoyer :</b><ul style="margin:6px 0 0 18px;padding:0">${al.map(x=>`<li${x.rg?' style="color:#c2410c;font-weight:700"':''}>${esc(x.t)}</li>`).join('')}</ul>${al.some(x=>x.rg)?'<div style="margin-top:6px;font-size:12.5px;color:#c2410c"><b>Fabrice ne pourra pas ouvrir ces factures.</b> Range d’abord les PDF (onglet Factures), sauf s’ils ne sont vraiment pas encore arrivés.</div>':''}<div style="margin-top:6px;font-size:12px">Tu peux envoyer quand même : Fabrice verra le dossier tel qu’il est.</div></div>`:`<div class="rx-ban ok" style="margin-bottom:10px">✓ Contrôle terminé, vérifié et reporté ; montants conformes.</div>`;
-  const ok=await showConfirm('Envoyer à Fabrice ?',`${alHtml}Dossier <b>${esc(a.N_Dossier||a.Title)}</b> — revient réel <b>${fmtCoef(c.coef)}</b>, ${groupesFrs(W.lines).length} fournisseur(s).<br><br>Fabrice reçoit un message Teams et un mail avec le lien vers ce dossier.`,al.length?'Envoyer quand même':'Envoyer');
+  const rc=envoiRecap(c);
+  const box=document.querySelector('#ovConfirm .cbox');const bs=box?[box.style.width,box.style.top,box.style.maxHeight,box.style.overflow]:null;
+  if(box)Object.assign(box.style,{width:'min(820px,96vw)',top:'3%',maxHeight:'94vh',overflow:'auto'});
+  const pOk=showConfirm('Envoyer à Fabrice ?',`${alHtml}${rc.html}<div style="margin-top:10px">Fabrice reçoit un message Teams et un mail avec le lien vers ce dossier.</div>`,al.length?'Envoyer quand même':'Envoyer');
+  const y=$('cYes'),maj=()=>{const cb=[...document.querySelectorAll('#envRecap input[data-envck]')],n=cb.filter(x=>x.checked).length;
+    cb.forEach(x=>x.closest('tr').classList.toggle('ok',x.checked));y.disabled=n<cb.length;const r=$('envReste');if(r)r.textContent=n<cb.length?`${cb.length-n} facture${cb.length-n>1?'s':''} à cocher`:'✓ Tout est comparé avec Image';if(r)r.style.color=n<cb.length?'#c2410c':'var(--green)';};
+  document.querySelectorAll('#envRecap input[data-envck]').forEach(x=>x.addEventListener('change',maj));maj();
+  const ok=await pOk;y.disabled=false;if(box)[box.style.width,box.style.top,box.style.maxHeight,box.style.overflow]=bs;
   if(!ok)return;
   await changerStatut({Statut:'À valider Fabrice',Date_Envoi_Validation:new Date().toISOString(),Total_VM:r2(c.vm),Total_CIF:r2(c.cif),Total_Frais:r2(c.frais),Coef_Reel:c.coef},'📤 Dossier envoyé à Fabrice');
 }
@@ -3970,13 +3985,62 @@ async function validerFabrice(){
     for(const g of gs){
       for(const l of g.lignes){const coef=W.coefs[coefKey(l)];busyMsg(`Validation des coefficients… ${++nL}/${tL}`);const body={Coef_Applique:coef,Gain_Perte:r2(lineVMnette(l)*(coef-c.coef))};await spPatch('Lignes_Arrivage',l.ID,body,DATA.lig.find(x=>x.ID===l.ID));Object.assign(l,body);}}
     const a=W.a;const resume=gs.flatMap(g=>g.lignes.map(l=>`${g.nom}${g.lignes.length>1?' · '+(l.N_Facture||''):''} : ${fmtN(W.coefs[coefKey(l)],2)}`)).join('\n');
-    const body={Statut:'Validé',Valide_Par:sessionStorage.getItem('user_name')||'',Date_Validation:new Date().toISOString(),Commentaire_Fabrice:com||null,Coef_Reel:c.coef,Total_VM:r2(c.vm),Total_CIF:r2(c.cif),Total_Frais:r2(c.frais),Resume_Validation:resume};
+    const body={Statut:'Validé',Valide_Par:sessionStorage.getItem('user_name')||'',Date_Validation:new Date().toISOString(),Commentaire_Fabrice:com||null,Coef_Reel:c.coef,Total_VM:r2(c.vm),Total_CIF:r2(c.cif),Total_Frais:r2(c.frais),Resume_Validation:[resume,...valAnnulLignes(a)].join('\n')};
     await spPatch('Arrivages',W.id,body,DATA.arr.find(x=>x.ID===W.id));Object.assign(a,body);
     busyMsg('Création de la fiche PDF…');
-    try{const blob=await fichePDF(W.id);await spAddAttachment('Arrivages',W.id,`Validation ${safeName(a.N_Dossier||a.Title)}.pdf`,await blob.arrayBuffer());}
+    try{const blob=await fichePDF(W.id);const nV=(W.att||[]).filter(f=>/^Validation /i.test(f.FileName||'')).length;await spAddAttachment('Arrivages',W.id,`Validation ${safeName(a.N_Dossier||a.Title)}${nV?` (${nV+1})`:''}.pdf`,await blob.arrayBuffer());}
     catch(e){console.warn(e);toast('⚠️ Validé, mais la fiche PDF n’a pas pu être jointe : '+e.message,'wa');}
     busyMsg('Mise à jour…');SAVING=false;await loadAll();const id=W.id;W.dirty=false;W=null;openFiche(id);busyOff();toast('✅ Coefficients validés — Patricia est prévenue','ok');
   }catch(e){SAVING=false;busyOff();toast('🔴 '+e.message,'ko');}
+}
+// ── Récapitulatif des montants avant l'envoi à Fabrice : chaque facture comparée avec Image et cochée ──
+function envoiDoublons(l){   // même montant dans deux cases d'une facture de frais (ex. 98 en fret ET en divers)
+  const cases=[['Fret','Fret maritime'],...POSTES,['Ajustement','Ajustement']].map(([k,lab])=>[lab,n0(l[k])]).filter(x=>Math.abs(x[1])>=0.005);
+  const m=new Map();cases.forEach(([lab,v])=>{const k=r2(v).toFixed(2);m.set(k,[...(m.get(k)||[]),lab]);});
+  return [...m.entries()].filter(([,L])=>L.length>1).map(([v,L])=>({v:+v,cases:L}));
+}
+function envoiRecap(c){
+  const L=W.lines.filter(l=>l._st!=='del'),mar=L.filter(l=>l.Type_Ligne!=='Frais'),fr=L.filter(l=>l.Type_Ligne==='Frais');
+  const lab=Object.assign({Fret:'Fret maritime',Ajustement:'Ajustement'},Object.fromEntries(POSTES));
+  const ck=i=>`<td style="width:30px;text-align:center"><input type="checkbox" data-envck="${i}" style="width:20px;height:20px"></td>`;
+  let i=0;
+  const rM=mar.map(l=>`<tr>${ck(i++)}<td><b>${esc(nomCourtTxt(l.Fournisseur||'?'))}</b> <span class="muted">cde ${esc(l.N_Commande||'—')}</span><div class="mono" style="font-size:12px">facture ${esc(l.N_Facture||'—')}</div></td>
+    <td style="font-size:12.5px">Valeur march. <b class="mono">${fmtN(n0(l.Valeur_Marchandise))}</b>${n0(l.Fret)?` · frais frs <b class="mono">${fmtN(n0(l.Fret))}</b>`:''}${n0(l.Ajustement)?` · ajustement <b class="mono">${fmtN(n0(l.Ajustement))}</b>`:''}</td><td class="r mono"><b>${fmtN(lineTotal(l))}</b></td></tr>`).join('');
+  const rF=fr.map(l=>{const d=envoiDoublons(l);const ks=['Fret',...POSTE_KEYS.filter(k=>k!=='Ajustement'),'Ajustement'].filter((k,j,A)=>A.indexOf(k)===j&&Math.abs(n0(l[k]))>=0.005);
+    return `<tr>${ck(i++)}<td><b>${esc(nomCourtTxt(l.Fournisseur||'?'))}</b><div class="mono" style="font-size:12px">facture ${esc(l.N_Facture||'—')}</div></td>
+    <td style="font-size:12.5px">${ks.map(k=>`${esc(lab[k]||k)} <b class="mono">${fmtN(n0(l[k]))}</b>`).join(' · ')||'<span class="muted">aucun montant</span>'}${d.length?`<div style="color:#c2410c;font-weight:700;margin-top:3px">⚠ ${d.map(x=>`${fmtN(x.v)} € saisi ${x.cases.length} fois (${x.cases.join(' et ')})`).join(' ; ')} : doublon ?</div>`:''}</td><td class="r mono"><b>${fmtN(lineTotal(l))}</b></td></tr>`;}).join('');
+  const html=`<div style="font-size:13px;margin-bottom:6px"><b>Compare chaque facture avec Image</b> (dossier ${esc(W.a.N_Dossier||'—')}) et coche-la quand tous ses montants sont identiques.</div>
+    <div class="tblwrap"><table class="ltable" id="envRecap" style="font-size:13px">
+    ${rM?`<tbody><tr><th colspan="4">Marchandise</th></tr>${rM}</tbody>`:''}${rF?`<tbody><tr><th colspan="4">Frais d’approche</th></tr>${rF}</tbody>`:''}
+    <tfoot><tr><td></td><td colspan="2">Valeur marchandise <b class="mono">${fmtN(c.vm)}</b> · total CIF <b class="mono">${fmtN(c.cif)}</b> · frais d’approche <b class="mono">${fmtN(c.frais)}</b><br>Coût total rendu <b class="mono">${fmtN(c.total)}</b> → revient réel <b class="mono" style="font-size:15px">${fmtCoef(c.coef)}</b></td><td></td></tr></tfoot></table></div>
+    <div id="envReste" style="font-weight:700;margin-top:6px"></div>`;
+  return {html,n:i};
+}
+// ── Rouvrir un dossier validé (erreur vue après la validation) : la validation annulée reste tracée dans Resume_Validation ──
+const VAL_ROUV='Rouvert après validation : ';
+const VAL_ANNUL_RX=/^\[Validation annulée le (\d{2}\/\d{2}\/\d{4}) par (.*?) · (.*?) · motif : (.*)\]$/;
+const valAnnulLignes=a=>String((a&&a.Resume_Validation)||'').split('\n').filter(x=>VAL_ANNUL_RX.test(x));
+function valAnnulations(a){return valAnnulLignes(a).map(x=>{const m=x.match(VAL_ANNUL_RX);return {date:m[1],qui:m[2],avant:m[3],motif:m[4],coef:(m[3].match(/revient (\d+(?:,\d+)?)/)||[])[1]||''};});}
+function valHistoHtml(AN){
+  if(!AN.length)return '';
+  return `<details class="val-histo" style="margin:0 0 10px;font-size:12.5px"${W&&W.a.Statut!=='Clôturé'?' open':''}><summary style="cursor:pointer"><b>🔁 Historique des corrections après validation (${AN.length})</b></summary><ul style="margin:6px 0 0 18px;padding:0">${AN.map(x=>`<li>Le ${esc(x.date)}, <b>${esc(x.qui)}</b> a rouvert le dossier : « ${esc(x.motif)} » <span class="muted">— avant : ${esc(x.avant)}</span></li>`).join('')}</ul></details>`;
+}
+async function rouvrirValide(){
+  if(!W)return;if(W.dirty){toast('⚠️ Enregistre d’abord le dossier (Ctrl+S).','wa');return;}
+  const a=W.a;const clo=a.Statut==='Clôturé';
+  const motif=await demanderTexte('↩ Rouvrir pour correction',`Le dossier <b>${esc(a.N_Dossier||a.Title)}</b> repasse en correction :
+    <ul style="margin:6px 0 8px 18px;padding:0"><li>les montants sont déverrouillés ;</li><li>le gain ou la perte sort de la tirelire jusqu’à la nouvelle validation ;</li><li>Fabrice devra <b>revalider les coefficients</b> et verra ton motif.</li></ul>
+    ${clo?'<div class="fac-box ko" style="margin:6px 0">⚠ Les prix sont <b>déjà dans Image</b> : après la nouvelle validation, il faudra les corriger dans Image.</div>':'<div class="fac-box ko" style="margin:6px 0">⚠ Ne saisis <b>rien dans Image</b> avant la nouvelle validation.</div>'}
+    <span class="muted">La validation actuelle reste dans le dossier : fiche PDF jointe et historique des corrections.</span>`,'Motif (obligatoire) : qu’est-ce qui est faux ?','↩ Rouvrir',true);
+  if(motif===null)return;
+  const u=sessionStorage.getItem('user_name')||'?',net=t=>String(t||'').replace(/[\[\]\n\r·]+/g,' ').replace(/\s+/g,' ').trim();
+  const coefs=String(a.Resume_Validation||'').split('\n').filter(x=>x&&!VAL_ANNUL_RX.test(x)).join(', ');
+  const avant=`${clo?'clôturé, ':''}validé le ${fmtD(dk(a,'Date_Validation'))||'?'} par ${net(a.Valide_Par)||'Fabrice'}, revient ${fmtCoef(a.Coef_Reel)}${coefs?', coef '+net(coefs):''}`;
+  const ligne=`[Validation annulée le ${fmtD(todayKey())} par ${net(u)} · ${net(avant)} · motif : ${net(motif)}]`;
+  const body={Statut:'Renvoyé à Patricia',Notif_Statut:'Renvoyé à Patricia',Commentaire_Fabrice:VAL_ROUV+net(motif),Date_Validation:null,Date_Saisie_Image:null,
+    Resume_Validation:[ligne,...String(a.Resume_Validation||'').split('\n').filter(Boolean)].join('\n')};
+  logAction('PATCH','Arrivages',W.id,'Statut',a.Statut,body.Statut,`Validation annulée par ${u} : ${net(motif)} (avant : ${avant})`,a.N_Dossier||a.Title||'');
+  await changerStatut(body,'↩ Dossier rouvert : corrige puis renvoie-le à Fabrice');
 }
 async function renvoyerPatricia(){
   const com=await demanderTexte('Renvoyer à Patricia',`Indique ce qu’il faut corriger (facture manquante, montant à revoir…).`,'Commentaire (obligatoire)','Renvoyer',true);
@@ -4171,6 +4235,7 @@ document.addEventListener('click',e=>{
   if(e.target.closest('#btnEnvoiFab'))envoyerFabrice();
   else if(e.target.closest('#btnValFab'))validerFabrice();
   else if(e.target.closest('#btnRenvoi'))renvoyerPatricia();
+  else if(e.target.closest('#btnRouvrirVal'))rouvrirValide();
   else if(e.target.closest('#btnPrixImage'))prixAJour();
   else if(e.target.closest('#btnFichePdf'))telechargerFiche();
 });
