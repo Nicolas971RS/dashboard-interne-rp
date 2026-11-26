@@ -2865,6 +2865,59 @@ async function deposerBLSigne(sessionId,file){
   }catch(e){toast('🔴 BL signé non déposé : '+e.message,'ko');}
   majBlocBLSigne(sessionId);
 }
+// ── Bons signés au magasin (Portail Scan) : « Bon_livraison_<nature>_<BL>_<date>_<heure>.pdf »
+// Signés seulement quand la remise diffère du BL Image signé au comptoir : livraison
+// partielle, solde (dernière livraison d'un reste), écart (BL soldé sans le reste).
+// Ils restent À CÔTÉ du BL signé d'origine (jamais repris par la demande BC ni Docuware) :
+// preuve en cas de litige. Le bloc regroupe toutes les livraisons du même BL d'origine.
+const _estBonMag=a=>/^Bon_livraison_/i.test(a.FileName||'');
+function _racineSession(s){
+  let cur=s,n=0;
+  while(cur&&n++<20){
+    const r=String(f(cur,'BL_Racine')||'').trim();
+    if(!r)return String(f(cur,'Numero_BL')||'').trim();
+    const p=findSessionByBL(r);
+    if(!p||p.ID===cur.ID)return r;
+    cur=p;
+  }
+  return String(f(s,'Numero_BL')||'').trim();
+}
+function familleLivraison(s){
+  const r=_racineSession(s).toLowerCase();
+  return (DATA.sessionsScan||[]).filter(x=>_normTxt(f(x,'Type_Operation'))==='livraison client'&&_racineSession(x).toLowerCase()===r).sort((a,b)=>a.ID-b.ID);
+}
+const _BON_LIB={partielle:'Livraison partielle',solde:'Solde (dernière livraison)',ecart:'Clôture avec écart'};
+window._bonsUrls=window._bonsUrls||{};
+async function majBlocBons(sessionId){
+  const box=document.getElementById('sp-bons-'+sessionId);
+  if(!box)return;
+  const s=(DATA.sessionsScan||[]).find(x=>x.ID===sessionId);
+  if(!s)return;
+  const fam=familleLivraison(s);
+  const items=[];
+  for(const x of fam){
+    let pjs=[];
+    try{pjs=await getAttachments('sites/BondeCommande','Sessions_Scan',x.ID)||[];}catch(e){console.warn('[bons magasin]',x.ID,e.message);}
+    pjs.filter(_estBonMag).forEach(a=>items.push({s:x,a}));
+  }
+  if(!items.length&&fam.length<2){box.style.display='none';return;}
+  items.sort((a,b)=>String(a.a.FileName).replace(/^.*?_(\d{8}_\d{6})\.pdf$/i,'$1').localeCompare(String(b.a.FileName).replace(/^.*?_(\d{8}_\d{6})\.pdf$/i,'$1')));
+  const e=v=>_escD(String(v==null?'':v));
+  const lignes=items.map((it,i)=>{
+    const m=String(it.a.FileName).match(/^Bon_livraison_([a-z]+)_.*_(\d{4})(\d{2})(\d{2})_(\d{2})(\d{2})\d{2}\.pdf$/i);
+    const nat=m?m[1].toLowerCase():'';
+    const quand=m?`${m[4]}/${m[3]}/${m[2]} à ${m[5]}h${m[6]}`:'';
+    const k=sessionId+'_'+i;window._bonsUrls[k]=C.spRoot+encodeURI(String(it.a.ServerRelativeUrl||''));
+    return `<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;padding:5px 0;border-top:1px solid var(--border-light)">
+      <span><strong>${i+1}.</strong> ${e(_BON_LIB[nat]||'Bon signé')} — BL <span class="mono">${e(f(it.s,'Numero_BL'))}</span>${quand?' · '+quand:''}</span>
+      <button class="btn" style="height:26px;font-size:11px" onclick="window.open(window._bonsUrls['${k}'],'_blank')">👁 Voir / imprimer</button></div>`;
+  }).join('');
+  box.style.display='block';
+  box.style.cssText+=';background:#f5f3ff;border-color:#c4b5fd;color:#3b0764';
+  box.innerHTML=`<div style="font-weight:700;margin-bottom:4px">✍️ Bons signés au magasin${items.length?' ('+items.length+')':''} · ${fam.length} livraison${fam.length>1?'s':''} sur ce BL</div>`
+    +(items.length?lignes:'<div style="color:var(--text-muted)">Aucun bon signé au magasin pour ces livraisons.</div>')
+    +`<div style="font-size:11px;color:var(--text-muted);margin-top:4px">Le BL signé au comptoir reste le document envoyé avec la facture. Ces bons servent en cas de litige.</div>`;
+}
 // Place le BL signé de la livraison dans le champ « BL signé — fichier » de la demande BC
 async function dbcChargerBLSigne(numBL){
   const inp=document.getElementById('d-blfile');
@@ -8303,8 +8356,9 @@ function openSessionPanel(id){
   // Dès la création du BL (livraison client) : on voit tout de suite si le BL signé est joint
   const _avecBLS=_normTxt(f(s,'Type_Operation'))==='livraison client'&&_numS&&!estNumeroFC(_numS)&&!_numS.startsWith('PREP-');
   const _blocBLS=_avecBLS?`<div id="sp-blsigne-${id}" style="border:1px solid var(--border);border-radius:var(--radius-sm);padding:9px 12px;margin-bottom:12px;font-size:12.5px;color:var(--text-muted)">✍️ BL signé : vérification…</div>`:'';
-  openPanel(iconBLFC(f(s,'Numero_BL'))+' '+(f(s,'Numero_BL')||'BL'),_bandeauInc+_blocBLS+_blocDBC+html);
-  if(_avecBLS)majBlocBLSigne(id);
+  const _blocBons=_avecBLS?`<div id="sp-bons-${id}" style="display:none;border:1px solid var(--border);border-radius:var(--radius-sm);padding:9px 12px;margin-bottom:12px;font-size:12.5px"></div>`:'';
+  openPanel(iconBLFC(f(s,'Numero_BL'))+' '+(f(s,'Numero_BL')||'BL'),_bandeauInc+_blocBLS+_blocBons+_blocDBC+html);
+  if(_avecBLS){majBlocBLSigne(id);majBlocBons(id);}
 }
 
 // ── Suppression d'une session créée par erreur ──
