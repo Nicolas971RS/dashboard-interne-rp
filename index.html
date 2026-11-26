@@ -2924,14 +2924,22 @@ async function majBlocBons(sessionId){
 // rédigé, puis l'ouvre dans Outlook Web. Le vendeur ajoute l'adresse et envoie.
 // Le brouillon apparaît aussi dans « Brouillons » d'Outlook bureau.
 const GRAPH_MAIL_SCOPE='https://graph.microsoft.com/Mail.ReadWrite openid';
-function _graphPopup(prompt){
-  return new Promise(async(res,rej)=>{
-    const v=rndB64(),ch=await sha256b64(v);
-    const hint=sessionStorage.getItem('user_login_hint')||'';
-    const w=window.open(`https://login.microsoftonline.com/${C.tenantId}/oauth2/v2.0/authorize?`+
-      new URLSearchParams({client_id:C.clientId,response_type:'code',redirect_uri:C.redirectUri,scope:GRAPH_MAIL_SCOPE,
-        code_challenge:ch,code_challenge_method:'S256',response_mode:'query',login_hint:hint,prompt}),'graph_auth','width=520,height=640');
-    if(!w){rej(new Error('Popup bloquée — autorise les popups pour ce site'));return;}
+var _graphPkce=null;
+async function preparerGraphPkce(){ const v=rndB64(); _graphPkce={v,ch:await sha256b64(v)}; }
+function graphTokenValide(){
+  const c=sessionStorage.getItem('graph_mail_token'),exp=parseInt(sessionStorage.getItem('graph_mail_token_exp')||'0');
+  return c&&Date.now()<exp-60000?c:null;
+}
+// À appeler DIRECTEMENT dans le clic (aucun await avant window.open), sinon le navigateur bloque la fenêtre
+function ouvrirGraphAuth(){
+  if(!_graphPkce)throw new Error('Préparation en cours — reclique dans une seconde');
+  const {v,ch}=_graphPkce;_graphPkce=null;
+  const hint=sessionStorage.getItem('user_login_hint')||'';
+  const w=window.open(`https://login.microsoftonline.com/${C.tenantId}/oauth2/v2.0/authorize?`+
+    new URLSearchParams({client_id:C.clientId,response_type:'code',redirect_uri:C.redirectUri,scope:GRAPH_MAIL_SCOPE,
+      code_challenge:ch,code_challenge_method:'S256',response_mode:'query',...(hint?{login_hint:hint}:{})}),'graph_auth','width=520,height=640');
+  if(!w)throw new Error('Popup bloquée — clique sur l\'icône de la barre d\'adresse et autorise les fenêtres pour ce site, puis reclique');
+  return new Promise((res,rej)=>{
     let done=false;
     const t=setInterval(async()=>{
       try{
@@ -2939,7 +2947,7 @@ function _graphPopup(prompt){
         if(u&&u.startsWith(C.redirectUri)){
           clearInterval(t);done=true;w.close();
           const q=new URL(u).searchParams;
-          if(q.get('error')){rej(new Error(q.get('error')));return;}
+          if(q.get('error')){rej(new Error('Autorisation Outlook refusée : '+(q.get('error_description')||q.get('error')).slice(0,160)));return;}
           const b=new URLSearchParams({client_id:C.clientId,grant_type:'authorization_code',code:q.get('code'),redirect_uri:C.redirectUri,code_verifier:v,scope:GRAPH_MAIL_SCOPE});
           const r=await fetch(`https://login.microsoftonline.com/${C.tenantId}/oauth2/v2.0/token`,{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:b});
           if(!r.ok){rej(new Error('Jeton Outlook : HTTP '+r.status));return;}
@@ -2949,20 +2957,10 @@ function _graphPopup(prompt){
           res(d.access_token);
         }
       }catch(e){/* cross-origin — attendre */}
-      if(w.closed&&!done){clearInterval(t);rej(new Error('Fenêtre fermée avant autorisation'));}
+      if(w.closed&&!done){clearInterval(t);rej(new Error('Fenêtre Microsoft fermée avant la fin de l\'autorisation'));}
     },400);
-    setTimeout(()=>{if(!done){clearInterval(t);try{w.close();}catch(e){}rej(new Error('Délai dépassé'));}},60000);
+    setTimeout(()=>{if(!done){clearInterval(t);try{w.close();}catch(e){}rej(new Error('Délai dépassé pour l\'autorisation Outlook'));}},120000);
   });
-}
-async function getGraphMailToken(){
-  const c=sessionStorage.getItem('graph_mail_token'),exp=parseInt(sessionStorage.getItem('graph_mail_token_exp')||'0');
-  if(c&&Date.now()<exp-60000)return c;
-  try{return await _graphPopup('none');}
-  catch(e){
-    // 1re fois : il faut accepter l'autorisation « lire et écrire vos e-mails »
-    if(/consent|interaction|login_required/i.test(e.message))return await _graphPopup('consent');
-    throw e;
-  }
 }
 function _abToB64(buf){
   const bytes=new Uint8Array(buf);let bin='';
@@ -3010,6 +3008,7 @@ async function openMailBonsSignes(sessionId){
   const MSG='<div class="modal-msg" id="modal-msg"></div>';
   try{info=await _docsLivraison(sessionId);}catch(e){document.getElementById('modal-body').innerHTML='🔴 '+_escD(e.message)+MSG;return;}
   _mailDocs=info;
+  preparerGraphPkce();
   const e=v=>_escD(String(v==null?'':v));
   const client=f(info.s,'Client')||'';
   const vend=sessionStorage.getItem('user_name')||vendeurConnecte()||'';
@@ -3044,10 +3043,12 @@ async function creerBrouillonBons(){
   const info=_mailDocs;
   const choisis=[...document.querySelectorAll('.mb-doc:checked')].map(c=>info.docs[parseInt(c.dataset.i)]);
   if(!choisis.length)throw new Error('Coche au moins un document à joindre.');
+  // Fenêtre Microsoft ouverte tout de suite, dans le clic (avant tout await)
+  const tokenP=graphTokenValide()?Promise.resolve(graphTokenValide()):ouvrirGraphAuth();
   const objet=document.getElementById('mb-objet').value.trim();
   const corps=document.getElementById('mb-corps').value;
   {
-    const token=await getGraphMailToken();
+    const token=await tokenP;
     const attachments=[];let total=0;
     for(const d of choisis){
       const buf=await _lireDoc(d);total+=buf.byteLength;
@@ -3060,7 +3061,7 @@ async function creerBrouillonBons(){
       body:JSON.stringify({subject:objet,body:{contentType:'HTML',content:html},toRecipients:[],attachments})});
     if(!r.ok){
       const t=await r.text().catch(()=>'');
-      if(r.status===401||r.status===403){sessionStorage.removeItem('graph_mail_token');throw new Error('Outlook a refusé l\'accès ('+r.status+') — l\'autorisation Mail.ReadWrite est-elle ajoutée dans Azure ?');}
+      if(r.status===401||r.status===403){sessionStorage.removeItem('graph_mail_token');preparerGraphPkce();throw new Error('Outlook a refusé l\'accès ('+r.status+') — l\'autorisation Mail.ReadWrite est-elle ajoutée dans Azure ?');}
       throw new Error('Création du brouillon : HTTP '+r.status+' '+t.slice(0,160));
     }
     const m=await r.json();
