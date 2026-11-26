@@ -7000,6 +7000,29 @@ function ralSuggestBC(){
     </button>`;}).join('');
 }
 function fermerDossierBC(){const el=document.getElementById('ral-dossier');if(el){el.style.display='none';el.innerHTML='';el.dataset.racine='';}}
+// Lignes en double dans un BC (même réf., même désignation) : on garde la plus avancée
+function lignesDoublonsBC(bcId){
+  const vus=new Map(),dbl=[];
+  _lignesDuBC(bcId).forEach(l=>{
+    const k=_normTxt(f(l,'R_x00e9_f_x00e9_rence')||'')+'|'+_normTxt(f(l,'Produit_x002f_D_x00e9_signation')||'');
+    const prev=vus.get(k);
+    if(!prev){vus.set(k,l);return;}
+    const ql=x=>Number(f(x,'Quantit_x00e9_livr_x00e9_e')||0);
+    if(ql(l)>ql(prev)){dbl.push(prev);vus.set(k,l);}else dbl.push(l);
+  });
+  return dbl;
+}
+async function nettoyerDoublonsBC(bcId){
+  const dbl=lignesDoublonsBC(bcId);
+  if(!dbl.length)return;
+  const bc=(DATA.suivi||[]).find(x=>x.ID===bcId);
+  const ok=await showConfirm('🧹 Lignes en double',`Supprimer <strong>${dbl.length}</strong> ligne${dbl.length>1?'s':''} en double du BC <strong>${_escD(f(bc,'Title')||'')}</strong> ? Une ligne par article est conservée. Le BC d'origine n'est pas touché.`,'Supprimer','delete');
+  if(!ok)return;
+  let n=0;
+  for(const l of dbl){try{await spDelete('sites/RseauxPlus','Lignes_BC',l.ID);DATA.lignes=DATA.lignes.filter(x=>x!==l);n++;}catch(e){console.warn('[doublons]',e.message);}}
+  toast(`🧹 ${n} ligne${n>1?'s':''} en double supprimée${n>1?'s':''}`,'ok');
+  setTimeout(()=>loadAll(),1200);
+}
 function openDossierBC(racine,silencieux){
   const host=document.getElementById('ral-dossier');
   if(!host)return;
@@ -7035,6 +7058,7 @@ function openDossierBC(racine,silencieux){
     return((rb>0)-(ra>0))||((parseInt(f(a,'Title'))||0)-(parseInt(f(b,'Title'))||0));
   });
   const etatLigne=(qc,ql)=>{const r=qc-ql;
+    if(qc===0&&ql===0)return'<span class="ctag" style="background:#fee2e2;color:#991b1b" title="Article annulé ou remplacé par le client (voir remarques du BC)">❌ Annulé</span>';
     if(r===0)return'<span class="ctag g">Livré</span>';
     if(r<0)return`<span class="ctag o" title="Livré supérieur au commandé">⚠️ surplus ${-r}</span>`;
     // Distinguer d'un coup d'œil : rien de livré (rouge, cadre) / livraison commencée (ambre)
@@ -7070,12 +7094,13 @@ function openDossierBC(racine,silencieux){
   const partiels=d.bcs.filter(b=>b!==d.root);
   const rowsPart=partiels.map(b=>{
     const ls=_lignesDuBC(b.ID);
+    const _dbl=lignesDoublonsBC(b.ID);
     const det=ls.map(l=>`${f(l,'R_x00e9_f_x00e9_rence')||f(l,'Produit_x002f_D_x00e9_signation')||'?'} ${num(l,'Quantit_x00e9_livr_x00e9_e')}/${num(l,'Quantit_x00e9_command_x00e9_e')}`).join(', ');
     return`<tr style="cursor:pointer" onclick="openBCPanel(${b.ID})">
       <td class="ref" style="color:var(--blue)">${_escD(f(b,'Title'))}</td>
       <td>${f(b,'N_x00b0_BL')?blLien(f(b,'N_x00b0_BL')):'<span style="color:var(--text-muted)">pas de BL</span>'}</td>
       <td class="mono" style="font-size:12px">${dh(f(b,'Created'))}</td>
-      <td style="font-size:12px">${det?_escD(det):'<span style="color:var(--text-muted)">aucune ligne</span>'}</td>
+      <td style="font-size:12px">${det?_escD(det):'<span style="color:var(--text-muted)">aucune ligne</span>'}${_dbl.length?`<div style="margin-top:4px"><button class="btn" style="height:24px;font-size:11px;color:#b45309;border-color:#fcd34d" onclick="event.stopPropagation();nettoyerDoublonsBC(${b.ID})">🧹 Supprimer ${_dbl.length} ligne${_dbl.length>1?'s':''} en double</button></div>`:''}</td>
     </tr>`;}).join('');
 
   const pct=d.cmd>0?Math.round(d.liv/d.cmd*100):0;
@@ -13967,7 +13992,16 @@ function _emSplitsLire(){try{return JSON.parse(localStorage.getItem(EM_SPLIT_KEY
 function _emSplitsEcrire(a){try{localStorage.setItem(EM_SPLIT_KEY,JSON.stringify(a));}catch(e){}}
 // Termine un BC suffixé en attente : N° BL + articles. Rejouée à chaque chargement
 // tant que le flux n'a pas créé l'élément (fermeture de page, flux lent…).
-async function emFinaliserSplit(job){
+// Verrou : le sondage après émission et la reprise au chargement tournaient en
+// parallèle → les deux voyaient 0 ligne et créaient chacun les articles (doublons).
+const _emSplitEnCours=new Map();
+function emFinaliserSplit(job){
+  if(_emSplitEnCours.has(job.attendu))return _emSplitEnCours.get(job.attendu);
+  const p=_emFinaliserSplit(job).finally(()=>_emSplitEnCours.delete(job.attendu));
+  _emSplitEnCours.set(job.attendu,p);
+  return p;
+}
+async function _emFinaliserSplit(job){
   const items=await spFetch('sites/RseauxPlus','Suivi_BC',`$select=ID,Title,N_x00b0_BL&$filter=Title eq '${job.attendu.replace(/'/g,"''")}'&$top=5`);
   const it=items&&items[0];
   if(!it)return false;
@@ -15621,6 +15655,29 @@ function ligneBCPiloteeParScan(ligne){
      (!ref&&design&&(f(l,'Designation')||'').trim().toLowerCase()===design)));
   return ls?{numBL,scanne:Number(f(ls,'Quantite_Scannee')||0)}:null;
 }
+// Lignes des BC suffixés (même article) dont le BL a livré PLUS que prévu sur le
+// suffixé (ex. commande modifiée) : la synchro bloque tant que leur « commandé »
+// est inférieur au scan. On les aligne quand on corrige la ligne d'origine.
+function splitsAAligner(ligne){
+  const bc=(DATA.suivi||[]).find(x=>x.ID===(ligne.BCId??parseInt(ligne.BCId)));
+  if(!bc)return[];
+  const t=(f(bc,'Title')||'').trim();
+  if(bcRacine(t)!==t)return[];
+  const ref=(f(ligne,'R_x00e9_f_x00e9_rence')||'').trim().toLowerCase();
+  if(!ref)return[];
+  const out=[];
+  (DATA.suivi||[]).filter(b=>b.ID!==bc.ID&&bcRacine((f(b,'Title')||'').trim())===t).forEach(sb=>{
+    const bl=String(f(sb,'N_x00b0_BL')||'').trim();const sess=bl&&findSessionByBL(bl);
+    if(!sess)return;
+    const ls=(DATA.lignesScan||[]).find(x=>String(lineSessionId(x))===String(sess.ID)&&(f(x,'Reference_Article')||'').trim().toLowerCase()===ref);
+    const sc=ls?Number(f(ls,'Quantite_Scannee')||0):0;
+    _lignesDuBC(sb.ID).filter(l=>(f(l,'R_x00e9_f_x00e9_rence')||'').trim().toLowerCase()===ref).forEach(l=>{
+      const qc=Number(f(l,'Quantit_x00e9_command_x00e9_e')||0);
+      if(sc>qc)out.push({l,bc:sb,bl,qc,sc});
+    });
+  });
+  return out;
+}
 function openCorrigerLigneBC(ligneId,bcId){
   const ligne=(DATA.lignes||[]).find(l=>l.ID===ligneId);
   if(!ligne){toast('🔴 Ligne non trouvée en cache — actualise et réessaie','ko');return;}
@@ -15658,10 +15715,55 @@ function openCorrigerLigneBC(ligneId,bcId){
       <input id="cl-bl" value="${esc(blActuel)}" style="font-family:var(--font-mono)">
     </div>
     <div id="cl-apercu" style="font-size:12px;font-weight:600;margin-bottom:8px"></div>
+    ${(()=>{const al=splitsAAligner(ligne);return al.length?`<div style="font-size:12px;background:#eff6ff;border:1px solid #93c5fd;border-radius:var(--radius-sm);padding:8px 10px;margin-bottom:10px;line-height:1.5">
+      🔗 Le BL ${al.map(a=>`<strong>${esc(a.bl)}</strong> (${esc(f(a.bc,'Title'))}) a livré <strong>${a.sc}</strong> au lieu de ${a.qc} prévu`).join(', ')}. En enregistrant, ${al.length>1?'ces lignes seront alignées':'cette ligne sera alignée'} sur le scan pour que le livré remonte ici (pense à mettre le commandé à au moins ${Math.max(...al.map(a=>a.sc))+ql}).</div>`:'';})()}
+    <div style="border:1px solid #fca5a5;background:#fef2f2;border-radius:var(--radius-sm);padding:9px 10px;margin-bottom:10px">
+      <label style="display:flex;align-items:center;gap:8px;font-size:12.5px;font-weight:700;color:#991b1b;cursor:pointer">
+        <input type="checkbox" id="cl-annule" style="width:16px;height:16px" onchange="clAnnuleMaj(${ql})"> ❌ Article annulé ou remplacé par le client</label>
+      <div id="cl-annule-zone" style="display:none;margin-top:8px">
+        <div style="font-size:11.5px;color:#7f1d1d;margin-bottom:6px">Le commandé passe à ${ql} (ce qui a déjà été livré) : plus de reste à livrer. Une note est ajoutée aux remarques du BC.</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+          <div class="mf" style="margin:0"><label>Remplacé par (réf., facultatif)</label>
+            <select id="cl-remp" style="width:100%"><option value="">— aucun —</option>${_lignesDuBC(ligne.BCId??parseInt(ligne.BCId)).filter(x=>x.ID!==ligneId).map(x=>`<option value="${x.ID}">${esc(f(x,'R_x00e9_f_x00e9_rence')||'')} — ${esc(String(f(x,'Produit_x002f_D_x00e9_signation')||'').slice(0,40))}</option>`).join('')}</select></div>
+          <div class="mf" style="margin:0"><label>Motif (facultatif)</label><input id="cl-motif" placeholder="ex : modification client du ${new Date().toLocaleDateString('fr-FR')}"></div>
+        </div>
+        <label style="display:flex;align-items:center;gap:8px;font-size:12px;margin-top:6px;cursor:pointer"><input type="checkbox" id="cl-remp-qte" checked> Ajouter la quantité annulée (${Math.max(0,qc-ql)}) au commandé de l'article de remplacement</label>
+      </div>
+    </div>
     <div style="border-top:1px solid var(--border);margin-top:6px;padding-top:10px">
       <button type="button" class="btn" style="height:26px;font-size:12px;color:var(--red);border-color:var(--red)" onclick="supprimerLigneBC(${ligneId},${bcId??'null'})">🗑️ Supprimer cette ligne (créée par erreur)</button>
     </div>`,
   async()=>{
+    // Article annulé / remplacé : commandé ramené au livré, note sur le BC,
+    // quantité reportée sur l'article de remplacement si demandé
+    if(document.getElementById('cl-annule')?.checked){
+      const rempId=parseInt(document.getElementById('cl-remp').value)||null;
+      const motif=document.getElementById('cl-motif').value.trim();
+      const annulee=Math.max(0,qc-ql);
+      await spPatch('sites/RseauxPlus','Lignes_BC',ligneId,{Quantit_x00e9_command_x00e9_e:ql});
+      ligne.Quantit_x00e9_command_x00e9_e=ql;
+      let txtRemp='';
+      if(rempId){
+        const lr=(DATA.lignes||[]).find(x=>x.ID===rempId);
+        txtRemp=' — remplacé par '+(f(lr,'R_x00e9_f_x00e9_rence')||f(lr,'Produit_x002f_D_x00e9_signation')||'');
+        if(lr&&document.getElementById('cl-remp-qte').checked&&annulee>0){
+          const nq=(parseFloat(f(lr,'Quantit_x00e9_command_x00e9_e'))||0)+annulee;
+          await spPatch('sites/RseauxPlus','Lignes_BC',rempId,{Quantit_x00e9_command_x00e9_e:nq});
+          lr.Quantit_x00e9_command_x00e9_e=nq;txtRemp+=` (+${annulee} → ${nq})`;
+          for(const a of splitsAAligner(lr)){await spPatch('sites/RseauxPlus','Lignes_BC',a.l.ID,{Quantit_x00e9_command_x00e9_e:a.sc});a.l.Quantit_x00e9_command_x00e9_e=a.sc;}
+        }
+      }
+      if(bc){
+        const quand=new Date().toLocaleDateString('fr-FR');
+        const note=`[${quand}] Modification client : ${ref||design} ×${annulee} annulé${txtRemp}${motif?' — '+motif:''}.`;
+        const rem=f(bc,'Remarques')||'';
+        try{await spPatch('sites/RseauxPlus','Suivi_BC',bc.ID,{Remarques:(rem?rem+'\n':'')+note});bc.Remarques=(rem?rem+'\n':'')+note;}catch(e){console.warn('[annulation] remarque',e.message);}
+      }
+      toast(`❌ ${ref||design} annulé${txtRemp}`,'ok');
+      setTimeout(()=>loadAll(),1500);
+      if(bcId)setTimeout(()=>openBCPanel(bcId),2200);
+      return;
+    }
     const nqc=parseFloat(document.getElementById('cl-qc').value);
     const nql=parseFloat(document.getElementById('cl-ql').value);
     const nbl=document.getElementById('cl-bl').value.trim();
@@ -15675,11 +15777,23 @@ function openCorrigerLigneBC(ligneId,bcId){
     if(!Object.keys(body).length)throw new Error('Aucune modification.');
     await spPatch('sites/RseauxPlus','Lignes_BC',ligneId,body);
     Object.assign(ligne,body);
+    // BL des BC suffixés ayant livré plus que prévu : aligner pour que la remontée passe
+    if(body.Quantit_x00e9_command_x00e9_e!=null){
+      for(const a of splitsAAligner(ligne)){
+        try{await spPatch('sites/RseauxPlus','Lignes_BC',a.l.ID,{Quantit_x00e9_command_x00e9_e:a.sc});a.l.Quantit_x00e9_command_x00e9_e=a.sc;}catch(e){console.warn('[aligner split]',e.message);}
+      }
+    }
     toast('✅ Ligne corrigée','ok');
     setTimeout(()=>loadAll(),1500);
     if(bcId)setTimeout(()=>openBCPanel(bcId),2200);
   });
   setTimeout(()=>clMajApercu(totalBL),0);
+}
+function clAnnuleMaj(ql){
+  const on=document.getElementById('cl-annule').checked;
+  document.getElementById('cl-annule-zone').style.display=on?'block':'none';
+  ['cl-qc','cl-ql','cl-bl'].forEach(id=>{const el=document.getElementById(id);if(el)el.disabled=on;});
+  if(on){document.getElementById('cl-qc').value=ql;clMajApercu();}
 }
 function clMajApercu(){
   const qc=parseFloat(document.getElementById('cl-qc')?.value);
