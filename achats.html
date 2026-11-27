@@ -6185,7 +6185,7 @@ function payTable(rows,mode,opt={}){
       const chk=mode==='prep'?`<td><input type="checkbox" data-paychk="${f.ID}" ${PAYV.exclus.has(f.ID)?'':'checked'} ${opt.ed?'':'disabled'}></td>`:'';
       if(mode==='prep'&&PAYV.exclus.has(f.ID))mod='pay-mod-x';
       return `<tr class="${rel?'pay-rel ':''}${du<0?'pay-av ':''}${mod}">${chk}<td>${payPdf(f)}</td><td class="mono">${esc(f.Title||'')}${rel?' <span class="pay-tag" data-tip="Solde d’une facture payée en partie ou reportée">reliquat</span>':''}${payEstCotis(f)?' <span class="pay-tag c">cotisation</span>':''}${payDblTag(f)}${du<0?' <span class="pay-tag a" data-tip="Montant négatif : déduit du total du fournisseur">avoir</span>':''}${f.Commentaire?` <span class="muted" data-tip="${esc(f.Commentaire)}">💬</span>`:''}</td>
-        <td>${fmtD(dk(f,'Date_Facture'))}</td><td>${payEchBadge(f)}</td><td class="r">${payEur(+f.Montant_TTC||0)}</td><td class="r muted">${payPaye(f)?payEur(payPaye(f)):''}</td><td class="r"><b class="${mod==='pay-mod-r'?'pay-barre':''}">${payEur(du)}</b>${sous}</td>${cDec}</tr>`;}).join('');
+        <td>${fmtD(dk(f,'Date_Facture'))}</td><td>${payEchBadge(f)}</td><td class="r">${payEur(+f.Montant_TTC||0)}</td><td class="r muted">${payPaye(f)?payEur(payPaye(f)):''}</td><td class="r"><b class="${mod==='pay-mod-r'?'pay-barre':''}">${payEur(du)}</b>${mode==='prep'&&opt.ed&&du>0.005?` <button class="btn ghost sm" style="padding:1px 6px;margin-left:4px" data-payman="${f.ID}" data-tip="Déjà payée hors proposition (ex. : appel du fournisseur) : enregistrer le paiement avec sa date">💸</button>`:''}${sous}</td>${cDec}</tr>`;}).join('');
     const btn=ed?`<span class="pay-gbt"><button class="btn ghost sm" data-paygrp="Payer" data-paygn="${esc(g.nom)}">✅ tout payer</button><button class="btn ghost sm" data-paygrp="Reporter" data-paygn="${esc(g.nom)}">⏸ tout reporter</button></span>`:'';
     const totPrep=mode==='prep'?g.R.filter(r=>!PAYV.exclus.has(r.f.ID)).reduce((s,r)=>s+payReste(r.f),0):null;
     const span=mode==='prep'?7:6;
@@ -6545,7 +6545,7 @@ async function payManuel(fid){
   if(!await showConfirm('Enregistrer un paiement',`<div>${esc(payNom(f))} · <b class="mono">${esc(f.Title)}</b> — reste dû <b>${payEur(r)}</b></div>
     <div class="fgrid2" style="margin-top:10px"><div class="f"><label>Montant payé</label><input id="pmM" inputmode="decimal" value="${String(r).replace('.',',')}"></div><div class="f"><label>Date</label><input id="pmD" type="date" value="${todayKey()}"></div></div>
     <div class="fgrid2" style="margin-top:8px"><div class="f"><label>Mode</label><select id="pmMo">${PAY_MODES.map(m=>`<option>${m}</option>`).join('')}</select></div><div class="f"><label>Banque</label><input id="pmB" list="payBanques2" placeholder="facultatif"><datalist id="payBanques2"><option>BRED</option><option>CEPAC</option></datalist></div></div>
-    <div class="f" style="margin-top:8px"><label>Commentaire</label><input id="pmC" placeholder="facultatif"></div>`,'💸 Enregistrer'))return;
+    <div class="f" style="margin-top:8px"><label>Commentaire</label><input id="pmC" placeholder="ex. : payé hors proposition, appel du fournisseur"></div>`,'💸 Enregistrer'))return;
   const m=parseFloat(String($('pmM').value).replace(/\s/g,'').replace(',','.'));if(!isFinite(m)||!m){toast('🔴 Montant invalide','ko');return;}
   try{await payEnregistrer(f,m,{date:$('pmD').value||todayKey(),mode:$('pmMo').value,banque:$('pmB').value.trim(),com:$('pmC').value.trim()});toast('✓ Paiement enregistré','ok');}catch(e){toast('🔴 '+e.message,'ko');}
   renderPaiements();
