@@ -3039,16 +3039,43 @@ Tél. : 0590 38 04 95 — contact@reseauxplus.com`)}</textarea></div>
   if(btn){btn.style.display=info.docs.length?'':'none';btn.textContent='✉️ Créer le brouillon Outlook';}
   _onSubmit=info.docs.length?creerBrouillonBons:null;
 }
+// Secours si la boîte n'est pas dans Exchange Online (MailboxNotEnabledForRESTAPI) :
+// fichier .eml « non envoyé » (X-Unsent) → double-clic = nouveau mail Outlook avec PJ.
+function _b64Lignes(b64){return b64.replace(/.{1,76}/g,'$&\r\n').replace(/\r\n$/,'');}
+function _mimeMot(t){return '=?UTF-8?B?'+btoa(unescape(encodeURIComponent(t)))+'?=';}
+function telechargerEml(objet,corpsHtml,pjs,nomFichier){
+  const b='=_RP_'+Date.now().toString(36);
+  const parts=['X-Unsent: 1','To: ','Subject: '+_mimeMot(objet),'MIME-Version: 1.0',`Content-Type: multipart/mixed; boundary="${b}"`,'',
+    '--'+b,'Content-Type: text/html; charset="UTF-8"','Content-Transfer-Encoding: base64','',
+    _b64Lignes(btoa(unescape(encodeURIComponent('<html><body>'+corpsHtml+'</body></html>'))))];
+  pjs.forEach(a=>parts.push('--'+b,`Content-Type: application/pdf; name="${_mimeMot(a.name)}"`,`Content-Disposition: attachment; filename="${_mimeMot(a.name)}"`,'Content-Transfer-Encoding: base64','',_b64Lignes(a.contentBytes)));
+  parts.push('--'+b+'--','');
+  const blob=new Blob([parts.join('\r\n')],{type:'message/rfc822'});
+  const url=URL.createObjectURL(blob),lien=document.createElement('a');
+  lien.href=url;lien.download=nomFichier;document.body.appendChild(lien);lien.click();lien.remove();
+  setTimeout(()=>URL.revokeObjectURL(url),60000);
+}
+function _ecranEml(nomFichier,nb){
+  setTimeout(()=>{
+    openModal('📥 Mail prêt à ouvrir',`<div style="font-size:13px;line-height:1.6">
+      Le fichier <strong>${_escD(nomFichier)}</strong> vient d'être téléchargé, avec ${nb} pièce(s) jointe(s).<br><br>
+      1. Ouvre-le (barre de téléchargements du navigateur, ou dossier <em>Téléchargements</em>) : il s'ouvre dans <strong>Outlook</strong> comme un <strong>nouveau mail</strong>.<br>
+      2. Ajoute l'adresse du destinataire, relis, puis clique sur <strong>Envoyer</strong>.</div>
+      <div style="font-size:11.5px;color:var(--text-muted);margin-top:10px">Si le fichier s'ouvre en lecture seule (nouvel Outlook), fais « Transférer » et supprime « TR : » de l'objet.</div>`,null);
+    const bt=document.getElementById('modal-submit');if(bt)bt.style.display='none';
+  },1900);
+}
 async function creerBrouillonBons(){
   const info=_mailDocs;
   const choisis=[...document.querySelectorAll('.mb-doc:checked')].map(c=>info.docs[parseInt(c.dataset.i)]);
   if(!choisis.length)throw new Error('Coche au moins un document à joindre.');
+  // Boîte déjà connue comme hors Exchange Online → directement le fichier .eml (pas de fenêtre Microsoft)
+  const sansGraph=localStorage.getItem('mail_mode_eml')==='1';
   // Fenêtre Microsoft ouverte tout de suite, dans le clic (avant tout await)
-  const tokenP=graphTokenValide()?Promise.resolve(graphTokenValide()):ouvrirGraphAuth();
+  const tokenP=sansGraph?null:(graphTokenValide()?Promise.resolve(graphTokenValide()):ouvrirGraphAuth());
   const objet=document.getElementById('mb-objet').value.trim();
   const corps=document.getElementById('mb-corps').value;
   {
-    const token=await tokenP;
     const attachments=[];let total=0;
     for(const d of choisis){
       const buf=await _lireDoc(d);total+=buf.byteLength;
@@ -3056,11 +3083,20 @@ async function creerBrouillonBons(){
     }
     if(total>3*1024*1024)throw new Error('Pièces jointes trop lourdes ('+Math.round(total/1024)+' Ko) — décoche un document.');
     const html='<div style="font-family:Calibri,Arial,sans-serif;font-size:11pt">'+_escD(corps).replace(/\n/g,'<br>')+'</div>';
+    const nomEml='Mail_BL_'+String(info.racine).replace(/[^\w-]/g,'')+'.eml';
+    if(sansGraph){telechargerEml(objet,html,attachments,nomEml);_ecranEml(nomEml,attachments.length);return 'Mail préparé ('+attachments.length+' PJ) — ouvre le fichier téléchargé';}
+    const token=await tokenP;
     const r=await fetch('https://graph.microsoft.com/v1.0/me/messages',{method:'POST',
       headers:{'Authorization':'Bearer '+token,'Content-Type':'application/json'},
       body:JSON.stringify({subject:objet,body:{contentType:'HTML',content:html},toRecipients:[],attachments})});
     if(!r.ok){
       const t=await r.text().catch(()=>'');
+      if(/MailboxNotEnabledForRESTAPI|MailboxNotSupportedForRESTAPI/.test(t)){
+        // Boîte mail hors Exchange Online : on bascule sur le fichier .eml (et on s'en souvient sur ce PC)
+        try{localStorage.setItem('mail_mode_eml','1');}catch(e){}
+        telechargerEml(objet,html,attachments,nomEml);_ecranEml(nomEml,attachments.length);
+        return 'Ta boîte mail n\'est pas dans Outlook en ligne — mail préparé en fichier ('+attachments.length+' PJ)';
+      }
       if(r.status===401||r.status===403){sessionStorage.removeItem('graph_mail_token');preparerGraphPkce();throw new Error('Outlook a refusé l\'accès ('+r.status+') — l\'autorisation Mail.ReadWrite est-elle ajoutée dans Azure ?');}
       throw new Error('Création du brouillon : HTTP '+r.status+' '+t.slice(0,160));
     }
